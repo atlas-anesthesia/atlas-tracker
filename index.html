@@ -455,13 +455,50 @@ window.doLogout = async function() {
 };
 
 // ── AUTH STATE ──
+// ── EMAIL → WORKER MAP ──
+const EMAIL_WORKER_MAP = {
+  'jxcondado@gmail.com': 'josh',
+  'murthy.devarsh@gmail.com': 'dev'
+};
+
 onAuthStateChanged(auth, async (user) => {
   document.getElementById('loadingScreen').style.display='none';
   if(user) {
     currentUser = user;
     document.getElementById('loginScreen').style.display='none';
     document.getElementById('appScreen').style.display='block';
-    document.getElementById('userLabel').textContent = user.email.split('@')[0];
+
+    // Auto-set worker based on email
+    const mappedWorker = EMAIL_WORKER_MAP[user.email.toLowerCase()] || 'dev';
+    currentWorker = mappedWorker;
+    currentInvTab = mappedWorker;
+
+    // Lock worker toggle to their own account
+    const wbtnDev = document.getElementById('wbtn-dev');
+    const wbtnJosh = document.getElementById('wbtn-josh');
+    if(mappedWorker === 'dev') {
+      wbtnDev.className = 'worker-btn active-dev';
+      wbtnJosh.className = 'worker-btn';
+      wbtnJosh.disabled = true;
+      wbtnJosh.style.opacity = '0.35';
+      wbtnJosh.style.cursor = 'not-allowed';
+      wbtnJosh.title = 'You can only log cases for your own inventory';
+    } else {
+      wbtnJosh.className = 'worker-btn active-josh';
+      wbtnDev.className = 'worker-btn';
+      wbtnDev.disabled = true;
+      wbtnDev.style.opacity = '0.35';
+      wbtnDev.style.cursor = 'not-allowed';
+      wbtnDev.title = 'You can only log cases for your own inventory';
+    }
+    const ind = document.getElementById('workerIndicator');
+    ind.className = 'worker-pill ' + (mappedWorker==='dev' ? 'pill-dev' : 'pill-josh');
+    ind.textContent = (mappedWorker==='dev' ? 'Devarsh' : 'Josh') + "'s inventory will be updated";
+
+    // Default inventory tab to their own
+    ['dev','josh','combined'].forEach(x => document.getElementById('itab-'+x).classList.toggle('active', x===mappedWorker));
+
+    document.getElementById('userLabel').textContent = mappedWorker === 'dev' ? 'Devarsh' : 'Josh';
     document.getElementById('dateDisplay').textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
     document.getElementById('caseDate').value = new Date().toISOString().split('T')[0];
     await initData();
@@ -519,6 +556,11 @@ function uid(){return Math.random().toString(36).substr(2,9);}
 
 // ── WORKER / TAB ──
 window.setWorker = function(w) {
+  // Prevent switching to the other person's worker
+  if(currentUser && EMAIL_WORKER_MAP[currentUser.email.toLowerCase()] !== w) {
+    alert('You can only log cases for your own inventory.');
+    return;
+  }
   currentWorker=w;
   document.getElementById('wbtn-dev').className='worker-btn'+(w==='dev'?' active-dev':'');
   document.getElementById('wbtn-josh').className='worker-btn'+(w==='josh'?' active-josh':'');
@@ -748,7 +790,12 @@ window.adjustStock = async function(id) {
   if(qty<=0){alert('Enter a positive quantity to add.');return;}
   const item=items.find(i=>i.id===id);
   if(item){
-    const w=currentInvTab==='josh'?'josh':'dev';
+    // Only allow adjusting your own stock
+    const w = currentWorker;
+    if(currentInvTab !== 'combined' && currentInvTab !== w) {
+      alert('You can only update your own inventory.');
+      return;
+    }
     setStock(item,w,getStock(item,w)+qty);
     await saveInventory();input.value='';
   }
@@ -756,10 +803,15 @@ window.adjustStock = async function(id) {
 
 window.editItem = async function(id) {
   const item=items.find(i=>i.id===id);if(!item)return;
-  const nD=parseInt(prompt(`Dev stock for ${item.generic}:`,item.stockDev));
-  if(!isNaN(nD)&&nD>=0) item.stockDev=nD;
-  const nJ=parseInt(prompt(`Josh stock for ${item.generic}:`,item.stockJosh));
-  if(!isNaN(nJ)&&nJ>=0) item.stockJosh=nJ;
+  const w = currentWorker;
+  // Each user can only edit their own stock count
+  if(w === 'dev') {
+    const nD=parseInt(prompt(`Your stock for ${item.generic}:`,item.stockDev));
+    if(!isNaN(nD)&&nD>=0) item.stockDev=nD;
+  } else {
+    const nJ=parseInt(prompt(`Your stock for ${item.generic}:`,item.stockJosh));
+    if(!isNaN(nJ)&&nJ>=0) item.stockJosh=nJ;
+  }
   const nC=parseFloat(prompt(`Unit cost for ${item.generic}:`,item.costPerUnit));
   if(!isNaN(nC)&&nC>=0) item.costPerUnit=nC;
   const nA=parseInt(prompt('Restock alert level (per person):',item.alert));
