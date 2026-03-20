@@ -179,17 +179,17 @@
   </div>
 
   <div class="nav">
-    <button class="active" onclick="showTab('new-case')">New Case</button>
+    <button onclick="showTab('new-case')">New Case</button>
     <button onclick="showTab('inventory')">Inventory</button>
     <button onclick="showTab('history')">Case History</button>
     <button onclick="showTab('reports')">Reports</button>
-    <button onclick="showTab('preop')">Pre-Op</button>
+    <button class="active" onclick="showTab('preop')">Pre-Op</button>
   </div>
 
   <div class="container">
 
     <!-- NEW CASE -->
-    <div class="section active" id="tab-new-case">
+    <div class="section" id="tab-new-case">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
         <span style="font-size:13px;font-weight:500;color:var(--text-muted);">Logging case for:</span>
         <div class="worker-toggle">
@@ -313,7 +313,7 @@
   </div>
 
     <!-- PRE-OP TAB -->
-    <div class="section" id="tab-preop">
+    <div class="section active" id="tab-preop">
       <div class="action-bar">
         <h2>Pre-Op Assessment</h2>
         <div style="display:flex;gap:10px;">
@@ -369,127 +369,126 @@
       <!-- MEDICAL H&P -->
       <div class="card" style="margin-bottom:18px;">
         <div class="card-title">Medical H&amp;P</div>
-
-        <!-- Pupil Exam -->
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Pupil Exam</div>
-          <div style="display:flex;gap:20px;flex-wrap:wrap;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-pupil-normal" style="width:15px;height:15px;"> Normal
-            </label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-pupil-dilated" style="width:15px;height:15px;"> Dilated
-            </label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-pupil-constricted" style="width:15px;height:15px;"> Constricted
-            </label>
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Pupil Exam</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pupil-normal" style="width:15px;height:15px;"> Normal</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pupil-dilated" style="width:15px;height:15px;"> Dilated</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pupil-constricted" style="width:15px;height:15px;"> Constricted</label>
+            
           </div>
         </div>
-
-        <!-- Cardiovascular -->
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Cardiovascular</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            ${['NEG','HTN','CAD','ANGINA','MI','CHF','MURMUR','ARRYTHMIA'].map(x=>`
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-cv-${x.toLowerCase()}" style="width:15px;height:15px;"> ${x}
-            </label>`).join('')}
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              Other: <input type="text" id="po-cv-other" placeholder="specify" style="width:120px;padding:3px 7px;font-size:13px;">
-            </label>
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Cardiovascular</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-neg" style="width:15px;height:15px;"> NEG</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-htn" style="width:15px;height:15px;"> HTN</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-cad" style="width:15px;height:15px;"> CAD</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-angina" style="width:15px;height:15px;"> ANGINA</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-mi" style="width:15px;height:15px;"> MI</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-chf" style="width:15px;height:15px;"> CHF</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-murmur" style="width:15px;height:15px;"> MURMUR</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-arrythmia" style="width:15px;height:15px;"> ARRYTHMIA</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">OTHER: <input type="text" id="po-cv-other" placeholder="specify" style="width:130px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg);"></label>
+            
           </div>
         </div>
-
-        <!-- EKG -->
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">EKG</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            ${['NSR','AFIB','BBB','LVH','CHNGS'].map(x=>`
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-ekg-${x.toLowerCase()}" style="width:15px;height:15px;"> ${x}
-            </label>`).join('')}
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">EKG</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-nsr" style="width:15px;height:15px;"> NSR</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-afib" style="width:15px;height:15px;"> AFIB</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-bbb" style="width:15px;height:15px;"> BBB</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-lvh" style="width:15px;height:15px;"> LVH</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-chngs" style="width:15px;height:15px;"> CHNGS</label>
+            
           </div>
         </div>
-
-        <!-- Pulmonary -->
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Pulmonary</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            ${['NEG','ASTHMA','COPD','URI','O2','CPAP','SLEEP APNEA','BL BREATH SOUNDS','SMOKER'].map(x=>`
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-pulm-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
-            </label>`).join('')}
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Pulmonary</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-neg" style="width:15px;height:15px;"> NEG</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-asthma" style="width:15px;height:15px;"> ASTHMA</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-copd" style="width:15px;height:15px;"> COPD</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-uri" style="width:15px;height:15px;"> URI</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-o2" style="width:15px;height:15px;"> O2</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-cpap" style="width:15px;height:15px;"> CPAP</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-sleep-apnea" style="width:15px;height:15px;"> SLEEP APNEA</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-bl-breath-sounds" style="width:15px;height:15px;"> BL BREATH SOUNDS</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-smoker" style="width:15px;height:15px;"> SMOKER</label>
+            
           </div>
         </div>
-
-        <!-- Gastro -->
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Gastro</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            ${['NEG','GERD','HIAT HERN','ULCER'].map(x=>`
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-gastro-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
-            </label>`).join('')}
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Gastro</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-gastro-neg" style="width:15px;height:15px;"> NEG</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-gastro-gerd" style="width:15px;height:15px;"> GERD</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-gastro-hiat-hern" style="width:15px;height:15px;"> HIAT HERN</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-gastro-ulcer" style="width:15px;height:15px;"> ULCER</label>
+            
           </div>
         </div>
-
-        <!-- Renal -->
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Renal</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            ${['NEG','DIALYSIS','ESRD'].map(x=>`
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-renal-${x.toLowerCase()}" style="width:15px;height:15px;"> ${x}
-            </label>`).join('')}
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Renal</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-renal-neg" style="width:15px;height:15px;"> NEG</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-renal-dialysis" style="width:15px;height:15px;"> DIALYSIS</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-renal-esrd" style="width:15px;height:15px;"> ESRD</label>
+            
           </div>
         </div>
-
-        <!-- Neuro -->
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Neuro</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            ${['NEG','DEPRESSION','ANXIETY DISORDER','SEIZURES','CVA','NM DISEASE'].map(x=>`
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-neuro-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
-            </label>`).join('')}
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Neuro</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-neg" style="width:15px;height:15px;"> NEG</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-depression" style="width:15px;height:15px;"> DEPRESSION</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-anxiety-disorder" style="width:15px;height:15px;"> ANXIETY DISORDER</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-seizures" style="width:15px;height:15px;"> SEIZURES</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-cva" style="width:15px;height:15px;"> CVA</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-nm-disease" style="width:15px;height:15px;"> NM DISEASE</label>
+            
           </div>
         </div>
-
-        <!-- Metabolic -->
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Metabolic</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            ${['NEG','IDDM','NIDDM','THYROID','Hx HEP','OBESITY','MORBID OBESITY'].map(x=>`
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-meta-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
-            </label>`).join('')}
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Metabolic</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-neg" style="width:15px;height:15px;"> NEG</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-iddm" style="width:15px;height:15px;"> IDDM</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-niddm" style="width:15px;height:15px;"> NIDDM</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-thyroid" style="width:15px;height:15px;"> THYROID</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-hx-hep" style="width:15px;height:15px;"> Hx HEP</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-obesity" style="width:15px;height:15px;"> OBESITY</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-morbid-obesity" style="width:15px;height:15px;"> MORBID OBESITY</label>
+            
           </div>
         </div>
-
-        <!-- Teeth -->
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Teeth</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            ${['INTACT','MISSING','DENTURE'].map(x=>`
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-teeth-${x.toLowerCase()}" style="width:15px;height:15px;"> ${x}
-            </label>`).join('')}
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Teeth</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-teeth-intact" style="width:15px;height:15px;"> INTACT</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-teeth-missing" style="width:15px;height:15px;"> MISSING</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-teeth-denture" style="width:15px;height:15px;"> DENTURE</label>
+            
           </div>
         </div>
-
-        <!-- Other -->
         <div style="padding:10px 0;">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Other</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
-            ${['HIV','HEP C','ANEMIA','STEROIDS','CANCERS','DRUG ABUSE','COAGULOPATHY','CHEMOTHERAPY'].map(x=>`
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
-              <input type="checkbox" id="po-other-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
-            </label>`).join('')}
+          <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Other</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-hiv" style="width:15px;height:15px;"> HIV</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-hep-c" style="width:15px;height:15px;"> HEP C</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-anemia" style="width:15px;height:15px;"> ANEMIA</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-steroids" style="width:15px;height:15px;"> STEROIDS</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-cancers" style="width:15px;height:15px;"> CANCERS</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-drug-abuse" style="width:15px;height:15px;"> DRUG ABUSE</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-coagulopathy" style="width:15px;height:15px;"> COAGULOPATHY</label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-chemotherapy" style="width:15px;height:15px;"> CHEMOTHERAPY</label>
+            
           </div>
         </div>
       </div>
 
-      <!-- MEDICATIONS & SURGICAL HISTORY -->
+            <!-- MEDICATIONS & SURGICAL HISTORY -->
       <div class="grid-2" style="margin-bottom:18px;">
         <div class="card">
           <div class="card-title">Medications</div>
@@ -1142,20 +1141,26 @@ function renderHistory() {
   el.innerHTML=filtered.map(c=>{
     const pill=c.worker==='dev'?'pill-dev':'pill-josh';
     const wname=c.worker==='dev'?'Devarsh':'Josh';
-    return `<div class="case-item">
+    return `<div class="case-item" style="${c.draft?'border-left:3px solid var(--warn);':''}">
       <div class="case-item-header" onclick="toggleCase('${c.id}')">
         <div>
           <div class="case-name" style="display:flex;align-items:center;gap:8px;">
-            ${c.procedure}<span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
+            ${c.procedure||'No Procedure Yet'}
+            <span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
+            ${c.draft?'<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">DRAFT</span>':''}
           </div>
           <div class="case-date">${c.date} · ${c.caseId}${c.provider?' · '+c.provider:''}</div>
         </div>
-        <div class="case-cost">$${c.total.toFixed(2)}</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <div class="case-cost">${c.draft?'In Progress':'$'+c.total.toFixed(2)}</div>
+          ${c.draft?`<button onclick="event.stopPropagation();resumeCase('${c.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Resume Case →</button>`:''}
+        </div>
       </div>
       <div class="case-items-list" id="detail_${c.id}">
-        ${c.items.map(i=>`<div class="case-item-row"><span>${i.generic} × ${i.qty}</span><span>$${i.lineTotal.toFixed(2)}</span></div>`).join('')}
+        ${c.items&&c.items.length?c.items.map(i=>`<div class="case-item-row"><span>${i.generic} × ${i.qty}</span><span>$${i.lineTotal.toFixed(2)}</span></div>`).join(''):'<div style="font-size:13px;color:var(--text-faint);padding:6px 0;">No supplies logged yet.</div>'}
         ${c.notes?`<div style="margin-top:6px;font-size:12px;color:var(--text-faint);font-style:italic;">${c.notes}</div>`:''}
         ${c.imageData?`<img src="${c.imageData}" class="case-log-img" onclick="openLightbox('${c.id}')" title="Click to enlarge">`:''}
+        ${c.preopId?`<div style="margin-top:8px;"><button onclick="event.stopPropagation();viewLinkedPreop('${c.preopId}')" class="btn btn-ghost btn-sm" style="font-size:11px;">📋 View Pre-Op Record</button></div>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1203,6 +1208,55 @@ function renderReports() {
         <span style="font-size:13px;font-family:'DM Mono',monospace;text-align:right;font-weight:500;">$${data.cost.toFixed(2)}</span>
       </div>`).join('')}`;
 }
+
+// ── RESUME DRAFT CASE ──
+window.resumeCase = function(caseId) {
+  const c = cases.find(x => x.id === caseId);
+  if(!c) return;
+  // Pre-fill new case form with draft data
+  document.getElementById('caseId').value = c.caseId || '';
+  document.getElementById('procedure').value = c.procedure || '';
+  document.getElementById('provider').value = c.provider || '';
+  document.getElementById('caseDate').value = c.date || new Date().toISOString().split('T')[0];
+  document.getElementById('caseNotes').value = c.notes || '';
+  // Set worker to match the draft
+  setWorker(c.worker || currentWorker);
+  // Pre-load any already saved items
+  caseItems = (c.items || []).map(i => ({
+    id: i.id, generic: i.generic, name: i.name, cost: i.cost, qty: i.qty,
+    stock: (items.find(x=>x.id===i.id) ? getStock(items.find(x=>x.id===i.id), c.worker) : 0)
+  }));
+  // Remove old draft so it doesn't duplicate
+  cases = cases.filter(x => x.id !== caseId);
+  saveCases();
+  renderCaseSupplies();
+  refreshItemSelect();
+  showTab('new-case');
+};
+
+window.viewLinkedPreop = async function(preopCaseId) {
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    const record = records.find(r => r['po-caseId'] === preopCaseId);
+    if(!record) { alert('Pre-op record not found for Case ID: ' + preopCaseId); return; }
+    // Pre-fill pre-op form with existing record and navigate there
+    Object.keys(record).forEach(key => {
+      const el = document.getElementById(key);
+      if(!el) return;
+      if(el.type === 'checkbox') el.checked = !!record[key];
+      else if(el.type !== 'radio') el.value = record[key] || '';
+    });
+    if(record['mallampati']) {
+      const radio = document.querySelector(`input[name="mallampati"][value="${record['mallampati']}"]`);
+      if(radio) radio.checked = true;
+    }
+    showTab('preop');
+  } catch(e) {
+    alert('Error loading pre-op record.');
+    console.error(e);
+  }
+};
 
 // ── PRE-OP ──
 function getPreopCheckboxes() {
@@ -1255,16 +1309,56 @@ window.savePreop = async function() {
     ...checkData
   };
   if(!record['po-caseId']) { alert('Please enter a Case ID.'); return; }
-  // Save to Firestore
+
+  // Save pre-op record to Firestore
   const preopSnap = await getDoc(doc(db,'atlas','preop'));
   const existing = preopSnap.exists() ? (preopSnap.data().records || []) : [];
   existing.unshift(record);
   setSyncing(true);
   await setDoc(doc(db,'atlas','preop'), { records: existing });
   setSyncing(false);
-  alert('✓ Pre-Op record saved!');
+
+  // Create a linked draft case if one doesn't already exist for this Case ID
+  const existingDraft = cases.find(c => c.caseId === record['po-caseId'] && c.draft);
+  if(!existingDraft) {
+    const draftCase = {
+      id: uid(),
+      caseId: record['po-caseId'],
+      procedure: '',
+      provider: record['po-provider'] || '',
+      date: record['po-surgeryDate'] || new Date().toISOString().split('T')[0],
+      notes: '',
+      worker: currentWorker,
+      items: [],
+      total: 0,
+      imageData: null,
+      draft: true,
+      preopId: record['po-caseId'],
+      savedAt: new Date().toISOString()
+    };
+    cases.unshift(draftCase);
+    await saveCases();
+  }
+
+  // Pre-fill the New Case form with pre-op info
+  prefillNewCase(record);
+
+  alert('✓ Pre-Op saved! New Case has been pre-filled — head to New Case to finish logging supplies.');
   clearPreop();
+
+  // Navigate to New Case tab
+  showTab('new-case');
 };
+
+function prefillNewCase(preopRecord) {
+  const caseIdEl = document.getElementById('caseId');
+  const providerEl = document.getElementById('provider');
+  const caseDateEl = document.getElementById('caseDate');
+
+  if(caseIdEl) caseIdEl.value = preopRecord['po-caseId'] || '';
+  if(providerEl) providerEl.value = preopRecord['po-provider'] || '';
+  if(caseDateEl) caseDateEl.value = preopRecord['po-surgeryDate'] || new Date().toISOString().split('T')[0];
+}
 
 window.clearPreop = function() {
   // Clear text fields
