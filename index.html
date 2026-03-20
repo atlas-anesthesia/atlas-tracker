@@ -342,7 +342,7 @@
           <label>Case ID <span style="font-size:11px;color:var(--text-faint);font-weight:400;">(auto-generated)</span></label>
           <div id="po-caseId-display" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:'DM Mono',monospace;color:var(--text-muted);">Will generate on save</div>
           <input type="hidden" id="po-caseId">
-          <label>Date of Surgery</label><input type="date" id="po-surgeryDate" oninput="updatePreopCaseIdDisplay()">
+          <label>Date of Surgery</label><input type="date" id="po-surgeryDate" oninput="updatePreopCaseIdDisplay()" onchange="updatePreopCaseIdDisplay()">
           <label>Date/Time of Call</label><input type="datetime-local" id="po-callDateTime">
           <label>Provider</label><input type="text" id="po-provider" placeholder="e.g. Dr. Smith">
         </div>
@@ -1047,6 +1047,11 @@ window.saveCase = async function() {
     const inv=items.find(i=>i.id===item.id);
     if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
   });
+  // Now remove the draft if one was loaded — only on successful save
+  if(window._activeDraftId) {
+    cases = cases.filter(x => x.id !== window._activeDraftId);
+    window._activeDraftId = null;
+  }
   await Promise.all([saveInventory(), saveCases()]);
   clearCase();
   alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
@@ -1056,6 +1061,9 @@ window.clearCase=function(){
   caseItems=[];
   ['caseId','procedure','provider','caseNotes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('caseDate').value=new Date().toISOString().split('T')[0];
+  window._activeDraftId = null;
+  const picker = document.getElementById('draftCasePicker');
+  if(picker) picker.value = '';
   removeImage();renderCaseSupplies();refreshItemSelect();
   updateCaseIdDisplays();
 };
@@ -1324,15 +1332,11 @@ window.loadDraftFromPicker = function() {
     stock: (items.find(x => x.id === i.id) ? getStock(items.find(x => x.id === i.id), c.worker) : 0)
   }));
 
-  // Remove draft from cases list so it doesn't duplicate on save
-  cases = cases.filter(x => x.id !== id);
-  saveCases();
+  // Store the draft ID so we can remove it only when the case is fully saved
+  window._activeDraftId = id;
 
   renderCaseSupplies();
   refreshItemSelect();
-
-  // Reset picker to "new case"
-  sel.value = '';
 };
 
 // ── RESUME DRAFT CASE ──
@@ -1352,9 +1356,8 @@ window.resumeCase = function(caseId) {
     id: i.id, generic: i.generic, name: i.name, cost: i.cost, qty: i.qty,
     stock: (items.find(x=>x.id===i.id) ? getStock(items.find(x=>x.id===i.id), c.worker) : 0)
   }));
-  // Remove old draft so it doesn't duplicate
-  cases = cases.filter(x => x.id !== caseId);
-  saveCases();
+  // Store draft ID — only remove when fully saved
+  window._activeDraftId = caseId;
   renderCaseSupplies();
   refreshItemSelect();
   showTab('new-case');
@@ -1427,6 +1430,22 @@ function getPreopTextFields() {
 window.savePreop = async function() {
   const textData = getPreopTextFields();
   const checkData = getPreopCheckboxes();
+
+  // Always generate Case ID fresh from surgery date at save time
+  const surgeryDate = textData['po-surgeryDate'];
+  if(!surgeryDate) {
+    alert('Please enter the Date of Surgery — it is used to generate the Case ID.');
+    return;
+  }
+  const generatedId = generateCaseId(currentWorker, surgeryDate);
+  textData['po-caseId'] = generatedId;
+
+  // Update the display too
+  const display = document.getElementById('po-caseId-display');
+  const input = document.getElementById('po-caseId');
+  if(display) display.textContent = generatedId;
+  if(input) input.value = generatedId;
+
   const record = {
     id: uid(),
     savedAt: new Date().toISOString(),
@@ -1434,8 +1453,6 @@ window.savePreop = async function() {
     ...textData,
     ...checkData
   };
-  if(!record['po-surgeryDate']) { alert('Please enter the Date of Surgery — it is used to generate the Case ID.'); return; }
-  if(!record['po-caseId']) { alert('Case ID could not be generated. Please enter the Date of Surgery.'); return; }
 
   // Save pre-op record to Firestore
   const preopSnap = await getDoc(doc(db,'atlas','preop'));
