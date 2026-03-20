@@ -538,12 +538,12 @@
             <input type="text" id="po-abd-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px;">
           </div>
           <div>
-            <label style="font-size:13px;font-weight:500;margin-bottom:6px;">Mallampati Score</label>
-            <div style="display:flex;gap:10px;">
-              ${[1,2,3,4].map(n=>`
-              <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:14px;font-weight:500;color:var(--text);">
-                <input type="radio" name="mallampati" value="${n}" id="po-mall-${n}" style="width:15px;height:15px;"> ${n}
-              </label>`).join('')}
+            <label style="font-size:13px;font-weight:500;margin-bottom:8px;">Mallampati Score</label>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+              <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="radio" name="mallampati" value="1" id="po-mall-1" style="width:15px;height:15px;"> 1</label>
+              <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="radio" name="mallampati" value="2" id="po-mall-2" style="width:15px;height:15px;"> 2</label>
+              <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="radio" name="mallampati" value="3" id="po-mall-3" style="width:15px;height:15px;"> 3</label>
+              <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="radio" name="mallampati" value="4" id="po-mall-4" style="width:15px;height:15px;"> 4</label>
             </div>
           </div>
         </div>
