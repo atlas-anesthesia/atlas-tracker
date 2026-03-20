@@ -190,6 +190,17 @@
 
     <!-- NEW CASE -->
     <div class="section" id="tab-new-case">
+      <!-- Draft case picker -->
+      <div class="card" style="margin-bottom:18px;padding:14px 20px;">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+          <span style="font-size:13px;font-weight:500;color:var(--text-muted);">Load a draft case:</span>
+          <select id="draftCasePicker" style="flex:1;min-width:220px;" onchange="loadDraftFromPicker()">
+            <option value="">— Start a new case —</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="refreshDraftPicker()">↻ Refresh</button>
+        </div>
+      </div>
+
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
         <span style="font-size:13px;font-weight:500;color:var(--text-muted);">Logging case for:</span>
         <div class="worker-toggle">
@@ -789,6 +800,7 @@ onAuthStateChanged(auth, async (user) => {
     await initData();
     updateCaseIdDisplays();
     updatePreopCaseIdDisplay();
+    refreshDraftPicker();
   } else {
     currentUser = null;
     document.getElementById('loginScreen').style.display='flex';
@@ -821,6 +833,7 @@ async function initData() {
     }
     renderHistory();
     renderReports();
+    refreshDraftPicker();
   });
 }
 
@@ -910,6 +923,7 @@ window.showTab = function(tab) {
   document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   document.querySelector(`.nav button[onclick="showTab('${tab}')"]`).classList.add('active');
+  if(tab==='new-case') refreshDraftPicker();
   if(tab==='inventory') renderInventory();
   if(tab==='history') renderHistory();
   if(tab==='reports') renderReports();
@@ -1246,6 +1260,74 @@ function renderReports() {
         <span style="font-size:13px;font-family:'DM Mono',monospace;text-align:right;font-weight:500;">$${data.cost.toFixed(2)}</span>
       </div>`).join('')}`;
 }
+
+// ── DRAFT CASE PICKER ──
+function refreshDraftPicker() {
+  const sel = document.getElementById('draftCasePicker');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— Start a new case —</option>';
+  const drafts = cases.filter(c => c.draft);
+  if(!drafts.length) {
+    const opt = document.createElement('option');
+    opt.disabled = true;
+    opt.textContent = 'No draft cases available';
+    sel.appendChild(opt);
+    return;
+  }
+  drafts.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    const wname = c.worker === 'dev' ? 'Devarsh' : 'Josh';
+    const proc = c.procedure ? ` — ${c.procedure}` : '';
+    opt.textContent = `${c.caseId} (${wname} · ${c.date}${proc})`;
+    sel.appendChild(opt);
+  });
+}
+
+window.loadDraftFromPicker = function() {
+  const sel = document.getElementById('draftCasePicker');
+  const id = sel.value;
+  if(!id) {
+    // "Start a new case" selected — clear the form
+    clearCase();
+    return;
+  }
+  const c = cases.find(x => x.id === id);
+  if(!c) return;
+
+  // Fill in case info
+  const ncDisplay = document.getElementById('caseId-display');
+  const ncInput = document.getElementById('caseId');
+  if(ncDisplay) ncDisplay.textContent = c.caseId;
+  if(ncInput) ncInput.value = c.caseId;
+
+  document.getElementById('procedure').value = c.procedure || '';
+  document.getElementById('provider').value = c.provider || '';
+  document.getElementById('caseDate').value = c.date || new Date().toISOString().split('T')[0];
+  document.getElementById('caseNotes').value = c.notes || '';
+
+  // Set correct worker
+  const mappedWorker = EMAIL_WORKER_MAP[currentUser.email.toLowerCase()] || 'dev';
+  if(c.worker === mappedWorker) {
+    currentWorker = c.worker;
+  }
+
+  // Load any already-saved items
+  caseItems = (c.items || []).map(i => ({
+    id: i.id, generic: i.generic, name: i.name, cost: i.cost, qty: i.qty,
+    stock: (items.find(x => x.id === i.id) ? getStock(items.find(x => x.id === i.id), c.worker) : 0)
+  }));
+
+  // Remove draft from cases list so it doesn't duplicate on save
+  cases = cases.filter(x => x.id !== id);
+  saveCases();
+
+  renderCaseSupplies();
+  refreshItemSelect();
+
+  // Reset picker to "new case"
+  sel.value = '';
+};
 
 // ── RESUME DRAFT CASE ──
 window.resumeCase = function(caseId) {
