@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas Anesthesia Case Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f5f4f0;--surface:#fff;--surface2:#f0efe9;--border:#e2e0d8;--border-strong:#c8c5ba;
+    --text:#1a1916;--text-muted:#6b6860;--text-faint:#9c9a94;
+    --accent:#2d6a4f;--accent-light:#e8f4ed;--accent-mid:#52b788;
+    --warn:#b5451b;--warn-light:#fdf0eb;
+    --info:#1d3557;--info-light:#e8eef5;
+    --dev:#5c3d8f;--dev-light:#f0eafa;
+    --josh:#1a6b8a;--josh-light:#e3f3f8;
+    --radius:10px;--radius-sm:6px;
+    --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.04);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+  /* ── LOGIN ── */
+  #loginScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--info);}
+  .login-card{background:#fff;border-radius:16px;padding:40px;width:100%;max-width:380px;box-shadow:0 8px 40px rgba(0,0,0,.2);}
+  .login-card h1{font-size:20px;font-weight:600;color:var(--info);margin-bottom:4px;}
+  .login-card p{font-size:13px;color:var(--text-faint);margin-bottom:28px;}
+  .login-field{margin-bottom:14px;}
+  .login-field label{display:block;font-size:12px;font-weight:500;color:var(--text-muted);margin-bottom:5px;}
+  .login-field input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .15s;}
+  .login-field input:focus{border-color:var(--info);}
+  .login-btn{width:100%;padding:11px;background:var(--info);color:#fff;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;cursor:pointer;transition:background .15s;margin-top:6px;}
+  .login-btn:hover{background:#152d49;}
+  .login-error{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;margin-bottom:14px;display:none;}
+
+  /* ── LOADING ── */
+  #loadingScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:14px;}
+  .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--info);border-radius:50%;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ── APP ── */
+  #appScreen{display:none;}
+  .header{background:var(--info);color:#fff;padding:18px 32px;display:flex;align-items:center;justify-content:space-between;}
+  .header h1{font-size:19px;font-weight:500;letter-spacing:-.3px;}
+  .header p{font-size:12px;opacity:.6;margin-top:2px;}
+  .header-right{display:flex;align-items:center;gap:12px;}
+  .header-badge{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:5px 13px;font-size:12px;font-family:'DM Mono',monospace;}
+  .user-badge{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:20px;padding:5px 13px;font-size:12px;display:flex;align-items:center;gap:7px;}
+  .logout-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:20px;padding:5px 13px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s;}
+  .logout-btn:hover{background:rgba(255,255,255,.2);}
+  .sync-indicator{font-size:11px;opacity:.7;display:flex;align-items:center;gap:5px;}
+  .sync-dot{width:7px;height:7px;border-radius:50%;background:#52b788;}
+  .sync-dot.syncing{background:#f59e0b;animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+  .nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;padding:0 32px;}
+  .nav button{background:none;border:none;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text-muted);padding:13px 0;margin-right:26px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;}
+  .nav button.active{color:var(--info);border-bottom-color:var(--info);font-weight:500;}
+  .container{max-width:1200px;margin:0 auto;padding:24px 32px;}
+  .section{display:none;}.section.active{display:block;}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;}
+  .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);}
+  .card-title{font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--text-faint);margin-bottom:14px;}
+  label{display:block;font-size:12px;font-weight:500;color:var(--text-muted);margin-bottom:4px;margin-top:11px;}
+  label:first-of-type{margin-top:0;}
+  input[type="text"],input[type="number"],input[type="date"],select{width:100%;padding:8px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;transition:border-color .15s;}
+  input:focus,select:focus{border-color:var(--accent-mid);background:#fff;}
+  .btn{display:inline-flex;align-items:center;gap:5px;padding:8px 16px;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .15s;}
+  .btn-primary{background:var(--info);color:#fff;}.btn-primary:hover{background:#152d49;}
+  .btn-success{background:var(--accent);color:#fff;}.btn-success:hover{background:#1f5235;}
+  .btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border);}.btn-ghost:hover{background:var(--surface2);}
+  .btn-sm{padding:5px 11px;font-size:12px;}
+
+  .worker-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;width:fit-content;margin-bottom:20px;}
+  .worker-btn{background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:8px 20px;cursor:pointer;transition:all .15s;color:var(--text-muted);}
+  .worker-btn.active-dev{background:var(--dev);color:#fff;}
+  .worker-btn.active-josh{background:var(--josh);color:#fff;}
+  .worker-btn:not([class*="active"]):hover{background:var(--surface2);}
+  .worker-pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 10px;border-radius:20px;}
+  .pill-dev{background:var(--dev-light);color:var(--dev);}
+  .pill-josh{background:var(--josh-light);color:var(--josh);}
+
+  .inv-tab-bar{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;width:fit-content;margin-bottom:18px;}
+  .inv-tab{background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:8px 18px;cursor:pointer;transition:all .15s;color:var(--text-muted);border-right:1px solid var(--border);}
+  .inv-tab:last-child{border-right:none;}
+  .inv-tab.active{background:var(--info);color:#fff;}
+
+  .supply-row{display:grid;grid-template-columns:2.5fr 90px 70px 80px 90px 32px;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);}
+  .supply-row:last-child{border-bottom:none;}
+  .supply-row-header{display:grid;grid-template-columns:2.5fr 90px 70px 80px 90px 32px;gap:8px;padding-bottom:7px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);}
+  .supply-row input{padding:5px 8px;font-size:13px;}
+  .stock-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;font-family:'DM Mono',monospace;}
+  .stock-ok{background:var(--accent-light);color:var(--accent);}
+  .stock-low{background:var(--warn-light);color:var(--warn);}
+  .stock-critical{background:#fef2f2;color:#b91c1c;}
+  .metric-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;}
+  .metric-label{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.7px;font-weight:600;}
+  .metric-value{font-size:26px;font-weight:300;color:var(--text);margin-top:3px;font-family:'DM Mono',monospace;}
+  .case-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:9px;}
+  .case-item-header{display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;}
+  .case-name{font-size:14px;font-weight:500;}
+  .case-date{font-size:12px;color:var(--text-faint);margin-top:2px;}
+  .case-cost{font-size:17px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info);}
+  .case-items-list{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:none;}
+  .case-items-list.open{display:block;}
+  .case-item-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text-muted);}
+  .case-item-row span:last-child{font-family:'DM Mono',monospace;color:var(--text);}
+  .img-upload-zone{border:1.5px dashed var(--border-strong);border-radius:var(--radius-sm);padding:18px;text-align:center;cursor:pointer;transition:border-color .15s;position:relative;background:var(--bg);}
+  .img-upload-zone:hover{border-color:var(--accent-mid);}
+  .img-upload-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+  .img-upload-zone p{font-size:13px;color:var(--text-faint);pointer-events:none;}
+  .img-preview{position:relative;margin-top:10px;}
+  .img-preview img{width:100%;border-radius:var(--radius-sm);border:1px solid var(--border);max-height:300px;object-fit:contain;}
+  .img-preview .remove-img{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+  .case-log-img{width:100%;border-radius:var(--radius-sm);border:1px solid var(--border);margin-top:10px;max-height:280px;object-fit:contain;display:block;cursor:zoom-in;}
+  .alert{padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:10px;}
+  .alert-warn{background:var(--warn-light);color:var(--warn);border:1px solid #f0c4b0;}
+  .alert-success{background:var(--accent-light);color:var(--accent);border:1px solid #b5ddc7;}
+  .empty-state{text-align:center;padding:40px 20px;color:var(--text-faint);font-size:14px;}
+  .action-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+  .action-bar h2{font-size:17px;font-weight:500;}
+  .total-row{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:var(--info-light);border-radius:var(--radius-sm);margin-top:12px;}
+  .total-row .label{font-weight:600;font-size:13px;color:var(--info);}
+  .total-row .value{font-size:21px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info);}
+  .inv-row{display:grid;grid-template-columns:1.8fr 80px 70px 70px 90px 110px 80px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .inv-row:last-child{border-bottom:none;}
+  .inv-header{display:grid;grid-template-columns:1.8fr 80px 70px 70px 90px 110px 80px;gap:8px;padding-bottom:7px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);}
+  .inv-row input{padding:5px 8px;font-size:13px;width:100%;}
+  .cat-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);padding:14px 0 6px;}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingScreen">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:var(--text-faint);">Connecting to Atlas...</div>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen" style="display:none;">
+  <div class="login-card">
+    <h1>Atlas Anesthesia</h1>
+    <p>Sign in to access the case tracker</p>
+    <div class="login-error" id="loginError"></div>
+    <div class="login-field">
+      <label>Email</label>
+      <input type="text" id="loginEmail" placeholder="you@example.com" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="login-btn" onclick="doLogin()">Sign In</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="header">
+    <div>
+      <h1>Atlas Anesthesia — Case Tracker</h1>
+      <p>Cost calculation &amp; inventory management</p>
+    </div>
+    <div class="header-right">
+      <div class="sync-indicator"><div class="sync-dot" id="syncDot"></div><span id="syncText">Synced</span></div>
+      <div class="user-badge">👤 <span id="userLabel"></span></div>
+      <button class="logout-btn" onclick="doLogout()">Sign out</button>
+      <div class="header-badge" id="dateDisplay"></div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button class="active" onclick="showTab('new-case')">New Case</button>
+    <button onclick="showTab('inventory')">Inventory</button>
+    <button onclick="showTab('history')">Case History</button>
+    <button onclick="showTab('reports')">Reports</button>
+  </div>
+
+  <div class="container">
+
+    <!-- NEW CASE -->
+    <div class="section active" id="tab-new-case">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+        <span style="font-size:13px;font-weight:500;color:var(--text-muted);">Logging case for:</span>
+        <div class="worker-toggle">
+          <button class="worker-btn active-dev" id="wbtn-dev" onclick="setWorker('dev')">Devarsh</button>
+          <button class="worker-btn" id="wbtn-josh" onclick="setWorker('josh')">Josh</button>
+        </div>
+        <span id="workerIndicator" class="worker-pill pill-dev">Devarsh's inventory will be updated</span>
+      </div>
+      <div class="grid-2" style="margin-bottom:18px;">
+        <div class="card">
+          <div class="card-title">Case Information</div>
+          <label>Patient / Case ID</label><input type="text" id="caseId" placeholder="e.g. PT-2024-001">
+          <label>Procedure</label><input type="text" id="procedure" placeholder="e.g. Total knee replacement">
+          <label>Provider</label><input type="text" id="provider" placeholder="e.g. Dr. Smith">
+          <label>Date</label><input type="date" id="caseDate">
+          <label>Notes</label><input type="text" id="caseNotes" placeholder="Optional notes">
+          <div style="margin-top:14px;">
+            <label style="margin-top:0;">Case Log Photo</label>
+            <div class="img-upload-zone" id="uploadZone">
+              <input type="file" accept="image/*" id="caseImageInput" onchange="handleImageUpload(event)">
+              <p>📷 Tap to upload a photo of the paper case log</p>
+            </div>
+            <div class="img-preview" id="imgPreview" style="display:none;">
+              <img id="previewImg" src="" alt="Case log">
+              <button class="remove-img" onclick="removeImage()">×</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Case Cost Summary</div>
+          <div id="liveSummary"><div class="empty-state">Add supplies below to see cost summary</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Supplies Used This Case</div>
+        <div id="lowStockWarnings"></div>
+        <div class="supply-row-header"><span>Item</span><span>Unit Cost</span><span>In Stock</span><span>Qty Used</span><span>Line Total</span><span></span></div>
+        <div id="caseSupplyRows"></div>
+        <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
+          <select id="addItemSelect" style="flex:1;"></select>
+          <button class="btn btn-ghost btn-sm" onclick="addCaseItem()">+ Add Item</button>
+        </div>
+        <div class="total-row"><span class="label">Total Case Cost</span><span class="value" id="caseTotalDisplay">$0.00</span></div>
+        <div style="margin-top:14px;display:flex;gap:10px;">
+          <button class="btn btn-success" onclick="saveCase()">✓ Save Case &amp; Update Inventory</button>
+          <button class="btn btn-ghost" onclick="clearCase()">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div class="section" id="tab-inventory">
+      <div class="action-bar">
+        <h2>Inventory</h2>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <input type="text" id="invSearch" placeholder="Search items..." style="width:200px;" oninput="renderInventory()">
+          <button class="btn btn-primary btn-sm" onclick="toggleAddForm()">+ Add New Item</button>
+        </div>
+      </div>
+      <div class="inv-tab-bar">
+        <button class="inv-tab active" id="itab-dev" onclick="setInvTab('dev')">Devarsh</button>
+        <button class="inv-tab" id="itab-josh" onclick="setInvTab('josh')">Josh</button>
+        <button class="inv-tab" id="itab-combined" onclick="setInvTab('combined')">Combined</button>
+      </div>
+      <div id="addItemForm" class="card" style="display:none;margin-bottom:18px;">
+        <div class="card-title">Add New Inventory Item</div>
+        <div class="grid-2">
+          <div>
+            <label>Item Code</label><input type="text" id="newCode" placeholder="e.g. 123-4567">
+            <label>Generic Name</label><input type="text" id="newGeneric" placeholder="e.g. Propofol">
+            <label>Item Name / Description</label><input type="text" id="newItemName" placeholder="Full item name">
+            <label>Category</label>
+            <select id="newItemCategory">
+              <option>Airway Supplies</option><option>Drugs / Medications</option><option>Emergency Drugs</option>
+              <option>Fluids</option><option>IV Supplies</option><option>Monitoring</option>
+              <option>Reversal Agents</option><option>Surgical Supplies</option><option>Other</option>
+            </select>
+          </div>
+          <div>
+            <label>Supplier</label><input type="text" id="newSupplier" placeholder="e.g. Smith Pharmacy">
+            <label>Unit Size</label><input type="text" id="newUnitSize" placeholder="e.g. 10/BX">
+            <label>Price Per Unit ($)</label><input type="number" id="newItemCost" placeholder="0.00" min="0" step="0.01">
+            <label>Stock — Devarsh</label><input type="number" id="newItemStockDev" placeholder="0" min="0">
+            <label>Stock — Josh</label><input type="number" id="newItemStockJosh" placeholder="0" min="0">
+            <label>Restock Alert Level</label><input type="number" id="newItemAlert" placeholder="e.g. 5" min="0">
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:10px;">
+          <button class="btn btn-primary btn-sm" onclick="saveNewItem()">Add Item</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleAddForm()">Cancel</button>
+        </div>
+      </div>
+      <div id="inventoryAlerts" style="margin-bottom:14px;"></div>
+      <div class="card"><div id="inventoryTable"></div></div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="section" id="tab-history">
+      <div class="action-bar">
+        <h2>Case History</h2>
+        <div class="worker-toggle" style="margin-bottom:0;">
+          <button class="worker-btn" id="hbtn-all" onclick="setHistoryFilter('all')" style="background:var(--info);color:#fff;">All</button>
+          <button class="worker-btn" id="hbtn-dev" onclick="setHistoryFilter('dev')">Devarsh</button>
+          <button class="worker-btn" id="hbtn-josh" onclick="setHistoryFilter('josh')">Josh</button>
+        </div>
+      </div>
+      <div id="caseHistoryList"></div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="section" id="tab-reports">
+      <div class="action-bar"><h2>Reports</h2></div>
+      <div class="grid-3" style="margin-bottom:20px;">
+        <div class="card" id="reportDev"></div>
+        <div class="card" id="reportJosh"></div>
+        <div class="card" id="reportCombined"></div>
+      </div>
+      <div class="card" id="topItemsCard"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;align-items:center;justify-content:center;" onclick="closeLightbox()">
+  <img id="lightboxImg" src="" style="max-width:90vw;max-height:90vh;border-radius:8px;object-fit:contain;">
+</div>
+
+<!-- FIREBASE SDKs -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ── FIREBASE CONFIG ──
+const firebaseConfig = {
+  apiKey: "AIzaSyAAY9Ajrx4PJRqhxW5MgRY3wgZni9rJhMo",
+  authDomain: "atlas-ane.firebaseapp.com",
+  projectId: "atlas-ane",
+  storageBucket: "atlas-ane.firebasestorage.app",
+  messagingSenderId: "677020713040",
+  appId: "1:677020713040:web:07f52f77fd225c607a5155"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ── STATE ──
+let items = [];
+let cases = [];
+let caseItems = [];
+let currentWorker = 'dev';
+let currentInvTab = 'dev';
+let currentHistoryFilter = 'all';
+let pendingImageData = null;
+let currentUser = null;
+
+// ── DEFAULT INVENTORY ──
+const ITEM_TEMPLATE = [
+  {id:'141-1719',code:'141-1719',generic:'Face Mask O2',name:"Mask O2 Elongated 7' Tube",category:'Airway Supplies',supplier:'Henry Schein',unitSize:'50/CA',costPerUnit:1.34,alert:25},
+  {id:'420-9994',code:'420-9994',generic:'Nasal Atomizer',name:'Nasal Atomization Device W/O Syringe',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=25/EA',costPerUnit:7.67,alert:20},
+  {id:'146-4280',code:'146-4280',generic:'LMA 2.5',name:'Airway LMA Unique SU Size 2.5',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:7.69,alert:3},
+  {id:'136-3903',code:'136-3903',generic:'ETT 4.0',name:'Airway Silicone w/Cuff Pilot Size 4',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:7.69,alert:3},
+  {id:'136-3901',code:'136-3901',generic:'ETT 5.0',name:'Airway Silicone w/Cuff Pilot Size 5',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:7.69,alert:3},
+  {id:'139-3110',code:'139-3110',generic:'LMA 3',name:'Airway LMA Unique w/Cuff Sze 3 Mask',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:7.69,alert:3},
+  {id:'113-5785',code:'113-5785',generic:'Nasal ETT 4.0',name:'AGT Nasal Tube Cuffed ET 4.0',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
+  {id:'113-2941',code:'113-2941',generic:'Nasal ETT 4.5',name:"Cannula Nasal Cuff w/Tube 4.5'",category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
+  {id:'743-0717',code:'743-0717',generic:'Nasal ETT 5.0',name:'Tube Endotrach Preformed 5.0MM',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
+  {id:'146-9367',code:'146-9367',generic:'Nasal ETT 5.5',name:'Endotracheal Tube Preformed 5.5mm',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:5.98,alert:3},
+  {id:'491-8760',code:'491-8760',generic:'Nasal ETT 6.0',name:'Tube Endotrach 6.0mm Agt Nasal',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:0,alert:3},
+  {id:'147-3037',code:'147-3037',generic:'Nasal ETT 6.5',name:'Pref AGT Endotrach Tubes 6.5mm',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:5.98,alert:3},
+  {id:'123-5611',code:'123-5611',generic:'Nasal ETT 7.0',name:'Tube Endo Trach Nasal Cuffed 7mm',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
+  {id:'743-3905',code:'743-3905',generic:'Nasal ETT 7.5',name:'Tube Endotrach Preformed 7.5MM',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
+  {id:'700-1576',code:'700-1576',generic:'NPA 28',name:'Robertazzi Naso Airway 28/FR',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:3.67,alert:10},
+  {id:'700-1577',code:'700-1577',generic:'NPA 30',name:'Robertazzi Naso Airway 30/FR',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:3.67,alert:10},
+  {id:'700-1579',code:'700-1579',generic:'NPA 34',name:'Robertazzi Naso Airway 34/FR',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:3.67,alert:3},
+  {id:'627-0136',code:'627-0136',generic:'Anesthesia Mask Sz 5',name:'Mask Anesthesia Prem Cushion Sz 5',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'20/CA',costPerUnit:0.28,alert:5},
+  {id:'627-0140',code:'627-0140',generic:'Anesthesia Mask Sz 4',name:'Mask Anesthesia Prem Cushion Sz 4',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'20/CA',costPerUnit:0.28,alert:5},
+  {id:'627-0141',code:'627-0141',generic:'Anesthesia Mask Sz 3',name:'Mask Anesthesia Prem Cushion Sz 3',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'20/CA',costPerUnit:0.28,alert:5},
+  {id:'122-8718',code:'122-8718',generic:'Jackson Rees Circuit',name:'Circuit Anesthesia JacksonRees',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'20/CA',costPerUnit:12.60,alert:5},
+  {id:'145-7149',code:'145-7149',generic:'Nasal Cannula CO2',name:"Cannula CO2 Sampling Female 7' Adult",category:'Airway Supplies',supplier:'Henry Schein',unitSize:'25/CA',costPerUnit:3.93,alert:10},
+  {id:'149-6489',code:'149-6489',generic:'Magills Forceps',name:'Magill Catheter Forceps 8"',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'50/BX',costPerUnit:10.66,alert:5},
+  {id:'987-0285',code:'987-0285',generic:'20G IV Catheter',name:'Insyte Autoguard BC PNK 20Gx1.16',category:'IV Supplies',supplier:'Henry Schein',unitSize:'50/BX',costPerUnit:2.31,alert:10},
+  {id:'987-0284',code:'987-0284',generic:'22G IV Catheter',name:'Insyte Autoguard BC BL 22Gx1',category:'IV Supplies',supplier:'Henry Schein',unitSize:'50/BX',costPerUnit:2.31,alert:10},
+  {id:'118-7249',code:'118-7249',generic:'KY Jelly',name:'Lubricating Jelly Fliptop 2oz/Sterile',category:'IV Supplies',supplier:'Henry Schein',unitSize:'12/BX',costPerUnit:1.55,alert:4},
+  {id:'777-9152',code:'777-9152',generic:'Tegaderm',name:'Tegaderm Transparent Dressing 2.4x2.8',category:'IV Supplies',supplier:'Henry Schein',unitSize:'100/BX',costPerUnit:0.26,alert:20},
+  {id:'777-7305',code:'777-7305',generic:'Eye Tape',name:'Tape Transpore Plast Transprnt 1"x10yd',category:'IV Supplies',supplier:'Henry Schein',unitSize:'12/BX',costPerUnit:0.82,alert:6},
+  {id:'112-7097',code:'112-7097',generic:'Blunt Needle 18G',name:'Needle Blunt Fill 18Gx1.5',category:'IV Supplies',supplier:'Henry Schein',unitSize:'100/BX',costPerUnit:0.13,alert:40},
+  {id:'148-6288',code:'148-6288',generic:'TB Syringe 1cc',name:'Syringe Hypodermic TB LuerLock 1cc',category:'IV Supplies',supplier:'Henry Schein',unitSize:'100/BX',costPerUnit:0,alert:20},
+  {id:'987-0248',code:'987-0248',generic:'3cc Syringe',name:'Luer-Lok Syringe Only 3cc',category:'IV Supplies',supplier:'Henry Schein',unitSize:'200/BX',costPerUnit:0.11,alert:50},
+  {id:'127-8254',code:'127-8254',generic:'10cc Syringe',name:'Syringe 10cc LL w/o Needle',category:'IV Supplies',supplier:'Henry Schein',unitSize:'200/BX',costPerUnit:0.17,alert:50},
+  {id:'987-3800',code:'987-3800',generic:'50cc Syringe',name:'Syringe w/o Needle LL 50ml',category:'IV Supplies',supplier:'Henry Schein',unitSize:'40/BX',costPerUnit:0.79,alert:30},
+  {id:'570-3406',code:'570-3406',generic:'IV Start Kit',name:'IV Start Kit w/ Chloraprep',category:'IV Supplies',supplier:'Henry Schein',unitSize:'CS=50/EA',costPerUnit:1.56,alert:20},
+  {id:'114-0817',code:'114-0817',generic:'Propofol Tubing',name:'Anesthesia Ext Tube 72"',category:'IV Supplies',supplier:'Henry Schein',unitSize:'60/CA',costPerUnit:3.68,alert:20},
+  {id:'681-3457',code:'681-3457',generic:'ETT Tape',name:'Tape Waterproof Adhesv .5x2.5yd',category:'IV Supplies',supplier:'Henry Schein',unitSize:'36/BX',costPerUnit:0.35,alert:8},
+  {id:'570-0887',code:'570-0887',generic:'IVF Tubing',name:'IV Admin Set 15 DRP 2 Port 105"',category:'IV Supplies',supplier:'Henry Schein',unitSize:'CS=50/EA',costPerUnit:2.95,alert:20},
+  {id:'777-9475',code:'777-9475',generic:'EKG Electrodes',name:'Red Dot Electrode Adult 4x3-1/2cm Foam',category:'Monitoring',supplier:'Henry Schein',unitSize:'50/BG',costPerUnit:0.23,alert:50},
+  {id:'106-1241',code:'106-1241',generic:'SCD Sleeve Medium',name:'SCD Express Sleeve Knee Medium',category:'Surgical Supplies',supplier:'Henry Schein',unitSize:'5PR/CA',costPerUnit:56.44,alert:2},
+  {id:'113-9573',code:'113-9573',generic:'SCD Sleeve Large',name:'SCD Express Sleeve Knee Pair Large',category:'Surgical Supplies',supplier:'Henry Schein',unitSize:'5PR/CA',costPerUnit:70.40,alert:2},
+  {id:'570-3485',code:'570-3485',generic:'Gloves N300 Large',name:'N300 Nitrile Exam Gloves Large Black 300ct',category:'Other',supplier:'Henry Schein',unitSize:'300/BX',costPerUnit:0.04,alert:100},
+  {id:'570-3490',code:'570-3490',generic:'Gloves N200 Large',name:'N200 Nitrile Exam Gloves Large Black 200ct',category:'Other',supplier:'Henry Schein',unitSize:'200/BX',costPerUnit:0.06,alert:100},
+  {id:'00904-6720-59',code:'00904-6720-59',generic:'Tylenol',name:'Acetaminophen 500mg Caplets',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'100 caplets',costPerUnit:0.04,alert:20},
+  {id:'00093-3174-31',code:'00093-3174-31',generic:'Albuterol Inhaler',name:'Albuterol HFA Inhaler (Proair) 200 dose',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1 inhaler',costPerUnit:16.00,alert:2},
+  {id:'00143-9875-25',code:'00143-9875-25',generic:'Amiodarone',name:'Amiodarone 150mg/3mL vials',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'3mLx25 vials',costPerUnit:1.32,alert:5},
+  {id:'00904-6794-89',code:'00904-6794-89',generic:'Aspirin 81mg',name:'Aspirin 81mg chewable',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'90 tablets',costPerUnit:0.03,alert:20},
+  {id:'64253-0400-91',code:'64253-0400-91',generic:'Atropine',name:'Atropine 1mg/10mL syringes',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx10 syringes',costPerUnit:11.20,alert:3},
+  {id:'00641-6145-25',code:'00641-6145-25',generic:'Decadron (Dexamethasone)',name:'Dexamethasone 4mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:0.96,alert:10},
+  {id:'71288-0505-03',code:'71288-0505-03',generic:'Precedex (Dexmedetomidine)',name:'Dexmedetomidine 200mcg/2mL vials',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'2mLx25 vials',costPerUnit:2.84,alert:5},
+  {id:'76329-3302-01',code:'76329-3302-01',generic:'D50',name:'Dextrose 50% 50mL Syringe',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'50mLx10 syringes',costPerUnit:20.90,alert:3},
+  {id:'25021-0319-10',code:'25021-0319-10',generic:'Cardizem (Diltiazem)',name:'Diltiazem 50mg/10mL',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx10 vials',costPerUnit:6.20,alert:3},
+  {id:'72485-0101-25',code:'72485-0101-25',generic:'Benadryl (Diphenhydramine)',name:'Diphenhydramine 50mg/mL',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:1.08,alert:5},
+  {id:'70700-0249-25',code:'70700-0249-25',generic:'Ephedrine',name:'Ephedrine 50mg/mL Vial',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:4.40,alert:5},
+  {id:'76329-3318-01',code:'76329-3318-01',generic:'Epinephrine',name:'Epinephrine 0.1mg/mL Syringe',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'10mLx10 syringes',costPerUnit:14.00,alert:3},
+  {id:'55150-0194-10',code:'55150-0194-10',generic:'Esmolol',name:'Esmolol 10mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx25 vials',costPerUnit:2.24,alert:5},
+  {id:'70860-0751-02',code:'70860-0751-02',generic:'Pepcid (Famotidine)',name:'Famotidine 20mg/2mL SDV',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'2mLx25 vials',costPerUnit:0.84,alert:5},
+  {id:'71288-0203-05',code:'71288-0203-05',generic:'Lasix (Furosemide)',name:'Furosemide 40mg/4mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'4mLx25 vials',costPerUnit:0.72,alert:5},
+  {id:'66794-0204-42',code:'66794-0204-42',generic:'Robinul (Glycopyrrolate)',name:'Glycopyrrolate 1mg/5mL Vial',category:'Reversal Agents',supplier:'Smith Pharmacy',unitSize:'5mLx25 vials',costPerUnit:2.12,alert:10},
+  {id:'00641-6231-25',code:'00641-6231-25',generic:'Hydralazine',name:'Hydralazine 20mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:3.20,alert:5},
+  {id:'76204-0600-30',code:'76204-0600-30',generic:'DuoNeb (Ipratropium/Albuterol)',name:'Ipratropium 0.5mg-Albuterol 3mg/mL Nebulizer',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'3mLx30 vials',costPerUnit:0.30,alert:5},
+  {id:'72266-0118-25',code:'72266-0118-25',generic:'Toradol (Ketorolac)',name:'Ketorolac 30mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:0.76,alert:10},
+  {id:'0143-9509-10',code:'0143-9509-10',generic:'Ketamine',name:'Ketamine HCI Injection 500mg/5mL',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'5mL vial',costPerUnit:14.67,alert:2},
+  {id:'36000-0322-02',code:'36000-0322-02',generic:'Labetalol',name:'Labetalol 100mg/20mL MDV',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'20mL vial',costPerUnit:4.00,alert:3},
+  {id:'00264-7750-00',code:'00264-7750-00',generic:'Lactated Ringers',name:'Lactated Ringers 1L Bag',category:'Fluids',supplier:'Smith Pharmacy',unitSize:'1Lx12 bags',costPerUnit:3.42,alert:8},
+  {id:'00143-9595-25',code:'00143-9595-25',generic:'Lidocaine 1%',name:'Lidocaine 1% SDV preservative-free',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'5mLx25 vials',costPerUnit:1.76,alert:10},
+  {id:'00009-3073-01',code:'00009-3073-01',generic:'Solumedrol (Methylprednisolone)',name:'Methylprednisolone 40mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mL vial',costPerUnit:9.00,alert:2},
+  {id:'23155-0240-41',code:'23155-0240-41',generic:'Reglan (Metoclopramide)',name:'Metoclopramide 10mg/2mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'2mLx25 vials',costPerUnit:1.40,alert:5},
+  {id:'36000-0033-10',code:'36000-0033-10',generic:'Metoprolol',name:'Metoprolol 5mg/5mL SDV',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'5mLx10 vials',costPerUnit:0.90,alert:3},
+  {id:'70069-0671-10',code:'70069-0671-10',generic:'Nubain (Nalbuphine)',name:'Nalbuphine 10mg/mL ampule',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx10 ampules',costPerUnit:6.90,alert:5},
+  {id:'23155-0518-41',code:'23155-0518-41',generic:'Neostigmine',name:'Neostigmine 10mg/10mL MDV',category:'Reversal Agents',supplier:'Smith Pharmacy',unitSize:'10mLx10 vials',costPerUnit:3.70,alert:3},
+  {id:'69339-0174-41',code:'69339-0174-41',generic:'NitroTabs (Nitroglycerin)',name:'Nitroglycerin 0.4mg SL tabs',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'25ct bottle',costPerUnit:10.00,alert:5},
+  {id:'60505-6130-05',code:'60505-6130-05',generic:'Zofran (Ondansetron)',name:'Ondansetron 4mg/2mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'2mLx25 vials',costPerUnit:0.44,alert:10},
+  {id:'00904-6761-30',code:'00904-6761-30',generic:'Afrin (Oxymetazoline)',name:'Oxymetazoline 0.5% Nasal Spray',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1 bottle 15mL',costPerUnit:3.00,alert:3},
+  {id:'70756-0621-25',code:'70756-0621-25',generic:'Neo (Phenylephrine)',name:'Phenylephrine 10mg SDV (10mg/mL)',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:1.20,alert:5},
+  {id:'23155-0345-44',code:'23155-0345-44',generic:'Propofol 20mL vials',name:'Propofol 200mg/20mL Vials (20 COUNT)',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'20mLx20 vials',costPerUnit:2.30,alert:20},
+  {id:'23155-0345-42',code:'23155-0345-42',generic:'Propofol 50mL vials',name:'Propofol 500mg/50mL Vials (20 COUNT)',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'50mLx20 vials',costPerUnit:5.20,alert:40},
+  {id:'00487-5901-99',code:'00487-5901-99',generic:'Racemic Epi',name:'Racepinephrine-S2 2.25% soln',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'1mLx30 vials',costPerUnit:2.53,alert:6},
+  {id:'43066-0007-10',code:'43066-0007-10',generic:'Roc (Rocuronium)',name:'Rocuronium 50mg/5mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'5mLx10 vials',costPerUnit:3.70,alert:3},
+  {id:'70069-0301-25',code:'70069-0301-25',generic:'Sux (Succinylcholine)',name:'Succinylcholine 20mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx25 vials',costPerUnit:2.08,alert:5},
+];
+
+const DEFAULT_STOCK = {
+  '141-1719':100,'420-9994':100,'146-4280':10,'136-3903':10,'136-3901':10,'139-3110':10,'113-5785':10,'113-2941':10,'743-0717':10,'146-9367':10,'491-8760':10,'147-3037':10,'123-5611':10,'743-3905':10,'700-1576':50,'700-1577':50,'700-1579':5,'627-0136':20,'627-0140':20,'627-0141':20,'122-8718':20,'145-7149':50,'149-6489':50,'987-0285':50,'987-0284':50,'118-7249':12,'777-9152':100,'777-7305':24,'112-7097':200,'148-6288':0,'987-0248':400,'127-8254':400,'987-3800':160,'570-3406':100,'114-0817':120,'681-3457':36,'570-0887':100,'777-9475':250,'106-1241':5,'113-9573':5,'570-3485':600,'570-3490':400,'00904-6720-59':100,'00093-3174-31':8,'00143-9875-25':25,'00904-6794-89':90,'64253-0400-91':10,'00641-6145-25':49,'71288-0505-03':25,'76329-3302-01':10,'25021-0319-10':10,'72485-0101-25':25,'70700-0249-25':25,'76329-3318-01':10,'55150-0194-10':25,'70860-0751-02':25,'71288-0203-05':25,'66794-0204-42':50,'00641-6231-25':25,'76204-0600-30':25,'72266-0118-25':49,'0143-9509-10':3,'36000-0322-02':8,'00264-7750-00':36,'00143-9595-25':50,'00009-3073-01':2,'23155-0240-41':25,'36000-0033-10':10,'70069-0671-10':20,'23155-0518-41':10,'69339-0174-41':25,'60505-6130-05':50,'00904-6761-30':10,'70756-0621-25':25,'23155-0345-44':80,'23155-0345-42':200,'00487-5901-99':30,'43066-0007-10':10,'70069-0301-25':25
+};
+
+// ── SYNC INDICATOR ──
+function setSyncing(on) {
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncText');
+  if(on){dot.className='sync-dot syncing';txt.textContent='Saving...';}
+  else{dot.className='sync-dot';txt.textContent='Synced';}
+}
+
+// ── AUTH ──
+window.doLogin = async function() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display='none';
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch(e) {
+    errEl.style.display='block';
+    errEl.textContent = e.code==='auth/invalid-credential' ? 'Incorrect email or password.' : e.message;
+  }
+};
+
+window.doLogout = async function() {
+  await signOut(auth);
+};
+
+// ── AUTH STATE ──
+onAuthStateChanged(auth, async (user) => {
+  document.getElementById('loadingScreen').style.display='none';
+  if(user) {
+    currentUser = user;
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('appScreen').style.display='block';
+    document.getElementById('userLabel').textContent = user.email.split('@')[0];
+    document.getElementById('dateDisplay').textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+    document.getElementById('caseDate').value = new Date().toISOString().split('T')[0];
+    await initData();
+  } else {
+    currentUser = null;
+    document.getElementById('loginScreen').style.display='flex';
+    document.getElementById('appScreen').style.display='none';
+  }
+});
+
+// ── FIRESTORE INIT ──
+async function initData() {
+  // Listen to items in real time
+  onSnapshot(doc(db,'atlas','inventory'), (snap) => {
+    if(snap.exists()) {
+      items = snap.data().items || [];
+    } else {
+      // First time — seed with defaults
+      items = ITEM_TEMPLATE.map(t=>({...t, stockDev:DEFAULT_STOCK[t.id]||0, stockJosh:DEFAULT_STOCK[t.id]||0}));
+      setDoc(doc(db,'atlas','inventory'),{items});
+    }
+    refreshItemSelect();
+    renderInventory();
+    renderReports();
+  });
+
+  // Listen to cases in real time
+  onSnapshot(doc(db,'atlas','cases'), (snap) => {
+    if(snap.exists()) {
+      cases = snap.data().cases || [];
+    } else {
+      cases = [];
+    }
+    renderHistory();
+    renderReports();
+  });
+}
+
+async function saveInventory() {
+  setSyncing(true);
+  await setDoc(doc(db,'atlas','inventory'),{items});
+  setSyncing(false);
+}
+
+async function saveCases() {
+  setSyncing(true);
+  await setDoc(doc(db,'atlas','cases'),{cases});
+  setSyncing(false);
+}
+
+// ── HELPERS ──
+function getStock(item,w){return w==='dev'?item.stockDev:item.stockJosh;}
+function setStock(item,w,val){if(w==='dev')item.stockDev=val;else item.stockJosh=val;}
+function uid(){return Math.random().toString(36).substr(2,9);}
+
+// ── WORKER / TAB ──
+window.setWorker = function(w) {
+  currentWorker=w;
+  document.getElementById('wbtn-dev').className='worker-btn'+(w==='dev'?' active-dev':'');
+  document.getElementById('wbtn-josh').className='worker-btn'+(w==='josh'?' active-josh':'');
+  const ind=document.getElementById('workerIndicator');
+  ind.className='worker-pill '+(w==='dev'?'pill-dev':'pill-josh');
+  ind.textContent=(w==='dev'?'Devarsh':'Josh')+"'s inventory will be updated";
+  caseItems=[];renderCaseSupplies();refreshItemSelect();
+};
+
+window.setInvTab = function(t) {
+  currentInvTab=t;
+  ['dev','josh','combined'].forEach(x=>document.getElementById('itab-'+x).classList.toggle('active',x===t));
+  renderInventory();
+};
+
+window.setHistoryFilter = function(f) {
+  currentHistoryFilter=f;
+  ['all','dev','josh'].forEach(x=>{
+    const btn=document.getElementById('hbtn-'+x);
+    btn.style.background=x===f?(x==='dev'?'var(--dev)':x==='josh'?'var(--josh)':'var(--info)'):'';
+    btn.style.color=x===f?'#fff':'';
+  });
+  renderHistory();
+};
+
+window.showTab = function(tab) {
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.querySelector(`.nav button[onclick="showTab('${tab}')"]`).classList.add('active');
+  if(tab==='inventory') renderInventory();
+  if(tab==='history') renderHistory();
+  if(tab==='reports') renderReports();
+};
+
+// ── ITEM SELECT ──
+function refreshItemSelect() {
+  const sel=document.getElementById('addItemSelect');if(!sel)return;
+  sel.innerHTML='<option value="">— Select an item to add —</option>';
+  const used=new Set(caseItems.map(i=>i.id));
+  [...items].filter(i=>!used.has(i.id)).sort((a,b)=>a.generic.localeCompare(b.generic)).forEach(item=>{
+    const stock=getStock(item,currentWorker);
+    const opt=document.createElement('option');
+    opt.value=item.id;
+    opt.textContent=`${item.generic} — $${item.costPerUnit.toFixed(2)} (${stock} in stock)`;
+    sel.appendChild(opt);
+  });
+}
+
+window.addCaseItem = function() {
+  const sel=document.getElementById('addItemSelect');
+  const id=sel.value;if(!id)return;
+  const inv=items.find(i=>i.id===id);if(!inv)return;
+  caseItems.push({id:inv.id,generic:inv.generic,name:inv.name,cost:inv.costPerUnit,qty:1,stock:getStock(inv,currentWorker)});
+  renderCaseSupplies();refreshItemSelect();
+};
+
+function renderCaseSupplies() {
+  const container=document.getElementById('caseSupplyRows');
+  const warnings=document.getElementById('lowStockWarnings');
+  container.innerHTML='';warnings.innerHTML='';
+  let total=0;let lowList=[];
+  caseItems.forEach((item,idx)=>{
+    const line=item.cost*item.qty;total+=line;
+    const remaining=item.stock-item.qty;
+    const inv=items.find(i=>i.id===item.id);
+    const al=inv?inv.alert:0;
+    if(remaining<=al) lowList.push(item.generic);
+    const row=document.createElement('div');row.className='supply-row';
+    row.innerHTML=`
+      <div style="font-size:13px;font-weight:500;">${item.generic}
+        <div style="font-size:11px;color:var(--text-faint);">${item.name}</div></div>
+      <div style="font-size:13px;font-family:'DM Mono',monospace;">$${item.cost.toFixed(2)}</div>
+      <div><span class="stock-badge ${remaining<0?'stock-critical':remaining<=al?'stock-low':'stock-ok'}">${item.stock}</span></div>
+      <div><input type="number" min="0" max="${item.stock}" value="${item.qty}" style="width:70px;text-align:center;" onchange="updateQty(${idx},this.value)"></div>
+      <div style="font-size:14px;font-weight:500;font-family:'DM Mono',monospace;">$${line.toFixed(2)}</div>
+      <button onclick="removeItem(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:18px;line-height:1;">×</button>`;
+    container.appendChild(row);
+  });
+  document.getElementById('caseTotalDisplay').textContent='$'+total.toFixed(2);
+  if(lowList.length) warnings.innerHTML=`<div class="alert alert-warn">⚠ Low stock after this case: ${lowList.join(', ')}</div>`;
+  renderLiveSummary(total);
+}
+
+function renderLiveSummary(total) {
+  const el=document.getElementById('liveSummary');
+  if(!caseItems.length){el.innerHTML='<div class="empty-state">Add supplies below to see cost summary</div>';return;}
+  const byCategory={};
+  caseItems.forEach(item=>{const inv=items.find(i=>i.id===item.id);const cat=inv?inv.category:'Other';byCategory[cat]=(byCategory[cat]||0)+item.cost*item.qty;});
+  let html='';
+  Object.entries(byCategory).sort((a,b)=>b[1]-a[1]).forEach(([cat,amt])=>{
+    const pct=Math.round((amt/total)*100);
+    html+=`<div style="margin-bottom:9px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
+        <span style="color:var(--text-muted);">${cat}</span>
+        <span style="font-family:'DM Mono',monospace;font-weight:500;">$${amt.toFixed(2)}</span></div>
+      <div style="background:var(--surface2);border-radius:3px;height:5px;">
+        <div style="width:${pct}%;height:100%;background:var(--info);border-radius:3px;"></div></div></div>`;
+  });
+  html+=`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-size:12px;font-weight:600;color:var(--text-muted);">TOTAL</span>
+    <span style="font-size:19px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info);">$${total.toFixed(2)}</span></div>`;
+  el.innerHTML=html;
+}
+
+window.updateQty=(idx,val)=>{caseItems[idx].qty=Math.max(0,parseInt(val)||0);renderCaseSupplies();};
+window.removeItem=(idx)=>{caseItems.splice(idx,1);renderCaseSupplies();refreshItemSelect();};
+
+// ── IMAGE ──
+window.handleImageUpload = function(e) {
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    pendingImageData=ev.target.result;
+    document.getElementById('uploadZone').style.display='none';
+    document.getElementById('imgPreview').style.display='block';
+    document.getElementById('previewImg').src=pendingImageData;
+  };
+  reader.readAsDataURL(file);
+};
+window.removeImage=function(){
+  pendingImageData=null;
+  document.getElementById('uploadZone').style.display='block';
+  document.getElementById('imgPreview').style.display='none';
+  document.getElementById('previewImg').src='';
+  document.getElementById('caseImageInput').value='';
+};
+
+// ── SAVE CASE ──
+window.saveCase = async function() {
+  const caseId=document.getElementById('caseId').value.trim()||'CASE-'+Date.now();
+  const proc=document.getElementById('procedure').value.trim()||'Unnamed Procedure';
+  const provider=document.getElementById('provider').value.trim();
+  const date=document.getElementById('caseDate').value||new Date().toISOString().split('T')[0];
+  const notes=document.getElementById('caseNotes').value.trim();
+  if(!caseItems.length){alert('Please add at least one supply item.');return;}
+  const total=caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
+  cases.unshift({
+    id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
+    items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
+    total,imageData:pendingImageData||null
+  });
+  caseItems.forEach(item=>{
+    const inv=items.find(i=>i.id===item.id);
+    if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
+  });
+  await Promise.all([saveInventory(), saveCases()]);
+  clearCase();
+  alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
+};
+
+window.clearCase=function(){
+  caseItems=[];
+  ['caseId','procedure','provider','caseNotes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('caseDate').value=new Date().toISOString().split('T')[0];
+  removeImage();renderCaseSupplies();refreshItemSelect();
+};
+
+// ── INVENTORY ──
+function renderInventory() {
+  const search=(document.getElementById('invSearch')?.value||'').toLowerCase();
+  const alertsEl=document.getElementById('inventoryAlerts');
+  const tableEl=document.getElementById('inventoryTable');
+  const tab=currentInvTab;
+  let lowList=tab==='dev'?items.filter(i=>i.stockDev<=i.alert):tab==='josh'?items.filter(i=>i.stockJosh<=i.alert):items.filter(i=>(i.stockDev+i.stockJosh)<=(i.alert*2));
+  alertsEl.innerHTML=lowList.length
+    ?`<div class="alert alert-warn">⚠ <strong>${lowList.length} item(s)</strong> at or below restock level: ${lowList.map(i=>i.generic).join(', ')}</div>`
+    :`<div class="alert alert-success">✓ All items are sufficiently stocked</div>`;
+  const filtered=items.filter(i=>i.generic.toLowerCase().includes(search)||i.name.toLowerCase().includes(search)||i.code.toLowerCase().includes(search)||i.category.toLowerCase().includes(search));
+  const byCategory={};
+  filtered.forEach(item=>{if(!byCategory[item.category])byCategory[item.category]=[];byCategory[item.category].push(item);});
+  let html='';
+  if(tab==='combined'){
+    Object.entries(byCategory).sort().forEach(([cat,itms])=>{
+      html+=`<div class="cat-label">${cat}</div>`;
+      html+=`<div style="display:grid;grid-template-columns:2fr 80px 80px 80px 70px 70px 80px;gap:8px;padding-bottom:7px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
+        <span>Generic / Item</span><span>Unit Cost</span><span>Dev</span><span>Josh</span><span>Total</span><span>Alert</span><span></span></div>`;
+      itms.sort((a,b)=>a.generic.localeCompare(b.generic)).forEach(item=>{
+        const tot=item.stockDev+item.stockJosh;
+        const scD=item.stockDev===0?'stock-critical':item.stockDev<=item.alert?'stock-low':'stock-ok';
+        const scJ=item.stockJosh===0?'stock-critical':item.stockJosh<=item.alert?'stock-low':'stock-ok';
+        html+=`<div style="display:grid;grid-template-columns:2fr 80px 80px 80px 70px 70px 80px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+          <div><div style="font-size:13px;font-weight:500;">${item.generic}</div><div style="font-size:11px;color:var(--text-faint);">${item.name}</div></div>
+          <div style="font-family:'DM Mono',monospace;font-size:13px;">$${item.costPerUnit.toFixed(2)}</div>
+          <div><span class="stock-badge ${scD}">${item.stockDev}</span></div>
+          <div><span class="stock-badge ${scJ}">${item.stockJosh}</span></div>
+          <div style="font-size:13px;font-weight:500;font-family:'DM Mono',monospace;">${tot}</div>
+          <div style="font-size:13px;color:var(--text-muted);">${item.alert}</div>
+          <div><button onclick="editItem('${item.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">Edit</button></div>
+        </div>`;
+      });
+    });
+  } else {
+    const w=tab;
+    Object.entries(byCategory).sort().forEach(([cat,itms])=>{
+      html+=`<div class="cat-label">${cat}</div>`;
+      html+=`<div class="inv-header"><span>Generic / Item</span><span>Unit Cost</span><span>In Stock</span><span>Alert At</span><span>Supplier</span><span>Add Stock</span><span></span></div>`;
+      itms.sort((a,b)=>a.generic.localeCompare(b.generic)).forEach(item=>{
+        const stock=getStock(item,w);
+        const sc=stock===0?'stock-critical':stock<=item.alert?'stock-low':'stock-ok';
+        html+=`<div class="inv-row">
+          <div><div style="font-size:13px;font-weight:500;">${item.generic}</div>
+            <div style="font-size:11px;color:var(--text-faint);">${item.name}</div>
+            <div style="font-size:10px;color:var(--text-faint);font-family:'DM Mono',monospace;">${item.code} · ${item.unitSize}</div></div>
+          <div style="font-family:'DM Mono',monospace;font-size:13px;">$${item.costPerUnit.toFixed(2)}</div>
+          <div><span class="stock-badge ${sc}">${stock}</span></div>
+          <div style="font-size:13px;color:var(--text-muted);">${item.alert}</div>
+          <div style="font-size:12px;color:var(--text-faint);">${item.supplier}</div>
+          <div style="display:flex;gap:5px;align-items:center;">
+            <input type="number" id="restock_${item.id}" style="width:58px;padding:4px 7px;font-size:13px;" placeholder="qty" min="0">
+            <button onclick="adjustStock('${item.id}')" class="btn btn-ghost btn-sm">+</button>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button onclick="editItem('${item.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">Edit</button>
+            <button onclick="deleteItem('${item.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">Del</button>
+          </div></div>`;
+      });
+    });
+  }
+  if(!filtered.length) html='<div class="empty-state">No items found.</div>';
+  tableEl.innerHTML=html;
+}
+
+window.adjustStock = async function(id) {
+  const input=document.getElementById('restock_'+id);
+  const qty=parseInt(input.value)||0;
+  if(qty<=0){alert('Enter a positive quantity to add.');return;}
+  const item=items.find(i=>i.id===id);
+  if(item){
+    const w=currentInvTab==='josh'?'josh':'dev';
+    setStock(item,w,getStock(item,w)+qty);
+    await saveInventory();input.value='';
+  }
+};
+
+window.editItem = async function(id) {
+  const item=items.find(i=>i.id===id);if(!item)return;
+  const nD=parseInt(prompt(`Dev stock for ${item.generic}:`,item.stockDev));
+  if(!isNaN(nD)&&nD>=0) item.stockDev=nD;
+  const nJ=parseInt(prompt(`Josh stock for ${item.generic}:`,item.stockJosh));
+  if(!isNaN(nJ)&&nJ>=0) item.stockJosh=nJ;
+  const nC=parseFloat(prompt(`Unit cost for ${item.generic}:`,item.costPerUnit));
+  if(!isNaN(nC)&&nC>=0) item.costPerUnit=nC;
+  const nA=parseInt(prompt('Restock alert level (per person):',item.alert));
+  if(!isNaN(nA)&&nA>=0) item.alert=nA;
+  await saveInventory();
+};
+
+window.deleteItem = async function(id) {
+  if(!confirm('Delete this item?'))return;
+  items=items.filter(i=>i.id!==id);
+  await saveInventory();refreshItemSelect();
+};
+
+window.toggleAddForm=function(){
+  const f=document.getElementById('addItemForm');
+  f.style.display=f.style.display==='none'?'block':'none';
+};
+
+window.saveNewItem = async function() {
+  const name=document.getElementById('newItemName').value.trim();
+  const generic=document.getElementById('newGeneric').value.trim()||name;
+  if(!name){alert('Please enter an item name.');return;}
+  items.push({
+    id:uid(),code:document.getElementById('newCode').value.trim()||uid(),
+    generic,name,category:document.getElementById('newItemCategory').value,
+    supplier:document.getElementById('newSupplier').value.trim()||'',
+    unitSize:document.getElementById('newUnitSize').value.trim()||'',
+    costPerUnit:parseFloat(document.getElementById('newItemCost').value)||0,
+    stockDev:parseInt(document.getElementById('newItemStockDev').value)||0,
+    stockJosh:parseInt(document.getElementById('newItemStockJosh').value)||0,
+    alert:parseInt(document.getElementById('newItemAlert').value)||0,
+  });
+  await saveInventory();
+  ['newCode','newGeneric','newItemName','newSupplier','newUnitSize','newItemCost','newItemStockDev','newItemStockJosh','newItemAlert'].forEach(id=>document.getElementById(id).value='');
+  toggleAddForm();refreshItemSelect();
+};
+
+// ── HISTORY ──
+function renderHistory() {
+  const el=document.getElementById('caseHistoryList');
+  let filtered=cases;
+  if(currentHistoryFilter!=='all') filtered=cases.filter(c=>c.worker===currentHistoryFilter);
+  if(!filtered.length){el.innerHTML='<div class="empty-state">No cases recorded yet</div>';return;}
+  el.innerHTML=filtered.map(c=>{
+    const pill=c.worker==='dev'?'pill-dev':'pill-josh';
+    const wname=c.worker==='dev'?'Devarsh':'Josh';
+    return `<div class="case-item">
+      <div class="case-item-header" onclick="toggleCase('${c.id}')">
+        <div>
+          <div class="case-name" style="display:flex;align-items:center;gap:8px;">
+            ${c.procedure}<span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
+          </div>
+          <div class="case-date">${c.date} · ${c.caseId}${c.provider?' · '+c.provider:''}</div>
+        </div>
+        <div class="case-cost">$${c.total.toFixed(2)}</div>
+      </div>
+      <div class="case-items-list" id="detail_${c.id}">
+        ${c.items.map(i=>`<div class="case-item-row"><span>${i.generic} × ${i.qty}</span><span>$${i.lineTotal.toFixed(2)}</span></div>`).join('')}
+        ${c.notes?`<div style="margin-top:6px;font-size:12px;color:var(--text-faint);font-style:italic;">${c.notes}</div>`:''}
+        ${c.imageData?`<img src="${c.imageData}" class="case-log-img" onclick="openLightbox('${c.id}')" title="Click to enlarge">`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.toggleCase=function(id){document.getElementById('detail_'+id).classList.toggle('open');};
+
+window.openLightbox=function(caseId){
+  const c=cases.find(x=>x.id===caseId);
+  if(!c||!c.imageData)return;
+  document.getElementById('lightboxImg').src=c.imageData;
+  document.getElementById('lightbox').style.display='flex';
+};
+window.closeLightbox=function(){document.getElementById('lightbox').style.display='none';};
+
+// ── REPORTS ──
+function renderReports() {
+  const devCases=cases.filter(c=>c.worker==='dev');
+  const joshCases=cases.filter(c=>c.worker==='josh');
+  function buildCard(el,label,cs,color){
+    const total=cs.reduce((s,c)=>s+c.total,0);
+    const avg=cs.length?total/cs.length:0;
+    el.innerHTML=`<div class="card-title" style="color:${color};">${label}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><div class="metric-label">Cases</div><div class="metric-value">${cs.length}</div></div>
+        <div><div class="metric-label">Total Spend</div><div class="metric-value">$${total.toFixed(0)}</div></div>
+        <div style="grid-column:1/-1;"><div class="metric-label">Avg Cost / Case</div><div class="metric-value">$${avg.toFixed(2)}</div></div>
+      </div>`;
+  }
+  buildCard(document.getElementById('reportDev'),'Devarsh',devCases,'var(--dev)');
+  buildCard(document.getElementById('reportJosh'),'Josh',joshCases,'var(--josh)');
+  buildCard(document.getElementById('reportCombined'),'Combined',cases,'var(--info)');
+  const usage={};
+  cases.forEach(c=>c.items.forEach(i=>{if(!usage[i.generic])usage[i.generic]={qty:0,cost:0};usage[i.generic].qty+=i.qty;usage[i.generic].cost+=i.lineTotal;}));
+  const sorted=Object.entries(usage).sort((a,b)=>b[1].cost-a[1].cost).slice(0,10);
+  const topCard=document.getElementById('topItemsCard');
+  if(!sorted.length){topCard.innerHTML='<div class="empty-state">No usage data yet</div>';return;}
+  topCard.innerHTML=`<div class="card-title">Top Items by Total Cost</div>
+    <div style="display:grid;grid-template-columns:2fr 80px 80px;gap:8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);padding-bottom:7px;border-bottom:1px solid var(--border-strong);">
+      <span>Item</span><span style="text-align:right;">Units Used</span><span style="text-align:right;">Total Cost</span></div>
+    ${sorted.map(([name,data])=>`
+      <div style="display:grid;grid-template-columns:2fr 80px 80px;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;">${name}</span>
+        <span style="font-size:13px;font-family:'DM Mono',monospace;text-align:right;">${data.qty}</span>
+        <span style="font-size:13px;font-family:'DM Mono',monospace;text-align:right;font-weight:500;">$${data.cost.toFixed(2)}</span>
+      </div>`).join('')}`;
+}
+</script>
+</body>
+</html>
