@@ -876,10 +876,16 @@ function updateCaseIdDisplays() {
 }
 
 function updatePreopCaseIdDisplay() {
-  const date = document.getElementById('po-surgeryDate')?.value || new Date().toISOString().split('T')[0];
-  const id = generateCaseId(currentWorker, date);
+  const surgeryDate = document.getElementById('po-surgeryDate')?.value;
   const display = document.getElementById('po-caseId-display');
   const input = document.getElementById('po-caseId');
+  if(!surgeryDate) {
+    // Don't generate until surgery date is entered
+    if(display) display.textContent = 'Enter date of surgery to generate ID';
+    if(input) input.value = '';
+    return;
+  }
+  const id = generateCaseId(currentWorker, surgeryDate);
   if(display) display.textContent = id;
   if(input) input.value = id;
 }
@@ -1428,7 +1434,8 @@ window.savePreop = async function() {
     ...textData,
     ...checkData
   };
-  if(!record['po-caseId']) { alert('Please enter a Case ID.'); return; }
+  if(!record['po-surgeryDate']) { alert('Please enter the Date of Surgery — it is used to generate the Case ID.'); return; }
+  if(!record['po-caseId']) { alert('Case ID could not be generated. Please enter the Date of Surgery.'); return; }
 
   // Save pre-op record to Firestore
   const preopSnap = await getDoc(doc(db,'atlas','preop'));
