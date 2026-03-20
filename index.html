@@ -179,11 +179,11 @@
   </div>
 
   <div class="nav">
+    <button class="active" onclick="showTab('preop')">Pre-Op</button>
     <button onclick="showTab('new-case')">New Case</button>
     <button onclick="showTab('inventory')">Inventory</button>
     <button onclick="showTab('history')">Case History</button>
     <button onclick="showTab('reports')">Reports</button>
-    <button class="active" onclick="showTab('preop')">Pre-Op</button>
   </div>
 
   <div class="container">
@@ -201,10 +201,12 @@
       <div class="grid-2" style="margin-bottom:18px;">
         <div class="card">
           <div class="card-title">Case Information</div>
-          <label>Patient / Case ID</label><input type="text" id="caseId" placeholder="e.g. PT-2024-001">
+          <label>Case ID <span style="font-size:11px;color:var(--text-faint);font-weight:400;">(auto-generated)</span></label>
+        <div id="caseId-display" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:'DM Mono',monospace;color:var(--text-muted);">Will generate on save</div>
+        <input type="hidden" id="caseId">
           <label>Procedure</label><input type="text" id="procedure" placeholder="e.g. Total knee replacement">
           <label>Provider</label><input type="text" id="provider" placeholder="e.g. Dr. Smith">
-          <label>Date</label><input type="date" id="caseDate">
+          <label>Date</label><input type="date" id="caseDate" oninput="updateCaseIdDisplays()">
           <label>Notes</label><input type="text" id="caseNotes" placeholder="Optional notes">
           <div style="margin-top:14px;">
             <label style="margin-top:0;">Case Log Photo</label>
@@ -326,8 +328,10 @@
         <!-- LEFT: Case Info -->
         <div class="card">
           <div class="card-title">Case Information</div>
-          <label>Case ID</label><input type="text" id="po-caseId" placeholder="e.g. PT-2024-001">
-          <label>Date of Surgery</label><input type="date" id="po-surgeryDate">
+          <label>Case ID <span style="font-size:11px;color:var(--text-faint);font-weight:400;">(auto-generated)</span></label>
+          <div id="po-caseId-display" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:'DM Mono',monospace;color:var(--text-muted);">Will generate on save</div>
+          <input type="hidden" id="po-caseId">
+          <label>Date of Surgery</label><input type="date" id="po-surgeryDate" oninput="updatePreopCaseIdDisplay()">
           <label>Date/Time of Call</label><input type="datetime-local" id="po-callDateTime">
           <label>Provider</label><input type="text" id="po-provider" placeholder="e.g. Dr. Smith">
         </div>
@@ -783,6 +787,8 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('dateDisplay').textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
     document.getElementById('caseDate').value = new Date().toISOString().split('T')[0];
     await initData();
+    updateCaseIdDisplays();
+    updatePreopCaseIdDisplay();
   } else {
     currentUser = null;
     document.getElementById('loginScreen').style.display='flex';
@@ -835,6 +841,36 @@ function getStock(item,w){return w==='dev'?item.stockDev:item.stockJosh;}
 function setStock(item,w,val){if(w==='dev')item.stockDev=val;else item.stockJosh=val;}
 function uid(){return Math.random().toString(36).substr(2,9);}
 
+function generateCaseId(worker, date) {
+  const w = worker === 'dev' ? 'DEV' : 'JOSH';
+  const d = (date || new Date().toISOString().split('T')[0]).replace(/-/g,'');
+  // Count existing cases for this worker+date to get sequence number
+  const existing = cases.filter(c => {
+    const cid = c.caseId || '';
+    return cid.includes(w) && cid.includes(d);
+  });
+  const seq = String(existing.length + 1).padStart(3, '0');
+  return `ATL-${w}-${d}-${seq}`;
+}
+
+function updateCaseIdDisplays() {
+  const date = document.getElementById('caseDate')?.value || new Date().toISOString().split('T')[0];
+  const id = generateCaseId(currentWorker, date);
+  const ncDisplay = document.getElementById('caseId-display');
+  const ncInput = document.getElementById('caseId');
+  if(ncDisplay) ncDisplay.textContent = id;
+  if(ncInput) ncInput.value = id;
+}
+
+function updatePreopCaseIdDisplay() {
+  const date = document.getElementById('po-surgeryDate')?.value || new Date().toISOString().split('T')[0];
+  const id = generateCaseId(currentWorker, date);
+  const display = document.getElementById('po-caseId-display');
+  const input = document.getElementById('po-caseId');
+  if(display) display.textContent = id;
+  if(input) input.value = id;
+}
+
 // ── WORKER / TAB ──
 window.setWorker = function(w) {
   // Prevent switching to the other person's worker
@@ -849,6 +885,8 @@ window.setWorker = function(w) {
   ind.className='worker-pill '+(w==='dev'?'pill-dev':'pill-josh');
   ind.textContent=(w==='dev'?'Devarsh':'Josh')+"'s inventory will be updated";
   caseItems=[];renderCaseSupplies();refreshItemSelect();
+  updateCaseIdDisplays();
+  updatePreopCaseIdDisplay();
 };
 
 window.setInvTab = function(t) {
@@ -999,6 +1037,7 @@ window.clearCase=function(){
   ['caseId','procedure','provider','caseNotes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('caseDate').value=new Date().toISOString().split('T')[0];
   removeImage();renderCaseSupplies();refreshItemSelect();
+  updateCaseIdDisplays();
 };
 
 // ── INVENTORY ──
