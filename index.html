@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Atlas Anesthesia — Case Tracker</title>
+<title>Atlas Mobile Case Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -198,6 +198,7 @@
             <option value="">— Start a new case —</option>
           </select>
           <button class="btn btn-ghost btn-sm" onclick="refreshDraftPicker()">↻ Refresh</button>
+          <button class="btn btn-ghost btn-sm" onclick="deleteSelectedDraft()" style="color:var(--warn);border-color:var(--warn);">🗑 Delete Draft</button>
         </div>
       </div>
 
@@ -1276,6 +1277,26 @@ function renderReports() {
 }
 
 // ── DRAFT CASE PICKER ──
+window.deleteSelectedDraft = async function() {
+  const sel = document.getElementById('draftCasePicker');
+  const id = sel ? sel.value : '';
+  if(!id) {
+    alert('Please select a draft from the dropdown first.');
+    return;
+  }
+  const c = cases.find(x => x.id === id);
+  const label = c ? c.caseId : 'this draft';
+  if(!confirm(`Delete draft "${label}"? This cannot be undone.`)) return;
+  cases = cases.filter(x => x.id !== id);
+  if(window._activeDraftId === id) {
+    window._activeDraftId = null;
+    clearCase();
+  }
+  await saveCases();
+  refreshDraftPicker();
+  alert(`Draft "${label}" deleted.`);
+};
+
 function refreshDraftPicker() {
   const sel = document.getElementById('draftCasePicker');
   if(!sel) return;
