@@ -183,6 +183,7 @@
     <button onclick="showTab('inventory')">Inventory</button>
     <button onclick="showTab('history')">Case History</button>
     <button onclick="showTab('reports')">Reports</button>
+    <button onclick="showTab('preop')">Pre-Op</button>
   </div>
 
   <div class="container">
@@ -310,6 +311,282 @@
     </div>
 
   </div>
+
+    <!-- PRE-OP TAB -->
+    <div class="section" id="tab-preop">
+      <div class="action-bar">
+        <h2>Pre-Op Assessment</h2>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-success" onclick="savePreop()">✓ Save Record</button>
+          <button class="btn btn-ghost" onclick="clearPreop()">Clear</button>
+          <button class="btn btn-primary btn-sm" onclick="showTab('preop-history')">View Saved Records</button>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:18px;">
+        <!-- LEFT: Case Info -->
+        <div class="card">
+          <div class="card-title">Case Information</div>
+          <label>Case ID</label><input type="text" id="po-caseId" placeholder="e.g. PT-2024-001">
+          <label>Date of Surgery</label><input type="date" id="po-surgeryDate">
+          <label>Date/Time of Call</label><input type="datetime-local" id="po-callDateTime">
+          <label>Provider</label><input type="text" id="po-provider" placeholder="e.g. Dr. Smith">
+        </div>
+
+        <!-- RIGHT: Pre-Op Call Info -->
+        <div class="card">
+          <div class="card-title">Pre-Op Call Information</div>
+          <div style="margin-top:8px;">
+            <label style="margin-top:0;margin-bottom:8px;">Pre-Op Instructions Confirmed</label>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <label style="margin:0;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);font-weight:400;">
+                <input type="checkbox" id="po-npo" style="width:16px;height:16px;"> NPO After Midnight Confirmed
+              </label>
+            </div>
+          </div>
+          <div style="margin-top:16px;">
+            <label style="margin-bottom:8px;">Transportation</label>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <label style="margin:0;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);font-weight:400;">
+                <input type="checkbox" id="po-driver" style="width:16px;height:16px;"> Responsible Adult Available to Drive Patient Home
+              </label>
+              <label style="margin:0;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);font-weight:400;">
+                <input type="checkbox" id="po-nodrive" style="width:16px;height:16px;"> Patient Understands They Cannot Drive Themselves
+              </label>
+            </div>
+            <label>Name of Driver</label><input type="text" id="po-driverName" placeholder="Driver's name">
+            <label>Relationship</label><input type="text" id="po-driverRel" placeholder="e.g. Spouse, Friend">
+          </div>
+        </div>
+      </div>
+
+      <!-- ALLERGIES -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">Allergies</div>
+        <textarea id="po-allergies" placeholder="List any known allergies..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:80px;"></textarea>
+      </div>
+
+      <!-- MEDICAL H&P -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">Medical H&amp;P</div>
+
+        <!-- Pupil Exam -->
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Pupil Exam</div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-pupil-normal" style="width:15px;height:15px;"> Normal
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-pupil-dilated" style="width:15px;height:15px;"> Dilated
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-pupil-constricted" style="width:15px;height:15px;"> Constricted
+            </label>
+          </div>
+        </div>
+
+        <!-- Cardiovascular -->
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Cardiovascular</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            ${['NEG','HTN','CAD','ANGINA','MI','CHF','MURMUR','ARRYTHMIA'].map(x=>`
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-cv-${x.toLowerCase()}" style="width:15px;height:15px;"> ${x}
+            </label>`).join('')}
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              Other: <input type="text" id="po-cv-other" placeholder="specify" style="width:120px;padding:3px 7px;font-size:13px;">
+            </label>
+          </div>
+        </div>
+
+        <!-- EKG -->
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">EKG</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            ${['NSR','AFIB','BBB','LVH','CHNGS'].map(x=>`
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-ekg-${x.toLowerCase()}" style="width:15px;height:15px;"> ${x}
+            </label>`).join('')}
+          </div>
+        </div>
+
+        <!-- Pulmonary -->
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Pulmonary</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            ${['NEG','ASTHMA','COPD','URI','O2','CPAP','SLEEP APNEA','BL BREATH SOUNDS','SMOKER'].map(x=>`
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-pulm-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
+            </label>`).join('')}
+          </div>
+        </div>
+
+        <!-- Gastro -->
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Gastro</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            ${['NEG','GERD','HIAT HERN','ULCER'].map(x=>`
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-gastro-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
+            </label>`).join('')}
+          </div>
+        </div>
+
+        <!-- Renal -->
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Renal</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            ${['NEG','DIALYSIS','ESRD'].map(x=>`
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-renal-${x.toLowerCase()}" style="width:15px;height:15px;"> ${x}
+            </label>`).join('')}
+          </div>
+        </div>
+
+        <!-- Neuro -->
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Neuro</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            ${['NEG','DEPRESSION','ANXIETY DISORDER','SEIZURES','CVA','NM DISEASE'].map(x=>`
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-neuro-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
+            </label>`).join('')}
+          </div>
+        </div>
+
+        <!-- Metabolic -->
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Metabolic</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            ${['NEG','IDDM','NIDDM','THYROID','Hx HEP','OBESITY','MORBID OBESITY'].map(x=>`
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-meta-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
+            </label>`).join('')}
+          </div>
+        </div>
+
+        <!-- Teeth -->
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Teeth</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            ${['INTACT','MISSING','DENTURE'].map(x=>`
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-teeth-${x.toLowerCase()}" style="width:15px;height:15px;"> ${x}
+            </label>`).join('')}
+          </div>
+        </div>
+
+        <!-- Other -->
+        <div style="padding:10px 0;">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Other</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            ${['HIV','HEP C','ANEMIA','STEROIDS','CANCERS','DRUG ABUSE','COAGULOPATHY','CHEMOTHERAPY'].map(x=>`
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+              <input type="checkbox" id="po-other-${x.replace(/ /g,'-').toLowerCase()}" style="width:15px;height:15px;"> ${x}
+            </label>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <!-- MEDICATIONS & SURGICAL HISTORY -->
+      <div class="grid-2" style="margin-bottom:18px;">
+        <div class="card">
+          <div class="card-title">Medications</div>
+          <textarea id="po-medications" placeholder="List current medications..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:120px;"></textarea>
+        </div>
+        <div class="card">
+          <div class="card-title">Surgical History</div>
+          <textarea id="po-surgicalHistory" placeholder="List previous surgeries..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:120px;"></textarea>
+        </div>
+      </div>
+
+      <!-- PHYSICAL ASSESSMENT -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">Physical Assessment Pre-Procedure</div>
+        <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+          <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+            <input type="checkbox" id="po-vss" style="width:15px;height:15px;"> VSS
+          </label>
+          <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+            <input type="checkbox" id="po-a0x3" style="width:15px;height:15px;"> A+0x3
+          </label>
+          <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">
+            <input type="checkbox" id="po-qa" style="width:15px;height:15px;"> Questions Answered
+          </label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:13px;font-weight:500;">Time:</span>
+            <input type="time" id="po-assessTime" style="width:120px;padding:5px 8px;font-size:13px;">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px;">
+              <input type="checkbox" id="po-heart-wnl" style="width:15px;height:15px;"> Heart WNL
+            </label>
+            <input type="text" id="po-heart-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px;">
+          </div>
+          <div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px;">
+              <input type="checkbox" id="po-lungs-wnl" style="width:15px;height:15px;"> Lungs WNL
+            </label>
+            <input type="text" id="po-lungs-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px;">
+          </div>
+          <div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px;">
+              <input type="checkbox" id="po-abd-wnl" style="width:15px;height:15px;"> Abdomen/Extremities WNL
+            </label>
+            <input type="text" id="po-abd-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px;">
+          </div>
+          <div>
+            <label style="font-size:13px;font-weight:500;margin-bottom:6px;">Mallampati Score</label>
+            <div style="display:flex;gap:10px;">
+              ${[1,2,3,4].map(n=>`
+              <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:14px;font-weight:500;color:var(--text);">
+                <input type="radio" name="mallampati" value="${n}" id="po-mall-${n}" style="width:15px;height:15px;"> ${n}
+              </label>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VENIPUNCTURE / FLUIDS / EBL -->
+      <div class="grid-3" style="margin-bottom:18px;">
+        <div class="card">
+          <div class="card-title">Venipuncture</div>
+          <textarea id="po-venipuncture" placeholder="Notes..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:80px;"></textarea>
+        </div>
+        <div class="card">
+          <div class="card-title">Total Fluids</div>
+          <input type="text" id="po-totalFluids" placeholder="e.g. 500mL LR">
+        </div>
+        <div class="card">
+          <div class="card-title">EBL</div>
+          <input type="text" id="po-ebl" placeholder="e.g. Minimal">
+        </div>
+      </div>
+
+      <!-- COMMENTS -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">Comments</div>
+        <textarea id="po-comments" placeholder="Additional comments..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:100px;"></textarea>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-bottom:32px;">
+        <button class="btn btn-success" onclick="savePreop()">✓ Save Record</button>
+        <button class="btn btn-ghost" onclick="clearPreop()">Clear Form</button>
+      </div>
+    </div>
+
+    <!-- PRE-OP HISTORY TAB -->
+    <div class="section" id="tab-preop-history">
+      <div class="action-bar">
+        <h2>Pre-Op Records</h2>
+        <button class="btn btn-primary btn-sm" onclick="showTab('preop')">+ New Pre-Op</button>
+      </div>
+      <div id="preopHistoryList"></div>
+    </div>
+
 </div>
 
 <!-- LIGHTBOX -->
@@ -600,6 +877,7 @@ window.showTab = function(tab) {
   if(tab==='inventory') renderInventory();
   if(tab==='history') renderHistory();
   if(tab==='reports') renderReports();
+  if(tab==='preop-history') renderPreopHistory();
 };
 
 // ── ITEM SELECT ──
@@ -925,6 +1203,131 @@ function renderReports() {
         <span style="font-size:13px;font-family:'DM Mono',monospace;text-align:right;font-weight:500;">$${data.cost.toFixed(2)}</span>
       </div>`).join('')}`;
 }
+
+// ── PRE-OP ──
+function getPreopCheckboxes() {
+  const fields = [
+    'po-npo','po-driver','po-nodrive',
+    'po-pupil-normal','po-pupil-dilated','po-pupil-constricted',
+    'po-cv-neg','po-cv-htn','po-cv-cad','po-cv-angina','po-cv-mi','po-cv-chf','po-cv-murmur','po-cv-arrythmia',
+    'po-ekg-nsr','po-ekg-afib','po-ekg-bbb','po-ekg-lvh','po-ekg-chngs',
+    'po-pulm-neg','po-pulm-asthma','po-pulm-copd','po-pulm-uri','po-pulm-o2','po-pulm-cpap','po-pulm-sleep-apnea','po-pulm-bl-breath-sounds','po-pulm-smoker',
+    'po-gastro-neg','po-gastro-gerd','po-gastro-hiat-hern','po-gastro-ulcer',
+    'po-renal-neg','po-renal-dialysis','po-renal-esrd',
+    'po-neuro-neg','po-neuro-depression','po-neuro-anxiety-disorder','po-neuro-seizures','po-neuro-cva','po-neuro-nm-disease',
+    'po-meta-neg','po-meta-iddm','po-meta-niddm','po-meta-thyroid','po-meta-hx-hep','po-meta-obesity','po-meta-morbid-obesity',
+    'po-teeth-intact','po-teeth-missing','po-teeth-denture',
+    'po-other-hiv','po-other-hep-c','po-other-anemia','po-other-steroids','po-other-cancers','po-other-drug-abuse','po-other-coagulopathy','po-other-chemotherapy',
+    'po-vss','po-a0x3','po-qa',
+    'po-heart-wnl','po-lungs-wnl','po-abd-wnl'
+  ];
+  const data = {};
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) data[id] = el.checked;
+  });
+  // Mallampati radio
+  const mall = document.querySelector('input[name="mallampati"]:checked');
+  data['mallampati'] = mall ? mall.value : '';
+  return data;
+}
+
+function getPreopTextFields() {
+  const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-driverName','po-driverRel',
+    'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
+    'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other'];
+  const data = {};
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) data[id] = el.value;
+  });
+  return data;
+}
+
+window.savePreop = async function() {
+  const textData = getPreopTextFields();
+  const checkData = getPreopCheckboxes();
+  const record = {
+    id: uid(),
+    savedAt: new Date().toISOString(),
+    worker: currentWorker,
+    ...textData,
+    ...checkData
+  };
+  if(!record['po-caseId']) { alert('Please enter a Case ID.'); return; }
+  // Save to Firestore
+  const preopSnap = await getDoc(doc(db,'atlas','preop'));
+  const existing = preopSnap.exists() ? (preopSnap.data().records || []) : [];
+  existing.unshift(record);
+  setSyncing(true);
+  await setDoc(doc(db,'atlas','preop'), { records: existing });
+  setSyncing(false);
+  alert('✓ Pre-Op record saved!');
+  clearPreop();
+};
+
+window.clearPreop = function() {
+  // Clear text fields
+  ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-driverName','po-driverRel',
+   'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
+   'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  // Clear checkboxes
+  document.querySelectorAll('#tab-preop input[type="checkbox"]').forEach(el => el.checked = false);
+  document.querySelectorAll('#tab-preop input[type="radio"]').forEach(el => el.checked = false);
+};
+
+async function renderPreopHistory() {
+  const el = document.getElementById('preopHistoryList');
+  el.innerHTML = '<div class="empty-state">Loading...</div>';
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    if(!records.length) { el.innerHTML = '<div class="empty-state">No pre-op records saved yet</div>'; return; }
+    el.innerHTML = records.map(r => {
+      const pill = r.worker==='dev' ? 'pill-dev' : 'pill-josh';
+      const wname = r.worker==='dev' ? 'Devarsh' : 'Josh';
+      const cvChecked = ['neg','htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).join(', ').toUpperCase();
+      const pulmChecked = ['neg','asthma','copd','uri','o2','cpap','sleep-apnea','bl-breath-sounds','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.replace(/-/g,' ')).join(', ').toUpperCase();
+      return `<div class="case-item">
+        <div class="case-item-header" onclick="togglePreop('${r.id}')">
+          <div>
+            <div class="case-name" style="display:flex;align-items:center;gap:8px;">
+              ${r['po-caseId'] || 'No Case ID'}
+              <span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
+            </div>
+            <div class="case-date">Surgery: ${r['po-surgeryDate']||'—'} · Provider: ${r['po-provider']||'—'}</div>
+          </div>
+          <div style="font-size:12px;color:var(--text-faint);">Saved ${new Date(r.savedAt).toLocaleDateString()}</div>
+        </div>
+        <div class="case-items-list" id="preop-detail-${r.id}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px;">
+            <div>
+              ${r['po-allergies']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Allergies</strong><div style="font-size:13px;margin-top:3px;">${r['po-allergies']}</div></div>`:''}
+              ${cvChecked?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Cardiovascular</strong><div style="font-size:13px;margin-top:3px;">${cvChecked}</div></div>`:''}
+              ${pulmChecked?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Pulmonary</strong><div style="font-size:13px;margin-top:3px;">${pulmChecked}</div></div>`:''}
+              ${r['po-medications']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Medications</strong><div style="font-size:13px;margin-top:3px;">${r['po-medications']}</div></div>`:''}
+            </div>
+            <div>
+              ${r['mallampati']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Mallampati Score</strong><div style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace;margin-top:3px;">${r['mallampati']}</div></div>`:''}
+              ${r['po-totalFluids']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Total Fluids</strong><div style="font-size:13px;margin-top:3px;">${r['po-totalFluids']}</div></div>`:''}
+              ${r['po-ebl']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">EBL</strong><div style="font-size:13px;margin-top:3px;">${r['po-ebl']}</div></div>`:''}
+              ${r['po-surgicalHistory']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Surgical History</strong><div style="font-size:13px;margin-top:3px;">${r['po-surgicalHistory']}</div></div>`:''}
+              ${r['po-comments']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Comments</strong><div style="font-size:13px;margin-top:3px;">${r['po-comments']}</div></div>`:''}
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state">Error loading records</div>';
+    console.error(e);
+  }
+}
+
+window.togglePreop = function(id) { document.getElementById('preop-detail-'+id).classList.toggle('open'); };
 </script>
 </body>
 </html>
