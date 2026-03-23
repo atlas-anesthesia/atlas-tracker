@@ -2071,10 +2071,21 @@ function renderCaseLog() {
 
 // ── CONTROLLED SUBSTANCES ──
 const CS_DRUGS = {
-  nubain:   { label: 'Nubain (Nalbuphine)',  invId: '70069-0671-10', keywords: ['nubain','nalbuphine'] },
-  ketamine: { label: 'Ketamine',             invId: '0143-9509-10',  keywords: ['ketamine'] },
-  versed:   { label: 'Versed (Midazolam)',   invId: null,            keywords: ['versed','midazolam'] }
+  nubain:   { label: 'Nubain (Nalbuphine)',  invId: '70069-0671-10', keywords: ['nubain','nalbuphine'], vialML: 1   },
+  ketamine: { label: 'Ketamine',             invId: '0143-9509-10',  keywords: ['ketamine'],            vialML: 5   },
+  versed:   { label: 'Versed (Midazolam)',   invId: null,            keywords: ['versed','midazolam'],  vialML: 2   }
 };
+
+// Returns cost per mL for a CS drug based on inventory unit cost and vial size
+function getCostPerML(drugKey) {
+  const drug = CS_DRUGS[drugKey];
+  if(!drug) return 0;
+  const invId = drug.invId;
+  if(!invId) return 0;
+  const invItem = items.find(i => i.id === invId);
+  if(!invItem || !drug.vialML) return 0;
+  return invItem.costPerUnit / drug.vialML;
+}
 
 // Returns true if an inventory item is a controlled substance (should be excluded from supplies)
 function isCSItem(item) {
@@ -2120,9 +2131,24 @@ function renderCSEntries() {
     container.innerHTML = '<div style="font-size:13px;color:var(--text-faint);padding:8px 0;">No controlled substances added yet.</div>';
     return;
   }
-  container.innerHTML = csEntries.map((entry, idx) => {
+
+  let csTotal = 0;
+
+  const rows = csEntries.map((entry, idx) => {
     const inv = entry.drug && CS_DRUGS[entry.drug]?.invId ? items.find(i=>i.id===CS_DRUGS[entry.drug].invId) : null;
     const stock = inv ? getStock(inv, currentWorker) : '?';
+    const costPerML = getCostPerML(entry.drug);
+    const amtGiven = parseFloat(entry.amountGiven) || 0;
+    const wasted = parseFloat(entry.wastedAmt) || 0;
+    const totalML = amtGiven + wasted;
+    const estimatedCost = costPerML * totalML;
+    csTotal += estimatedCost;
+
+    const costStr = costPerML > 0
+      ? `<span style="font-size:11px;color:var(--text-faint);">$${costPerML.toFixed(2)}/mL</span>
+         <span style="font-size:13px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info);">≈ $${estimatedCost.toFixed(2)}</span>`
+      : `<span style="font-size:11px;color:var(--text-faint);">Cost N/A</span>`;
+
     return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;">
       <div style="display:grid;grid-template-columns:1.5fr 90px 90px 90px 1fr 36px;gap:10px;align-items:end;">
         <div>
@@ -2144,7 +2170,7 @@ function renderCSEntries() {
           <input type="number" min="0" step="0.1" value="${entry.wastedAmt}" placeholder="0" onchange="updateCSEntry(${idx},'wastedAmt',this.value)" style="padding:7px 10px;font-size:13px;">
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Options &amp; Signature</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Est. Cost &amp; Signature</div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:400;cursor:pointer;">
               <input type="checkbox" ${entry.newBottle?'checked':''} onchange="updateCSEntry(${idx},'newBottle',this.checked)"> New Bottle
@@ -2155,11 +2181,21 @@ function renderCSEntries() {
             }
             <span style="font-size:11px;color:var(--text-faint);">Stock: ${stock}</span>
           </div>
+          <div style="margin-top:6px;display:flex;gap:8px;align-items:center;">${costStr}</div>
         </div>
         <button onclick="removeCSEntry(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:20px;align-self:center;">×</button>
       </div>
     </div>`;
   }).join('');
+
+  // CS total footer
+  const totalBar = csTotal > 0 ? `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--warn-light);border-radius:var(--radius-sm);border:1px solid #f0c4b0;margin-top:4px;">
+      <span style="font-size:13px;font-weight:600;color:var(--warn);">Estimated CS Cost</span>
+      <span style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace;color:var(--warn);">≈ $${csTotal.toFixed(2)}</span>
+    </div>` : '';
+
+  container.innerHTML = rows + totalBar;
 }
 
 window.updateCSEntry = function(idx, field, val) {
