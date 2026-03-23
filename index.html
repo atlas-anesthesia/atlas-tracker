@@ -129,6 +129,34 @@
   .inv-header{display:grid;grid-template-columns:1.8fr 80px 70px 70px 90px 110px 80px;gap:8px;padding-bottom:7px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);}
   .inv-row input{padding:5px 8px;font-size:13px;width:100%;}
   .cat-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);padding:14px 0 6px;}
+
+  /* ── NAV DROPDOWN ── */
+  .nav-dropdown { position: relative; display: inline-flex; }
+  .nav-dropdown-btn {
+    background: none; border: none; font-family: 'DM Sans', sans-serif;
+    font-size: 14px; color: var(--text-muted); padding: 13px 0;
+    margin-right: 26px; cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all .15s; display: flex; align-items: center; gap: 5px;
+  }
+  .nav-dropdown-btn.active { color: var(--info); border-bottom-color: var(--info); font-weight: 500; }
+  .nav-dropdown-btn .arrow { font-size: 9px; transition: transform .15s; }
+  .nav-dropdown-btn.open .arrow { transform: rotate(180deg); }
+  .nav-dropdown-menu {
+    display: none; position: absolute; top: 100%; left: 0;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); box-shadow: var(--shadow);
+    min-width: 160px; z-index: 100; overflow: hidden;
+  }
+  .nav-dropdown-menu.open { display: block; }
+  .nav-dropdown-menu button {
+    display: block; width: 100%; text-align: left;
+    background: none; border: none; font-family: 'DM Sans', sans-serif;
+    font-size: 14px; color: var(--text-muted); padding: 10px 16px;
+    cursor: pointer; transition: background .12s; border-bottom: 1px solid var(--border);
+  }
+  .nav-dropdown-menu button:last-child { border-bottom: none; }
+  .nav-dropdown-menu button:hover { background: var(--surface2); color: var(--text); }
+  .nav-dropdown-menu button.active { color: var(--info); font-weight: 500; background: var(--info-light); }
 </style>
 </head>
 <body>
@@ -183,10 +211,17 @@
     <button onclick="showTab('new-case')">New Case</button>
     <button onclick="showTab('inventory')">Inventory</button>
     <button onclick="showTab('history')">Case History</button>
-    <button onclick="showTab('reports')">Reports</button>
-    <button onclick="showTab('caselog')">Case Log</button>
     <button onclick="showTab('invoice')">Invoice</button>
-    <button onclick="showTab('cs-log')">CS Log</button>
+    <div class="nav-dropdown" id="reports-dropdown">
+      <button class="nav-dropdown-btn" id="reports-dropdown-btn" onclick="toggleReportsDropdown()">
+        Reports <span class="arrow">▼</span>
+      </button>
+      <div class="nav-dropdown-menu" id="reports-dropdown-menu">
+        <button onclick="showTab('reports');closeReportsDropdown();" id="subnav-reports">Overview</button>
+        <button onclick="showTab('caselog');closeReportsDropdown();" id="subnav-caselog">Case Log</button>
+        <button onclick="showTab('cs-log');closeReportsDropdown();" id="subnav-cs-log">CS Log</button>
+      </div>
+    </div>
   </div>
 
   <div class="container">
@@ -330,7 +365,7 @@
 
     <!-- REPORTS -->
     <div class="section" id="tab-reports">
-      <div class="action-bar"><h2>Reports</h2></div>
+      <div class="action-bar"><h2>Overview</h2></div>
       <div class="grid-3" style="margin-bottom:20px;">
         <div class="card" id="reportDev"></div>
         <div class="card" id="reportJosh"></div>
@@ -983,6 +1018,7 @@ async function initData() {
       items = ITEM_TEMPLATE.map(t=>({...t, stockDev:DEFAULT_STOCK[t.id]||0, stockJosh:DEFAULT_STOCK[t.id]||0}));
       setDoc(doc(db,'atlas','inventory'),{items});
     }
+    linkCSInvIds();
     refreshItemSelect();
     renderInventory();
     renderReports();
@@ -1092,8 +1128,19 @@ window.setHistoryFilter = function(f) {
 window.showTab = function(tab) {
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.nav-dropdown-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.nav-dropdown-menu button').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
-  document.querySelector(`.nav button[onclick="showTab('${tab}')"]`).classList.add('active');
+  // Highlight correct nav item
+  const directBtn = document.querySelector(`.nav > button[onclick="showTab('${tab}')"]`);
+  if(directBtn) directBtn.classList.add('active');
+  // If it's a reports sub-tab, highlight the dropdown button and sub-item
+  const reportsTabs = ['reports','caselog','cs-log'];
+  if(reportsTabs.includes(tab)) {
+    document.getElementById('reports-dropdown-btn').classList.add('active');
+    const subBtn = document.getElementById('subnav-'+tab);
+    if(subBtn) subBtn.classList.add('active');
+  }
   if(tab==='new-case') refreshDraftPicker();
   if(tab==='inventory') renderInventory();
   if(tab==='history') renderHistory();
@@ -1109,7 +1156,8 @@ function refreshItemSelect() {
   const sel=document.getElementById('addItemSelect');if(!sel)return;
   sel.innerHTML='<option value="">— Select an item to add —</option>';
   const used=new Set(caseItems.map(i=>i.id));
-  [...items].filter(i=>!used.has(i.id)).sort((a,b)=>a.generic.localeCompare(b.generic)).forEach(item=>{
+  linkCSInvIds();
+  [...items].filter(i=>!used.has(i.id) && !isCSItem(i)).sort((a,b)=>a.generic.localeCompare(b.generic)).forEach(item=>{
     const stock=getStock(item,currentWorker);
     const opt=document.createElement('option');
     opt.value=item.id;
@@ -2023,10 +2071,32 @@ function renderCaseLog() {
 
 // ── CONTROLLED SUBSTANCES ──
 const CS_DRUGS = {
-  nubain:   { label: 'Nubain (Nalbuphine)',  invId: '70069-0671-10' },
-  ketamine: { label: 'Ketamine',             invId: '0143-9509-10'  },
-  versed:   { label: 'Versed (Midazolam)',   invId: null             }
+  nubain:   { label: 'Nubain (Nalbuphine)',  invId: '70069-0671-10', keywords: ['nubain','nalbuphine'] },
+  ketamine: { label: 'Ketamine',             invId: '0143-9509-10',  keywords: ['ketamine'] },
+  versed:   { label: 'Versed (Midazolam)',   invId: null,            keywords: ['versed','midazolam'] }
 };
+
+// Returns true if an inventory item is a controlled substance (should be excluded from supplies)
+function isCSItem(item) {
+  const nameLC = (item.name + ' ' + item.generic).toLowerCase();
+  return Object.values(CS_DRUGS).some(drug =>
+    (drug.invId && drug.invId === item.id) ||
+    drug.keywords.some(kw => nameLC.includes(kw))
+  );
+}
+
+// When a CS drug is added to inventory, link it to CS_DRUGS
+function linkCSInvIds() {
+  Object.entries(CS_DRUGS).forEach(([key, drug]) => {
+    if(!drug.invId) {
+      const match = items.find(i => {
+        const n = (i.name + ' ' + i.generic).toLowerCase();
+        return drug.keywords.some(kw => n.includes(kw));
+      });
+      if(match) CS_DRUGS[key].invId = match.id;
+    }
+  });
+}
 
 let csEntries = []; // current case CS entries being built
 let currentCSEntry = null; // entry awaiting witness sig
@@ -2194,14 +2264,13 @@ async function saveCSEntriesWithCase(caseId, caseDate, provider) {
     };
     existing.unshift(logEntry);
 
-    // Deduct from inventory
+    // Deduct from inventory only — CS drugs are tracked separately, not added to case supplies
+    linkCSInvIds();
     const invId = CS_DRUGS[entry.drug]?.invId;
     if(invId) {
       const invItem = items.find(i => i.id === invId);
-      if(invItem) {
-        const used = (parseFloat(entry.amountGiven)||0) + (parseFloat(entry.wastedAmt)||0);
-        // Deduct 1 unit per vial opened (approximation) — adjust stock by leftInVial logic
-        const newStock = Math.max(0, getStock(invItem, currentWorker) - (entry.newBottle ? 1 : 0));
+      if(invItem && entry.newBottle) {
+        const newStock = Math.max(0, getStock(invItem, currentWorker) - 1);
         setStock(invItem, currentWorker, newStock);
       }
     }
@@ -2680,6 +2749,7 @@ async function loadSavedInvoices() {
 }
 
 function renderSavedInvoices(invoices) {
+  window._savedInvoices = invoices; // cache for re-download
   const el = document.getElementById('savedInvoicesList');
   if(!el) return;
   if(!invoices.length) {
@@ -2700,6 +2770,7 @@ function renderSavedInvoices(invoices) {
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
           <div class="case-cost">$${inv.total.toFixed(2)}</div>
+          <button onclick="event.stopPropagation();redownloadInvoice('${inv.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">⬇ Re-download</button>
           <button onclick="event.stopPropagation();deleteInvoice('${inv.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">Delete</button>
         </div>
       </div>
@@ -2758,6 +2829,130 @@ window.deleteInvoice = async function(id) {
   }
 };
 
+window.redownloadInvoice = function(id) {
+  // Find the saved invoice record
+  const invRecords = window._savedInvoices || [];
+  const inv = invRecords.find(i => i.id === id);
+  if(!inv) { alert('Invoice data not found. Try refreshing the page.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const W = 215.9;
+  const navy = [29, 53, 87];
+  const lightBlue = [232, 238, 245];
+  const gray = [107, 104, 96];
+  const lightGray = [240, 239, 233];
+  const black = [26, 25, 22];
+  const white = [255, 255, 255];
+
+  // ── HEADER ──
+  doc.setFillColor(...navy);
+  doc.rect(0, 0, W, 42, 'F');
+  doc.setFillColor(255, 255, 255);
+  doc.circle(20, 20, 12, 'F');
+  const logoEl = document.querySelector('img[style*="border-radius:50%"]');
+  if(logoEl) { try { doc.addImage(logoEl.src, 'PNG', 10, 10, 20, 20); } catch(e) {} }
+
+  doc.setTextColor(...white);
+  doc.setFontSize(20); doc.setFont('helvetica', 'bold');
+  doc.text('ATLAS ANESTHESIA', 36, 20);
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+  doc.text('Mobile Anesthesia Services', 36, 28);
+
+  doc.setFontSize(26); doc.setFont('helvetica', 'bold');
+  doc.text('INVOICE', W - 15, 20, { align: 'right' });
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+  doc.text(`# ${inv.invoiceNum}`, W - 15, 28, { align: 'right' });
+  doc.text(`Date: ${inv.date}`, W - 15, 34, { align: 'right' });
+
+  let y = 55;
+
+  // Billed To / From
+  doc.setFillColor(...lightGray);
+  doc.roundedRect(14, y, 85, 38, 2, 2, 'F');
+  doc.roundedRect(116, y, 85, 38, 2, 2, 'F');
+  doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(...gray);
+  doc.text('BILLED TO', 20, y + 8);
+  doc.text('FROM', 122, y + 8);
+  doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(...black);
+  doc.text(inv.location, 20, y + 17);
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(...gray);
+  doc.text('Anesthesia Services', 20, y + 25);
+  doc.text(inv.date, 20, y + 32);
+  doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(...black);
+  doc.text('Atlas Anesthesia', 122, y + 17);
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(...gray);
+  doc.text(`Provider: ${inv.provider}`, 122, y + 25);
+  doc.text('Mobile Anesthesia Services', 122, y + 32);
+
+  y += 50;
+
+  // Table header
+  doc.setFillColor(...navy);
+  doc.roundedRect(14, y, W - 28, 10, 1, 1, 'F');
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(...white);
+  doc.text('DESCRIPTION', 20, y + 7);
+  doc.text('TIME', 110, y + 7, { align: 'center' });
+  doc.text('RATE', 155, y + 7, { align: 'center' });
+  doc.text('AMOUNT', W - 20, y + 7, { align: 'right' });
+  y += 12;
+
+  // Row 1: First hour
+  doc.setFillColor(...lightGray);
+  doc.rect(14, y, W - 28, 10, 'F');
+  doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(...black);
+  doc.text('Anesthesia Services — First Hour', 20, y + 7);
+  doc.text('60 min', 110, y + 7, { align: 'center' });
+  doc.text(`$${inv.firstHourRate.toFixed(2)}`, 155, y + 7, { align: 'center' });
+  doc.text(`$${inv.firstHourRate.toFixed(2)}`, W - 20, y + 7, { align: 'right' });
+  y += 12;
+
+  // Row 2: Additional time if any
+  const billedMins = inv.billedDuration ? parseInt(inv.billedDuration) : 0;
+  if(billedMins > 60 || inv.total > inv.firstHourRate) {
+    const extraCost = inv.total - inv.firstHourRate;
+    const extraBlocks = inv.per15Rate > 0 ? Math.round(extraCost / inv.per15Rate) : 0;
+    if(extraBlocks > 0) {
+      doc.setFillColor(...white);
+      doc.rect(14, y, W - 28, 10, 'F');
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(...black);
+      doc.text(`Additional Time (${extraBlocks} × 15-min block${extraBlocks!==1?'s':''})`, 20, y + 7);
+      doc.text(`$${inv.per15Rate.toFixed(2)}/15min`, 155, y + 7, { align: 'center' });
+      doc.text(`$${extraCost.toFixed(2)}`, W - 20, y + 7, { align: 'right' });
+      y += 12;
+    }
+  }
+
+  y += 4;
+
+  // Time detail
+  doc.setFillColor(...lightBlue);
+  doc.roundedRect(14, y, W - 28, 14, 2, 2, 'F');
+  doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(...navy);
+  doc.text('TIME DETAIL', 20, y + 6);
+  doc.setFont('helvetica', 'normal'); doc.setTextColor(...black);
+  doc.text(`${inv.start} → ${inv.end}   ·   Actual: ${inv.actualDuration}   ·   Billed: ${inv.billedDuration} (rounded to nearest 15 min)`, 20, y + 12);
+  y += 22;
+
+  // Total
+  doc.setFillColor(...navy);
+  doc.roundedRect(120, y, W - 134, 18, 2, 2, 'F');
+  doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(...white);
+  doc.text('TOTAL DUE', 128, y + 7);
+  doc.setFontSize(16);
+  doc.text(`$${inv.total.toFixed(2)}`, W - 20, y + 12, { align: 'right' });
+  y += 28;
+
+  // Footer
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(...gray);
+  doc.text('Thank you for choosing Atlas Anesthesia — Mobile Anesthesia Services', W/2, y, { align: 'center' });
+  doc.text(`Invoice ${inv.invoiceNum} · Generated ${new Date().toLocaleDateString()}`, W/2, y+6, { align:'center' });
+  doc.setDrawColor(...navy); doc.setLineWidth(1.5);
+  doc.line(14, y+12, W-14, y+12);
+
+  doc.save(`Atlas-Invoice-${inv.invoiceNum}.pdf`);
+};
+
 window.clearInvoice = function() {
   ['inv-location','inv-date','inv-start','inv-end','inv-first-hour','inv-per-15'].forEach(id => {
     const el = document.getElementById(id);
@@ -2766,6 +2961,25 @@ window.clearInvoice = function() {
   document.getElementById('inv-summary').innerHTML = 'Enter times and rates to see summary';
   document.getElementById('inv-total').textContent = '$0.00';
 };
+
+// ── REPORTS DROPDOWN ──
+window.toggleReportsDropdown = function() {
+  const btn = document.getElementById('reports-dropdown-btn');
+  const menu = document.getElementById('reports-dropdown-menu');
+  btn.classList.toggle('open');
+  menu.classList.toggle('open');
+};
+
+window.closeReportsDropdown = function() {
+  document.getElementById('reports-dropdown-btn').classList.remove('open');
+  document.getElementById('reports-dropdown-menu').classList.remove('open');
+};
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  const dropdown = document.getElementById('reports-dropdown');
+  if(dropdown && !dropdown.contains(e.target)) closeReportsDropdown();
+});
 </script>
 </body>
 </html>
