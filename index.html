@@ -280,11 +280,24 @@
       <!-- CONTROLLED SUBSTANCES SECTION -->
       <div class="card" style="margin-bottom:18px;border-left:3px solid var(--warn);">
         <div class="card-title" style="color:var(--warn);">Controlled Substances</div>
-        <div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">These entries will auto-create CS log records and deduct from inventory.</div>
-        <div id="cs-entries-container">
-          <!-- CS entries rendered here -->
+        <div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">These entries auto-create CS log records and deduct from inventory.</div>
+
+        <!-- CS rows header -->
+        <div id="cs-rows-header" style="display:none;" class="supply-row-header" style="grid-template-columns:2.5fr 90px 70px 80px 90px 90px 32px;">
+          <span>Drug</span><span>Given (mL)</span><span>Left</span><span>Wasted</span><span>Est. Cost</span><span>Witness</span><span></span>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="addCSEntry()" style="margin-top:10px;">+ Add Controlled Substance</button>
+        <div id="cs-entries-container"></div>
+
+        <!-- Add CS dropdown -->
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
+          <select id="addCSSelect" style="flex:1;">
+            <option value="">— Select a controlled substance —</option>
+            ${Object.entries(CS_DRUGS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="addCSEntry()">+ Add Item</button>
+        </div>
+
+        <div id="cs-total-bar"></div>
       </div>
 
       <div class="card">
@@ -2140,25 +2153,37 @@ let witnessLastX = 0, witnessLastY = 0;
 let currentCSTab = 'nubain';
 
 window.addCSEntry = function() {
+  const sel = document.getElementById('addCSSelect');
+  const drug = sel ? sel.value : 'nubain';
+  if(!drug) { alert('Please select a controlled substance first.'); return; }
   const id = uid();
   csEntries.push({
-    id, drug: 'nubain', amountGiven: '', leftInVial: '', wasted: false,
+    id, drug, amountGiven: '', leftInVial: '', wasted: false,
     wastedAmt: '', newBottle: false, crnaSignature: '', witnessSignature: ''
   });
+  if(sel) sel.value = '';
   renderCSEntries();
+  renderCaseSupplies();
 };
 
 function renderCSEntries() {
   const container = document.getElementById('cs-entries-container');
+  const header = document.getElementById('cs-rows-header');
+  const totalBar = document.getElementById('cs-total-bar');
   if(!container) return;
+
   if(!csEntries.length) {
     container.innerHTML = '<div style="font-size:13px;color:var(--text-faint);padding:8px 0;">No controlled substances added yet.</div>';
+    if(header) header.style.display = 'none';
+    if(totalBar) totalBar.innerHTML = '';
     return;
   }
 
+  if(header) header.style.display = 'grid';
+
   let csTotal = 0;
 
-  const rows = csEntries.map((entry, idx) => {
+  container.innerHTML = csEntries.map((entry, idx) => {
     const inv = entry.drug && CS_DRUGS[entry.drug]?.invId ? items.find(i=>i.id===CS_DRUGS[entry.drug].invId) : null;
     const stock = inv ? getStock(inv, currentWorker) : '?';
     const costPerML = getCostPerML(entry.drug);
@@ -2168,59 +2193,46 @@ function renderCSEntries() {
     const estimatedCost = costPerML * totalML;
     csTotal += estimatedCost;
 
-    const costStr = costPerML > 0
-      ? `<span style="font-size:11px;color:var(--text-faint);">$${costPerML.toFixed(2)}/mL</span>
-         <span style="font-size:13px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info);">≈ $${estimatedCost.toFixed(2)}</span>`
-      : `<span style="font-size:11px;color:var(--text-faint);">Cost N/A</span>`;
+    const costStr = costPerML > 0 && totalML > 0
+      ? `<span style="font-size:13px;font-weight:500;font-family:'DM Mono',monospace;color:var(--warn);">≈ $${estimatedCost.toFixed(2)}</span><div style="font-size:10px;color:var(--text-faint);">$${costPerML.toFixed(2)}/mL</div>`
+      : `<span style="font-size:12px;color:var(--text-faint);">Enter mL</span>`;
 
-    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;">
-      <div style="display:grid;grid-template-columns:1.5fr 90px 90px 90px 1fr 36px;gap:10px;align-items:end;">
-        <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Drug</div>
-          <select onchange="updateCSEntry(${idx},'drug',this.value)" style="width:100%;padding:7px 10px;font-size:13px;">
-            ${Object.entries(CS_DRUGS).map(([k,v])=>`<option value="${k}" ${entry.drug===k?'selected':''}>${v.label}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Amount Given</div>
-          <input type="number" min="0" step="0.1" value="${entry.amountGiven}" placeholder="mL" onchange="updateCSEntry(${idx},'amountGiven',this.value)" style="padding:7px 10px;font-size:13px;">
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Left in Vial</div>
-          <input type="number" min="0" step="0.1" value="${entry.leftInVial}" placeholder="mL" onchange="updateCSEntry(${idx},'leftInVial',this.value)" style="padding:7px 10px;font-size:13px;">
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Wasted (mL)</div>
-          <input type="number" min="0" step="0.1" value="${entry.wastedAmt}" placeholder="0" onchange="updateCSEntry(${idx},'wastedAmt',this.value)" style="padding:7px 10px;font-size:13px;">
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Est. Cost &amp; Signature</div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:400;cursor:pointer;">
-              <input type="checkbox" ${entry.newBottle?'checked':''} onchange="updateCSEntry(${idx},'newBottle',this.checked)"> New Bottle
-            </label>
-            ${entry.witnessSignature
-              ? `<div style="display:flex;align-items:center;gap:6px;"><img src="${entry.witnessSignature}" style="height:28px;border:1px solid var(--border);border-radius:4px;background:#fff;"><button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;">Re-sign</button></div>`
-              : `<button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;color:var(--warn);border-color:var(--warn);">✍ Witness Sign</button>`
-            }
-            <span style="font-size:11px;color:var(--text-faint);">Stock: ${stock}</span>
-          </div>
-          <div style="margin-top:6px;display:flex;gap:8px;align-items:center;">${costStr}</div>
-        </div>
-        <button onclick="removeCSEntry(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:20px;align-self:center;">×</button>
+    return `<div style="display:grid;grid-template-columns:2.5fr 90px 70px 80px 90px 90px 32px;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);">
+      <div style="font-size:13px;font-weight:500;">
+        ${CS_DRUGS[entry.drug]?.label || entry.drug}
+        <div style="font-size:11px;color:var(--text-faint);">Stock: ${stock} · ${entry.newBottle?'<span style="color:var(--accent);">New bottle</span>':'existing vial'}</div>
+        <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:400;color:var(--text-muted);cursor:pointer;margin-top:3px;">
+          <input type="checkbox" ${entry.newBottle?'checked':''} onchange="updateCSEntry(${idx},'newBottle',this.checked)" style="width:13px;height:13px;"> New Bottle
+        </label>
       </div>
+      <div><input type="number" min="0" step="0.1" value="${entry.amountGiven}" placeholder="mL"
+        onchange="updateCSEntry(${idx},'amountGiven',this.value)"
+        style="width:100%;padding:5px 8px;font-size:13px;text-align:center;"></div>
+      <div><input type="number" min="0" step="0.1" value="${entry.leftInVial}" placeholder="mL"
+        onchange="updateCSEntry(${idx},'leftInVial',this.value)"
+        style="width:100%;padding:5px 8px;font-size:13px;text-align:center;"></div>
+      <div><input type="number" min="0" step="0.1" value="${entry.wastedAmt}" placeholder="0"
+        onchange="updateCSEntry(${idx},'wastedAmt',this.value)"
+        style="width:100%;padding:5px 8px;font-size:13px;text-align:center;"></div>
+      <div>${costStr}</div>
+      <div>${entry.witnessSignature
+        ? `<div style="display:flex;align-items:center;gap:4px;"><img src="${entry.witnessSignature}" style="height:26px;border:1px solid var(--border);border-radius:3px;background:#fff;"><button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:10px;">Re-sign</button></div>`
+        : `<button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;color:var(--warn);border-color:var(--warn);">✍ Sign</button>`
+      }</div>
+      <button onclick="removeCSEntry(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:18px;line-height:1;">×</button>
     </div>`;
   }).join('');
 
-  // CS total footer
-  const totalBar = csTotal > 0 ? `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--warn-light);border-radius:var(--radius-sm);border:1px solid #f0c4b0;margin-top:4px;">
-      <span style="font-size:13px;font-weight:600;color:var(--warn);">Estimated CS Cost</span>
-      <span style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace;color:var(--warn);">≈ $${csTotal.toFixed(2)}</span>
-    </div>` : '';
-
-  container.innerHTML = rows + totalBar;
+  // CS total bar
+  if(totalBar) {
+    totalBar.innerHTML = csTotal > 0 ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--warn-light);border-radius:var(--radius-sm);border:1px solid #f0c4b0;margin-top:10px;">
+        <span style="font-size:13px;font-weight:600;color:var(--warn);">Estimated CS Cost</span>
+        <span style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace;color:var(--warn);">≈ $${csTotal.toFixed(2)}</span>
+      </div>` : '';
+  }
 }
+
 
 window.updateCSEntry = function(idx, field, val) {
   if(field === 'newBottle' || field === 'wasted') csEntries[idx][field] = val;
