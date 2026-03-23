@@ -668,10 +668,24 @@
     <div class="section" id="tab-caselog">
       <div class="action-bar"><h2>Case Log</h2></div>
 
-      <!-- Provider tabs -->
-      <div class="inv-tab-bar" style="margin-bottom:20px;">
-        <button class="inv-tab active" id="cltab-dev" onclick="setCaseLogTab('dev')">Devarsh</button>
-        <button class="inv-tab" id="cltab-josh" onclick="setCaseLogTab('josh')">Josh</button>
+      <!-- Provider tabs + date filter + download -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+        <div class="inv-tab-bar" style="margin-bottom:0;">
+          <button class="inv-tab active" id="cltab-dev" onclick="setCaseLogTab('dev')">Devarsh</button>
+          <button class="inv-tab" id="cltab-josh" onclick="setCaseLogTab('josh')">Josh</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted);">From</label>
+            <input type="date" id="cl-date-from" style="width:145px;padding:6px 10px;font-size:13px;" oninput="renderCaseLog()" onchange="renderCaseLog()">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted);">To</label>
+            <input type="date" id="cl-date-to" style="width:145px;padding:6px 10px;font-size:13px;" oninput="renderCaseLog()" onchange="renderCaseLog()">
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="clearCaseLogDates()">Clear Dates</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadCaseLogPDF()">⬇ Download PDF</button>
+        </div>
       </div>
 
       <!-- Dev summary -->
@@ -1689,6 +1703,165 @@ async function renderPreopHistory() {
 
 window.togglePreop = function(id) { document.getElementById('preop-detail-'+id).classList.toggle('open'); };
 
+// ── CASE LOG HELPERS ──
+window.clearCaseLogDates = function() {
+  const f = document.getElementById('cl-date-from');
+  const t = document.getElementById('cl-date-to');
+  if(f) f.value = '';
+  if(t) t.value = '';
+  renderCaseLog();
+};
+
+window.downloadCaseLogPDF = function() {
+  const worker = currentCaseLogTab;
+  const wname = worker === 'dev' ? 'Devarsh Murthy' : 'Josh Condado';
+  const fromDate = document.getElementById('cl-date-from')?.value || '';
+  const toDate = document.getElementById('cl-date-to')?.value || '';
+
+  let workerCases = cases.filter(c => c.worker === worker && !c.draft);
+  if(fromDate) workerCases = workerCases.filter(c => c.date >= fromDate);
+  if(toDate) workerCases = workerCases.filter(c => c.date <= toDate);
+  const sorted = [...workerCases].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+  if(!sorted.length) { alert('No cases found for the selected range.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const W = 215.9;
+  const navy = [29, 53, 87];
+  const lightGray = [240, 239, 233];
+  const gray = [107, 104, 96];
+  const black = [26, 25, 22];
+  const white = [255, 255, 255];
+  const lightBlue = [232, 238, 245];
+
+  // ── HEADER ──
+  doc.setFillColor(...navy);
+  doc.rect(0, 0, W, 38, 'F');
+
+  // Logo white circle + image
+  doc.setFillColor(255, 255, 255);
+  doc.circle(20, 19, 12, 'F');
+  const logoEl = document.querySelector('img[style*="border-radius:50%"]');
+  if(logoEl) {
+    try { doc.addImage(logoEl.src, 'PNG', 9, 8, 22, 22); } catch(e) {}
+  }
+
+  doc.setTextColor(...white);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ATLAS ANESTHESIA', 38, 16);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Mobile Anesthesia Services', 38, 23);
+
+  // Right side - title
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('CASE LOG', W - 15, 16, { align: 'right' });
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(wname, W - 15, 23, { align: 'right' });
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`, W - 15, 29, { align: 'right' });
+
+  let y = 48;
+
+  // ── DATE RANGE BANNER ──
+  if(fromDate || toDate) {
+    doc.setFillColor(...lightBlue);
+    doc.roundedRect(14, y, W-28, 10, 1, 1, 'F');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...navy);
+    const rangeText = `Date Range: ${fromDate ? new Date(fromDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'All'} → ${toDate ? new Date(toDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'All'}`;
+    doc.text(rangeText, W/2, y+7, { align:'center' });
+    y += 14;
+  }
+
+  // ── SUMMARY CARDS ──
+  doc.setFillColor(...lightGray);
+  doc.roundedRect(14, y, 56, 18, 2, 2, 'F');
+  doc.roundedRect(78, y, 56, 18, 2, 2, 'F');
+  doc.roundedRect(142, y, 56, 18, 2, 2, 'F');
+
+  doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(...gray);
+  doc.text('TOTAL CASES', 42, y+6, {align:'center'});
+  doc.text('THIS REPORT', 106, y+6, {align:'center'});
+  doc.text('PROVIDER', 170, y+6, {align:'center'});
+
+  doc.setFontSize(14); doc.setFont('helvetica','bold'); doc.setTextColor(...navy);
+  doc.text(String(sorted.length), 42, y+15, {align:'center'});
+  doc.text(String(sorted.length), 106, y+15, {align:'center'});
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text(worker==='dev'?'Devarsh':'Josh', 170, y+14, {align:'center'});
+
+  y += 26;
+
+  // ── TABLE HEADER ──
+  doc.setFillColor(...navy);
+  doc.roundedRect(14, y, W-28, 9, 1, 1, 'F');
+  doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(...white);
+  doc.text('DATE', 18, y+6);
+  doc.text('CASE ID', 52, y+6);
+  doc.text('PROCEDURE', 90, y+6);
+  doc.text('PROVIDER', 155, y+6);
+  doc.text('NOTES', 185, y+6);
+
+  y += 11;
+
+  // ── TABLE ROWS ──
+  sorted.forEach((c, i) => {
+    // Check if we need a new page
+    if(y > 250) {
+      doc.addPage();
+      y = 20;
+      // Re-draw table header on new page
+      doc.setFillColor(...navy);
+      doc.roundedRect(14, y, W-28, 9, 1, 1, 'F');
+      doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(...white);
+      doc.text('DATE', 18, y+6);
+      doc.text('CASE ID', 52, y+6);
+      doc.text('PROCEDURE', 90, y+6);
+      doc.text('PROVIDER', 155, y+6);
+      doc.text('NOTES', 185, y+6);
+      y += 11;
+    }
+
+    if(i%2===0) {
+      doc.setFillColor(...lightGray);
+      doc.rect(14, y, W-28, 9, 'F');
+    }
+
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...black);
+    doc.text(c.date || '—', 18, y+6);
+    doc.text((c.caseId||'—').substring(0,18), 52, y+6);
+
+    // Truncate procedure if too long
+    const proc = (c.procedure||'—').substring(0,28);
+    doc.text(proc, 90, y+6);
+    doc.text((c.provider||'—').substring(0,14), 155, y+6);
+
+    const noteText = ((c.notes||'')+(c.caseComments?' '+c.caseComments:'')).substring(0,18);
+    if(noteText) { doc.setTextColor(...gray); doc.text(noteText, 185, y+6); }
+
+    y += 9;
+  });
+
+  // ── FOOTER LINE ──
+  y += 6;
+  doc.setDrawColor(...navy);
+  doc.setLineWidth(0.8);
+  doc.line(14, y, W-14, y);
+  y += 5;
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+  doc.text(`Atlas Anesthesia · ${wname} Case Log · ${sorted.length} cases`, W/2, y, {align:'center'});
+
+  // File name
+  const fromStr = fromDate ? fromDate.replace(/-/g,'') : 'all';
+  const toStr = toDate ? toDate.replace(/-/g,'') : 'all';
+  doc.save(`Atlas-CaseLog-${worker.toUpperCase()}-${fromStr}-${toStr}.pdf`);
+};
+
 // ── INLINE COST UPDATE ──
 window.updateCost = async function(id, val) {
   const cost = parseFloat(val);
@@ -1732,8 +1905,12 @@ window.setCaseLogTab = function(tab) {
 };
 
 function renderCaseLog() {
+  const fromDate = document.getElementById('cl-date-from')?.value || '';
+  const toDate = document.getElementById('cl-date-to')?.value || '';
   ['dev','josh'].forEach(worker => {
-    const workerCases = cases.filter(c => c.worker === worker && !c.draft);
+    let workerCases = cases.filter(c => c.worker === worker && !c.draft);
+    if(fromDate) workerCases = workerCases.filter(c => c.date >= fromDate);
+    if(toDate) workerCases = workerCases.filter(c => c.date <= toDate);
     const wname = worker === 'dev' ? 'Devarsh' : 'Josh';
 
     // Metrics
