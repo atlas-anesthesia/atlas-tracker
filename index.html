@@ -1196,19 +1196,27 @@ function renderCaseSupplies() {
       <button onclick="removeItem(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:18px;line-height:1;">×</button>`;
     container.appendChild(row);
   });
-  document.getElementById('caseTotalDisplay').textContent='$'+total.toFixed(2);
+  // Add CS estimated cost to total display
+  const csTotal = csEntries.reduce((sum, entry) => {
+    const costPerML = getCostPerML(entry.drug);
+    const ml = (parseFloat(entry.amountGiven)||0) + (parseFloat(entry.wastedAmt)||0);
+    return sum + costPerML * ml;
+  }, 0);
+  const grandTotal = total + csTotal;
+  document.getElementById('caseTotalDisplay').textContent='$'+grandTotal.toFixed(2);
   if(lowList.length) warnings.innerHTML=`<div class="alert alert-warn">⚠ Low stock after this case: ${lowList.join(', ')}</div>`;
-  renderLiveSummary(total);
+  renderLiveSummary(total, csTotal);
 }
 
-function renderLiveSummary(total) {
+function renderLiveSummary(total, csTotal=0) {
   const el=document.getElementById('liveSummary');
-  if(!caseItems.length){el.innerHTML='<div class="empty-state">Add supplies below to see cost summary</div>';return;}
+  const grandTotal = total + csTotal;
+  if(!caseItems.length && csTotal===0){el.innerHTML='<div class="empty-state">Add supplies below to see cost summary</div>';return;}
   const byCategory={};
   caseItems.forEach(item=>{const inv=items.find(i=>i.id===item.id);const cat=inv?inv.category:'Other';byCategory[cat]=(byCategory[cat]||0)+item.cost*item.qty;});
   let html='';
   Object.entries(byCategory).sort((a,b)=>b[1]-a[1]).forEach(([cat,amt])=>{
-    const pct=Math.round((amt/total)*100);
+    const pct=grandTotal>0?Math.round((amt/grandTotal)*100):0;
     html+=`<div style="margin-bottom:9px;">
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
         <span style="color:var(--text-muted);">${cat}</span>
@@ -1216,9 +1224,25 @@ function renderLiveSummary(total) {
       <div style="background:var(--surface2);border-radius:3px;height:5px;">
         <div style="width:${pct}%;height:100%;background:var(--info);border-radius:3px;"></div></div></div>`;
   });
-  html+=`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;">
-    <span style="font-size:12px;font-weight:600;color:var(--text-muted);">TOTAL</span>
-    <span style="font-size:19px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info);">$${total.toFixed(2)}</span></div>`;
+  // Add CS row if any
+  if(csTotal > 0) {
+    const csPct = grandTotal>0 ? Math.round((csTotal/grandTotal)*100) : 0;
+    html+=`<div style="margin-bottom:9px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
+        <span style="color:var(--warn);">Controlled Substances <span style="font-size:10px;">(est.)</span></span>
+        <span style="font-family:'DM Mono',monospace;font-weight:500;color:var(--warn);">≈ $${csTotal.toFixed(2)}</span></div>
+      <div style="background:var(--surface2);border-radius:3px;height:5px;">
+        <div style="width:${csPct}%;height:100%;background:var(--warn);border-radius:3px;"></div></div></div>`;
+  }
+  html+=`<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;">
+    ${csTotal>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-faint);margin-bottom:4px;">
+      <span>Supplies</span><span style="font-family:'DM Mono',monospace;">$${total.toFixed(2)}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--warn);margin-bottom:6px;">
+      <span>CS (est.)</span><span style="font-family:'DM Mono',monospace;">≈ $${csTotal.toFixed(2)}</span></div>`:''}
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:12px;font-weight:600;color:var(--text-muted);">TOTAL</span>
+      <span style="font-size:19px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info);">$${grandTotal.toFixed(2)}</span></div>
+  </div>`;
   el.innerHTML=html;
 }
 
@@ -2202,11 +2226,13 @@ window.updateCSEntry = function(idx, field, val) {
   if(field === 'newBottle' || field === 'wasted') csEntries[idx][field] = val;
   else csEntries[idx][field] = val;
   renderCSEntries();
+  renderCaseSupplies(); // refresh case total
 };
 
 window.removeCSEntry = function(idx) {
   csEntries.splice(idx, 1);
   renderCSEntries();
+  renderCaseSupplies();
 };
 
 // ── WITNESS SIGNATURE MODAL ──
