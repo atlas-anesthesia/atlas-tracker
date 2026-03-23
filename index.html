@@ -186,6 +186,7 @@
     <button onclick="showTab('reports')">Reports</button>
     <button onclick="showTab('caselog')">Case Log</button>
     <button onclick="showTab('invoice')">Invoice</button>
+    <button onclick="showTab('cs-log')">CS Log</button>
   </div>
 
   <div class="container">
@@ -241,6 +242,16 @@
           <div id="liveSummary"><div class="empty-state">Add supplies below to see cost summary</div></div>
         </div>
       </div>
+      <!-- CONTROLLED SUBSTANCES SECTION -->
+      <div class="card" style="margin-bottom:18px;border-left:3px solid var(--warn);">
+        <div class="card-title" style="color:var(--warn);">Controlled Substances</div>
+        <div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">These entries will auto-create CS log records and deduct from inventory.</div>
+        <div id="cs-entries-container">
+          <!-- CS entries rendered here -->
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addCSEntry()" style="margin-top:10px;">+ Add Controlled Substance</button>
+      </div>
+
       <div class="card">
         <div class="card-title">Supplies Used This Case</div>
         <div id="lowStockWarnings"></div>
@@ -700,6 +711,53 @@
       </div>
     </div>
 
+    <!-- CS LOG TAB -->
+    <div class="section" id="tab-cs-log">
+      <div class="action-bar">
+        <h2>Controlled Substance Log</h2>
+        <button class="btn btn-primary btn-sm" onclick="downloadCSLogPDF()">⬇ Download PDF</button>
+      </div>
+
+      <!-- Drug tabs -->
+      <div class="inv-tab-bar" style="margin-bottom:20px;">
+        <button class="inv-tab active" id="cstab-nubain" onclick="setCSTab('nubain')">Nubain (Nalbuphine)</button>
+        <button class="inv-tab" id="cstab-ketamine" onclick="setCSTab('ketamine')">Ketamine</button>
+        <button class="inv-tab" id="cstab-versed" onclick="setCSTab('versed')">Versed (Midazolam)</button>
+      </div>
+
+      <!-- Filter row -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted);">From</label>
+          <input type="date" id="cs-date-from" style="width:145px;padding:6px 10px;font-size:13px;" onchange="renderCSLog()">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted);">To</label>
+          <input type="date" id="cs-date-to" style="width:145px;padding:6px 10px;font-size:13px;" onchange="renderCSLog()">
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="clearCSDates()">Clear</button>
+      </div>
+
+      <div id="cs-log-content"></div>
+    </div>
+
+    <!-- WITNESS SIGNATURE MODAL -->
+    <div id="witnessModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;">
+      <div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+        <div style="font-size:16px;font-weight:500;margin-bottom:6px;">Witness Signature</div>
+        <div style="font-size:13px;color:var(--text-faint);margin-bottom:16px;">Sign below using your finger or mouse</div>
+        <canvas id="witnessCanvas" width="450" height="160"
+          style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100%;touch-action:none;background:#fff;cursor:crosshair;display:block;"></canvas>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;">
+          <button class="btn btn-ghost btn-sm" onclick="clearWitnessCanvas()">Clear</button>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-ghost" onclick="closeWitnessModal()">Cancel</button>
+            <button class="btn btn-success" onclick="saveWitnessSignature()">✓ Save Signature</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
 </div>
 
 <!-- LIGHTBOX -->
@@ -902,6 +960,7 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('caseDate').value = new Date().toISOString().split('T')[0];
     await initData();
     updateCaseIdDisplays();
+    renderCSEntries();
     updatePreopCaseIdDisplay();
     refreshDraftPicker();
     loadSavedInvoices();
@@ -1041,6 +1100,7 @@ window.showTab = function(tab) {
   if(tab==='reports') renderReports();
   if(tab==='preop-history') renderPreopHistory();
   if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); }
+  if(tab==='cs-log') renderCSLog();
   if(tab==='caselog') renderCaseLog();
 };
 
@@ -1157,10 +1217,14 @@ window.saveCase = async function() {
     const inv=items.find(i=>i.id===item.id);
     if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
   });
+  // Save CS entries and deduct CS inventory
+  await saveCSEntriesWithCase(caseId, date, provider);
   // Now remove the draft if one was loaded — only on successful save
   if(window._activeDraftId) {
     cases = cases.filter(x => x.id !== window._activeDraftId);
     window._activeDraftId = null;
+  csEntries = [];
+  renderCSEntries();
   }
   await Promise.all([saveInventory(), saveCases()]);
   clearCase();
@@ -1956,6 +2020,352 @@ function renderCaseLog() {
     `;
   });
 }
+
+// ── CONTROLLED SUBSTANCES ──
+const CS_DRUGS = {
+  nubain:   { label: 'Nubain (Nalbuphine)',  invId: '70069-0671-10' },
+  ketamine: { label: 'Ketamine',             invId: '0143-9509-10'  },
+  versed:   { label: 'Versed (Midazolam)',   invId: null             }
+};
+
+let csEntries = []; // current case CS entries being built
+let currentCSEntry = null; // entry awaiting witness sig
+let witnessDrawing = false;
+let witnessLastX = 0, witnessLastY = 0;
+let currentCSTab = 'nubain';
+
+window.addCSEntry = function() {
+  const id = uid();
+  csEntries.push({
+    id, drug: 'nubain', amountGiven: '', leftInVial: '', wasted: false,
+    wastedAmt: '', newBottle: false, crnaSignature: '', witnessSignature: ''
+  });
+  renderCSEntries();
+};
+
+function renderCSEntries() {
+  const container = document.getElementById('cs-entries-container');
+  if(!container) return;
+  if(!csEntries.length) {
+    container.innerHTML = '<div style="font-size:13px;color:var(--text-faint);padding:8px 0;">No controlled substances added yet.</div>';
+    return;
+  }
+  container.innerHTML = csEntries.map((entry, idx) => {
+    const inv = entry.drug && CS_DRUGS[entry.drug]?.invId ? items.find(i=>i.id===CS_DRUGS[entry.drug].invId) : null;
+    const stock = inv ? getStock(inv, currentWorker) : '?';
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;">
+      <div style="display:grid;grid-template-columns:1.5fr 90px 90px 90px 1fr 36px;gap:10px;align-items:end;">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Drug</div>
+          <select onchange="updateCSEntry(${idx},'drug',this.value)" style="width:100%;padding:7px 10px;font-size:13px;">
+            ${Object.entries(CS_DRUGS).map(([k,v])=>`<option value="${k}" ${entry.drug===k?'selected':''}>${v.label}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Amount Given</div>
+          <input type="number" min="0" step="0.1" value="${entry.amountGiven}" placeholder="mL" onchange="updateCSEntry(${idx},'amountGiven',this.value)" style="padding:7px 10px;font-size:13px;">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Left in Vial</div>
+          <input type="number" min="0" step="0.1" value="${entry.leftInVial}" placeholder="mL" onchange="updateCSEntry(${idx},'leftInVial',this.value)" style="padding:7px 10px;font-size:13px;">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Wasted (mL)</div>
+          <input type="number" min="0" step="0.1" value="${entry.wastedAmt}" placeholder="0" onchange="updateCSEntry(${idx},'wastedAmt',this.value)" style="padding:7px 10px;font-size:13px;">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Options &amp; Signature</div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:400;cursor:pointer;">
+              <input type="checkbox" ${entry.newBottle?'checked':''} onchange="updateCSEntry(${idx},'newBottle',this.checked)"> New Bottle
+            </label>
+            ${entry.witnessSignature
+              ? `<div style="display:flex;align-items:center;gap:6px;"><img src="${entry.witnessSignature}" style="height:28px;border:1px solid var(--border);border-radius:4px;background:#fff;"><button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;">Re-sign</button></div>`
+              : `<button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;color:var(--warn);border-color:var(--warn);">✍ Witness Sign</button>`
+            }
+            <span style="font-size:11px;color:var(--text-faint);">Stock: ${stock}</span>
+          </div>
+        </div>
+        <button onclick="removeCSEntry(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:20px;align-self:center;">×</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.updateCSEntry = function(idx, field, val) {
+  if(field === 'newBottle' || field === 'wasted') csEntries[idx][field] = val;
+  else csEntries[idx][field] = val;
+  renderCSEntries();
+};
+
+window.removeCSEntry = function(idx) {
+  csEntries.splice(idx, 1);
+  renderCSEntries();
+};
+
+// ── WITNESS SIGNATURE MODAL ──
+window.openWitnessModal = function(entryIdx) {
+  currentCSEntry = entryIdx;
+  document.getElementById('witnessModal').style.display = 'flex';
+  clearWitnessCanvas();
+  setupWitnessCanvas();
+};
+
+window.closeWitnessModal = function() {
+  document.getElementById('witnessModal').style.display = 'none';
+  currentCSEntry = null;
+};
+
+function setupWitnessCanvas() {
+  const canvas = document.getElementById('witnessCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#1d3557';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+  }
+
+  canvas.onmousedown = canvas.ontouchstart = function(e) {
+    e.preventDefault();
+    witnessDrawing = true;
+    const p = getPos(e);
+    witnessLastX = p.x; witnessLastY = p.y;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  };
+  canvas.onmousemove = canvas.ontouchmove = function(e) {
+    e.preventDefault();
+    if(!witnessDrawing) return;
+    const p = getPos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    witnessLastX = p.x; witnessLastY = p.y;
+  };
+  canvas.onmouseup = canvas.ontouchend = function(e) {
+    e.preventDefault();
+    witnessDrawing = false;
+  };
+}
+
+window.clearWitnessCanvas = function() {
+  const canvas = document.getElementById('witnessCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+};
+
+window.saveWitnessSignature = function() {
+  const canvas = document.getElementById('witnessCanvas');
+  const sigData = canvas.toDataURL('image/png');
+  if(currentCSEntry !== null) {
+    csEntries[currentCSEntry].witnessSignature = sigData;
+    renderCSEntries();
+  }
+  closeWitnessModal();
+};
+
+// ── SAVE CS ENTRIES WITH CASE ──
+async function saveCSEntriesWithCase(caseId, caseDate, provider) {
+  if(!csEntries.length) return;
+  const snap = await getDoc(doc(db,'atlas','cslog'));
+  const existing = snap.exists() ? (snap.data().entries || []) : [];
+
+  csEntries.forEach(entry => {
+    const logEntry = {
+      id: uid(),
+      drug: entry.drug,
+      drugLabel: CS_DRUGS[entry.drug]?.label || entry.drug,
+      caseId,
+      date: caseDate,
+      provider,
+      worker: currentWorker,
+      amountGiven: parseFloat(entry.amountGiven) || 0,
+      leftInVial: parseFloat(entry.leftInVial) || 0,
+      wastedAmt: parseFloat(entry.wastedAmt) || 0,
+      newBottle: entry.newBottle || false,
+      witnessSignature: entry.witnessSignature || '',
+      savedAt: new Date().toISOString()
+    };
+    existing.unshift(logEntry);
+
+    // Deduct from inventory
+    const invId = CS_DRUGS[entry.drug]?.invId;
+    if(invId) {
+      const invItem = items.find(i => i.id === invId);
+      if(invItem) {
+        const used = (parseFloat(entry.amountGiven)||0) + (parseFloat(entry.wastedAmt)||0);
+        // Deduct 1 unit per vial opened (approximation) — adjust stock by leftInVial logic
+        const newStock = Math.max(0, getStock(invItem, currentWorker) - (entry.newBottle ? 1 : 0));
+        setStock(invItem, currentWorker, newStock);
+      }
+    }
+  });
+
+  setSyncing(true);
+  await setDoc(doc(db,'atlas','cslog'), { entries: existing });
+  await saveInventory();
+  setSyncing(false);
+  csEntries = [];
+  renderCSEntries();
+}
+
+// ── CS LOG TAB ──
+window.setCSTab = function(tab) {
+  currentCSTab = tab;
+  ['nubain','ketamine','versed'].forEach(x => {
+    document.getElementById('cstab-'+x).classList.toggle('active', x===tab);
+  });
+  renderCSLog();
+};
+
+window.clearCSDates = function() {
+  document.getElementById('cs-date-from').value = '';
+  document.getElementById('cs-date-to').value = '';
+  renderCSLog();
+};
+
+async function renderCSLog() {
+  const el = document.getElementById('cs-log-content');
+  if(!el) return;
+  el.innerHTML = '<div class="empty-state">Loading...</div>';
+  try {
+    const snap = await getDoc(doc(db,'atlas','cslog'));
+    const all = snap.exists() ? (snap.data().entries || []) : [];
+    const fromDate = document.getElementById('cs-date-from')?.value || '';
+    const toDate = document.getElementById('cs-date-to')?.value || '';
+
+    let entries = all.filter(e => e.drug === currentCSTab);
+    if(fromDate) entries = entries.filter(e => e.date >= fromDate);
+    if(toDate) entries = entries.filter(e => e.date <= toDate);
+    entries.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+    const drug = CS_DRUGS[currentCSTab];
+
+    if(!entries.length) {
+      el.innerHTML = `<div class="empty-state">No ${drug.label} entries found</div>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div class="card-title" style="margin-bottom:0;">${drug.label} — ${entries.length} entr${entries.length===1?'y':'ies'}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:90px 70px 1fr 80px 80px 70px 60px 80px 80px;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);">
+          <span>Date</span><span>Time</span><span>Location/Case</span><span>Given</span><span>Left in Vial</span><span>Wasted</span><span>New Btl</span><span>CRNA</span><span>Witness</span>
+        </div>
+        ${entries.map((e,i) => `
+          <div style="display:grid;grid-template-columns:90px 70px 1fr 80px 80px 70px 60px 80px 80px;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center;background:${i%2===0?'transparent':'var(--surface2)'};">
+            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.date||'—'}</div>
+            <div style="font-size:12px;color:var(--text-faint);">${e.savedAt?new Date(e.savedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—'}</div>
+            <div style="font-size:12px;font-weight:500;">${e.caseId||'—'}<div style="font-size:11px;color:var(--text-faint);">${e.provider||''}</div></div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.amountGiven||0} mL</div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.leftInVial||0} mL</div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;color:${e.wastedAmt>0?'var(--warn)':'var(--text-faint)'};">${e.wastedAmt||0} mL</div>
+            <div style="text-align:center;">${e.newBottle?'<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 6px;border-radius:10px;">YES</span>':'—'}</div>
+            <div style="font-size:11px;color:var(--text-muted);">${e.worker==='dev'?'Devarsh':'Josh'}</div>
+            <div>${e.witnessSignature?`<img src="${e.witnessSignature}" style="height:30px;border:1px solid var(--border);border-radius:3px;background:#fff;" title="Witness signature">`:'<span style="font-size:11px;color:var(--warn);">No sig</span>'}</div>
+          </div>`).join('')}
+      </div>`;
+  } catch(err) {
+    el.innerHTML = '<div class="empty-state">Error loading CS log</div>';
+    console.error(err);
+  }
+}
+
+window.downloadCSLogPDF = async function() {
+  const drug = CS_DRUGS[currentCSTab];
+  const fromDate = document.getElementById('cs-date-from')?.value || '';
+  const toDate = document.getElementById('cs-date-to')?.value || '';
+
+  const snap = await getDoc(doc(db,'atlas','cslog'));
+  const all = snap.exists() ? (snap.data().entries || []) : [];
+  let entries = all.filter(e => e.drug === currentCSTab);
+  if(fromDate) entries = entries.filter(e => e.date >= fromDate);
+  if(toDate) entries = entries.filter(e => e.date <= toDate);
+  entries.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  if(!entries.length) { alert('No entries found for this drug/range.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+  const W = 279.4, H = 215.9;
+  const navy = [29,53,87], white = [255,255,255], gray = [107,104,96];
+  const lightGray = [240,239,233], warn = [181,69,27], black = [26,25,22];
+
+  // Header
+  doc.setFillColor(...navy);
+  doc.rect(0, 0, W, 28, 'F');
+  doc.setFillColor(255,255,255);
+  doc.circle(16, 14, 10, 'F');
+  const logoEl = document.querySelector('img[style*="border-radius:50%"]');
+  if(logoEl) { try { doc.addImage(logoEl.src,'PNG',7,5,18,18); } catch(e){} }
+  doc.setTextColor(...white);
+  doc.setFontSize(16); doc.setFont('helvetica','bold');
+  doc.text('CONTROLLED SUBSTANCE INVENTORY LOG', 32, 12);
+  doc.setFontSize(11); doc.setFont('helvetica','normal');
+  doc.text(drug.label.toUpperCase(), 32, 20);
+  doc.setFontSize(9);
+  doc.text(`Generated: ${new Date().toLocaleDateString()}`, W-10, 10, {align:'right'});
+  if(fromDate||toDate) doc.text(`Period: ${fromDate||'start'} to ${toDate||'present'}`, W-10, 18, {align:'right'});
+
+  // Month/CRNA header row
+  let y = 34;
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...black);
+  doc.text(`Month/Period: ${fromDate||'—'} to ${toDate||'—'}`, 10, y);
+  doc.text(`CRNA: Devarsh Murthy / Josh Condado`, W/2, y, {align:'center'});
+  y += 8;
+
+  // Table header
+  doc.setFillColor(...navy);
+  doc.rect(10, y, W-20, 8, 'F');
+  doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(...white);
+  const cols = [10, 32, 52, 90, 122, 148, 172, 194, 220, 252];
+  const headers = ['Date','Time','Location / Case ID','Amount Given','Left in Vial','Wasted','New Bottle','CRNA','Witness Sig','Notes'];
+  headers.forEach((h,i) => doc.text(h, cols[i], y+5.5));
+  y += 10;
+
+  entries.forEach((e, i) => {
+    if(y > H-20) {
+      doc.addPage();
+      y = 15;
+      doc.setFillColor(...navy);
+      doc.rect(10, y, W-20, 8, 'F');
+      doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(...white);
+      headers.forEach((h,i) => doc.text(h, cols[i], y+5.5));
+      y += 10;
+    }
+    if(i%2===0) { doc.setFillColor(...lightGray); doc.rect(10, y, W-20, 10, 'F'); }
+    doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...black);
+    doc.text(e.date||'—', cols[0], y+7);
+    doc.text(e.savedAt?new Date(e.savedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—', cols[1], y+7);
+    doc.text((e.caseId||'—').substring(0,20), cols[2], y+7);
+    doc.text(`${e.amountGiven||0} mL`, cols[3], y+7);
+    doc.text(`${e.leftInVial||0} mL`, cols[4], y+7);
+    if(e.wastedAmt>0) { doc.setTextColor(...warn); doc.text(`${e.wastedAmt} mL`, cols[5], y+7); doc.setTextColor(...black); }
+    else doc.text('—', cols[5], y+7);
+    doc.text(e.newBottle?'YES':'—', cols[6], y+7);
+    doc.text(e.worker==='dev'?'D. Murthy':'J. Condado', cols[7], y+7);
+    if(e.witnessSignature) {
+      try { doc.addImage(e.witnessSignature,'PNG',cols[8],y+1,20,8); } catch(ex){}
+    } else { doc.setTextColor(...warn); doc.text('NO SIG', cols[8], y+7); doc.setTextColor(...black); }
+    y += 10;
+  });
+
+  // Footer
+  doc.setDrawColor(...navy); doc.setLineWidth(0.8);
+  doc.line(10, H-10, W-10, H-10);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+  doc.text(`Atlas Anesthesia · CS Log · ${drug.label} · ${entries.length} entries`, W/2, H-5, {align:'center'});
+
+  doc.save(`Atlas-CSLog-${currentCSTab}-${fromDate||'all'}-${toDate||'all'}.pdf`);
+};
 
 // ── INVOICE GENERATOR ──
 function timeToMinutes(t) {
