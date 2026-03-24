@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -425,6 +425,8 @@
           <label>Date of Surgery</label><input type="date" id="po-surgeryDate" oninput="updatePreopCaseIdDisplay()" onchange="updatePreopCaseIdDisplay()">
           <label>Date/Time of Call</label><input type="datetime-local" id="po-callDateTime">
           <label>Provider</label><input type="text" id="po-provider" placeholder="e.g. Dr. Smith">
+          <label>Patient Email <span style="font-size:11px;color:var(--text-faint);font-weight:400;">(for deposit matching only)</span></label>
+          <input type="email" id="po-patientEmail" placeholder="patient@email.com">
         </div>
 
         <!-- RIGHT: Pre-Op Call Info -->
@@ -1743,7 +1745,7 @@ function getPreopCheckboxes() {
 }
 
 function getPreopTextFields() {
-  const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-driverName','po-driverRel',
+  const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel',
     'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
     'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other'];
   const data = {};
@@ -1858,7 +1860,7 @@ function prefillNewCase(preopRecord) {
 
 window.clearPreop = function() {
   // Clear text fields
-  ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-driverName','po-driverRel',
+  ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel',
    'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
    'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other'].forEach(id => {
     const el = document.getElementById(id);
@@ -1902,6 +1904,7 @@ async function renderPreopHistory() {
               ${r['po-allergies']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Allergies</strong><div style="font-size:13px;margin-top:3px;">${r['po-allergies']}</div></div>`:''}
               ${cvChecked?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Cardiovascular</strong><div style="font-size:13px;margin-top:3px;">${cvChecked}</div></div>`:''}
               ${pulmChecked?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Pulmonary</strong><div style="font-size:13px;margin-top:3px;">${pulmChecked}</div></div>`:''}
+              ${r['po-patientEmail']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Patient Email</strong><div style="font-size:13px;margin-top:3px;font-family:'DM Mono',monospace;">${r['po-patientEmail']}</div></div>`:''}
               ${r['po-medications']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Medications</strong><div style="font-size:13px;margin-top:3px;">${r['po-medications']}</div></div>`:''}
             </div>
             <div>
@@ -3614,6 +3617,7 @@ async function renderMidCase() {
           <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Surgery Date</strong><div>${r['po-surgeryDate']||'—'}</div></div>
           <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Call Date/Time</strong><div>${r['po-callDateTime']||'—'}</div></div>
           <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Mallampati</strong><div style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace;">${r['mallampati']||'—'}</div></div>
+          ${r['po-patientEmail']?`<div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Patient Email</strong><div style="font-family:'DM Mono',monospace;font-size:12px;">${r['po-patientEmail']}</div></div>`:''}
           ${r['po-allergies']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--warn);">⚠ Allergies</strong><div style="color:var(--warn);">${r['po-allergies']}</div></div>`:''}
           ${r['po-medications']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Medications</strong><div>${r['po-medications']}</div></div>`:''}
           ${r['po-comments']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Comments</strong><div style="font-style:italic;">${r['po-comments']}</div></div>`:''}
