@@ -292,7 +292,7 @@
         <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
           <select id="addCSSelect" style="flex:1;">
             <option value="">— Select a controlled substance —</option>
-            ${Object.entries(CS_DRUGS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}
+            ${Object.entries(CS_DRUGS).map(([k,v])=>`<option value="${k}" style="color:${v.color||'inherit'};">${v.label}</option>`).join('')}
           </select>
           <button class="btn btn-ghost btn-sm" onclick="addCSEntry()">+ Add Item</button>
         </div>
@@ -768,7 +768,7 @@
 
       <!-- Drug tabs -->
       <div class="inv-tab-bar" style="margin-bottom:20px;">
-        <button class="inv-tab active" id="cstab-nubain" onclick="setCSTab('nubain')">Nubain (Nalbuphine)</button>
+        <button class="inv-tab active" id="cstab-ephedrine" onclick="setCSTab('ephedrine')" style="color:#7c3aed;">Ephedrine</button>
         <button class="inv-tab" id="cstab-ketamine" onclick="setCSTab('ketamine')">Ketamine</button>
         <button class="inv-tab" id="cstab-versed" onclick="setCSTab('versed')">Versed (Midazolam)</button>
       </div>
@@ -2108,9 +2108,9 @@ function renderCaseLog() {
 
 // ── CONTROLLED SUBSTANCES ──
 const CS_DRUGS = {
-  nubain:   { label: 'Nubain (Nalbuphine)',  invId: '70069-0671-10', keywords: ['nubain','nalbuphine'], vialML: 1   },
-  ketamine: { label: 'Ketamine',             invId: '0143-9509-10',  keywords: ['ketamine'],            vialML: 5   },
-  versed:   { label: 'Versed (Midazolam)',   invId: null,            keywords: ['versed','midazolam'],  vialML: 2   }
+  ephedrine: { label: 'Ephedrine',          invId: '70700-0249-25', keywords: ['ephedrine'],           vialML: 1,  color: '#7c3aed' },
+  ketamine:  { label: 'Ketamine',           invId: '0143-9509-10',  keywords: ['ketamine'],            vialML: 5,  color: '#1d3557' },
+  versed:    { label: 'Versed (Midazolam)', invId: null,            keywords: ['versed','midazolam'],  vialML: 2,  color: '#1d3557' }
 };
 
 // Returns cost per mL for a CS drug based on inventory unit cost and vial size
@@ -2150,7 +2150,7 @@ let csEntries = []; // current case CS entries being built
 let currentCSEntry = null; // entry awaiting witness sig
 let witnessDrawing = false;
 let witnessLastX = 0, witnessLastY = 0;
-let currentCSTab = 'nubain';
+let currentCSTab = 'ephedrine';
 
 window.addCSEntry = function() {
   const sel = document.getElementById('addCSSelect');
@@ -2199,7 +2199,7 @@ function renderCSEntries() {
 
     return `<div style="display:grid;grid-template-columns:2.5fr 90px 70px 80px 90px 90px 32px;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);">
       <div style="font-size:13px;font-weight:500;">
-        ${CS_DRUGS[entry.drug]?.label || entry.drug}
+        <span style="color:${CS_DRUGS[entry.drug]?.color||'var(--text)'};">${CS_DRUGS[entry.drug]?.label || entry.drug}</span>
         <div style="font-size:11px;color:var(--text-faint);">Stock: ${stock} · ${entry.newBottle?'<span style="color:var(--accent);">New bottle</span>':'existing vial'}</div>
         <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:400;color:var(--text-muted);cursor:pointer;margin-top:3px;">
           <input type="checkbox" ${entry.newBottle?'checked':''} onchange="updateCSEntry(${idx},'newBottle',this.checked)" style="width:13px;height:13px;"> New Bottle
@@ -2361,8 +2361,9 @@ async function saveCSEntriesWithCase(caseId, caseDate, provider) {
 // ── CS LOG TAB ──
 window.setCSTab = function(tab) {
   currentCSTab = tab;
-  ['nubain','ketamine','versed'].forEach(x => {
-    document.getElementById('cstab-'+x).classList.toggle('active', x===tab);
+  ['ephedrine','ketamine','versed'].forEach(x => {
+    const btn = document.getElementById('cstab-'+x);
+    if(btn) btn.classList.toggle('active', x===tab);
   });
   renderCSLog();
 };
