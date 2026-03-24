@@ -208,9 +208,9 @@
 
   <div class="nav">
     <button class="active" onclick="showTab('preop')">Pre-Op</button>
-    <button onclick="showTab('new-case')">New Case</button>
+    <button onclick="showTab('mid-case')">Mid-Case</button>
+    <button onclick="showTab('new-case')">Finalize Case</button>
     <button onclick="showTab('inventory')">Inventory</button>
-    <button onclick="showTab('history')">Case History</button>
     <button onclick="showTab('invoice')">Invoice</button>
     <div class="nav-dropdown" id="reports-dropdown">
       <button class="nav-dropdown-btn" id="reports-dropdown-btn" onclick="toggleReportsDropdown()">
@@ -218,6 +218,7 @@
       </button>
       <div class="nav-dropdown-menu" id="reports-dropdown-menu">
         <button onclick="showTab('reports');closeReportsDropdown();" id="subnav-reports">Overview</button>
+        <button onclick="showTab('history');closeReportsDropdown();" id="subnav-history">Case History</button>
         <button onclick="showTab('caselog');closeReportsDropdown();" id="subnav-caselog">Case Log</button>
         <button onclick="showTab('cs-log');closeReportsDropdown();" id="subnav-cs-log">CS Log</button>
       </div>
@@ -227,7 +228,24 @@
   <div class="container">
 
     <!-- NEW CASE -->
-    <div class="section" id="tab-new-case">
+    <!-- MID-CASE TAB -->
+  <div class="section" id="tab-mid-case">
+    <div class="action-bar">
+      <h2>Mid-Case</h2>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <div class="worker-toggle" style="margin-bottom:0;">
+          <button class="worker-btn active-dev" id="mcbtn-all" onclick="setMidCaseFilter('all')" style="background:var(--info);color:#fff;">All</button>
+          <button class="worker-btn" id="mcbtn-dev" onclick="setMidCaseFilter('dev')">Devarsh</button>
+          <button class="worker-btn" id="mcbtn-josh" onclick="setMidCaseFilter('josh')">Josh</button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="showTab('preop')">+ New Pre-Op</button>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--text-faint);margin-bottom:18px;">Pre-ops that have been saved and are awaiting case completion.</div>
+    <div id="midCaseList"><div class="empty-state">No draft cases yet</div></div>
+  </div>
+
+  <div class="section" id="tab-new-case">
       <!-- Draft case picker -->
       <div class="card" style="margin-bottom:18px;padding:14px 20px;">
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
@@ -309,7 +327,7 @@
         </div>
         <div class="total-row"><span class="label">Total Case Cost</span><span class="value" id="caseTotalDisplay">$0.00</span></div>
         <div style="margin-top:14px;display:flex;gap:10px;">
-          <button class="btn btn-success" onclick="saveCase()">✓ Save Case &amp; Update Inventory</button>
+          <button class="btn btn-success" onclick="saveCase()">✓ Finalize Case &amp; Update Inventory</button>
           <button class="btn btn-ghost" onclick="clearCase()">Clear</button>
         </div>
       </div>
@@ -564,7 +582,10 @@
         </div>
       </div>
 
-            <!-- MEDICATIONS & SURGICAL HISTORY -->
+            <!-- EKG ALERT BANNER -->
+      <div id="ekg-alert-banner" style="display:none;margin-bottom:18px;"></div>
+
+      <!-- MEDICATIONS & SURGICAL HISTORY -->
       <div class="grid-2" style="margin-bottom:18px;">
         <div class="card">
           <div class="card-title">Medications</div>
@@ -806,6 +827,25 @@
 
 </div>
 
+<!-- EKG ORDER MODAL -->
+<div id="ekgModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9997;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 20px;">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto;">
+    <!-- Modal header -->
+    <div style="background:#1d3557;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:16px;font-weight:600;">EKG / PCP Order Required</div>
+        <div style="font-size:12px;opacity:.7;margin-top:2px;">Pre-operative cardiac screening indicated</div>
+      </div>
+      <button onclick="closeEKGModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;">Close</button>
+    </div>
+    <div id="ekgModalContent" style="padding:24px;"></div>
+    <div style="padding:0 24px 24px;display:flex;gap:10px;">
+      <button class="btn btn-primary" onclick="downloadEKGPDF()">⬇ Download PDF Order</button>
+      <button class="btn btn-ghost" onclick="closeEKGModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- LIGHTBOX -->
 <div id="lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;align-items:center;justify-content:center;" onclick="closeLightbox()">
   <img id="lightboxImg" src="" style="max-width:90vw;max-height:90vh;border-radius:8px;object-fit:contain;">
@@ -1011,6 +1051,7 @@ onAuthStateChanged(auth, async (user) => {
     refreshDraftPicker();
     loadSavedInvoices();
     setInvoiceProvider();
+    setTimeout(wireEKGDetection, 600);
   } else {
     currentUser = null;
     document.getElementById('loginScreen').style.display='flex';
@@ -1046,6 +1087,7 @@ async function initData() {
     renderReports();
     refreshDraftPicker();
     renderCaseLog();
+    renderMidCase();
   });
 }
 
@@ -1146,7 +1188,7 @@ window.showTab = function(tab) {
   const directBtn = document.querySelector(`.nav > button[onclick="showTab('${tab}')"]`);
   if(directBtn) directBtn.classList.add('active');
   // If it's a reports sub-tab, highlight the dropdown button and sub-item
-  const reportsTabs = ['reports','caselog','cs-log'];
+  const reportsTabs = ['reports','history','caselog','cs-log'];
   if(reportsTabs.includes(tab)) {
     document.getElementById('reports-dropdown-btn').classList.add('active');
     const subBtn = document.getElementById('subnav-'+tab);
@@ -1157,8 +1199,10 @@ window.showTab = function(tab) {
   if(tab==='history') renderHistory();
   if(tab==='reports') renderReports();
   if(tab==='preop-history') renderPreopHistory();
+  if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
   if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); }
   if(tab==='cs-log') renderCSLog();
+  if(tab==='mid-case') renderMidCase();
   if(tab==='caselog') renderCaseLog();
 };
 
@@ -1720,6 +1764,31 @@ window.savePreop = async function() {
     alert('Please enter the Date of Surgery — it is used to generate the Case ID.');
     return;
   }
+
+  // If editing an existing record, update it instead of creating new
+  if(window._editingPreopId) {
+    try {
+      const snap = await getDoc(doc(db,'atlas','preop'));
+      const records = snap.exists() ? (snap.data().records || []) : [];
+      const idx = records.findIndex(r => r.id === window._editingPreopId);
+      if(idx !== -1) {
+        const generatedId2 = generateCaseId(currentWorker, surgeryDate);
+        textData['po-caseId'] = generatedId2;
+        const updated = { ...records[idx], ...textData, ...checkData, savedAt: new Date().toISOString() };
+        records[idx] = updated;
+        setSyncing(true);
+        await setDoc(doc(db,'atlas','preop'), { records });
+        setSyncing(false);
+        window._editingPreopId = null;
+        const editBanner = document.getElementById('preop-edit-banner');
+        if(editBanner) editBanner.remove();
+        clearPreop();
+        alert('✓ Pre-Op record updated!');
+        showTab('preop-history');
+        return;
+      }
+    } catch(e) { console.error(e); }
+  }
   const generatedId = generateCaseId(currentWorker, surgeryDate);
   textData['po-caseId'] = generatedId;
 
@@ -1806,7 +1875,7 @@ async function renderPreopHistory() {
   try {
     const snap = await getDoc(doc(db,'atlas','preop'));
     const records = snap.exists() ? (snap.data().records || []) : [];
-    if(!records.length) { el.innerHTML = '<div class="empty-state">No pre-op records saved yet</div>'; return; }
+    if(!records.length) { el.innerHTML='<div class="empty-state">No pre-op records saved yet</div>'; return; }
     el.innerHTML = records.map(r => {
       const pill = r.worker==='dev' ? 'pill-dev' : 'pill-josh';
       const wname = r.worker==='dev' ? 'Devarsh' : 'Josh';
@@ -1821,7 +1890,11 @@ async function renderPreopHistory() {
             </div>
             <div class="case-date">Surgery: ${r['po-surgeryDate']||'—'} · Provider: ${r['po-provider']||'—'}</div>
           </div>
-          <div style="font-size:12px;color:var(--text-faint);">Saved ${new Date(r.savedAt).toLocaleDateString()}</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit</button>
+            <button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">Delete</button>
+            <div style="font-size:12px;color:var(--text-faint);">Saved ${new Date(r.savedAt).toLocaleDateString()}</div>
+          </div>
         </div>
         <div class="case-items-list" id="preop-detail-${r.id}">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px;">
@@ -1847,6 +1920,82 @@ async function renderPreopHistory() {
     console.error(e);
   }
 }
+
+window.deletePreopRecord = async function(id) {
+  if(!confirm('Delete this pre-op record? This cannot be undone.')) return;
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    const updated = records.filter(r => r.id !== id);
+    setSyncing(true);
+    await setDoc(doc(db,'atlas','preop'), { records: updated });
+    setSyncing(false);
+    renderPreopHistory();
+  } catch(e) { console.error(e); }
+};
+
+window.editPreopRecord = async function(id) {
+  // Load the record into the pre-op form and navigate there
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    const record = records.find(r => r.id === id);
+    if(!record) { alert('Record not found.'); return; }
+
+    // Clear the form first
+    clearPreop();
+
+    // Fill text fields
+    const textFields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-driverName','po-driverRel',
+      'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
+      'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other'];
+    textFields.forEach(fid => {
+      const el = document.getElementById(fid);
+      if(el && record[fid] !== undefined) el.value = record[fid] || '';
+    });
+
+    // Fill checkboxes
+    document.querySelectorAll('#tab-preop input[type="checkbox"]').forEach(el => {
+      if(record[el.id] !== undefined) el.checked = !!record[el.id];
+    });
+
+    // Fill radio (mallampati)
+    if(record['mallampati']) {
+      const radio = document.querySelector(`input[name="mallampati"][value="${record['mallampati']}"]`);
+      if(radio) radio.checked = true;
+    }
+
+    // Update case ID display
+    updatePreopCaseIdDisplay();
+
+    // Store the ID so savePreop knows to update instead of create new
+    window._editingPreopId = id;
+
+    // Navigate to pre-op tab
+    showTab('preop');
+
+    // Show a banner indicating edit mode
+    const banner = document.getElementById('ekg-alert-banner');
+    const editBanner = document.createElement('div');
+    editBanner.id = 'preop-edit-banner';
+    editBanner.style.cssText = 'background:var(--info-light);border:1px solid #b8cfe8;border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;';
+    editBanner.innerHTML = `
+      <span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing existing record: ${record['po-caseId']||'No Case ID'}</span>
+      <button onclick="cancelEditPreop()" class="btn btn-ghost btn-sm" style="font-size:11px;">Cancel Edit</button>`;
+    if(banner && banner.parentNode) {
+      // Insert before ekg banner
+      banner.parentNode.insertBefore(editBanner, banner);
+    }
+  } catch(e) { alert('Error loading record.'); console.error(e); }
+};
+
+window.cancelEditPreop = function() {
+  window._editingPreopId = null;
+  const banner = document.getElementById('preop-edit-banner');
+  if(banner) banner.remove();
+  clearPreop();
+};
+
 
 window.togglePreop = function(id) { document.getElementById('preop-detail-'+id).classList.toggle('open'); };
 
@@ -3070,6 +3219,459 @@ window.clearInvoice = function() {
   });
   document.getElementById('inv-summary').innerHTML = 'Enter times and rates to see summary';
   document.getElementById('inv-total').textContent = '$0.00';
+};
+
+// ── EKG ORDER LOGIC ──
+const EKG_CONDITIONS = {
+  // Cardiovascular
+  'po-cv-htn':      'Hypertension (HTN)',
+  'po-cv-cad':      'Coronary Artery Disease (CAD)',
+  'po-cv-angina':   'Angina',
+  'po-cv-mi':       'Myocardial Infarction (MI)',
+  'po-cv-chf':      'Congestive Heart Failure (CHF)',
+  'po-cv-murmur':   'Cardiac Murmur',
+  'po-cv-arrythmia':'Arrhythmia',
+  // EKG findings
+  'po-ekg-afib':    'Atrial Fibrillation (AFIB)',
+  'po-ekg-bbb':     'Bundle Branch Block (BBB)',
+  'po-ekg-lvh':     'Left Ventricular Hypertrophy (LVH)',
+  'po-ekg-chngs':   'EKG Changes',
+  // Neuro (cerebrovascular)
+  'po-neuro-cva':   'Cerebrovascular Accident (CVA/Stroke)',
+  // Metabolic
+  'po-meta-iddm':   'Insulin-Dependent Diabetes (IDDM)',
+  'po-meta-niddm':  'Non-Insulin Dependent Diabetes (NIDDM)',
+  // Renal
+  'po-renal-dialysis': 'Dialysis / Chronic Kidney Disease',
+  'po-renal-esrd':     'End-Stage Renal Disease (ESRD)',
+};
+
+// EKG criteria categories for the order
+const EKG_CRITERIA_MAP = {
+  'po-cv-htn':       'Cardiovascular / Major Vascular Disease',
+  'po-cv-cad':       'Cardiovascular / Major Vascular Disease',
+  'po-cv-angina':    'Cardiovascular / Major Vascular Disease',
+  'po-cv-mi':        'Cardiovascular / Major Vascular Disease',
+  'po-cv-chf':       'Cardiovascular / Major Vascular Disease',
+  'po-cv-murmur':    'Cardiovascular / Major Vascular Disease',
+  'po-cv-arrythmia': 'Arrhythmia (bradycardia, heart block, PVC, paced rhythm, or controlled rate AF)',
+  'po-ekg-afib':     'Arrhythmia — Atrial Fibrillation',
+  'po-ekg-bbb':      'Arrhythmia — Bundle Branch Block',
+  'po-ekg-lvh':      'Cardiovascular — LVH',
+  'po-ekg-chngs':    'Cardiovascular — EKG Changes',
+  'po-neuro-cva':    'Cerebrovascular Disease (CVA/Stroke)',
+  'po-meta-iddm':    'Diabetes Mellitus',
+  'po-meta-niddm':   'Diabetes Mellitus',
+  'po-renal-dialysis':'Chronic Kidney Disease (GFR <60)',
+  'po-renal-esrd':   'Chronic Kidney Disease — ESRD',
+};
+
+let ekgTriggeredConditions = [];
+
+function checkEKGConditions() {
+  ekgTriggeredConditions = [];
+  Object.entries(EKG_CONDITIONS).forEach(([id, label]) => {
+    const el = document.getElementById(id);
+    if(el && el.checked) ekgTriggeredConditions.push({ id, label, criteria: EKG_CRITERIA_MAP[id] });
+  });
+
+  const banner = document.getElementById('ekg-alert-banner');
+  if(!banner) return;
+
+  if(ekgTriggeredConditions.length > 0) {
+    // Group by criteria
+    const criteria = [...new Set(ekgTriggeredConditions.map(c => c.criteria))];
+    banner.style.display = 'block';
+    banner.innerHTML = `
+      <div style="background:#fef3cd;border:1.5px solid #f59e0b;border-radius:var(--radius-sm);padding:16px 18px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#92400e;margin-bottom:6px;">
+              ⚠ EKG / PCP Order Indicated
+            </div>
+            <div style="font-size:12px;color:#78350f;margin-bottom:8px;">
+              Based on the following checked condition(s):
+            </div>
+            <ul style="margin:0;padding-left:18px;font-size:13px;color:#78350f;">
+              ${ekgTriggeredConditions.map(c => `<li>${c.label}</li>`).join('')}
+            </ul>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="openEKGModal()"
+              style="background:#92400e;color:#fff;border:none;">
+              📋 View EKG Order
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="downloadEKGPDF()">
+              ⬇ Download PDF
+            </button>
+          </div>
+        </div>
+      </div>`;
+  } else {
+    banner.style.display = 'none';
+    banner.innerHTML = '';
+  }
+}
+
+function buildEKGOrderHTML(caseId, surgeryDate, provider, forPDF) {
+  const criteria = [...new Set(ekgTriggeredConditions.map(c => c.criteria))];
+  const conditions = ekgTriggeredConditions.map(c => c.label);
+  const dateStr = surgeryDate
+    ? new Date(surgeryDate + 'T12:00:00').toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'})
+    : new Date().toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
+  const today = new Date().toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'});
+  const providerName = provider || (currentWorker === 'dev' ? 'Devarsh Murthy, CRNA' : 'Josh Condado, CRNA');
+
+  if(forPDF) return { criteria, conditions, dateStr, today, providerName, caseId };
+
+  return `
+    <div style="font-family:'DM Sans',sans-serif;font-size:13px;color:#1a1916;line-height:1.6;">
+
+      <div style="text-align:center;border-bottom:2px solid #1d3557;padding-bottom:16px;margin-bottom:20px;">
+        <div style="font-size:18px;font-weight:700;color:#1d3557;letter-spacing:1px;">PRE-OPERATIVE EKG ORDER</div>
+        <div style="font-size:12px;color:#6b6860;margin-top:4px;">Primary Care Physician / Ordering Provider Communication</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;">
+        <div style="padding:10px 14px;background:#f5f4f0;border-radius:6px;">
+          <div style="font-size:10px;font-weight:700;color:#9c9a94;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Case ID</div>
+          <div style="font-weight:500;">${caseId || '—'}</div>
+        </div>
+        <div style="padding:10px 14px;background:#f5f4f0;border-radius:6px;">
+          <div style="font-size:10px;font-weight:700;color:#9c9a94;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Date of Surgery</div>
+          <div style="font-weight:500;">${dateStr}</div>
+        </div>
+        <div style="padding:10px 14px;background:#f5f4f0;border-radius:6px;">
+          <div style="font-size:10px;font-weight:700;color:#9c9a94;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Ordering Provider</div>
+          <div style="font-weight:500;">${providerName}</div>
+        </div>
+        <div style="padding:10px 14px;background:#f5f4f0;border-radius:6px;">
+          <div style="font-size:10px;font-weight:700;color:#9c9a94;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;">Order Date</div>
+          <div style="font-weight:500;">${today}</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:700;color:#1d3557;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;border-bottom:1px solid #e2e0d8;padding-bottom:4px;">ORDER</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Please obtain a 12-lead Electrocardiogram (EKG) prior to the scheduled procedure.</div>
+        <div style="font-size:13px;color:#6b6860;">Results to be forwarded to the anesthesia provider prior to the date of surgery.</div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:700;color:#1d3557;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;border-bottom:1px solid #e2e0d8;padding-bottom:4px;">Clinical Indication(s)</div>
+        <ul style="margin:0;padding-left:18px;">
+          ${conditions.map(c=>`<li style="margin-bottom:4px;">${c}</li>`).join('')}
+        </ul>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:700;color:#1d3557;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;border-bottom:1px solid #e2e0d8;padding-bottom:4px;">Basis for Order</div>
+        <div style="font-size:12px;color:#6b6860;margin-bottom:8px;">Per anesthesia pre-operative assessment, EKG is indicated based on:</div>
+        <ul style="margin:0;padding-left:18px;">
+          ${criteria.map(c=>`<li style="margin-bottom:4px;font-size:13px;">${c}</li>`).join('')}
+        </ul>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <div style="font-size:12px;font-weight:700;color:#1d3557;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;border-bottom:1px solid #e2e0d8;padding-bottom:4px;">Urgency</div>
+        <div style="font-size:13px;">
+          Required <strong>prior to date of surgery (${dateStr})</strong>. 
+          EKG obtained within the past 6 months may be acceptable if the patient's condition has been stable and asymptomatic.
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #e2e0d8;padding-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div>
+          <div style="font-size:11px;color:#9c9a94;margin-bottom:24px;">Ordering Provider Signature</div>
+          <div style="border-top:1px solid #1a1916;padding-top:4px;font-size:12px;color:#6b6860;">${providerName} — Atlas Anesthesia</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#9c9a94;margin-bottom:24px;">Date</div>
+          <div style="border-top:1px solid #1a1916;padding-top:4px;font-size:12px;color:#6b6860;">${today}</div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;padding:10px 14px;background:#e8eef5;border-radius:6px;font-size:11px;color:#1d3557;">
+        <strong>Atlas Anesthesia</strong> — Mobile Anesthesia Services · Questions: contact ordering provider
+      </div>
+    </div>`;
+}
+
+window.openEKGModal = function() {
+  const caseId = document.getElementById('po-caseId')?.value || document.getElementById('po-caseId-display')?.textContent || '—';
+  const surgeryDate = document.getElementById('po-surgeryDate')?.value || '';
+  const provider = document.getElementById('po-provider')?.value || '';
+  document.getElementById('ekgModalContent').innerHTML = buildEKGOrderHTML(caseId, surgeryDate, provider, false);
+  document.getElementById('ekgModal').style.display = 'flex';
+};
+
+window.closeEKGModal = function() {
+  document.getElementById('ekgModal').style.display = 'none';
+};
+
+window.downloadEKGPDF = function() {
+  const caseId = document.getElementById('po-caseId')?.value || document.getElementById('po-caseId-display')?.textContent || '—';
+  const surgeryDate = document.getElementById('po-surgeryDate')?.value || '';
+  const provider = document.getElementById('po-provider')?.value || '';
+  const { criteria, conditions, dateStr, today, providerName } = buildEKGOrderHTML(caseId, surgeryDate, provider, true);
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const W = 215.9;
+  const navy = [29,53,87], black = [26,25,22], gray = [107,104,96], lightGray = [240,239,233], lightBlue = [232,238,245];
+
+  // Title
+  doc.setFontSize(18); doc.setFont('helvetica','bold'); doc.setTextColor(...navy);
+  doc.text('PRE-OPERATIVE EKG ORDER', W/2, 20, {align:'center'});
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+  doc.text('Primary Care Physician / Ordering Provider Communication', W/2, 27, {align:'center'});
+  doc.setDrawColor(...navy); doc.setLineWidth(1); doc.line(14, 30, W-14, 30);
+
+  let y = 38;
+
+  // Info grid
+  const infoItems = [
+    ['Case ID', caseId], ['Date of Surgery', dateStr],
+    ['Ordering Provider', providerName], ['Order Date', today]
+  ];
+  infoItems.forEach((item, i) => {
+    const x = i%2===0 ? 14 : W/2+2;
+    if(i%2===0 && i>0) y += 18;
+    doc.setFillColor(...lightGray);
+    doc.roundedRect(x, y, W/2-16, 14, 1, 1, 'F');
+    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(...gray);
+    doc.text(item[0].toUpperCase(), x+4, y+6);
+    doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...black);
+    doc.text(String(item[1]).substring(0,35), x+4, y+12);
+  });
+  y += 22;
+
+  // Order box
+  doc.setFillColor(...lightBlue);
+  doc.roundedRect(14, y, W-28, 18, 2, 2, 'F');
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...navy);
+  doc.text('ORDER', 20, y+7);
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...black);
+  doc.text('Please obtain a 12-lead Electrocardiogram (EKG) prior to the scheduled procedure.', 20, y+14);
+  y += 24;
+
+  // Clinical indications
+  doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(...navy);
+  doc.text('CLINICAL INDICATION(S)', 14, y);
+  doc.setLineWidth(0.3); doc.setDrawColor(...navy); doc.line(14, y+2, W-14, y+2);
+  y += 7;
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...black);
+  conditions.forEach(c => {
+    doc.text(`• ${c}`, 18, y); y += 6;
+  });
+  y += 4;
+
+  // Basis for order
+  doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(...navy);
+  doc.text('BASIS FOR ORDER', 14, y);
+  doc.line(14, y+2, W-14, y+2);
+  y += 7;
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+  doc.text('Per anesthesia pre-operative assessment, EKG is indicated based on:', 14, y);
+  y += 6;
+  doc.setTextColor(...black);
+  criteria.forEach(c => {
+    const lines = doc.splitTextToSize(`• ${c}`, W-32);
+    lines.forEach(line => { doc.text(line, 18, y); y += 5; });
+  });
+  y += 4;
+
+  // Urgency
+  doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(...navy);
+  doc.text('URGENCY', 14, y);
+  doc.line(14, y+2, W-14, y+2);
+  y += 7;
+  doc.setFont('helvetica','normal'); doc.setTextColor(...black);
+  const urgencyText = `Required prior to date of surgery (${dateStr}). EKG obtained within the past 6 months may be acceptable if the patient's condition has been stable and asymptomatic.`;
+  const urgencyLines = doc.splitTextToSize(urgencyText, W-28);
+  urgencyLines.forEach(line => { doc.text(line, 14, y); y += 5; });
+  y += 8;
+
+  // Signature lines
+  doc.setLineWidth(0.5); doc.setDrawColor(...black);
+  doc.line(14, y+12, 95, y+12);
+  doc.line(110, y+12, W-14, y+12);
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+  doc.text('Ordering Provider Signature', 14, y+17);
+  doc.text('Date', 110, y+17);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...black);
+  doc.text(`${providerName} — Atlas Anesthesia`, 14, y+24);
+  doc.text(today, 110, y+24);
+  y += 32;
+
+  // Footer
+  doc.setFillColor(...lightBlue);
+  doc.rect(14, y, W-28, 10, 'F');
+  doc.setFontSize(8); doc.setTextColor(...navy);
+  doc.text('Atlas Anesthesia — Mobile Anesthesia Services', W/2, y+6, {align:'center'});
+
+  doc.save(`Atlas-EKG-Order-${caseId}-${(surgeryDate||'').replace(/-/g,'')}.pdf`);
+};
+
+// Hook into pre-op checkboxes to auto-detect EKG conditions
+function wireEKGDetection() {
+  Object.keys(EKG_CONDITIONS).forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('change', checkEKGConditions);
+  });
+}
+
+// ── MID-CASE ──
+let midCaseFilter = 'all';
+
+window.setMidCaseFilter = function(f) {
+  midCaseFilter = f;
+  ['all','dev','josh'].forEach(x => {
+    const btn = document.getElementById('mcbtn-'+x);
+    if(!btn) return;
+    btn.style.background = x===f ? (x==='dev'?'var(--dev)':x==='josh'?'var(--josh)':'var(--info)') : '';
+    btn.style.color = x===f ? '#fff' : '';
+  });
+  renderMidCase();
+};
+
+async function renderMidCase() {
+  const el = document.getElementById('midCaseList');
+  if(!el) return;
+
+  // Get all saved pre-op records
+  let preopRecords = [];
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    preopRecords = snap.exists() ? (snap.data().records || []) : [];
+  } catch(e) { console.error(e); }
+
+  // Get draft cases
+  let drafts = cases.filter(c => c.draft);
+
+  // Filter by worker
+  if(midCaseFilter !== 'all') {
+    preopRecords = preopRecords.filter(r => r.worker === midCaseFilter);
+    drafts = drafts.filter(d => d.worker === midCaseFilter);
+  }
+
+  // Match pre-ops to drafts by caseId
+  const draftIds = new Set(drafts.map(d => d.caseId));
+
+  // Combine: show all pre-ops, with draft status if applicable
+  const allPreops = preopRecords.sort((a,b) => (b['po-surgeryDate']||'').localeCompare(a['po-surgeryDate']||''));
+
+  if(!allPreops.length && !drafts.length) {
+    el.innerHTML = '<div class="empty-state">No mid-case records yet. Save a Pre-Op to get started.</div>';
+    return;
+  }
+
+  // Build combined list
+  const items_html = allPreops.map(r => {
+    const caseId = r['po-caseId'] || '—';
+    const hasDraft = draftIds.has(caseId);
+    const draft = drafts.find(d => d.caseId === caseId);
+    const pill = r.worker==='dev' ? 'pill-dev' : 'pill-josh';
+    const wname = r.worker==='dev' ? 'Devarsh' : 'Josh';
+    const surgDate = r['po-surgeryDate'] || '—';
+    const provider = r['po-provider'] || '—';
+
+    // Summarize checked conditions
+    const cvFlags = ['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase());
+    const pulmFlags = ['asthma','copd','uri','cpap','sleep-apnea','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '));
+    const allFlags = [...cvFlags, ...pulmFlags];
+
+    return `<div class="case-item" style="${hasDraft?'border-left:3px solid var(--warn);':'border-left:3px solid var(--accent);'}">
+      <div class="case-item-header" onclick="toggleMidCase('${r.id}')">
+        <div>
+          <div class="case-name" style="display:flex;align-items:center;gap:8px;">
+            ${caseId}
+            <span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
+            ${hasDraft
+              ? '<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">DRAFT</span>'
+              : '<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">PRE-OP SAVED</span>'
+            }
+          </div>
+          <div class="case-date">
+            Surgery: ${surgDate} · Provider: ${provider}
+            ${r['po-allergies'] ? ' · <span style="color:var(--warn);">⚠ Allergies</span>' : ''}
+          </div>
+          ${allFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
+            ${allFlags.map(f=>`<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;">${f}</span>`).join('')}
+          </div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          ${hasDraft && draft
+            ? `<button onclick="event.stopPropagation();resumeCase('${draft.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Finalize Case →</button>`
+            : `<button onclick="event.stopPropagation();startCaseFromPreop('${r.id}')" class="btn btn-success btn-sm" style="font-size:11px;">+ Start Case</button>`
+          }
+          <button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit Pre-Op</button>
+        </div>
+      </div>
+      <div class="case-items-list" id="midcase-detail-${r.id}">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px;font-size:13px;">
+          <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Surgery Date</strong><div>${r['po-surgeryDate']||'—'}</div></div>
+          <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Call Date/Time</strong><div>${r['po-callDateTime']||'—'}</div></div>
+          <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Mallampati</strong><div style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace;">${r['mallampati']||'—'}</div></div>
+          ${r['po-allergies']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--warn);">⚠ Allergies</strong><div style="color:var(--warn);">${r['po-allergies']}</div></div>`:''}
+          ${r['po-medications']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Medications</strong><div>${r['po-medications']}</div></div>`:''}
+          ${r['po-comments']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Comments</strong><div style="font-style:italic;">${r['po-comments']}</div></div>`:''}
+        </div>
+        ${hasDraft && draft && draft.items && draft.items.length ? `
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+            <strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Supplies Added So Far</strong>
+            ${draft.items.map(i=>`<div class="case-item-row"><span>${i.generic} × ${i.qty}</span><span>$${i.lineTotal.toFixed(2)}</span></div>`).join('')}
+          </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Also show drafts that have no matching pre-op
+  const orphanDrafts = drafts.filter(d => !preopRecords.find(r => r['po-caseId'] === d.caseId));
+  const orphanHtml = orphanDrafts.map(d => {
+    const pill = d.worker==='dev' ? 'pill-dev' : 'pill-josh';
+    const wname = d.worker==='dev' ? 'Devarsh' : 'Josh';
+    return `<div class="case-item" style="border-left:3px solid var(--warn);">
+      <div class="case-item-header">
+        <div>
+          <div class="case-name" style="display:flex;align-items:center;gap:8px;">
+            ${d.caseId}
+            <span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
+            <span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">DRAFT</span>
+          </div>
+          <div class="case-date">${d.date} · ${d.provider||'—'}</div>
+        </div>
+        <button onclick="resumeCase('${d.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Finalize Case →</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = (items_html + orphanHtml) || '<div class="empty-state">No mid-case records yet.</div>';
+}
+
+window.toggleMidCase = function(id) {
+  document.getElementById('midcase-detail-'+id).classList.toggle('open');
+};
+
+window.startCaseFromPreop = function(preopId) {
+  // Same as loading a pre-op into Finalize Case but without an existing draft
+  editPreopRecord(preopId); // loads the pre-op form
+  // After loading, navigate to finalize case
+  setTimeout(() => {
+    showTab('new-case');
+    // Pre-fill from the preop data already loaded
+    const caseIdDisplay = document.getElementById('po-caseId-display');
+    const caseIdInput = document.getElementById('po-caseId');
+    const caseId = caseIdInput?.value || caseIdDisplay?.textContent || '';
+    const ncDisplay = document.getElementById('caseId-display');
+    const ncInput = document.getElementById('caseId');
+    if(ncDisplay && caseId) ncDisplay.textContent = caseId;
+    if(ncInput && caseId) ncInput.value = caseId;
+    const surgDate = document.getElementById('po-surgeryDate')?.value;
+    if(surgDate) document.getElementById('caseDate').value = surgDate;
+    const prov = document.getElementById('po-provider')?.value;
+    if(prov) document.getElementById('provider').value = prov;
+  }, 200);
 };
 
 // ── REPORTS DROPDOWN ──
