@@ -3601,6 +3601,10 @@ async function renderMidCase() {
             Surgery: ${surgDate} · Provider: ${provider}
             ${r['po-allergies'] ? ' · <span style="color:var(--warn);">⚠ Allergies</span>' : ''}
           </div>
+          ${r['po-patientEmail'] ? `<div style="margin-top:4px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;color:var(--text-faint);">💳 Deposit:</span>
+            <span id="deposit-badge-${r.id}" style="font-size:11px;color:var(--text-faint);">Checking...</span>
+          </div>` : ''}
           ${allFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
             ${allFlags.map(f=>`<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;">${f}</span>`).join('')}
           </div>` : ''}
@@ -3624,13 +3628,7 @@ async function renderMidCase() {
               <strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Patient Email</strong>
               <div style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap;">
                 <div style="font-family:'DM Mono',monospace;font-size:12px;">${r['po-patientEmail']}</div>
-                <button onclick="event.stopPropagation();checkStripeDeposit('${r.id}')"
-                  data-email="${r['po-patientEmail']}"
-                  id="deposit-btn-${r.id}"
-                  class="btn btn-ghost btn-sm" style="font-size:11px;">
-                  💳 Check Deposit
-                </button>
-                <div id="deposit-status-${r.id}" style="font-size:12px;"></div>
+                <span style="font-size:12px;font-family:'DM Mono',monospace;">${r['po-patientEmail']}</span>
               </div>
             </div>`:''}
           ${r['po-allergies']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--warn);">⚠ Allergies</strong><div style="color:var(--warn);">${r['po-allergies']}</div></div>`:''}
@@ -3670,6 +3668,13 @@ async function renderMidCase() {
   }).join('');
 
   el.innerHTML = (items_html + orphanHtml) || '<div class="empty-state">No mid-case records yet.</div>';
+
+  // Auto-check deposits for all records that have an email
+  allPreops.forEach(r => {
+    if(r['po-patientEmail']) {
+      autoCheckDeposit(r.id, r['po-patientEmail']);
+    }
+  });
 }
 
 window.toggleMidCase = function(id) {
@@ -3708,6 +3713,32 @@ window.deleteMidCase = async function(type, id, caseId) {
     console.error(e);
   }
 };
+
+async function autoCheckDeposit(recordId, email) {
+  const badge = document.getElementById('deposit-badge-' + recordId);
+  if(!badge || !email) return;
+
+  try {
+    const res = await fetch(STRIPE_WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+
+    if(data.status === 'paid') {
+      badge.innerHTML = `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;">✓ PAID — $${data.amount} ${data.currency}</span>`;
+    } else if(data.status === 'unpaid') {
+      badge.innerHTML = `<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;">✗ NOT PAID</span>`;
+    } else if(data.status === 'not_found') {
+      badge.innerHTML = `<span style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;">? Not in Stripe</span>`;
+    } else {
+      badge.innerHTML = `<span style="color:var(--text-faint);font-size:10px;">Unable to check</span>`;
+    }
+  } catch(err) {
+    badge.innerHTML = `<span style="color:var(--text-faint);font-size:10px;">—</span>`;
+  }
+}
 
 window.checkStripeDeposit = async function(recordId) {
   const statusEl = document.getElementById('deposit-status-' + recordId);
