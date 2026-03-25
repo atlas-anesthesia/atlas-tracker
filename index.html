@@ -130,6 +130,26 @@
   .inv-row input{padding:5px 8px;font-size:13px;width:100%;}
   .cat-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);padding:14px 0 6px;}
 
+  /* ── CALENDAR ── */
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .cal-day-header { background: var(--info); color: #fff; text-align: center; padding: 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .5px; }
+  .cal-day { background: var(--surface); min-height: 90px; padding: 6px; position: relative; }
+  .cal-day.other-month { background: var(--surface2); }
+  .cal-day.today { background: var(--info-light); }
+  .cal-day-num { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
+  .cal-day.today .cal-day-num { color: var(--info); font-weight: 700; }
+  .cal-event { font-size: 10px; font-weight: 500; padding: 2px 5px; border-radius: 3px; margin-bottom: 2px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cal-event.surgery { background: #fee2e2; color: #b91c1c; }
+  .cal-event.preop-call { background: var(--info-light); color: var(--info); }
+  .cal-event.deposit { background: var(--accent-light); color: var(--accent); }
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .cal-nav h3 { font-size: 17px; font-weight: 500; }
+  .cal-nav button { background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 14px; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text-muted); }
+  .cal-nav button:hover { background: var(--surface2); }
+  .gcal-btn { background: #4285f4; color: #fff; border: none; border-radius: var(--radius-sm); padding: 8px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .gcal-btn:hover { background: #3367d6; }
+  .gcal-connected { background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent-mid); border-radius: var(--radius-sm); padding: 6px 14px; font-size: 12px; font-weight: 500; }
+
   /* ── NAV DROPDOWN ── */
   .nav-dropdown { position: relative; display: inline-flex; }
   .nav-dropdown-btn {
@@ -211,6 +231,7 @@
     <button onclick="showTab('mid-case')">Mid-Case</button>
     <button onclick="showTab('new-case')">Finalize Case</button>
     <button onclick="showTab('inventory')">Inventory</button>
+    <button onclick="showTab('calendar')">Calendar</button>
     <button onclick="showTab('invoice')">Invoice</button>
     <div class="nav-dropdown" id="reports-dropdown">
       <button class="nav-dropdown-btn" id="reports-dropdown-btn" onclick="toggleReportsDropdown()">
@@ -846,12 +867,96 @@
       <button class="btn btn-ghost" onclick="closeEKGModal()">Close</button>
     </div>
   </div>
+    <!-- CALENDAR TAB -->
+    <div class="section" id="tab-calendar">
+      <div class="action-bar">
+        <h2>Calendar</h2>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div id="gcal-status"></div>
+          <button class="gcal-btn" id="gcal-connect-btn" onclick="connectGoogleCalendar()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Connect Google Calendar
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="syncAllToGoogleCalendar()" id="gcal-sync-btn" style="display:none;">↻ Sync All Events</button>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <div style="width:12px;height:12px;border-radius:2px;background:#fee2e2;"></div> Surgery Date
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <div style="width:12px;height:12px;border-radius:2px;background:var(--info-light);"></div> Pre-Op Call (30 days before)
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;">
+          <div style="width:12px;height:12px;border-radius:2px;background:var(--accent-light);"></div> Deposit Due
+        </div>
+      </div>
+
+      <!-- Settings + Filter -->
+      <div class="card" style="margin-bottom:16px;padding:14px 20px;">
+        <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted);">Pre-Op Call</label>
+            <input type="number" id="cal-preop-days" value="30" min="1" max="365"
+              style="width:65px;padding:5px 8px;font-size:13px;text-align:center;"
+              onchange="renderCalendar()">
+            <span style="font-size:12px;color:var(--text-faint);">days before surgery</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted);">Deposit Due</label>
+            <input type="number" id="cal-deposit-days" value="14" min="1" max="365"
+              style="width:65px;padding:5px 8px;font-size:13px;text-align:center;"
+              onchange="renderCalendar()">
+            <span style="font-size:12px;color:var(--text-faint);">days before surgery</span>
+          </div>
+          <div style="border-left:1px solid var(--border);padding-left:20px;">
+            <div class="worker-toggle" style="margin-bottom:0;">
+              <button class="worker-btn" id="calbtn-all" onclick="setCalFilter('all')" style="background:var(--info);color:#fff;">All</button>
+              <button class="worker-btn" id="calbtn-dev" onclick="setCalFilter('dev')">Devarsh</button>
+              <button class="worker-btn" id="calbtn-josh" onclick="setCalFilter('josh')">Josh</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Calendar nav -->
+      <div class="cal-nav">
+        <button onclick="changeMonth(-1)">← Prev</button>
+        <h3 id="cal-month-label"></h3>
+        <button onclick="changeMonth(1)">Next →</button>
+      </div>
+
+      <!-- Calendar grid -->
+      <div class="card" style="padding:0;">
+        <div class="cal-grid" id="cal-grid">
+          <div class="cal-day-header">SUN</div>
+          <div class="cal-day-header">MON</div>
+          <div class="cal-day-header">TUE</div>
+          <div class="cal-day-header">WED</div>
+          <div class="cal-day-header">THU</div>
+          <div class="cal-day-header">FRI</div>
+          <div class="cal-day-header">SAT</div>
+        </div>
+      </div>
+
+      <!-- Event detail popup -->
+      <div id="cal-event-detail" style="display:none;margin-top:16px;" class="card">
+        <div id="cal-event-detail-content"></div>
+      </div>
+    </div>
+
 </div>
 
 <!-- LIGHTBOX -->
 <div id="lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;align-items:center;justify-content:center;" onclick="closeLightbox()">
   <img id="lightboxImg" src="" style="max-width:90vw;max-height:90vh;border-radius:8px;object-fit:contain;">
 </div>
+
+<!-- Google API -->
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client"></script>
 
 <!-- jsPDF for invoice generation -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -1204,6 +1309,7 @@ window.showTab = function(tab) {
   if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
   if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); }
   if(tab==='cs-log') renderCSLog();
+  if(tab==='calendar') { window._cachedPreopRecords = null; renderCalendar(); }
   if(tab==='mid-case') renderMidCase();
   if(tab==='caselog') renderCaseLog();
 };
@@ -3802,6 +3908,303 @@ window.startCaseFromPreop = function(preopId) {
     if(prov) document.getElementById('provider').value = prov;
   }, 200);
 };
+
+// ── CALENDAR ──
+const GCAL_CLIENT_ID = '677020713040-6smv4mss68prvd3mqnq3pkotcea8l16v.apps.googleusercontent.com';
+const GCAL_SCOPES = 'https://www.googleapis.com/auth/calendar.events';
+
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let calFilter = 'all';
+let gcalToken = null;
+let gcalTokenClient = null;
+
+// Build calendar events from pre-op records
+function getCalendarEvents() {
+  let records = [];
+  try {
+    // Get from Firestore cache (already loaded in cases/preop)
+    records = window._cachedPreopRecords || [];
+  } catch(e) {}
+
+  const events = [];
+
+  records.forEach(r => {
+    if(calFilter !== 'all' && r.worker !== calFilter) return;
+    const surgDate = r['po-surgeryDate'];
+    const caseId = r['po-caseId'] || '—';
+    const provider = r['po-provider'] || '';
+    const worker = r.worker || 'dev';
+    const wname = worker === 'dev' ? 'Devarsh' : 'Josh';
+    const patientEmail = r['po-patientEmail'] || '';
+
+    if(!surgDate) return;
+
+    // Surgery date event
+    events.push({
+      type: 'surgery',
+      date: surgDate,
+      label: `🔴 ${caseId}`,
+      detail: `Surgery — ${caseId}
+Provider: ${provider || wname}
+Worker: ${wname}`,
+      caseId, provider, worker, patientEmail, surgDate
+    });
+
+    // Pre-op call reminder (configurable days before surgery)
+    const preopDays = parseInt(document.getElementById('cal-preop-days')?.value) || 30;
+    const callDate = new Date(surgDate + 'T12:00:00');
+    callDate.setDate(callDate.getDate() - preopDays);
+    const callDateStr = callDate.toISOString().split('T')[0];
+    events.push({
+      type: 'preop-call',
+      date: callDateStr,
+      label: `📞 Call — ${caseId}`,
+      detail: `Pre-Op Call Due
+Case: ${caseId}
+Surgery in 30 days: ${surgDate}
+Patient Email: ${patientEmail||'—'}`,
+      caseId, provider, worker, patientEmail, surgDate
+    });
+
+    // Deposit due (configurable days before surgery)
+    const depositDays = parseInt(document.getElementById('cal-deposit-days')?.value) || 14;
+    const depDate = new Date(surgDate + 'T12:00:00');
+    depDate.setDate(depDate.getDate() - depositDays);
+    const depDateStr = depDate.toISOString().split('T')[0];
+    events.push({
+      type: 'deposit',
+      date: depDateStr,
+      label: `💰 Deposit — ${caseId}`,
+      detail: `Deposit Due
+Case: ${caseId}
+Surgery in 14 days: ${surgDate}
+Patient Email: ${patientEmail||'—'}`,
+      caseId, provider, worker, patientEmail, surgDate
+    });
+  });
+
+  return events;
+}
+
+window.setCalFilter = function(f) {
+  calFilter = f;
+  ['all','dev','josh'].forEach(x => {
+    const btn = document.getElementById('calbtn-'+x);
+    if(!btn) return;
+    btn.style.background = x===f ? (x==='dev'?'var(--dev)':x==='josh'?'var(--josh)':'var(--info)') : '';
+    btn.style.color = x===f ? '#fff' : '';
+  });
+  renderCalendar();
+};
+
+window.changeMonth = function(dir) {
+  calMonth += dir;
+  if(calMonth > 11) { calMonth = 0; calYear++; }
+  if(calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar();
+};
+
+async function renderCalendar() {
+  // Cache preop records if not already
+  if(!window._cachedPreopRecords) {
+    try {
+      const snap = await getDoc(doc(db,'atlas','preop'));
+      window._cachedPreopRecords = snap.exists() ? (snap.data().records || []) : [];
+    } catch(e) { window._cachedPreopRecords = []; }
+  }
+
+  const grid = document.getElementById('cal-grid');
+  const label = document.getElementById('cal-month-label');
+  if(!grid || !label) return;
+
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  label.textContent = `${monthNames[calMonth]} ${calYear}`;
+
+  // Clear old day cells (keep headers)
+  const headers = Array.from(grid.querySelectorAll('.cal-day-header'));
+  grid.innerHTML = '';
+  headers.forEach(h => grid.appendChild(h));
+
+  const events = getCalendarEvents();
+  const today = new Date().toISOString().split('T')[0];
+
+  // First day of month and number of days
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const daysInPrevMonth = new Date(calYear, calMonth, 0).getDate();
+
+  // Prev month padding
+  for(let i = firstDay - 1; i >= 0; i--) {
+    const day = document.createElement('div');
+    day.className = 'cal-day other-month';
+    day.innerHTML = `<div class="cal-day-num">${daysInPrevMonth - i}</div>`;
+    grid.appendChild(day);
+  }
+
+  // Current month days
+  for(let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dayEvents = events.filter(e => e.date === dateStr);
+    const isToday = dateStr === today;
+
+    const day = document.createElement('div');
+    day.className = `cal-day${isToday?' today':''}`;
+
+    let eventsHtml = dayEvents.map(e =>
+      `<div class="cal-event ${e.type}" onclick="showCalEventDetail(${JSON.stringify(e).replace(/"/g,'&quot;')})" title="${e.detail}">${e.label}</div>`
+    ).join('');
+
+    day.innerHTML = `<div class="cal-day-num">${d}</div>${eventsHtml}`;
+    grid.appendChild(day);
+  }
+
+  // Next month padding
+  const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+  let nextDay = 1;
+  for(let i = firstDay + daysInMonth; i < totalCells; i++) {
+    const day = document.createElement('div');
+    day.className = 'cal-day other-month';
+    day.innerHTML = `<div class="cal-day-num">${nextDay++}</div>`;
+    grid.appendChild(day);
+  }
+}
+
+window.showCalEventDetail = function(eventData) {
+  let e;
+  try { e = typeof eventData === 'string' ? JSON.parse(eventData) : eventData; } catch(ex) { return; }
+  const detail = document.getElementById('cal-event-detail');
+  const content = document.getElementById('cal-event-detail-content');
+  if(!detail || !content) return;
+
+  const typeLabels = { surgery: '🔴 Surgery', 'preop-call': '📞 Pre-Op Call', deposit: '💰 Deposit Due' };
+  const typeColors = { surgery: 'var(--warn)', 'preop-call': 'var(--info)', deposit: 'var(--accent)' };
+
+  content.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-size:14px;font-weight:600;color:${typeColors[e.type]||'var(--text)'};">${typeLabels[e.type]||e.type}</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Case: <strong>${e.caseId}</strong> · ${e.date}</div>
+        ${e.provider?`<div style="font-size:13px;color:var(--text-muted);">Provider: ${e.provider}</div>`:''}
+        ${e.patientEmail?`<div style="font-size:13px;color:var(--text-muted);">Patient Email: ${e.patientEmail}</div>`:''}
+        <div style="font-size:13px;color:var(--text-muted);">Surgery Date: ${e.surgDate}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${gcalToken
+          ? `<button class="gcal-btn" onclick="addSingleEventToGCal(${JSON.stringify(e).replace(/"/g,'&quot;')})" style="font-size:12px;padding:6px 12px;">
+              + Add to Google Calendar
+             </button>`
+          : `<button class="gcal-btn" onclick="connectGoogleCalendar()" style="font-size:12px;padding:6px 12px;">
+              Connect Google Calendar
+             </button>`
+        }
+        <button onclick="document.getElementById('cal-event-detail').style.display='none'" class="btn btn-ghost btn-sm">Close</button>
+      </div>
+    </div>`;
+  detail.style.display = 'block';
+};
+
+// ── GOOGLE CALENDAR AUTH ──
+window.connectGoogleCalendar = function() {
+  if(!gcalTokenClient) {
+    gcalTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GCAL_CLIENT_ID,
+      scope: GCAL_SCOPES,
+      callback: (tokenResponse) => {
+        if(tokenResponse.error) {
+          console.error('GCal auth error:', tokenResponse.error);
+          return;
+        }
+        gcalToken = tokenResponse.access_token;
+        updateGCalUI(true);
+        syncAllToGoogleCalendar();
+      }
+    });
+  }
+  gcalTokenClient.requestAccessToken();
+};
+
+function updateGCalUI(connected) {
+  const btn = document.getElementById('gcal-connect-btn');
+  const syncBtn = document.getElementById('gcal-sync-btn');
+  const status = document.getElementById('gcal-status');
+  if(connected) {
+    if(btn) btn.style.display = 'none';
+    if(syncBtn) syncBtn.style.display = 'inline-flex';
+    if(status) status.innerHTML = '<span class="gcal-connected">✓ Google Calendar Connected</span>';
+  } else {
+    if(btn) btn.style.display = 'flex';
+    if(syncBtn) syncBtn.style.display = 'none';
+    if(status) status.innerHTML = '';
+  }
+  renderCalendar();
+}
+
+// ── SYNC ALL EVENTS ──
+window.syncAllToGoogleCalendar = async function() {
+  if(!gcalToken) { connectGoogleCalendar(); return; }
+  const events = getCalendarEvents();
+  if(!events.length) { alert('No events to sync.'); return; }
+
+  const syncBtn = document.getElementById('gcal-sync-btn');
+  if(syncBtn) syncBtn.textContent = 'Syncing...';
+
+  let synced = 0, failed = 0;
+  for(const e of events) {
+    try {
+      await addEventToGCal(e);
+      synced++;
+    } catch(err) { failed++; }
+  }
+
+  if(syncBtn) syncBtn.textContent = '↻ Sync All Events';
+  alert(`✓ Synced ${synced} events to Google Calendar${failed>0?`
+${failed} failed`:''}!`);
+};
+
+window.addSingleEventToGCal = async function(eventData) {
+  let e;
+  try { e = typeof eventData === 'string' ? JSON.parse(eventData) : eventData; } catch(ex) { return; }
+  if(!gcalToken) { connectGoogleCalendar(); return; }
+  try {
+    await addEventToGCal(e);
+    alert(`✓ "${e.label}" added to Google Calendar!`);
+  } catch(err) {
+    alert('Error adding event: ' + err.message);
+  }
+};
+
+async function addEventToGCal(e) {
+  const typeLabels = { surgery: 'Surgery', 'preop-call': 'Pre-Op Call Due', deposit: 'Deposit Due' };
+  const title = `Atlas: ${typeLabels[e.type]||e.type} — ${e.caseId}`;
+
+  const event = {
+    summary: title,
+    description: e.detail,
+    start: { date: e.date },
+    end: { date: e.date },
+    colorId: e.type === 'surgery' ? '11' : e.type === 'preop-call' ? '9' : '10',
+    reminders: {
+      useDefault: false,
+      overrides: [{ method: 'email', minutes: 24*60 }, { method: 'popup', minutes: 60 }]
+    }
+  };
+
+  const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${gcalToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(event)
+  });
+
+  if(!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message || 'Failed to create event');
+  }
+  return await res.json();
+}
 
 // ── REPORTS DROPDOWN ──
 window.toggleReportsDropdown = function() {
