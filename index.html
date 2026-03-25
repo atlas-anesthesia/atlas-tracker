@@ -473,17 +473,7 @@
             </div>
             <label>Name of Driver</label><input type="text" id="po-driverName" placeholder="Driver's name">
             <label>Relationship</label><input type="text" id="po-driverRel" placeholder="e.g. Spouse, Friend">
-          <div style="margin-top:14px;">
-            <label style="margin-top:0;margin-bottom:6px;">Provider Signature</label>
-            <div class="img-upload-zone" id="providerSigZone" style="padding:12px;cursor:pointer;" onclick="openProviderSigModal()">
-              <p style="font-size:13px;color:var(--text-faint);pointer-events:none;">✍ Click to sign as provider</p>
-            </div>
-            <div id="providerSigPreview" style="display:none;margin-top:8px;position:relative;">
-              <img id="providerSigImg" src="" style="height:50px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px;">
-              <button onclick="clearProviderSig()" style="background:rgba(0,0,0,.4);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;position:absolute;top:2px;left:2px;">×</button>
-            </div>
-            <input type="hidden" id="po-providerSignature">
-          </div>
+
           </div>
         </div>
       </div>
@@ -784,9 +774,14 @@
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-other-chemotherapy" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> CHEMOTHERAPY
             </label>
-            
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-other-other" style="width:15px;height:15px;" onchange="onOtherToggle(this)"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-other-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-other-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-other-other-comment" placeholder="Please describe..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-other-comment" placeholder="General comments for this section..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
       </div>
 
@@ -1013,7 +1008,24 @@
       <div id="cs-log-content"></div>
     </div>
 
-    <!-- PROVIDER SIGNATURE MODAL -->
+    <!-- CS PROVIDER SIGNATURE MODAL -->
+<div id="csProviderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="font-size:16px;font-weight:500;margin-bottom:6px;">Provider Signature</div>
+    <div style="font-size:13px;color:var(--text-faint);margin-bottom:16px;">Sign below using your finger or mouse</div>
+    <canvas id="csProviderCanvas" width="450" height="160"
+      style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100%;touch-action:none;background:#fff;cursor:crosshair;display:block;"></canvas>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;">
+      <button class="btn btn-ghost btn-sm" onclick="clearCSProviderCanvas()">Clear</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" onclick="closeCSProviderModal()">Cancel</button>
+        <button class="btn btn-success" onclick="saveCSProviderSig()">✓ Save Signature</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROVIDER SIGNATURE MODAL -->
 <div id="providerSigModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;">
   <div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
     <div style="font-size:16px;font-weight:500;margin-bottom:6px;">Provider Signature</div>
@@ -2023,7 +2035,7 @@ function getPreopCheckboxes() {
     'po-meta-neg','po-meta-iddm','po-meta-niddm','po-meta-thyroid','po-meta-hx-hep','po-meta-obesity','po-meta-morbid-obesity',
     'po-teeth-intact','po-teeth-missing','po-teeth-denture',
     'po-other-hiv','po-other-hep-c','po-other-anemia','po-other-steroids','po-other-cancers','po-other-drug-abuse','po-other-coagulopathy','po-other-chemotherapy',
-    'po-vss','po-a0x3','po-qa','po-iv-difficulty','po-anesthesia-issues',
+    'po-vss','po-a0x3','po-qa','po-iv-difficulty','po-anesthesia-issues','po-other-other',
     'po-heart-wnl','po-lungs-wnl','po-abd-wnl'
   ];
   const data = {};
@@ -2040,7 +2052,7 @@ function getPreopCheckboxes() {
 function getPreopTextFields() {
   const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
     'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
-    'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-providerSignature'];
+    'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature'];
   const data = {};
   fields.forEach(id => {
     const el = document.getElementById(id);
@@ -2244,7 +2256,7 @@ window.editPreopRecord = async function(id) {
     // Fill text fields
     const textFields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-driverName','po-driverRel',
       'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
-      'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-providerSignature'];
+      'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature'];
     textFields.forEach(fid => {
       const el = document.getElementById(fid);
       if(el && record[fid] !== undefined) el.value = record[fid] || '';
@@ -2680,26 +2692,38 @@ function renderCSEntries() {
         </div>
       </div>
 
-      <!-- New bottle + Witness row -->
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:12px;border-top:1px solid var(--border);">
-        <label style="margin:0;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer;">
-          <input type="checkbox" ${entry.newBottle?'checked':''} onchange="updateCSEntry(${idx},'newBottle',this.checked)"
-            style="width:16px;height:16px;">
-          <span>New Bottle Opened</span>
-          ${entry.newBottle ? '<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">YES</span>' : ''}
-        </label>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:12px;color:var(--text-faint);font-weight:500;">Witness Signature:</span>
-          ${entry.witnessSignature
-            ? `<div style="display:flex;align-items:center;gap:8px;">
-                <img src="${entry.witnessSignature}" style="height:36px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px;">
-                <button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;">Re-sign</button>
-               </div>`
-            : `<button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})"
-                style="font-size:12px;color:var(--warn);border-color:var(--warn);padding:7px 14px;">
-                ✍ Sign Here
-               </button>`
-          }
+      <!-- New bottle + Other + Witness + Provider row -->
+      <div style="padding-top:12px;border-top:1px solid var(--border);">
+
+        <!-- Row 1: New Bottle + Other -->
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px;">
+          <label style="margin:0;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;cursor:pointer;">
+            <input type="checkbox" ${entry.newBottle?'checked':''} onchange="updateCSEntry(${idx},'newBottle',this.checked)"
+              style="width:16px;height:16px;">
+            <span>New Bottle Opened</span>
+            ${entry.newBottle ? '<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">YES</span>' : ''}
+          </label>
+
+        </div>
+
+
+
+        <!-- Row 2: Witness + Provider signatures -->
+        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;color:var(--text-faint);font-weight:500;">Witness:</span>
+            ${entry.witnessSignature
+              ? `<div style="display:flex;align-items:center;gap:6px;"><img src="${entry.witnessSignature}" style="height:32px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px;"><button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;">Re-sign</button></div>`
+              : `<button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;color:var(--warn);border-color:var(--warn);">✍ Witness Sign</button>`
+            }
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;color:var(--text-faint);font-weight:500;">Provider:</span>
+            ${entry.providerSignature
+              ? `<div style="display:flex;align-items:center;gap:6px;"><img src="${entry.providerSignature}" style="height:32px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px;"><button class="btn btn-ghost btn-sm" onclick="openCSProviderModal(${idx})" style="font-size:11px;">Re-sign</button></div>`
+              : `<button class="btn btn-ghost btn-sm" onclick="openCSProviderModal(${idx})" style="font-size:11px;color:var(--info);border-color:var(--info);">✍ Provider Sign</button>`
+            }
+          </div>
         </div>
       </div>
     </div>`;
@@ -2717,10 +2741,14 @@ function renderCSEntries() {
 
 
 window.updateCSEntry = function(idx, field, val) {
-  if(field === 'newBottle' || field === 'wasted') csEntries[idx][field] = val;
-  else csEntries[idx][field] = val;
+  csEntries[idx][field] = val;
+  if(field === 'hasOther') {
+    // Toggle other comment visibility without full re-render
+    const row = document.getElementById('cs-other-comment-row-' + idx);
+    if(row) { row.style.display = val ? 'block' : 'none'; return; }
+  }
   renderCSEntries();
-  renderCaseSupplies(); // refresh case total
+  renderCaseSupplies();
 };
 
 window.removeCSEntry = function(idx) {
@@ -2816,6 +2844,9 @@ async function saveCSEntriesWithCase(caseId, caseDate, provider) {
       wastedAmt: parseFloat(entry.wastedAmt) || 0,
       newBottle: entry.newBottle || false,
       witnessSignature: entry.witnessSignature || '',
+      providerSignature: entry.providerSignature || '',
+      hasOther: entry.hasOther || false,
+      otherComment: entry.otherComment || '',
       savedAt: new Date().toISOString()
     };
     existing.unshift(logEntry);
@@ -2979,8 +3010,11 @@ window.downloadCSLogPDF = async function() {
     doc.text(e.newBottle?'YES':'—', cols[6], y+7);
     doc.text(e.worker==='dev'?'D. Murthy':'J. Condado', cols[7], y+7);
     if(e.witnessSignature) {
-      try { doc.addImage(e.witnessSignature,'PNG',cols[8],y+1,20,8); } catch(ex){}
+      try { doc.addImage(e.witnessSignature,'PNG',cols[8],y+1,18,8); } catch(ex){}
     } else { doc.setTextColor(...warn); doc.text('NO SIG', cols[8], y+7); doc.setTextColor(...black); }
+    if(e.providerSignature) {
+      try { doc.addImage(e.providerSignature,'PNG',cols[9]||242,y+1,18,8); } catch(ex){}
+    } else { doc.setTextColor(...warn); doc.text('NO SIG', cols[9]||242, y+7); doc.setTextColor(...black); }
     y += 10;
   });
 
@@ -4400,6 +4434,59 @@ window.onHPCheck = function(checkbox, prefix) {
   if(typeof checkEKGConditions === 'function') checkEKGConditions();
 };
 
+// ── CS PROVIDER SIGNATURE ──
+let csProviderEntryIdx = null;
+let csProviderDrawing = false;
+
+window.openCSProviderModal = function(idx) {
+  csProviderEntryIdx = idx;
+  document.getElementById('csProviderModal').style.display = 'flex';
+  clearCSProviderCanvas();
+  setupCSProviderCanvas();
+};
+
+window.closeCSProviderModal = function() {
+  document.getElementById('csProviderModal').style.display = 'none';
+  csProviderEntryIdx = null;
+};
+
+function setupCSProviderCanvas() {
+  const canvas = document.getElementById('csProviderCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#1d3557'; ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width/rect.width; const scaleY = canvas.height/rect.height;
+    const src = e.touches?e.touches[0]:e;
+    return {x:(src.clientX-rect.left)*scaleX, y:(src.clientY-rect.top)*scaleY};
+  }
+  canvas.onmousedown = canvas.ontouchstart = function(e) {
+    e.preventDefault(); csProviderDrawing=true;
+    const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y);
+  };
+  canvas.onmousemove = canvas.ontouchmove = function(e) {
+    e.preventDefault(); if(!csProviderDrawing) return;
+    const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke();
+  };
+  canvas.onmouseup = canvas.ontouchend = function(e) { e.preventDefault(); csProviderDrawing=false; };
+}
+
+window.clearCSProviderCanvas = function() {
+  const canvas = document.getElementById('csProviderCanvas');
+  if(canvas) canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+};
+
+window.saveCSProviderSig = function() {
+  const canvas = document.getElementById('csProviderCanvas');
+  const sigData = canvas.toDataURL('image/png');
+  if(csProviderEntryIdx !== null) {
+    csEntries[csProviderEntryIdx].providerSignature = sigData;
+    renderCSEntries();
+  }
+  closeCSProviderModal();
+};
+
 // ── PROVIDER SIGNATURE ──
 let providerSigDrawing = false;
 
@@ -4460,6 +4547,16 @@ window.clearProviderSig = function() {
   document.getElementById('providerSigPreview').style.display = 'none';
   document.getElementById('providerSigZone').style.display = 'block';
   document.getElementById('providerSigImg').src = '';
+};
+
+// ── OTHER TOGGLE IN PRE-OP ──
+window.onOtherToggle = function(checkbox) {
+  const row = document.getElementById('po-other-other-row');
+  if(row) row.style.display = checkbox.checked ? 'block' : 'none';
+  if(!checkbox.checked) {
+    const commentEl = document.getElementById('po-other-other-comment');
+    if(commentEl) commentEl.value = '';
+  }
 };
 
 // ── REPORTS DROPDOWN ──
