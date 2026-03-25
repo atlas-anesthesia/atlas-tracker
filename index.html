@@ -542,23 +542,28 @@
         <div class="card-title">Medical H&amp;P</div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Pupil Exam</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
-              <input type="checkbox" id="po-pupil-normal" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pupil')"> Normal
+              <input type="checkbox" id="po-pupil-normal" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pupil')"> NORMAL
             </label>
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
-              <input type="checkbox" id="po-pupil-dilated" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pupil')"> Dilated
+              <input type="checkbox" id="po-pupil-dilated" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pupil')"> DILATED
             </label>
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
-              <input type="checkbox" id="po-pupil-constricted" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pupil')"> Constricted
+              <input type="checkbox" id="po-pupil-constricted" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pupil')"> CONSTRICTED
             </label>
-            
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pupil-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-pupil')"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-pupil-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-pupil-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-pupil-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-pupil-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Cardiovascular</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-cv-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> NEG
             </label>
@@ -583,13 +588,18 @@
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-cv-arrythmia" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> ARRYTHMIA
             </label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">OTHER: <input type="text" id="po-cv-other" placeholder="specify" style="width:130px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg);"></label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-cv-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-cv')"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-cv-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-cv-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-cv-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-cv-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">EKG</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-ekg-nsr" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-ekg')"> NSR
             </label>
@@ -605,13 +615,18 @@
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-ekg-chngs" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-ekg')"> CHNGS
             </label>
-            
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-ekg-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-ekg')"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-ekg-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-ekg-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-ekg-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-ekg-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Pulmonary</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-pulm-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> NEG
             </label>
@@ -639,13 +654,18 @@
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-pulm-smoker" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> SMOKER
             </label>
-            
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-pulm')"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-pulm-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-pulm-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-pulm-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-pulm-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Gastro</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-gastro-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-gastro')"> NEG
             </label>
@@ -658,13 +678,18 @@
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-gastro-ulcer" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-gastro')"> ULCER
             </label>
-            
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-gastro-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-gastro')"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-gastro-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-gastro-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-gastro-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-gastro-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Renal</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-renal-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-renal')"> NEG
             </label>
@@ -674,13 +699,18 @@
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-renal-esrd" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-renal')"> ESRD
             </label>
-            
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-renal-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-renal')"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-renal-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-renal-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-renal-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-renal-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Neuro</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-neuro-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-neuro')"> NEG
             </label>
@@ -699,13 +729,18 @@
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-neuro-nm-disease" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-neuro')"> NM DISEASE
             </label>
-            
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-neuro-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-neuro')"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-neuro-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-neuro-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-neuro-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-neuro-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Metabolic</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-meta-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-meta')"> NEG
             </label>
@@ -727,13 +762,18 @@
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-meta-morbid-obesity" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-meta')"> MORBID OBESITY
             </label>
-            
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-meta-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-meta')"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-meta-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-meta-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-meta-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-meta-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Teeth</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-teeth-intact" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-teeth')"> INTACT
             </label>
@@ -743,13 +783,18 @@
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-teeth-denture" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-teeth')"> DENTURE
             </label>
-            
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-teeth-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-teeth')"> OTHER
+            </label>
           </div>
-          <input type="text" id="po-teeth-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <div id="po-teeth-other-row" style="display:none;margin-bottom:6px;">
+            <input type="text" id="po-teeth-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
+          </div>
+          <input type="text" id="po-teeth-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
         <div style="padding:10px 0;">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Other</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
               <input type="checkbox" id="po-other-hiv" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> HIV
             </label>
@@ -775,13 +820,13 @@
               <input type="checkbox" id="po-other-chemotherapy" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> CHEMOTHERAPY
             </label>
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
-              <input type="checkbox" id="po-other-other" style="width:15px;height:15px;" onchange="onOtherToggle(this)"> OTHER
+              <input type="checkbox" id="po-other-other-cb" style="width:15px;height:15px;" onchange="onHPOtherToggle('po-other')"> OTHER
             </label>
           </div>
           <div id="po-other-other-row" style="display:none;margin-bottom:6px;">
-            <input type="text" id="po-other-other-comment" placeholder="Please describe..." style="width:100%;padding:6px 10px;font-size:13px;">
+            <input type="text" id="po-other-other-val" placeholder="Please specify..." style="width:100%;padding:6px 10px;font-size:13px;">
           </div>
-          <input type="text" id="po-other-comment" placeholder="General comments for this section..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
+          <input type="text" id="po-other-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:2px;">
         </div>
       </div>
 
@@ -2035,7 +2080,7 @@ function getPreopCheckboxes() {
     'po-meta-neg','po-meta-iddm','po-meta-niddm','po-meta-thyroid','po-meta-hx-hep','po-meta-obesity','po-meta-morbid-obesity',
     'po-teeth-intact','po-teeth-missing','po-teeth-denture',
     'po-other-hiv','po-other-hep-c','po-other-anemia','po-other-steroids','po-other-cancers','po-other-drug-abuse','po-other-coagulopathy','po-other-chemotherapy',
-    'po-vss','po-a0x3','po-qa','po-iv-difficulty','po-anesthesia-issues','po-other-other',
+    'po-vss','po-a0x3','po-qa','po-iv-difficulty','po-anesthesia-issues','po-other-other','po-pupil-other-cb','po-cv-other-cb','po-ekg-other-cb','po-pulm-other-cb','po-gastro-other-cb','po-renal-other-cb','po-neuro-other-cb','po-meta-other-cb','po-teeth-other-cb','po-other-other-cb',
     'po-heart-wnl','po-lungs-wnl','po-abd-wnl'
   ];
   const data = {};
@@ -2052,7 +2097,7 @@ function getPreopCheckboxes() {
 function getPreopTextFields() {
   const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
     'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
-    'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature'];
+    'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
   const data = {};
   fields.forEach(id => {
     const el = document.getElementById(id);
@@ -2256,7 +2301,7 @@ window.editPreopRecord = async function(id) {
     // Fill text fields
     const textFields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-driverName','po-driverRel',
       'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
-      'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature'];
+      'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
     textFields.forEach(fid => {
       const el = document.getElementById(fid);
       if(el && record[fid] !== undefined) el.value = record[fid] || '';
@@ -2273,6 +2318,13 @@ window.editPreopRecord = async function(id) {
       if(radio) radio.checked = true;
     }
 
+    // Restore OTHER rows visibility
+    const otherPrefixes = ['po-pupil','po-cv','po-ekg','po-pulm','po-gastro','po-renal','po-neuro','po-meta','po-teeth','po-other'];
+    otherPrefixes.forEach(p => {
+      const cb = document.getElementById(p+'-other-cb');
+      const row = document.getElementById(p+'-other-row');
+      if(cb && row) row.style.display = cb.checked ? 'block' : 'none';
+    });
     // Update case ID display
     updatePreopCaseIdDisplay();
 
@@ -4547,6 +4599,23 @@ window.clearProviderSig = function() {
   document.getElementById('providerSigPreview').style.display = 'none';
   document.getElementById('providerSigZone').style.display = 'block';
   document.getElementById('providerSigImg').src = '';
+};
+
+// ── OTHER TOGGLE IN PRE-OP H&P ──
+window.onHPOtherToggle = function(prefix) {
+  const cb = document.getElementById(prefix + '-other-cb');
+  const row = document.getElementById(prefix + '-other-row');
+  if(!row) return;
+  if(cb && cb.checked) {
+    row.style.display = 'block';
+    // Uncheck NEG if other is checked
+    const neg = document.getElementById(prefix + '-neg');
+    if(neg) neg.checked = false;
+  } else {
+    row.style.display = 'none';
+    const val = document.getElementById(prefix + '-other-val');
+    if(val) val.value = '';
+  }
 };
 
 // ── OTHER TOGGLE IN PRE-OP ──
