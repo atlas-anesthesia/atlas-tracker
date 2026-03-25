@@ -1679,6 +1679,33 @@ window.saveCase = async function() {
   const notes=document.getElementById('caseNotes').value.trim();
   const comments=document.getElementById('caseComments')?document.getElementById('caseComments').value.trim():'';
   if(!caseItems.length){alert('Please add at least one supply item.');return;}
+
+  // If editing an existing case, update it instead of creating new
+  if(window._editingCaseId) {
+    const idx = cases.findIndex(x => x.id === window._editingCaseId);
+    if(idx !== -1) {
+      const total = caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
+      cases[idx] = {
+        ...cases[idx],
+        caseId, procedure:proc, provider, date, notes,
+        caseComments:comments, worker:currentWorker,
+        items: caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
+        total
+      };
+      setSyncing(true);
+      await saveCases();
+      setSyncing(false);
+      window._editingCaseId = null;
+      const banner = document.getElementById('case-edit-banner');
+      if(banner) banner.remove();
+      const saveBtn = document.querySelector('#tab-new-case .btn-success');
+      if(saveBtn) saveBtn.textContent = '✓ Finalize Case & Update Inventory';
+      clearCase();
+      alert('✓ Case updated successfully!');
+      showTab('history');
+      return;
+    }
+  }
   const total=caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
   cases.unshift({
     id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
@@ -1878,7 +1905,10 @@ function renderHistory() {
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <div class="case-cost">${c.draft?'In Progress':'$'+c.total.toFixed(2)}</div>
-          ${c.draft?`<button onclick="event.stopPropagation();resumeCase('${c.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Resume Case →</button>`:''}
+          ${c.draft
+            ? `<button onclick="event.stopPropagation();resumeCase('${c.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Resume Case →</button>`
+            : `<button onclick="event.stopPropagation();editFinalizedCase('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit</button>`
+          }
         </div>
       </div>
       <div class="case-items-list" id="detail_${c.id}">
@@ -1890,6 +1920,68 @@ function renderHistory() {
     </div>`;
   }).join('');
 }
+
+window.editFinalizedCase = function(id) {
+  const c = cases.find(x => x.id === id);
+  if(!c) return;
+
+  // Load the case into the Finalize Case tab
+  showTab('new-case');
+
+  // Fill fields
+  setTimeout(() => {
+    const caseIdEl = document.getElementById('caseId');
+    const procEl = document.getElementById('procedure');
+    const provEl = document.getElementById('provider');
+    const dateEl = document.getElementById('caseDate');
+    const notesEl = document.getElementById('caseNotes');
+    const commentsEl = document.getElementById('caseComments');
+
+    if(caseIdEl) caseIdEl.value = c.caseId || '';
+    if(procEl) procEl.value = c.procedure || '';
+    if(provEl) provEl.value = c.provider || '';
+    if(dateEl) dateEl.value = c.date || '';
+    if(notesEl) notesEl.value = c.notes || '';
+    if(commentsEl) commentsEl.value = c.caseComments || '';
+
+    // Load case items
+    caseItems = (c.items || []).map(i => ({
+      id: i.id, generic: i.generic, name: i.name,
+      cost: i.cost, qty: i.qty,
+      stock: getStock(items.find(x=>x.id===i.id)||{devStock:0,joshStock:0}, currentWorker)
+    }));
+    renderCaseSupplies();
+    refreshItemSelect();
+
+    // Store editing ID
+    window._editingCaseId = id;
+
+    // Show edit banner
+    const existing = document.getElementById('case-edit-banner');
+    if(existing) existing.remove();
+    const banner = document.createElement('div');
+    banner.id = 'case-edit-banner';
+    banner.style.cssText = 'background:var(--info-light);border:1px solid #b8cfe8;border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;';
+    banner.innerHTML = `
+      <span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing case: ${c.caseId || c.procedure}</span>
+      <button onclick="cancelEditCase()" class="btn btn-ghost btn-sm" style="font-size:11px;">Cancel Edit</button>`;
+    const actionBar = document.querySelector('#tab-new-case .action-bar');
+    if(actionBar) actionBar.insertAdjacentElement('afterend', banner);
+
+    // Update save button text
+    const saveBtn = document.querySelector('#tab-new-case .btn-success');
+    if(saveBtn) saveBtn.textContent = '✓ Save Edits & Update Inventory';
+  }, 100);
+};
+
+window.cancelEditCase = function() {
+  window._editingCaseId = null;
+  const banner = document.getElementById('case-edit-banner');
+  if(banner) banner.remove();
+  const saveBtn = document.querySelector('#tab-new-case .btn-success');
+  if(saveBtn) saveBtn.textContent = '✓ Finalize Case & Update Inventory';
+  clearCase();
+};
 
 window.toggleCase=function(id){document.getElementById('detail_'+id).classList.toggle('open');};
 
