@@ -473,6 +473,17 @@
             </div>
             <label>Name of Driver</label><input type="text" id="po-driverName" placeholder="Driver's name">
             <label>Relationship</label><input type="text" id="po-driverRel" placeholder="e.g. Spouse, Friend">
+          <div style="margin-top:14px;">
+            <label style="margin-top:0;margin-bottom:6px;">Provider Signature</label>
+            <div class="img-upload-zone" id="providerSigZone" style="padding:12px;cursor:pointer;" onclick="openProviderSigModal()">
+              <p style="font-size:13px;color:var(--text-faint);pointer-events:none;">✍ Click to sign as provider</p>
+            </div>
+            <div id="providerSigPreview" style="display:none;margin-top:8px;position:relative;">
+              <img id="providerSigImg" src="" style="height:50px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px;">
+              <button onclick="clearProviderSig()" style="background:rgba(0,0,0,.4);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;position:absolute;top:2px;left:2px;">×</button>
+            </div>
+            <input type="hidden" id="po-providerSignature">
+          </div>
           </div>
         </div>
       </div>
@@ -483,132 +494,303 @@
         <textarea id="po-allergies" placeholder="List any known allergies..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:80px;"></textarea>
       </div>
 
+      <!-- HEIGHT / WEIGHT / BMI -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">Height, Weight &amp; BMI</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+          <div>
+            <label style="margin-bottom:4px;">Height — Feet</label>
+            <input type="number" id="po-height-ft" min="1" max="9" placeholder="ft" oninput="calcBMI()">
+          </div>
+          <div>
+            <label style="margin-bottom:4px;">Height — Inches</label>
+            <input type="number" id="po-height-in" min="0" max="11" placeholder="in" oninput="calcBMI()">
+          </div>
+          <div>
+            <label style="margin-bottom:4px;">Weight (lbs)</label>
+            <input type="number" id="po-weight-lbs" min="1" placeholder="lbs" oninput="calcBMI()">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:12px;">
+          <div>
+            <label style="margin-bottom:4px;">Height (cm) <span style="font-size:10px;color:var(--text-faint);">auto</span></label>
+            <div id="po-height-cm" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-family:'DM Mono',monospace;color:var(--text-muted);">—</div>
+          </div>
+          <div>
+            <label style="margin-bottom:4px;">Weight (kg) <span style="font-size:10px;color:var(--text-faint);">auto</span></label>
+            <div id="po-weight-kg" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-family:'DM Mono',monospace;color:var(--text-muted);">—</div>
+          </div>
+          <div>
+            <label style="margin-bottom:4px;">BMI <span style="font-size:10px;color:var(--text-faint);">auto</span></label>
+            <div id="po-bmi" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-family:'DM Mono',monospace;color:var(--text-muted);">—</div>
+          </div>
+        </div>
+        <input type="hidden" id="po-height-cm-val">
+        <input type="hidden" id="po-weight-kg-val">
+        <input type="hidden" id="po-bmi-val">
+      </div>
+
+      <!-- IV & ANESTHESIA HISTORY -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">Anesthesia &amp; IV History</div>
+        <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+          <label style="margin:0;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;margin-bottom:8px;">
+            <input type="checkbox" id="po-iv-difficulty" style="width:16px;height:16px;"> History of difficulty with IV placement
+          </label>
+          <input type="text" id="po-iv-difficulty-comment" placeholder="Comments on IV access..." style="width:100%;padding:6px 10px;font-size:13px;">
+        </div>
+        <div style="padding:10px 0;">
+          <label style="margin:0;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;margin-bottom:8px;">
+            <input type="checkbox" id="po-anesthesia-issues" style="width:16px;height:16px;"> Any issues with anesthesia before
+          </label>
+          <input type="text" id="po-anesthesia-issues-comment" placeholder="Describe previous anesthesia issues..." style="width:100%;padding:6px 10px;font-size:13px;">
+        </div>
+      </div>
+
       <!-- MEDICAL H&P -->
       <div class="card" style="margin-bottom:18px;">
         <div class="card-title">Medical H&amp;P</div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Pupil Exam</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pupil-normal" style="width:15px;height:15px;"> Normal</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pupil-dilated" style="width:15px;height:15px;"> Dilated</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pupil-constricted" style="width:15px;height:15px;"> Constricted</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pupil-normal" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pupil')"> Normal
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pupil-dilated" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pupil')"> Dilated
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pupil-constricted" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pupil')"> Constricted
+            </label>
             
           </div>
+          <input type="text" id="po-pupil-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Cardiovascular</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-neg" style="width:15px;height:15px;"> NEG</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-htn" style="width:15px;height:15px;"> HTN</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-cad" style="width:15px;height:15px;"> CAD</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-angina" style="width:15px;height:15px;"> ANGINA</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-mi" style="width:15px;height:15px;"> MI</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-chf" style="width:15px;height:15px;"> CHF</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-murmur" style="width:15px;height:15px;"> MURMUR</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-cv-arrythmia" style="width:15px;height:15px;"> ARRYTHMIA</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-cv-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> NEG
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-cv-htn" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> HTN
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-cv-cad" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> CAD
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-cv-angina" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> ANGINA
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-cv-mi" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> MI
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-cv-chf" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> CHF
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-cv-murmur" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> MURMUR
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-cv-arrythmia" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-cv')"> ARRYTHMIA
+            </label>
             <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);">OTHER: <input type="text" id="po-cv-other" placeholder="specify" style="width:130px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg);"></label>
-            
           </div>
+          <input type="text" id="po-cv-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">EKG</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-nsr" style="width:15px;height:15px;"> NSR</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-afib" style="width:15px;height:15px;"> AFIB</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-bbb" style="width:15px;height:15px;"> BBB</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-lvh" style="width:15px;height:15px;"> LVH</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-ekg-chngs" style="width:15px;height:15px;"> CHNGS</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-ekg-nsr" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-ekg')"> NSR
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-ekg-afib" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-ekg')"> AFIB
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-ekg-bbb" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-ekg')"> BBB
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-ekg-lvh" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-ekg')"> LVH
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-ekg-chngs" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-ekg')"> CHNGS
+            </label>
             
           </div>
+          <input type="text" id="po-ekg-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Pulmonary</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-neg" style="width:15px;height:15px;"> NEG</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-asthma" style="width:15px;height:15px;"> ASTHMA</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-copd" style="width:15px;height:15px;"> COPD</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-uri" style="width:15px;height:15px;"> URI</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-o2" style="width:15px;height:15px;"> O2</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-cpap" style="width:15px;height:15px;"> CPAP</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-sleep-apnea" style="width:15px;height:15px;"> SLEEP APNEA</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-bl-breath-sounds" style="width:15px;height:15px;"> BL BREATH SOUNDS</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-pulm-smoker" style="width:15px;height:15px;"> SMOKER</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> NEG
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-asthma" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> ASTHMA
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-copd" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> COPD
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-uri" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> URI
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-o2" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> O2
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-cpap" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> CPAP
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-sleep-apnea" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> SLEEP APNEA
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-bl-breath-sounds" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> BL BREATH SOUNDS
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-pulm-smoker" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-pulm')"> SMOKER
+            </label>
             
           </div>
+          <input type="text" id="po-pulm-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Gastro</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-gastro-neg" style="width:15px;height:15px;"> NEG</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-gastro-gerd" style="width:15px;height:15px;"> GERD</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-gastro-hiat-hern" style="width:15px;height:15px;"> HIAT HERN</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-gastro-ulcer" style="width:15px;height:15px;"> ULCER</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-gastro-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-gastro')"> NEG
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-gastro-gerd" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-gastro')"> GERD
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-gastro-hiat-hern" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-gastro')"> HIAT HERN
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-gastro-ulcer" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-gastro')"> ULCER
+            </label>
             
           </div>
+          <input type="text" id="po-gastro-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Renal</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-renal-neg" style="width:15px;height:15px;"> NEG</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-renal-dialysis" style="width:15px;height:15px;"> DIALYSIS</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-renal-esrd" style="width:15px;height:15px;"> ESRD</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-renal-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-renal')"> NEG
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-renal-dialysis" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-renal')"> DIALYSIS
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-renal-esrd" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-renal')"> ESRD
+            </label>
             
           </div>
+          <input type="text" id="po-renal-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Neuro</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-neg" style="width:15px;height:15px;"> NEG</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-depression" style="width:15px;height:15px;"> DEPRESSION</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-anxiety-disorder" style="width:15px;height:15px;"> ANXIETY DISORDER</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-seizures" style="width:15px;height:15px;"> SEIZURES</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-cva" style="width:15px;height:15px;"> CVA</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-neuro-nm-disease" style="width:15px;height:15px;"> NM DISEASE</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-neuro-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-neuro')"> NEG
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-neuro-depression" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-neuro')"> DEPRESSION
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-neuro-anxiety-disorder" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-neuro')"> ANXIETY DISORDER
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-neuro-seizures" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-neuro')"> SEIZURES
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-neuro-cva" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-neuro')"> CVA
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-neuro-nm-disease" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-neuro')"> NM DISEASE
+            </label>
             
           </div>
+          <input type="text" id="po-neuro-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Metabolic</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-neg" style="width:15px;height:15px;"> NEG</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-iddm" style="width:15px;height:15px;"> IDDM</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-niddm" style="width:15px;height:15px;"> NIDDM</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-thyroid" style="width:15px;height:15px;"> THYROID</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-hx-hep" style="width:15px;height:15px;"> Hx HEP</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-obesity" style="width:15px;height:15px;"> OBESITY</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-meta-morbid-obesity" style="width:15px;height:15px;"> MORBID OBESITY</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-meta-neg" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-meta')"> NEG
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-meta-iddm" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-meta')"> IDDM
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-meta-niddm" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-meta')"> NIDDM
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-meta-thyroid" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-meta')"> THYROID
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-meta-hx-hep" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-meta')"> Hx HEP
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-meta-obesity" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-meta')"> OBESITY
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-meta-morbid-obesity" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-meta')"> MORBID OBESITY
+            </label>
             
           </div>
+          <input type="text" id="po-meta-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
         <div style="padding:10px 0;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Teeth</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-teeth-intact" style="width:15px;height:15px;"> INTACT</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-teeth-missing" style="width:15px;height:15px;"> MISSING</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-teeth-denture" style="width:15px;height:15px;"> DENTURE</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-teeth-intact" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-teeth')"> INTACT
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-teeth-missing" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-teeth')"> MISSING
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-teeth-denture" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-teeth')"> DENTURE
+            </label>
             
           </div>
+          <input type="text" id="po-teeth-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
         <div style="padding:10px 0;">
           <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Other</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-hiv" style="width:15px;height:15px;"> HIV</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-hep-c" style="width:15px;height:15px;"> HEP C</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-anemia" style="width:15px;height:15px;"> ANEMIA</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-steroids" style="width:15px;height:15px;"> STEROIDS</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-cancers" style="width:15px;height:15px;"> CANCERS</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-drug-abuse" style="width:15px;height:15px;"> DRUG ABUSE</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-coagulopathy" style="width:15px;height:15px;"> COAGULOPATHY</label>
-            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);"><input type="checkbox" id="po-other-chemotherapy" style="width:15px;height:15px;"> CHEMOTHERAPY</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-other-hiv" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> HIV
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-other-hep-c" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> HEP C
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-other-anemia" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> ANEMIA
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-other-steroids" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> STEROIDS
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-other-cancers" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> CANCERS
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-other-drug-abuse" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> DRUG ABUSE
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-other-coagulopathy" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> COAGULOPATHY
+            </label>
+            <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text);cursor:pointer;">
+              <input type="checkbox" id="po-other-chemotherapy" style="width:15px;height:15px;" onchange="onHPCheck(this,'po-other')"> CHEMOTHERAPY
+            </label>
             
           </div>
+          <input type="text" id="po-other-comment" placeholder="Comments..." style="width:100%;padding:6px 10px;font-size:13px;margin-top:4px;">
         </div>
       </div>
 
-            <!-- EKG ALERT BANNER -->
-      <div id="ekg-alert-banner" style="display:none;margin-bottom:18px;"></div>
-
-      <!-- MEDICATIONS & SURGICAL HISTORY -->
+            <!-- MEDICATIONS & SURGICAL HISTORY -->
       <div class="grid-2" style="margin-bottom:18px;">
         <div class="card">
           <div class="card-title">Medications</div>
@@ -831,7 +1013,24 @@
       <div id="cs-log-content"></div>
     </div>
 
-    <!-- WITNESS SIGNATURE MODAL -->
+    <!-- PROVIDER SIGNATURE MODAL -->
+<div id="providerSigModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="font-size:16px;font-weight:500;margin-bottom:6px;">Provider Signature</div>
+    <div style="font-size:13px;color:var(--text-faint);margin-bottom:16px;">Sign below using your finger or mouse</div>
+    <canvas id="providerSigCanvas" width="450" height="160"
+      style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100%;touch-action:none;background:#fff;cursor:crosshair;display:block;"></canvas>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;">
+      <button class="btn btn-ghost btn-sm" onclick="clearProviderSigCanvas()">Clear</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" onclick="closeProviderSigModal()">Cancel</button>
+        <button class="btn btn-success" onclick="saveProviderSig()">✓ Save Signature</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WITNESS SIGNATURE MODAL -->
     <div id="witnessModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;">
       <div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
         <div style="font-size:16px;font-weight:500;margin-bottom:6px;">Witness Signature</div>
@@ -1452,6 +1651,12 @@ window.clearCase=function(){
   caseItems=[];
   ['caseId','procedure','provider','caseNotes','caseComments'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('caseDate').value=new Date().toISOString().split('T')[0];
+  // Clear BMI displays
+  ['po-height-cm','po-weight-kg','po-bmi'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.textContent = '—';
+  });
+  clearProviderSig();
   window._activeDraftId = null;
   const picker = document.getElementById('draftCasePicker');
   if(picker) picker.value = '';
@@ -1516,7 +1721,7 @@ function renderInventory() {
           <div style="font-size:13px;color:var(--text-muted);">${item.alert}</div>
           <div style="font-size:12px;color:var(--text-faint);">${item.supplier}</div>
           <div style="display:flex;gap:5px;align-items:center;">
-            <input type="number" id="restock_${item.id}" style="width:58px;padding:4px 7px;font-size:13px;" placeholder="qty" min="0">
+            <input type="number" id="restock_${item.id}" style="width:58px;padding:4px 7px;font-size:13px;" placeholder="qty" min="0" step="0.5">
             <button onclick="adjustStock('${item.id}')" class="btn btn-ghost btn-sm">+</button>
           </div>
           <div style="display:flex;gap:4px;">
@@ -1818,7 +2023,7 @@ function getPreopCheckboxes() {
     'po-meta-neg','po-meta-iddm','po-meta-niddm','po-meta-thyroid','po-meta-hx-hep','po-meta-obesity','po-meta-morbid-obesity',
     'po-teeth-intact','po-teeth-missing','po-teeth-denture',
     'po-other-hiv','po-other-hep-c','po-other-anemia','po-other-steroids','po-other-cancers','po-other-drug-abuse','po-other-coagulopathy','po-other-chemotherapy',
-    'po-vss','po-a0x3','po-qa',
+    'po-vss','po-a0x3','po-qa','po-iv-difficulty','po-anesthesia-issues',
     'po-heart-wnl','po-lungs-wnl','po-abd-wnl'
   ];
   const data = {};
@@ -1833,9 +2038,9 @@ function getPreopCheckboxes() {
 }
 
 function getPreopTextFields() {
-  const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel',
+  const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
     'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
-    'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other'];
+    'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-providerSignature'];
   const data = {};
   fields.forEach(id => {
     const el = document.getElementById(id);
@@ -1948,7 +2153,7 @@ function prefillNewCase(preopRecord) {
 
 window.clearPreop = function() {
   // Clear text fields
-  ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel',
+  ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-iv-difficulty-comment','po-anesthesia-issues-comment',
    'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
    'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other'].forEach(id => {
     const el = document.getElementById(id);
@@ -2039,7 +2244,7 @@ window.editPreopRecord = async function(id) {
     // Fill text fields
     const textFields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-driverName','po-driverRel',
       'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
-      'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other'];
+      'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-providerSignature'];
     textFields.forEach(fid => {
       const el = document.getElementById(fid);
       if(el && record[fid] !== undefined) el.value = record[fid] || '';
@@ -2446,19 +2651,19 @@ function renderCSEntries() {
       <!-- Fields row -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Amount Given (mL)</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Amount Given (mg)</div>
           <input type="number" min="0" step="0.1" value="${entry.amountGiven}" placeholder="0.0"
             onchange="updateCSEntry(${idx},'amountGiven',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Left in Vial (mL)</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Left in Vial (mg)</div>
           <input type="number" min="0" step="0.1" value="${entry.leftInVial}" placeholder="0.0"
             onchange="updateCSEntry(${idx},'leftInVial',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Wasted (mL)</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Wasted (mg)</div>
           <input type="number" min="0" step="0.1" value="${entry.wastedAmt}" placeholder="0.0"
             onchange="updateCSEntry(${idx},'wastedAmt',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
@@ -2468,7 +2673,7 @@ function renderCSEntries() {
           <div style="padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);text-align:center;">
             ${totalML > 0 && costPerML > 0
               ? `<div style="font-size:15px;font-weight:500;font-family:'DM Mono',monospace;color:var(--warn);">≈ $${estimatedCost.toFixed(2)}</div>
-                 <div style="font-size:10px;color:var(--text-faint);">${totalML.toFixed(1)} mL × $${costPerML.toFixed(2)}</div>`
+                 <div style="font-size:10px;color:var(--text-faint);">${totalML.toFixed(1)} mg × $${costPerML.toFixed(2)}/mg</div>`
               : `<div style="font-size:13px;color:var(--text-faint);">Enter mL above</div>`
             }
           </div>
@@ -4129,6 +4334,133 @@ async function pushToGCal(e) {
   if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'Failed'); }
 }
 
+
+// ── BMI CALCULATOR ──
+window.calcBMI = function() {
+  const ft = parseFloat(document.getElementById('po-height-ft')?.value) || 0;
+  const inches = parseFloat(document.getElementById('po-height-in')?.value) || 0;
+  const lbs = parseFloat(document.getElementById('po-weight-lbs')?.value) || 0;
+
+  if(!ft && !inches && !lbs) return;
+
+  const totalInches = (ft * 12) + inches;
+  const cm = Math.round(totalInches * 2.54);
+  const kg = Math.round(lbs * 0.453592 * 10) / 10;
+  const heightM = totalInches * 0.0254;
+  const bmi = heightM > 0 ? Math.round((lbs * 703) / (totalInches * totalInches) * 10) / 10 : 0;
+
+  // Update display
+  const cmEl = document.getElementById('po-height-cm');
+  const kgEl = document.getElementById('po-weight-kg');
+  const bmiEl = document.getElementById('po-bmi');
+
+  if(cmEl) cmEl.textContent = cm > 0 ? `${cm} cm` : '—';
+  if(kgEl) kgEl.textContent = kg > 0 ? `${kg} kg` : '—';
+
+  if(bmiEl) {
+    let bmiLabel = '';
+    let bmiColor = 'var(--text-muted)';
+    if(bmi > 0) {
+      if(bmi < 18.5)      { bmiLabel = ' (Underweight)'; bmiColor = 'var(--info)'; }
+      else if(bmi < 25)   { bmiLabel = ' (Normal)';      bmiColor = 'var(--accent)'; }
+      else if(bmi < 30)   { bmiLabel = ' (Overweight)';  bmiColor = 'var(--warn)'; }
+      else                { bmiLabel = ' (Obese)';        bmiColor = '#b91c1c'; }
+      bmiEl.innerHTML = `<span style="color:${bmiColor};font-weight:500;">${bmi}${bmiLabel}</span>`;
+    } else {
+      bmiEl.textContent = '—';
+    }
+  }
+
+  // Store values in hidden fields
+  const cmVal = document.getElementById('po-height-cm-val');
+  const kgVal = document.getElementById('po-weight-kg-val');
+  const bmiVal = document.getElementById('po-bmi-val');
+  if(cmVal) cmVal.value = cm;
+  if(kgVal) kgVal.value = kg;
+  if(bmiVal) bmiVal.value = bmi;
+};
+
+// ── H&P AUTO-UNCHECK NEG ──
+window.onHPCheck = function(checkbox, prefix) {
+  const negEl = document.getElementById(prefix + '-neg');
+  if(!negEl) return;
+
+  if(checkbox.id === prefix + '-neg') {
+    // NEG was clicked — if checked, uncheck everything else in this section
+    if(checkbox.checked) {
+      document.querySelectorAll(`[id^="${prefix}-"]`).forEach(el => {
+        if(el.type === 'checkbox' && el.id !== prefix + '-neg') el.checked = false;
+      });
+    }
+  } else {
+    // Something else was clicked — if checked, uncheck NEG
+    if(checkbox.checked && negEl) negEl.checked = false;
+  }
+  // Trigger EKG check in case a CV condition changed
+  if(typeof checkEKGConditions === 'function') checkEKGConditions();
+};
+
+// ── PROVIDER SIGNATURE ──
+let providerSigDrawing = false;
+
+window.openProviderSigModal = function() {
+  document.getElementById('providerSigModal').style.display = 'flex';
+  clearProviderSigCanvas();
+  setupProviderSigCanvas();
+};
+
+window.closeProviderSigModal = function() {
+  document.getElementById('providerSigModal').style.display = 'none';
+};
+
+function setupProviderSigCanvas() {
+  const canvas = document.getElementById('providerSigCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#1d3557';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+  }
+
+  canvas.onmousedown = canvas.ontouchstart = function(e) {
+    e.preventDefault(); providerSigDrawing = true;
+    const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  };
+  canvas.onmousemove = canvas.ontouchmove = function(e) {
+    e.preventDefault(); if(!providerSigDrawing) return;
+    const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke();
+  };
+  canvas.onmouseup = canvas.ontouchend = function(e) { e.preventDefault(); providerSigDrawing = false; };
+}
+
+window.clearProviderSigCanvas = function() {
+  const canvas = document.getElementById('providerSigCanvas');
+  if(canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+};
+
+window.saveProviderSig = function() {
+  const canvas = document.getElementById('providerSigCanvas');
+  const sigData = canvas.toDataURL('image/png');
+  document.getElementById('po-providerSignature').value = sigData;
+  document.getElementById('providerSigPreview').style.display = 'block';
+  document.getElementById('providerSigImg').src = sigData;
+  document.getElementById('providerSigZone').style.display = 'none';
+  closeProviderSigModal();
+};
+
+window.clearProviderSig = function() {
+  document.getElementById('po-providerSignature').value = '';
+  document.getElementById('providerSigPreview').style.display = 'none';
+  document.getElementById('providerSigZone').style.display = 'block';
+  document.getElementById('providerSigImg').src = '';
+};
 
 // ── REPORTS DROPDOWN ──
 window.toggleReportsDropdown = function() {
