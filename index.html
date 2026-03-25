@@ -4088,6 +4088,9 @@ async function renderCalendar() {
   }
 }
 
+// Expose renderCalendar on window so showTab can call it
+window.renderCalendar = renderCalendar;
+
 window.showCalEventDetail = function(eventData) {
   let e;
   try { e = typeof eventData === 'string' ? JSON.parse(eventData) : eventData; } catch(ex) { return; }
