@@ -1639,9 +1639,9 @@ window.saveCase = async function() {
   if(window._activeDraftId) {
     cases = cases.filter(x => x.id !== window._activeDraftId);
     window._activeDraftId = null;
+  }
   csEntries = [];
   renderCSEntries();
-  }
   await Promise.all([saveInventory(), saveCases()]);
   clearCase();
   alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
