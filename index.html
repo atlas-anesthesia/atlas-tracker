@@ -1195,6 +1195,8 @@ async function initData() {
     refreshDraftPicker();
     renderCaseLog();
     renderMidCase();
+    // Refresh calendar if open
+    if(document.getElementById('tab-calendar')?.classList.contains('active')) renderCalendar();
   });
 }
 
@@ -1309,7 +1311,7 @@ window.showTab = function(tab) {
   if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
   if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); }
   if(tab==='cs-log') renderCSLog();
-  if(tab==='calendar') { window._cachedPreopRecords = null; renderCalendar(); }
+  if(tab==='calendar') renderCalendar();
   if(tab==='mid-case') renderMidCase();
   if(tab==='caselog') renderCaseLog();
 };
@@ -4006,13 +4008,29 @@ window.changeMonth = function(dir) {
 };
 
 async function renderCalendar() {
-  // Cache preop records if not already
-  if(!window._cachedPreopRecords) {
-    try {
-      const snap = await getDoc(doc(db,'atlas','preop'));
-      window._cachedPreopRecords = snap.exists() ? (snap.data().records || []) : [];
-    } catch(e) { window._cachedPreopRecords = []; }
+  // Always reload preop records fresh from Firestore
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    window._cachedPreopRecords = snap.exists() ? (snap.data().records || []) : [];
+  } catch(e) {
+    window._cachedPreopRecords = window._cachedPreopRecords || [];
   }
+
+  // Also include surgery dates from finalized cases
+  const caseEvents = cases
+    .filter(c => !c.draft && c.date)
+    .map(c => ({
+      'po-surgeryDate': c.date,
+      'po-caseId': c.caseId,
+      'po-provider': c.provider,
+      'po-patientEmail': '',
+      worker: c.worker
+    }));
+
+  // Merge: preop records take priority, add cases that don't have a matching preop
+  const preopIds = new Set((window._cachedPreopRecords||[]).map(r => r['po-caseId']));
+  const extraCases = caseEvents.filter(c => !preopIds.has(c['po-caseId']));
+  window._cachedPreopRecords = [...(window._cachedPreopRecords||[]), ...extraCases];
 
   const grid = document.getElementById('cal-grid');
   const label = document.getElementById('cal-month-label');
