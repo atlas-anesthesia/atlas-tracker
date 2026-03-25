@@ -1592,9 +1592,23 @@ function renderCaseSupplies() {
         <div style="font-size:11px;color:var(--text-faint);">${item.name}</div></div>
       <div style="font-size:13px;font-family:'DM Mono',monospace;">$${item.cost.toFixed(2)}</div>
       <div><span class="stock-badge ${remaining<0?'stock-critical':remaining<=al?'stock-low':'stock-ok'}">${item.stock}</span></div>
-      <div><input type="number" min="0" max="${item.stock}" value="${item.qty}" style="width:70px;text-align:center;" onchange="updateQty(${idx},this.value)"></div>
+      <div><input type="number" min="0" value="${item.qty}" style="width:70px;text-align:center;"></div>
       <div style="font-size:14px;font-weight:500;font-family:'DM Mono',monospace;">$${line.toFixed(2)}</div>
-      <button onclick="removeItem(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:18px;line-height:1;">×</button>`;
+      <button style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:18px;line-height:1;">×</button>`;
+    // Attach events directly using closure — no stale index issues
+    const qtyInput = row.querySelector('input[type="number"]');
+    qtyInput.setAttribute('step', '0.5');
+    const removeBtn = row.querySelector('button');
+    const capturedIdx = idx;
+    qtyInput.addEventListener('change', function() {
+      caseItems[capturedIdx].qty = Math.max(0, parseFloat(this.value)||0);
+      renderCaseSupplies();
+    });
+    removeBtn.addEventListener('click', function() {
+      caseItems.splice(capturedIdx, 1);
+      renderCaseSupplies();
+      refreshItemSelect();
+    });
     container.appendChild(row);
   });
   // Add CS estimated cost to total display
@@ -1678,8 +1692,6 @@ window.saveCase = async function() {
   const date=document.getElementById('caseDate').value||new Date().toISOString().split('T')[0];
   const notes=document.getElementById('caseNotes').value.trim();
   const comments=document.getElementById('caseComments')?document.getElementById('caseComments').value.trim():'';
-  if(!caseItems.length){alert('Please add at least one supply item.');return;}
-
   // If editing an existing case, update it instead of creating new
   if(window._editingCaseId) {
     const idx = cases.findIndex(x => x.id === window._editingCaseId);
@@ -1944,12 +1956,18 @@ window.editFinalizedCase = function(id) {
     if(notesEl) notesEl.value = c.notes || '';
     if(commentsEl) commentsEl.value = c.caseComments || '';
 
-    // Load case items
-    caseItems = (c.items || []).map(i => ({
-      id: i.id, generic: i.generic, name: i.name,
-      cost: i.cost, qty: i.qty,
-      stock: getStock(items.find(x=>x.id===i.id)||{devStock:0,joshStock:0}, currentWorker)
-    }));
+    // Load case items — ensure proper types
+    caseItems = (c.items || []).map(i => {
+      const invItem = items.find(x => x.id === i.id);
+      return {
+        id: i.id,
+        generic: i.generic || i.name || 'Unknown',
+        name: i.name || i.generic || 'Unknown',
+        cost: parseFloat(i.cost) || 0,
+        qty: parseFloat(i.qty) || 1,
+        stock: invItem ? getStock(invItem, currentWorker) : parseFloat(i.qty) || 1
+      };
+    });
     renderCaseSupplies();
     refreshItemSelect();
 
@@ -2216,8 +2234,8 @@ window.savePreop = async function() {
       const records = snap.exists() ? (snap.data().records || []) : [];
       const idx = records.findIndex(r => r.id === window._editingPreopId);
       if(idx !== -1) {
-        const generatedId2 = generateCaseId(currentWorker, surgeryDate);
-        textData['po-caseId'] = generatedId2;
+        // Keep the ORIGINAL case ID — do not regenerate
+        textData['po-caseId'] = records[idx]['po-caseId'];
         const updated = { ...records[idx], ...textData, ...checkData, savedAt: new Date().toISOString() };
         records[idx] = updated;
         setSyncing(true);
@@ -2228,7 +2246,7 @@ window.savePreop = async function() {
         if(editBanner) editBanner.remove();
         clearPreop();
         alert('✓ Pre-Op record updated!');
-        showTab('preop-history');
+        showTab('mid-case');
         return;
       }
     } catch(e) { console.error(e); }
