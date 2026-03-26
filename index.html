@@ -1774,7 +1774,13 @@ window.saveCase = async function() {
       return;
     }
   }
-  const total=caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
+  const suppliesTotal2=caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
+  const csTotal2=csEntries.reduce((sum,entry)=>{
+    const cpm=getCostPerML(entry.drug);
+    const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
+    return sum+cpm*mg;
+  },0);
+  const total=suppliesTotal2+csTotal2;
   cases.unshift({
     id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
     caseComments:comments,
