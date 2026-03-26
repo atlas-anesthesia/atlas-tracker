@@ -4206,6 +4206,7 @@ async function renderMidCase() {
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <button onclick="resumeCase('${d.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Finalize Case →</button>
+          <button onclick="editFinalizedCase('${d.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit Draft</button>
           <button onclick="deleteMidCase('draft','${d.id}','${d.caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">🗑 Delete</button>
         </div>
       </div>
