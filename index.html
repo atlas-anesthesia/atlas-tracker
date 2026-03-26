@@ -1530,6 +1530,10 @@ async function initData() {
     } else {
       cases = [];
     }
+    // Pre-load preop records for calendar
+    getDoc(doc(db,'atlas','preop')).then(ps => {
+      window._cachedPreopRecords = ps.exists() ? (ps.data().records||[]) : [];
+    }).catch(()=>{});
     renderHistory();
     renderReports();
     refreshDraftPicker();
@@ -1706,39 +1710,25 @@ function getCalEvents() {
   }
 }
 
-window.buildCalendar = async function() {
+function buildCalendar() {
   const grid  = document.getElementById('cal-grid');
   const label = document.getElementById('cal-month-label');
-  if(!grid) {
-    console.error('cal-grid not found');
-    const calTab = document.getElementById('tab-calendar');
-    if(calTab) calTab.innerHTML += '<div style="padding:20px;color:red;">Error: Calendar grid element not found. Please refresh.</div>';
-    return;
-  }
-  // Show loading state
-  grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text-faint);">Loading calendar...</div>';
+  if(!grid) { console.error('cal-grid not found'); return; }
 
+  // Use already-loaded data (from Firebase snapshot listeners)
+  // Merge preop records and finalized cases
   try {
-    // Load preop records
-    const snap = await getDoc(doc(db,'atlas','preop'));
-    window._cachedPreopRecords = snap.exists() ? (snap.data().records||[]) : [];
-  } catch(e) {
-    console.warn('Calendar: could not load preop records', e);
-    window._cachedPreopRecords = window._cachedPreopRecords || [];
-  }
-
-  // Merge finalized cases
-  try {
+    const preopSnap = window._cachedPreopRecords || [];
     const caseRecs = (cases||[]).filter(c=>!c.draft&&c.date).map(c=>({
       'po-surgeryDate':c.date,'po-caseId':c.caseId,'po-provider':c.provider,
       'po-patientEmail':'',worker:c.worker
     }));
-    const existingIds = new Set((window._cachedPreopRecords||[]).map(r=>r['po-caseId']));
+    const existingIds = new Set(preopSnap.map(r=>r['po-caseId']));
     window._cachedPreopRecords = [
-      ...(window._cachedPreopRecords||[]),
+      ...preopSnap,
       ...caseRecs.filter(c=>!existingIds.has(c['po-caseId']))
     ];
-  } catch(e) { console.warn('Calendar: could not merge cases', e); }
+  } catch(e) { console.warn('Calendar merge error:', e); window._cachedPreopRecords = window._cachedPreopRecords||[]; }
 
   const months = ['January','February','March','April','May','June','July',
     'August','September','October','November','December'];
@@ -1929,20 +1919,7 @@ window.showTab = function(tab) {
   if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); }
   if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
   if(tab==='calendar') {
-    const calFn = window.buildCalendar || window.renderCalendar;
-    if(calFn) {
-      calFn();
-    } else {
-      // Try again after short delay in case module hasn't loaded yet
-      setTimeout(() => {
-        const fn = window.buildCalendar || window.renderCalendar;
-        if(fn) fn();
-        else {
-          const g = document.getElementById('cal-grid');
-          if(g) g.innerHTML = '<div style="padding:20px;color:red;">Calendar failed to load. Please refresh.</div>';
-        }
-      }, 1000);
-    }
+    setTimeout(buildCalendar, 50);
   }
   if(tab==='mid-case') renderMidCase();
   if(tab==='caselog') renderCaseLog();
