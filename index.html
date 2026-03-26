@@ -1762,7 +1762,7 @@ window.clearCase=function(){
     const el = document.getElementById(id);
     if(el) el.textContent = '—';
   });
-  clearProviderSig();
+  window._editingPreopId = null;
   window._activeDraftId = null;
   const picker = document.getElementById('draftCasePicker');
   if(picker) picker.value = '';
@@ -2425,28 +2425,33 @@ window.deletePreopRecord = async function(id) {
 };
 
 window.editPreopRecord = async function(id) {
-  // Load the record into the pre-op form and navigate there
   try {
     const snap = await getDoc(doc(db,'atlas','preop'));
     const records = snap.exists() ? (snap.data().records || []) : [];
     const record = records.find(r => r.id === id);
     if(!record) { alert('Record not found.'); return; }
 
-    // Clear the form first
+    // Navigate to pre-op tab FIRST so DOM elements exist
+    showTab('preop');
+
+    // Small delay to ensure tab is visible and DOM is ready
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Clear the form
     clearPreop();
 
-    // Fill text fields
-    const textFields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-driverName','po-driverRel',
-      'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
-      'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
-    textFields.forEach(fid => {
-      const el = document.getElementById(fid);
-      if(el && record[fid] !== undefined) el.value = record[fid] || '';
-    });
+    // Store editing ID immediately after clear (clearPreop resets it)
+    window._editingPreopId = id;
 
-    // Fill checkboxes
-    document.querySelectorAll('#tab-preop input[type="checkbox"]').forEach(el => {
-      if(record[el.id] !== undefined) el.checked = !!record[el.id];
+    // Fill ALL saved fields
+    Object.keys(record).forEach(fid => {
+      const el = document.getElementById(fid);
+      if(!el) return;
+      if(el.type === 'checkbox') {
+        el.checked = !!record[fid];
+      } else if(el.type !== 'radio') {
+        el.value = record[fid] || '';
+      }
     });
 
     // Fill radio (mallampati)
@@ -2455,42 +2460,66 @@ window.editPreopRecord = async function(id) {
       if(radio) radio.checked = true;
     }
 
+    // Restore BMI displays
+    if(record['po-height-cm-val']) {
+      const cmEl = document.getElementById('po-height-cm');
+      if(cmEl) cmEl.textContent = record['po-height-cm-val'] + ' cm';
+    }
+    if(record['po-weight-kg-val']) {
+      const kgEl = document.getElementById('po-weight-kg');
+      if(kgEl) kgEl.textContent = record['po-weight-kg-val'] + ' kg';
+    }
+    if(record['po-bmi-val']) {
+      const bmiEl = document.getElementById('po-bmi');
+      if(bmiEl) bmiEl.textContent = record['po-bmi-val'];
+    }
+
     // Restore OTHER rows visibility
-    const otherPrefixes = ['po-pupil','po-cv','po-ekg','po-pulm','po-gastro','po-renal','po-neuro','po-meta','po-teeth','po-other'];
-    otherPrefixes.forEach(p => {
+    ['po-pupil','po-cv','po-ekg','po-pulm','po-gastro','po-renal','po-neuro','po-meta','po-teeth','po-other'].forEach(p => {
       const cb = document.getElementById(p+'-other-cb');
       const row = document.getElementById(p+'-other-row');
       if(cb && row) row.style.display = cb.checked ? 'block' : 'none';
     });
+
+    // Check EKG conditions
+    checkEKGConditions();
+
     // Update case ID display
     updatePreopCaseIdDisplay();
 
-    // Store the ID so savePreop knows to update instead of create new
-    window._editingPreopId = id;
+    // Remove any existing edit banner
+    const existing = document.getElementById('preop-edit-banner');
+    if(existing) existing.remove();
 
-    // Navigate to pre-op tab
-    showTab('preop');
-
-    // Show a banner indicating edit mode
-    const banner = document.getElementById('ekg-alert-banner');
+    // Show edit banner — insert at top of pre-op tab
     const editBanner = document.createElement('div');
     editBanner.id = 'preop-edit-banner';
     editBanner.style.cssText = 'background:var(--info-light);border:1px solid #b8cfe8;border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;';
     editBanner.innerHTML = `
-      <span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing existing record: ${record['po-caseId']||'No Case ID'}</span>
+      <span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing: ${record['po-caseId']||'No Case ID'}</span>
       <button onclick="cancelEditPreop()" class="btn btn-ghost btn-sm" style="font-size:11px;">Cancel Edit</button>`;
-    if(banner && banner.parentNode) {
-      // Insert before ekg banner
-      banner.parentNode.insertBefore(editBanner, banner);
+
+    // Find a reliable anchor in the pre-op tab
+    const preopTab = document.getElementById('tab-preop');
+    const actionBar = preopTab ? preopTab.querySelector('.action-bar') : null;
+    if(actionBar) {
+      actionBar.insertAdjacentElement('afterend', editBanner);
+    } else if(preopTab) {
+      preopTab.insertBefore(editBanner, preopTab.firstChild);
     }
-  } catch(e) { alert('Error loading record.'); console.error(e); }
+
+  } catch(e) {
+    alert('Error loading record: ' + e.message);
+    console.error(e);
+  }
 };
 
 window.cancelEditPreop = function() {
-  window._editingPreopId = null;
   const banner = document.getElementById('preop-edit-banner');
   if(banner) banner.remove();
   clearPreop();
+  // clearPreop may reset _editingPreopId — ensure it's null
+  window._editingPreopId = null;
 };
 
 
