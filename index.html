@@ -4134,7 +4134,7 @@ async function renderMidCase() {
   const draftIds = new Set(drafts.map(d => d.caseId));
 
   // Combine: show all pre-ops, with draft status if applicable
-  const allPreops = preopRecords.sort((a,b) => (b['po-surgeryDate']||'').localeCompare(a['po-surgeryDate']||''));
+  const allPreops = preopRecords.sort((a,b) => (a['po-surgeryDate']||'').localeCompare(b['po-surgeryDate']||''));
 
   if(!allPreops.length && !drafts.length) {
     el.innerHTML = '<div class="empty-state">No mid-case records yet. Save a Pre-Op to get started.</div>';
@@ -4156,7 +4156,7 @@ async function renderMidCase() {
     const pulmFlags = ['asthma','copd','uri','cpap','sleep-apnea','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '));
     const allFlags = [...cvFlags, ...pulmFlags];
 
-    return `<div class="case-item" style="${hasDraft?'border-left:3px solid var(--warn);':'border-left:3px solid var(--accent);'}">
+    return `<div class="case-item" style="border-left:3px solid var(--info);">
       <div class="case-item-header" onclick="toggleMidCase('${r.id}')">
         <div>
           <div class="case-name" style="display:flex;align-items:center;gap:8px;">
@@ -4194,14 +4194,7 @@ async function renderMidCase() {
           <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Surgery Date</strong><div>${r['po-surgeryDate']||'—'}</div></div>
           <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Call Date/Time</strong><div>${r['po-callDateTime']||'—'}</div></div>
           <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Mallampati</strong><div style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace;">${r['mallampati']||'—'}</div></div>
-          ${r['po-patientEmail']?`
-            <div style="grid-column:1/-1;">
-              <strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Invoice Email</strong>
-              <div style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap;">
-                <div style="font-family:'DM Mono',monospace;font-size:12px;">${r['po-patientEmail']}</div>
-                <span style="font-size:12px;font-family:'DM Mono',monospace;">${r['po-patientEmail']}</span>
-              </div>
-            </div>`:''}
+          
           ${r['po-allergies']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--warn);">⚠ Allergies</strong><div style="color:var(--warn);">${r['po-allergies']}</div></div>`:''}
           ${r['po-medications']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Medications</strong><div>${r['po-medications']}</div></div>`:''}
           ${r['po-comments']?`<div style="grid-column:1/-1;"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Comments</strong><div style="font-style:italic;">${r['po-comments']}</div></div>`:''}
