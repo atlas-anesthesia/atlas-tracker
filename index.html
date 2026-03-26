@@ -4139,7 +4139,7 @@ async function renderMidCase() {
             <span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
             ${hasDraft
               ? '<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">DRAFT</span>'
-              : '<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">PRE-OP SAVED</span>'
+              : '<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">DRAFT</span>'
             }
           </div>
           <div class="case-date">
@@ -4157,7 +4157,7 @@ async function renderMidCase() {
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           ${hasDraft && draft
             ? `<button onclick="event.stopPropagation();resumeCase('${draft.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Finalize Case →</button>`
-            : `<button onclick="event.stopPropagation();startCaseFromPreop('${r.id}')" class="btn btn-success btn-sm" style="font-size:11px;">+ Start Case</button>`
+            : `<button onclick="event.stopPropagation();startCaseFromPreop('${r.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Finalize Case →</button>`
           }
           <button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit Pre-Op</button>
           <button onclick="event.stopPropagation();deleteMidCase('preop','${r.id}','${caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">🗑 Delete</button>
