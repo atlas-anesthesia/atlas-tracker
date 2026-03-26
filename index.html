@@ -1979,6 +1979,7 @@ function renderHistory() {
             ? `<button onclick="event.stopPropagation();resumeCase('${c.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Resume Case →</button>`
             : `<button onclick="event.stopPropagation();editFinalizedCase('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit</button>`
           }
+          <button onclick="event.stopPropagation();deleteFinalizedCase('${c.id}','${(c.procedure||c.caseId||'this case').replace(/'/g,\'\')}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">🗑 Delete</button>
         </div>
       </div>
       <div class="case-items-list" id="detail_${c.id}">
@@ -2057,6 +2058,36 @@ window.cancelEditCase = function() {
   const saveBtn = document.querySelector('#tab-new-case .btn-success');
   if(saveBtn) saveBtn.textContent = '✓ Finalize Case & Update Inventory';
   clearCase();
+};
+
+window.deleteFinalizedCase = async function(id, label) {
+  const confirmed = confirm(
+    `Are you sure you want to delete "${label}"?\n\nThis will permanently remove the case from Case History, Overview, and all Reports.\n\nThis cannot be undone.`
+  );
+  if(!confirmed) return;
+
+  try {
+    cases = cases.filter(c => c.id !== id);
+    setSyncing(true);
+    await saveCases();
+    setSyncing(false);
+
+    // Re-render everything that shows cases
+    renderHistory();
+    renderReports();
+    renderCaseLog();
+    renderMidCase();
+    if(document.getElementById('tab-calendar')?.classList.contains('active')) {
+      window._cachedPreopRecords = null;
+      renderCalendar();
+    }
+
+    alert('✓ Case deleted.');
+  } catch(e) {
+    setSyncing(false);
+    alert('Error deleting case: ' + e.message);
+    console.error(e);
+  }
 };
 
 window.toggleCase=function(id){document.getElementById('detail_'+id).classList.toggle('open');};
