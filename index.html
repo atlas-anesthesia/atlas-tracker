@@ -380,6 +380,7 @@
     <div class="section" id="tab-inventory">
       <div class="action-bar">
         <h2>Inventory</h2>
+        <button class="btn btn-ghost btn-sm" onclick="syncPricesFromTemplate()" style="font-size:12px;color:var(--info);border-color:var(--info);">↻ Sync Prices & Stock</button>
         <div style="display:flex;gap:10px;align-items:center;">
           <input type="text" id="invSearch" placeholder="Search items..." style="width:200px;" oninput="renderInventory()">
           <button class="btn btn-primary btn-sm" onclick="toggleAddForm()">+ Add New Item</button>
@@ -1454,40 +1455,10 @@ async function initData() {
     if(snap.exists()) {
       items = snap.data().items || [];
     } else {
-      // First time — seed with defaults
-      items = ITEM_TEMPLATE.map(t=>({...t, stockDev:DEFAULT_STOCK[t.id]||0, stockJosh:DEFAULT_STOCK[t.id]||0}));
-      setDoc(doc(db,'atlas','inventory'),{items});
+      // First time — seed with template
+      items = ITEM_TEMPLATE.map(t => ({...t}));
+      setDoc(doc(db,'atlas','inventory'), {items});
     }
-    // Sync prices and Josh stock from latest template
-    let inventoryUpdated = false;
-    ITEM_TEMPLATE.forEach(template => {
-      const existing = items.find(i => i.id === template.id);
-      if(existing) {
-        // Update price if changed
-        if(existing.costPerUnit !== template.costPerUnit) {
-          if(!existing.priceHistory) existing.priceHistory = [];
-          existing.priceHistory.unshift({
-            date: new Date().toISOString().split('T')[0],
-            oldCost: existing.costPerUnit,
-            newCost: template.costPerUnit,
-            changedBy: 'system-sync'
-          });
-          existing.costPerUnit = template.costPerUnit;
-          inventoryUpdated = true;
-        }
-        // Update Josh stock if it's 0 and template has stock
-        if(existing.joshStock === 0 && template.joshStock > 0) {
-          existing.joshStock = template.joshStock;
-          inventoryUpdated = true;
-        }
-      } else {
-        // Add new item from template
-        items.push({...template});
-        inventoryUpdated = true;
-      }
-    });
-    if(inventoryUpdated) await saveInventory();
-
     linkCSInvIds();
     refreshItemSelect();
     renderInventory();
@@ -5174,6 +5145,66 @@ async function renderReviewTomorrow() {
     }).join('');
   } catch(e) { console.error(e); }
 }
+
+// ── SYNC PRICES FROM TEMPLATE ──
+window.syncPricesFromTemplate = async function() {
+  const confirmed = confirm(
+    'This will update ALL unit prices and add any missing items from the master template.\n\n' +
+    'Josh stock will be updated for items that currently have 0 stock.\n\n' +
+    'Existing stock levels for items already in inventory will NOT be changed.\n\n' +
+    'Continue?'
+  );
+  if(!confirmed) return;
+
+  let priceUpdates = 0;
+  let newItems = 0;
+  let stockUpdates = 0;
+
+  ITEM_TEMPLATE.forEach(template => {
+    const existing = items.find(i => i.id === template.id);
+    if(existing) {
+      // Update price
+      if(existing.costPerUnit !== template.costPerUnit) {
+        if(!existing.priceHistory) existing.priceHistory = [];
+        existing.priceHistory.unshift({
+          date: new Date().toISOString().split('T')[0],
+          oldCost: existing.costPerUnit,
+          newCost: template.costPerUnit,
+          changedBy: 'template-sync'
+        });
+        existing.costPerUnit = template.costPerUnit;
+        priceUpdates++;
+      }
+      // Update Josh stock only if currently 0 and template has stock
+      if((existing.joshStock === 0 || existing.joshStock === undefined) && template.joshStock > 0) {
+        existing.joshStock = template.joshStock;
+        stockUpdates++;
+      }
+    } else {
+      // New item — add with full template data
+      items.push({...template});
+      newItems++;
+    }
+  });
+
+  try {
+    setSyncing(true);
+    await saveInventory();
+    setSyncing(false);
+    renderInventory();
+    refreshItemSelect();
+    alert(
+      `✓ Sync complete!\n\n` +
+      `• ${priceUpdates} price${priceUpdates !== 1 ? 's' : ''} updated\n` +
+      `• ${stockUpdates} Josh stock count${stockUpdates !== 1 ? 's' : ''} updated\n` +
+      `• ${newItems} new item${newItems !== 1 ? 's' : ''} added`
+    );
+  } catch(e) {
+    setSyncing(false);
+    alert('Error saving: ' + e.message);
+    console.error(e);
+  }
+};
 
 // ── REPORTS DROPDOWN ──
 window.toggleReportsDropdown = function() {
