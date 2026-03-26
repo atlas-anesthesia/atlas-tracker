@@ -327,6 +327,17 @@
           <div id="liveSummary"><div class="empty-state">Add supplies below to see cost summary</div></div>
         </div>
       </div>
+      <!-- PRE-OP SUMMARY (auto-populated) -->
+      <div id="finalize-preop-summary" style="display:none;margin-bottom:18px;">
+        <div class="card" style="border-left:3px solid var(--info);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div class="card-title" style="margin-bottom:0;color:var(--info);">Pre-Op Summary</div>
+            <button onclick="document.getElementById('finalize-preop-summary').style.display='none'" class="btn btn-ghost btn-sm" style="font-size:11px;">Hide</button>
+          </div>
+          <div id="finalize-preop-content"></div>
+        </div>
+      </div>
+
       <!-- CONTROLLED SUBSTANCES SECTION -->
       <div class="card" style="margin-bottom:18px;border-left:3px solid var(--warn);">
         <div class="card-title" style="color:var(--warn);">Controlled Substances</div>
@@ -1781,6 +1792,8 @@ window.saveCase = async function() {
 window.clearCase=function(){
   caseItems=[];
   ['caseId','procedure','provider','caseNotes','caseComments'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const preopSummary = document.getElementById('finalize-preop-summary');
+  if(preopSummary) preopSummary.style.display = 'none';
   document.getElementById('caseDate').value=new Date().toISOString().split('T')[0];
   // Clear BMI displays
   ['po-height-cm','po-weight-kg','po-bmi'].forEach(id => {
@@ -2164,26 +2177,57 @@ window.loadDraftFromPicker = function() {
 };
 
 // ── RESUME DRAFT CASE ──
-window.resumeCase = function(caseId) {
-  const c = cases.find(x => x.id === caseId);
+window.resumeCase = function(draftId) {
+  const c = cases.find(x => x.id === draftId);
   if(!c) return;
-  // Pre-fill new case form with draft data
-  document.getElementById('caseId').value = c.caseId || '';
-  document.getElementById('procedure').value = c.procedure || '';
-  document.getElementById('provider').value = c.provider || '';
-  document.getElementById('caseDate').value = c.date || new Date().toISOString().split('T')[0];
-  document.getElementById('caseNotes').value = c.notes || '';
+
+  // Clear first
+  clearCase();
+
+  // Pre-fill all fields
+  const el = id => document.getElementById(id);
+  if(el('caseId')) el('caseId').value = c.caseId || '';
+  if(el('procedure')) el('procedure').value = c.procedure || '';
+  if(el('provider')) el('provider').value = c.provider || '';
+  if(el('caseDate')) el('caseDate').value = c.date || new Date().toISOString().split('T')[0];
+  if(el('caseNotes')) el('caseNotes').value = c.notes || '';
+  if(el('caseComments')) el('caseComments').value = c.caseComments || '';
+
   // Set worker to match the draft
   setWorker(c.worker || currentWorker);
-  // Pre-load any already saved items
-  caseItems = (c.items || []).map(i => ({
-    id: i.id, generic: i.generic, name: i.name, cost: i.cost, qty: i.qty,
-    stock: (items.find(x=>x.id===i.id) ? getStock(items.find(x=>x.id===i.id), c.worker) : 0)
-  }));
-  // Store draft ID — only remove when fully saved
-  window._activeDraftId = caseId;
+
+  // Pre-load saved items
+  caseItems = (c.items || []).map(i => {
+    const invItem = items.find(x => x.id === i.id);
+    return {
+      id: i.id,
+      generic: i.generic || i.name || 'Unknown',
+      name: i.name || i.generic || 'Unknown',
+      cost: parseFloat(i.cost) || 0,
+      qty: parseFloat(i.qty) || 1,
+      stock: invItem ? getStock(invItem, c.worker) : parseFloat(i.qty) || 1
+    };
+  });
+
+  // Store draft ID
+  window._activeDraftId = draftId;
+
   renderCaseSupplies();
   refreshItemSelect();
+
+  // Load pre-op summary if available
+  const linkedPreop = (window._cachedPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
+  if(linkedPreop) {
+    populateFinalizeFromPreop(linkedPreop);
+  } else {
+    // Try loading from Firebase
+    getDoc(doc(db,'atlas','preop')).then(snap => {
+      const records = snap.exists() ? (snap.data().records||[]) : [];
+      const preop = records.find(r => r['po-caseId'] === c.caseId);
+      if(preop) populateFinalizeFromPreop(preop);
+    }).catch(()=>{});
+  }
+
   showTab('new-case');
 };
 
@@ -4359,25 +4403,136 @@ window.checkStripeDeposit = async function(recordId) {
   }
 };
 
-window.startCaseFromPreop = function(preopId) {
-  // Same as loading a pre-op into Finalize Case but without an existing draft
-  editPreopRecord(preopId); // loads the pre-op form
-  // After loading, navigate to finalize case
-  setTimeout(() => {
-    showTab('new-case');
-    // Pre-fill from the preop data already loaded
-    const caseIdDisplay = document.getElementById('po-caseId-display');
-    const caseIdInput = document.getElementById('po-caseId');
-    const caseId = caseIdInput?.value || caseIdDisplay?.textContent || '';
-    const ncDisplay = document.getElementById('caseId-display');
-    const ncInput = document.getElementById('caseId');
-    if(ncDisplay && caseId) ncDisplay.textContent = caseId;
-    if(ncInput && caseId) ncInput.value = caseId;
-    const surgDate = document.getElementById('po-surgeryDate')?.value;
-    if(surgDate) document.getElementById('caseDate').value = surgDate;
-    const prov = document.getElementById('po-provider')?.value;
-    if(prov) document.getElementById('provider').value = prov;
-  }, 200);
+function populateFinalizeFromPreop(r) {
+  if(!r) return;
+
+  // Fill case fields
+  const el = id => document.getElementById(id);
+  if(el('caseId')) el('caseId').value = r['po-caseId'] || '';
+  if(el('provider')) el('provider').value = r['po-provider'] || '';
+  if(el('caseDate')) el('caseDate').value = r['po-surgeryDate'] || '';
+
+  // Build pre-op summary display
+  const cvFlags = ['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase());
+  const ekgFlags = ['nsr','afib','bbb','lvh','chngs'].filter(x=>r['po-ekg-'+x]).map(x=>x.toUpperCase());
+  const pulmFlags = ['asthma','copd','uri','o2','cpap','sleep-apnea','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '));
+  const metaFlags = ['iddm','niddm','thyroid','obesity','morbid-obesity'].filter(x=>r['po-meta-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '));
+  const renalFlags = ['dialysis','esrd'].filter(x=>r['po-renal-'+x]).map(x=>x.toUpperCase());
+  const neuroFlags = ['cva','seizures','nm-disease'].filter(x=>r['po-neuro-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '));
+  const ekgRequired = ['po-cv-htn','po-cv-cad','po-cv-mi','po-cv-chf','po-cv-arrythmia','po-ekg-afib',
+    'po-neuro-cva','po-meta-iddm','po-meta-niddm','po-renal-dialysis'].some(k=>r[k]);
+
+  const pill = (text, color='var(--info)') =>
+    `<span style="background:${color}22;color:${color};font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;display:inline-block;margin:2px 3px 2px 0;">${text}</span>`;
+
+  const row = (label, val, warn=false) => val ? `
+    <div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:11px;font-weight:600;color:${warn?'#b91c1c':'var(--text-faint)'};text-transform:uppercase;letter-spacing:.5px;min-width:110px;">${label}</span>
+      <span style="font-size:13px;color:${warn?'#7f1d1d':'var(--text)'};">${val}</span>
+    </div>` : '';
+
+  let html = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Surgery Date</div>
+        <div style="font-size:14px;font-weight:500;">${fmtDate(r['po-surgeryDate'])||'—'}</div>
+      </div>
+      <div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Mallampati</div>
+        <div style="font-size:20px;font-weight:500;font-family:'DM Mono',monospace;">${r['mallampati']||'—'}</div>
+      </div>
+      <div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Weight / BMI</div>
+        <div style="font-size:13px;font-weight:500;">${r['po-weight-kg-val']?r['po-weight-kg-val']+'kg':'—'}${r['po-bmi-val']?' · BMI '+r['po-bmi-val']:''}</div>
+      </div>
+      <div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Provider</div>
+        <div style="font-size:13px;font-weight:500;">${r['po-provider']||'—'}</div>
+      </div>
+    </div>`;
+
+  // Warnings first
+  if(r['po-allergies']) html += `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:8px;">
+    <span style="font-size:12px;font-weight:700;color:#b91c1c;">⚠ ALLERGIES: ${r['po-allergies']}</span></div>`;
+  if(r['po-iv-difficulty']) html += `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:8px;">
+    <span style="font-size:12px;font-weight:600;color:#856404;">⚠ Difficult IV${r['po-iv-difficulty-comment']?' — '+r['po-iv-difficulty-comment']:''}</span></div>`;
+  if(r['po-anesthesia-issues']) html += `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:8px;">
+    <span style="font-size:12px;font-weight:600;color:#856404;">⚠ Anesthesia issues${r['po-anesthesia-issues-comment']?' — '+r['po-anesthesia-issues-comment']:''}</span></div>`;
+  if(ekgRequired) html += `<div style="background:#fef3cd;border:1px solid #f59e0b;border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:8px;">
+    <span style="font-size:12px;font-weight:600;color:#92400e;">⚠ EKG / PCP Order Required</span></div>`;
+
+  // Conditions
+  html += '<div style="margin-top:8px;">';
+  if(cvFlags.length) html += `<div style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;margin-right:8px;">CV</span>${cvFlags.map(f=>pill(f,'var(--warn)')).join('')}</div>`;
+  if(ekgFlags.length) html += `<div style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;margin-right:8px;">EKG</span>${ekgFlags.map(f=>pill(f,'var(--info)')).join('')}</div>`;
+  if(pulmFlags.length) html += `<div style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;margin-right:8px;">PULM</span>${pulmFlags.map(f=>pill(f,'#0891b2')).join('')}</div>`;
+  if(metaFlags.length) html += `<div style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;margin-right:8px;">METABOLIC</span>${metaFlags.map(f=>pill(f,'#d97706')).join('')}</div>`;
+  if(renalFlags.length) html += `<div style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;margin-right:8px;">RENAL</span>${renalFlags.map(f=>pill(f,'#7c3aed')).join('')}</div>`;
+  if(neuroFlags.length) html += `<div style="margin-bottom:6px;"><span style="font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;margin-right:8px;">NEURO</span>${neuroFlags.map(f=>pill(f,'#059669')).join('')}</div>`;
+  html += '</div>';
+
+  // Key info rows
+  html += '<div style="margin-top:10px;">';
+  html += row('Medications', r['po-medications']);
+  html += row('Allergies', r['po-allergies'], true);
+  html += row('Surgical Hx', r['po-surgicalHistory']);
+  html += row('NPO Notes', r['po-comments']);
+  html += row('Call Date', fmtDate(r['po-callDateTime']?.split('T')[0]));
+  html += row('Driver', r['po-driverName'] ? r['po-driverName'] + (r['po-driverRel']?' ('+r['po-driverRel']+')':'') : null);
+  html += '</div>';
+
+  const summary = document.getElementById('finalize-preop-summary');
+  const summaryContent = document.getElementById('finalize-preop-content');
+  if(summary && summaryContent) {
+    summaryContent.innerHTML = html;
+    summary.style.display = 'block';
+  }
+
+  // Update case ID display
+  updateCaseIdDisplays();
+}
+
+window.startCaseFromPreop = async function(preopId) {
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records||[]) : [];
+    const r = records.find(x => x.id === preopId);
+    if(!r) { alert('Pre-op record not found.'); return; }
+
+    // Check if a draft already exists for this caseId
+    const existingDraft = cases.find(c => c.draft && c.caseId === r['po-caseId']);
+    if(existingDraft) {
+      // Just resume the existing draft
+      resumeCase(existingDraft.id);
+      return;
+    }
+
+    // Create a new draft case from pre-op data
+    const newDraft = {
+      id: uid(),
+      caseId: r['po-caseId'] || '',
+      procedure: '',
+      provider: r['po-provider'] || '',
+      date: r['po-surgeryDate'] || new Date().toISOString().split('T')[0],
+      notes: '',
+      caseComments: '',
+      worker: r.worker || currentWorker,
+      items: [],
+      total: 0,
+      draft: true,
+      imageData: null
+    };
+
+    cases.unshift(newDraft);
+    await saveCases();
+
+    // Now resume it so it loads into Finalize Case
+    resumeCase(newDraft.id);
+
+  } catch(e) {
+    console.error(e);
+    alert('Error loading case: ' + e.message);
+  }
 };
 
 // ── CALENDAR ──
