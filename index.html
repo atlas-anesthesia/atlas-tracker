@@ -446,7 +446,7 @@
           <label>Date of Surgery</label><input type="date" id="po-surgeryDate" oninput="updatePreopCaseIdDisplay()" onchange="updatePreopCaseIdDisplay()">
           <label>Date/Time of Call</label><input type="datetime-local" id="po-callDateTime">
           <label>Provider</label><input type="text" id="po-provider" placeholder="e.g. Dr. Smith">
-          <label>Patient Email</label>
+          <label>Invoice Email</label>
           <input type="text" id="po-patientEmail" placeholder="patient@email.com">
         </div>
 
@@ -2391,7 +2391,7 @@ async function renderPreopHistory() {
               ${r['po-allergies']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Allergies</strong><div style="font-size:13px;margin-top:3px;">${r['po-allergies']}</div></div>`:''}
               ${cvChecked?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Cardiovascular</strong><div style="font-size:13px;margin-top:3px;">${cvChecked}</div></div>`:''}
               ${pulmChecked?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Pulmonary</strong><div style="font-size:13px;margin-top:3px;">${pulmChecked}</div></div>`:''}
-              ${r['po-patientEmail']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Patient Email</strong><div style="font-size:13px;margin-top:3px;font-family:'DM Mono',monospace;">${r['po-patientEmail']}</div></div>`:''}
+              ${r['po-patientEmail']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Invoice Email</strong><div style="font-size:13px;margin-top:3px;font-family:'DM Mono',monospace;">${r['po-patientEmail']}</div></div>`:''}
               ${r['po-medications']?`<div style="margin-bottom:8px;"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint);">Medications</strong><div style="font-size:13px;margin-top:3px;">${r['po-medications']}</div></div>`:''}
             </div>
             <div>
@@ -4159,7 +4159,7 @@ async function renderMidCase() {
             ? `<button onclick="event.stopPropagation();resumeCase('${draft.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Finalize Case →</button>`
             : `<button onclick="event.stopPropagation();startCaseFromPreop('${r.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Finalize Case →</button>`
           }
-          <button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit Pre-Op</button>
+          <button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit Draft</button>
           <button onclick="event.stopPropagation();deleteMidCase('preop','${r.id}','${caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">🗑 Delete</button>
         </div>
       </div>
@@ -4170,7 +4170,7 @@ async function renderMidCase() {
           <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Mallampati</strong><div style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace;">${r['mallampati']||'—'}</div></div>
           ${r['po-patientEmail']?`
             <div style="grid-column:1/-1;">
-              <strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Patient Email</strong>
+              <strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Invoice Email</strong>
               <div style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap;">
                 <div style="font-family:'DM Mono',monospace;font-size:12px;">${r['po-patientEmail']}</div>
                 <span style="font-size:12px;font-family:'DM Mono',monospace;">${r['po-patientEmail']}</span>
