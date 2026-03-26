@@ -349,7 +349,7 @@
         <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
           <select id="addCSSelect" style="flex:1;">
             <option value="">— Select a controlled substance —</option>
-            <option value="nubain">Nubain (Nalbuphine)</option>
+            <option value="ephedrine">Ephedrine</option>
             <option value="ketamine">Ketamine</option>
             <option value="versed">Versed (Midazolam)</option>
           </select>
@@ -1055,7 +1055,7 @@
 
       <!-- Drug tabs -->
       <div class="inv-tab-bar" style="margin-bottom:20px;">
-        <button class="inv-tab active" id="cstab-nubain" onclick="setCSTab('nubain')">Nubain (Nalbuphine)</button>
+        <button class="inv-tab active" id="cstab-ephedrine" onclick="setCSTab('ephedrine')">Ephedrine</button>
         <button class="inv-tab" id="cstab-ketamine" onclick="setCSTab('ketamine')">Ketamine</button>
         <button class="inv-tab" id="cstab-versed" onclick="setCSTab('versed')">Versed (Midazolam)</button>
       </div>
@@ -1074,6 +1074,59 @@
       </div>
 
       <div id="cs-log-content"></div>
+
+      <!-- CS TRANSFER LOG -->
+      <div style="margin-top:32px;">
+        <div class="action-bar" style="margin-bottom:14px;">
+          <h2 style="font-size:15px;">Drug Transfer Log <span style="font-size:12px;font-weight:400;color:var(--text-faint);">Josh → Dev</span></h2>
+          <button class="btn btn-ghost btn-sm" onclick="showAddTransferForm()">+ Record Transfer</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">
+          Records controlled substance transfers from Josh (purchaser) to Dev for audit purposes.
+        </div>
+
+        <!-- Add Transfer Form -->
+        <div id="transfer-form" style="display:none;" class="card" style="margin-bottom:16px;">
+          <div class="card-title">Record Drug Transfer</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
+            <div>
+              <label>Date of Transfer</label>
+              <input type="date" id="tf-date">
+            </div>
+            <div>
+              <label>Drug</label>
+              <select id="tf-drug">
+                <option value="">— Select drug —</option>
+                <option value="Ephedrine">Ephedrine</option>
+                <option value="Ketamine">Ketamine</option>
+                <option value="Versed (Midazolam)">Versed (Midazolam)</option>
+                <option value="Nubain (Nalbuphine)">Nubain (Nalbuphine)</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label>Amount Transferred (mg)</label>
+              <input type="number" id="tf-amount" min="0" step="0.1" placeholder="e.g. 500">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+            <div>
+              <label>Number of Vials / Units</label>
+              <input type="number" id="tf-vials" min="1" step="1" placeholder="e.g. 2">
+            </div>
+            <div>
+              <label>Notes (optional)</label>
+              <input type="text" id="tf-notes" placeholder="e.g. For upcoming case ATL-DEV-...">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-success" onclick="saveTransfer()">✓ Record Transfer</button>
+            <button class="btn btn-ghost" onclick="hideAddTransferForm()">Cancel</button>
+          </div>
+        </div>
+
+        <div id="transfer-log-list"></div>
+      </div>
     </div>
 
     <!-- CS PROVIDER SIGNATURE MODAL -->
@@ -1602,7 +1655,7 @@ window.showTab = function(tab) {
   if(tab==='preop-history') renderPreopHistory();
   if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
   if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); }
-  if(tab==='cs-log') renderCSLog();
+  if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
   if(tab==='calendar') renderCalendar();
   if(tab==='mid-case') renderMidCase();
   if(tab==='caselog') renderCaseLog();
@@ -1669,9 +1722,9 @@ function renderCaseSupplies() {
   });
   // Add CS estimated cost to total display
   const csTotal = csEntries.reduce((sum, entry) => {
-    const costPerML = getCostPerML(entry.drug);
-    const ml = (parseFloat(entry.amountGiven)||0) + (parseFloat(entry.wastedAmt)||0);
-    return sum + costPerML * ml;
+    const cpm = getCostPerMG(entry.drug);
+    const mg = (parseFloat(entry.amountGiven)||0) + (parseFloat(entry.wastedAmt)||0);
+    return sum + cpm * mg;
   }, 0);
   const grandTotal = total + csTotal;
   document.getElementById('caseTotalDisplay').textContent='$'+grandTotal.toFixed(2);
@@ -1754,7 +1807,7 @@ window.saveCase = async function() {
     if(idx !== -1) {
       const suppliesTotal = caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
       const csTotal = csEntries.reduce((sum,entry)=>{
-        const cpm=getCostPerML(entry.drug);
+        const cpm=getCostPerMG(entry.drug);
         const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
         return sum+cpm*mg;
       },0);
@@ -1783,7 +1836,7 @@ window.saveCase = async function() {
   }
   const suppliesTotal2=caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
   const csTotal2=csEntries.reduce((sum,entry)=>{
-    const cpm=getCostPerML(entry.drug);
+    const cpm=getCostPerMG(entry.drug);
     const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
     return sum+cpm*mg;
   },0);
@@ -2926,21 +2979,26 @@ function fmtDate(dateStr) {
 }
 
 const CS_DRUGS = {
-  nubain:   { label: 'Nubain (Nalbuphine)',  invId: '70069-0671-10', keywords: ['nubain','nalbuphine'], vialML: 1 },
-  ketamine: { label: 'Ketamine',             invId: '0143-9509-10',  keywords: ['ketamine'],            vialML: 5 },
-  versed:   { label: 'Versed (Midazolam)',   invId: null,            keywords: ['versed','midazolam'],  vialML: 2 }
+  ephedrine: { label: 'Ephedrine',           invId: '70700-0249-25', keywords: ['ephedrine'],           vialML: 1,  mgPerML: 50  },
+  ketamine:  { label: 'Ketamine',            invId: '0143-9509-10',  keywords: ['ketamine'],            vialML: 5,  mgPerML: 100 },
+  versed:    { label: 'Versed (Midazolam)',  invId: null,            keywords: ['versed','midazolam'],  vialML: 2,  mgPerML: 5   }
 };
 
-// Returns cost per mL for a CS drug based on inventory unit cost and vial size
-function getCostPerML(drugKey) {
+// Returns cost per MG (not mL) for a CS drug
+function getCostPerMG(drugKey) {
   const drug = CS_DRUGS[drugKey];
   if(!drug) return 0;
+  linkCSInvIds();
   const invId = drug.invId;
   if(!invId) return 0;
   const invItem = items.find(i => i.id === invId);
-  if(!invItem || !drug.vialML) return 0;
-  return invItem.costPerUnit / drug.vialML;
+  if(!invItem || !drug.vialML || !drug.mgPerML) return 0;
+  const totalMG = drug.vialML * drug.mgPerML;
+  return invItem.costPerUnit / totalMG;
 }
+
+// Legacy alias — use getCostPerMG going forward
+function getCostPerML(drugKey) { return getCostPerMG(drugKey); }
 
 // Returns true if an inventory item is a controlled substance (should be excluded from supplies)
 function isCSItem(item) {
@@ -2968,7 +3026,7 @@ let csEntries = []; // current case CS entries being built
 let currentCSEntry = null; // entry awaiting witness sig
 let witnessDrawing = false;
 let witnessLastX = 0, witnessLastY = 0;
-let currentCSTab = 'nubain';
+let currentCSTab = 'ephedrine';
 
 window.addCSEntry = function() {
   const sel = document.getElementById('addCSSelect');
@@ -3000,13 +3058,14 @@ function renderCSEntries() {
   container.innerHTML = csEntries.map((entry, idx) => {
     const inv = CS_DRUGS[entry.drug]?.invId ? items.find(i => i.id === CS_DRUGS[entry.drug].invId) : null;
     const stock = inv ? getStock(inv, currentWorker) : '?';
-    const costPerML = getCostPerML(entry.drug);
-    const vialML = CS_DRUGS[entry.drug]?.vialML || 1;
+    const costPerMG = getCostPerMG(entry.drug);
+    const drug = CS_DRUGS[entry.drug];
+    const vialMG = drug ? (drug.vialML * (drug.mgPerML||1)) : 1;
     const vialCost = inv ? inv.costPerUnit : 0;
     const amtGiven = parseFloat(entry.amountGiven) || 0;
     const wasted = parseFloat(entry.wastedAmt) || 0;
-    const totalML = amtGiven + wasted;
-    const estimatedCost = costPerML * totalML;
+    const totalMG = amtGiven + wasted;
+    const estimatedCost = costPerMG * totalMG;
     csTotal += estimatedCost;
 
     return `
@@ -3016,7 +3075,7 @@ function renderCSEntries() {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
         <div style="font-size:14px;font-weight:500;">${CS_DRUGS[entry.drug]?.label || entry.drug}</div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:11px;color:var(--text-faint);">Stock: ${stock} vials · $${vialCost.toFixed(2)}/vial · $${costPerML.toFixed(2)}/mL</span>
+          <span style="font-size:11px;color:var(--text-faint);">Stock: ${stock} vials · $${vialCost.toFixed(2)}/vial · $${costPerMG.toFixed(4)}/mg (${drug?.mgPerML||'?'}mg/mL)</span>
           <button onclick="removeCSEntry(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:20px;line-height:1;">×</button>
         </div>
       </div>
@@ -3025,7 +3084,7 @@ function renderCSEntries() {
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
         <div>
           <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Amount Given (mg)</div>
-          <input type="number" min="0" step="0.1" value="${entry.amountGiven}" placeholder="0.0"
+          <input type="number" min="0" step="0.1" value="${entry.amountGiven}" placeholder="0"
             onchange="updateCSEntry(${idx},'amountGiven',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
         </div>
@@ -3046,8 +3105,8 @@ function renderCSEntries() {
           <div style="padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);text-align:center;">
             ${totalML > 0 && costPerML > 0
               ? `<div style="font-size:15px;font-weight:500;font-family:'DM Mono',monospace;color:var(--warn);">≈ $${estimatedCost.toFixed(2)}</div>
-                 <div style="font-size:10px;color:var(--text-faint);">${totalML.toFixed(1)} mg × $${costPerML.toFixed(2)}/mg</div>`
-              : `<div style="font-size:13px;color:var(--text-faint);">Enter mL above</div>`
+                 <div style="font-size:10px;color:var(--text-faint);">${totalMG.toFixed(1)} mg × $${costPerMG.toFixed(4)}/mg</div>`
+              : `<div style="font-size:13px;color:var(--text-faint);">Enter mg above</div>`
             }
           </div>
         </div>
@@ -3235,7 +3294,7 @@ async function saveCSEntriesWithCase(caseId, caseDate, provider) {
 // ── CS LOG TAB ──
 window.setCSTab = function(tab) {
   currentCSTab = tab;
-  ['nubain','ketamine','versed'].forEach(x => {
+  ['ephedrine','ketamine','versed'].forEach(x => {
     const btn = document.getElementById('cstab-'+x);
     if(btn) btn.classList.toggle('active', x===tab);
   });
@@ -3283,9 +3342,9 @@ async function renderCSLog() {
             <div style="font-size:12px;font-family:'DM Mono',monospace;">${fmtDate(e.date)||'—'}</div>
             <div style="font-size:12px;color:var(--text-faint);">${e.savedAt?new Date(e.savedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—'}</div>
             <div style="font-size:12px;font-weight:500;">${e.caseId||'—'}<div style="font-size:11px;color:var(--text-faint);">${e.provider||''}</div></div>
-            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.amountGiven||0} mL</div>
-            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.leftInVial||0} mL</div>
-            <div style="font-size:12px;font-family:'DM Mono',monospace;color:${e.wastedAmt>0?'var(--warn)':'var(--text-faint)'};">${e.wastedAmt||0} mL</div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.amountGiven||0} mg</div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.leftInVial||0} mg</div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;color:${e.wastedAmt>0?'var(--warn)':'var(--text-faint)'};">${e.wastedAmt||0} mg</div>
             <div style="text-align:center;">${e.newBottle?'<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 6px;border-radius:10px;">YES</span>':'—'}</div>
             <div style="font-size:11px;color:var(--text-muted);">${e.worker==='dev'?'Devarsh':'Josh'}</div>
             <div>${e.witnessSignature?`<img src="${e.witnessSignature}" style="height:30px;border:1px solid var(--border);border-radius:3px;background:#fff;" title="Witness signature">`:'<span style="font-size:11px;color:var(--warn);">No sig</span>'}</div>
@@ -3364,9 +3423,9 @@ window.downloadCSLogPDF = async function() {
     doc.text(fmtDate(e.date)||'—', cols[0], y+7);
     doc.text(e.savedAt?new Date(e.savedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—', cols[1], y+7);
     doc.text((e.caseId||'—').substring(0,20), cols[2], y+7);
-    doc.text(`${e.amountGiven||0} mL`, cols[3], y+7);
-    doc.text(`${e.leftInVial||0} mL`, cols[4], y+7);
-    if(e.wastedAmt>0) { doc.setTextColor(...warn); doc.text(`${e.wastedAmt} mL`, cols[5], y+7); doc.setTextColor(...black); }
+    doc.text(`${e.amountGiven||0} mg`, cols[3], y+7);
+    doc.text(`${e.leftInVial||0} mg`, cols[4], y+7);
+    if(e.wastedAmt>0) { doc.setTextColor(...warn); doc.text(`${e.wastedAmt} mg`, cols[5], y+7); doc.setTextColor(...black); }
     else doc.text('—', cols[5], y+7);
     doc.text(e.newBottle?'YES':'—', cols[6], y+7);
     doc.text(e.worker==='dev'?'D. Murthy':'J. Condado', cols[7], y+7);
@@ -5255,6 +5314,113 @@ window.syncPricesFromTemplate = async function() {
     console.error(e);
   }
 };
+
+// ── CS TRANSFER LOG ──
+window.showAddTransferForm = function() {
+  const form = document.getElementById('transfer-form');
+  if(form) {
+    form.style.display = 'block';
+    // Default to today
+    const dateEl = document.getElementById('tf-date');
+    if(dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
+  }
+};
+
+window.hideAddTransferForm = function() {
+  const form = document.getElementById('transfer-form');
+  if(form) form.style.display = 'none';
+  ['tf-date','tf-drug','tf-amount','tf-vials','tf-notes'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+};
+
+window.saveTransfer = async function() {
+  const date = document.getElementById('tf-date')?.value;
+  const drug = document.getElementById('tf-drug')?.value;
+  const amount = parseFloat(document.getElementById('tf-amount')?.value) || 0;
+  const vials = parseInt(document.getElementById('tf-vials')?.value) || 0;
+  const notes = document.getElementById('tf-notes')?.value?.trim() || '';
+
+  if(!date || !drug || !amount) {
+    alert('Please fill in date, drug, and amount.');
+    return;
+  }
+
+  try {
+    const snap = await getDoc(doc(db,'atlas','cstransfers'));
+    const existing = snap.exists() ? (snap.data().transfers || []) : [];
+    existing.unshift({
+      id: uid(),
+      date,
+      drug,
+      amount,
+      vials,
+      notes,
+      from: 'Josh Condado',
+      to: 'Devarsh Murthy',
+      recordedBy: currentUser?.email || 'unknown',
+      savedAt: new Date().toISOString()
+    });
+    setSyncing(true);
+    await setDoc(doc(db,'atlas','cstransfers'), { transfers: existing });
+    setSyncing(false);
+    hideAddTransferForm();
+    renderTransferLog();
+  } catch(e) {
+    alert('Error saving: ' + e.message);
+    console.error(e);
+  }
+};
+
+window.deleteTransfer = async function(id) {
+  if(!confirm('Delete this transfer record?')) return;
+  try {
+    const snap = await getDoc(doc(db,'atlas','cstransfers'));
+    const existing = snap.exists() ? (snap.data().transfers || []) : [];
+    const updated = existing.filter(t => t.id !== id);
+    setSyncing(true);
+    await setDoc(doc(db,'atlas','cstransfers'), { transfers: updated });
+    setSyncing(false);
+    renderTransferLog();
+  } catch(e) { console.error(e); }
+};
+
+async function renderTransferLog() {
+  const el = document.getElementById('transfer-log-list');
+  if(!el) return;
+  el.innerHTML = '<div style="font-size:13px;color:var(--text-faint);">Loading...</div>';
+  try {
+    const snap = await getDoc(doc(db,'atlas','cstransfers'));
+    const transfers = snap.exists() ? (snap.data().transfers || []) : [];
+    if(!transfers.length) {
+      el.innerHTML = '<div class="empty-state">No transfers recorded yet</div>';
+      return;
+    }
+
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:90px 1fr 80px 60px 1fr 80px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
+        <span>Date</span><span>Drug</span><span>Amount</span><span>Vials</span><span>Notes</span><span></span>
+      </div>
+      ${transfers.map((t,i) => `
+        <div style="display:grid;grid-template-columns:90px 1fr 80px 60px 1fr 80px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;background:${i%2===0?'transparent':'var(--surface2)'};">
+          <div style="font-size:12px;font-family:'DM Mono',monospace;">${fmtDate(t.date)}</div>
+          <div style="font-size:13px;font-weight:500;">${t.drug}</div>
+          <div style="font-size:13px;font-family:'DM Mono',monospace;">${t.amount} mg</div>
+          <div style="font-size:13px;color:var(--text-muted);">${t.vials||'—'}</div>
+          <div style="font-size:12px;color:var(--text-faint);font-style:italic;">${t.notes||'—'}<div style="font-size:10px;color:var(--text-faint);">Josh → Dev</div></div>
+          <div style="display:flex;gap:4px;">
+            <button onclick="deleteTransfer('${t.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">Delete</button>
+          </div>
+        </div>`).join('')}
+      <div style="padding-top:10px;margin-top:4px;border-top:2px solid var(--border-strong);font-size:13px;font-weight:600;color:var(--text-muted);">
+        ${transfers.length} transfer${transfers.length!==1?'s':''} recorded
+      </div>`;
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state">Error loading transfers</div>';
+    console.error(e);
+  }
+}
 
 // ── REPORTS DROPDOWN ──
 window.toggleReportsDropdown = function() {
