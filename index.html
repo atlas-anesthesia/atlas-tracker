@@ -1265,85 +1265,94 @@ let currentUser = null;
 
 // ── DEFAULT INVENTORY ──
 const ITEM_TEMPLATE = [
-  {id:'141-1719',code:'141-1719',generic:'Face Mask O2',name:"Mask O2 Elongated 7' Tube",category:'Airway Supplies',supplier:'Henry Schein',unitSize:'50/CA',costPerUnit:1.34,alert:25},
-  {id:'420-9994',code:'420-9994',generic:'Nasal Atomizer',name:'Nasal Atomization Device W/O Syringe',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=25/EA',costPerUnit:7.67,alert:20},
-  {id:'146-4280',code:'146-4280',generic:'LMA 2.5',name:'Airway LMA Unique SU Size 2.5',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:7.69,alert:3},
-  {id:'136-3903',code:'136-3903',generic:'ETT 4.0',name:'Airway Silicone w/Cuff Pilot Size 4',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:7.69,alert:3},
-  {id:'136-3901',code:'136-3901',generic:'ETT 5.0',name:'Airway Silicone w/Cuff Pilot Size 5',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:7.69,alert:3},
-  {id:'139-3110',code:'139-3110',generic:'LMA 3',name:'Airway LMA Unique w/Cuff Sze 3 Mask',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:7.69,alert:3},
-  {id:'113-5785',code:'113-5785',generic:'Nasal ETT 4.0',name:'AGT Nasal Tube Cuffed ET 4.0',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
-  {id:'113-2941',code:'113-2941',generic:'Nasal ETT 4.5',name:"Cannula Nasal Cuff w/Tube 4.5'",category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
-  {id:'743-0717',code:'743-0717',generic:'Nasal ETT 5.0',name:'Tube Endotrach Preformed 5.0MM',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
-  {id:'146-9367',code:'146-9367',generic:'Nasal ETT 5.5',name:'Endotracheal Tube Preformed 5.5mm',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:5.98,alert:3},
-  {id:'491-8760',code:'491-8760',generic:'Nasal ETT 6.0',name:'Tube Endotrach 6.0mm Agt Nasal',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:0,alert:3},
-  {id:'147-3037',code:'147-3037',generic:'Nasal ETT 6.5',name:'Pref AGT Endotrach Tubes 6.5mm',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:5.98,alert:3},
-  {id:'123-5611',code:'123-5611',generic:'Nasal ETT 7.0',name:'Tube Endo Trach Nasal Cuffed 7mm',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
-  {id:'743-3905',code:'743-3905',generic:'Nasal ETT 7.5',name:'Tube Endotrach Preformed 7.5MM',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'10/BX',costPerUnit:5.98,alert:3},
-  {id:'700-1576',code:'700-1576',generic:'NPA 28',name:'Robertazzi Naso Airway 28/FR',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:3.67,alert:10},
-  {id:'700-1577',code:'700-1577',generic:'NPA 30',name:'Robertazzi Naso Airway 30/FR',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:3.67,alert:10},
-  {id:'700-1579',code:'700-1579',generic:'NPA 34',name:'Robertazzi Naso Airway 34/FR',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'CS=10/EA',costPerUnit:3.67,alert:3},
-  {id:'627-0136',code:'627-0136',generic:'Anesthesia Mask Sz 5',name:'Mask Anesthesia Prem Cushion Sz 5',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'20/CA',costPerUnit:0.28,alert:5},
-  {id:'627-0140',code:'627-0140',generic:'Anesthesia Mask Sz 4',name:'Mask Anesthesia Prem Cushion Sz 4',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'20/CA',costPerUnit:0.28,alert:5},
-  {id:'627-0141',code:'627-0141',generic:'Anesthesia Mask Sz 3',name:'Mask Anesthesia Prem Cushion Sz 3',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'20/CA',costPerUnit:0.28,alert:5},
-  {id:'122-8718',code:'122-8718',generic:'Jackson Rees Circuit',name:'Circuit Anesthesia JacksonRees',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'20/CA',costPerUnit:12.60,alert:5},
-  {id:'145-7149',code:'145-7149',generic:'Nasal Cannula CO2',name:"Cannula CO2 Sampling Female 7' Adult",category:'Airway Supplies',supplier:'Henry Schein',unitSize:'25/CA',costPerUnit:3.93,alert:10},
-  {id:'149-6489',code:'149-6489',generic:'Magills Forceps',name:'Magill Catheter Forceps 8"',category:'Airway Supplies',supplier:'Henry Schein',unitSize:'50/BX',costPerUnit:10.66,alert:5},
-  {id:'987-0285',code:'987-0285',generic:'20G IV Catheter',name:'Insyte Autoguard BC PNK 20Gx1.16',category:'IV Supplies',supplier:'Henry Schein',unitSize:'50/BX',costPerUnit:2.31,alert:10},
-  {id:'987-0284',code:'987-0284',generic:'22G IV Catheter',name:'Insyte Autoguard BC BL 22Gx1',category:'IV Supplies',supplier:'Henry Schein',unitSize:'50/BX',costPerUnit:2.31,alert:10},
-  {id:'118-7249',code:'118-7249',generic:'KY Jelly',name:'Lubricating Jelly Fliptop 2oz/Sterile',category:'IV Supplies',supplier:'Henry Schein',unitSize:'12/BX',costPerUnit:1.55,alert:4},
-  {id:'777-9152',code:'777-9152',generic:'Tegaderm',name:'Tegaderm Transparent Dressing 2.4x2.8',category:'IV Supplies',supplier:'Henry Schein',unitSize:'100/BX',costPerUnit:0.26,alert:20},
-  {id:'777-7305',code:'777-7305',generic:'Eye Tape',name:'Tape Transpore Plast Transprnt 1"x10yd',category:'IV Supplies',supplier:'Henry Schein',unitSize:'12/BX',costPerUnit:0.82,alert:6},
-  {id:'112-7097',code:'112-7097',generic:'Blunt Needle 18G',name:'Needle Blunt Fill 18Gx1.5',category:'IV Supplies',supplier:'Henry Schein',unitSize:'100/BX',costPerUnit:0.13,alert:40},
-  {id:'148-6288',code:'148-6288',generic:'TB Syringe 1cc',name:'Syringe Hypodermic TB LuerLock 1cc',category:'IV Supplies',supplier:'Henry Schein',unitSize:'100/BX',costPerUnit:0,alert:20},
-  {id:'987-0248',code:'987-0248',generic:'3cc Syringe',name:'Luer-Lok Syringe Only 3cc',category:'IV Supplies',supplier:'Henry Schein',unitSize:'200/BX',costPerUnit:0.11,alert:50},
-  {id:'127-8254',code:'127-8254',generic:'10cc Syringe',name:'Syringe 10cc LL w/o Needle',category:'IV Supplies',supplier:'Henry Schein',unitSize:'200/BX',costPerUnit:0.17,alert:50},
-  {id:'987-3800',code:'987-3800',generic:'50cc Syringe',name:'Syringe w/o Needle LL 50ml',category:'IV Supplies',supplier:'Henry Schein',unitSize:'40/BX',costPerUnit:0.79,alert:30},
-  {id:'570-3406',code:'570-3406',generic:'IV Start Kit',name:'IV Start Kit w/ Chloraprep',category:'IV Supplies',supplier:'Henry Schein',unitSize:'CS=50/EA',costPerUnit:1.56,alert:20},
-  {id:'114-0817',code:'114-0817',generic:'Propofol Tubing',name:'Anesthesia Ext Tube 72"',category:'IV Supplies',supplier:'Henry Schein',unitSize:'60/CA',costPerUnit:3.68,alert:20},
-  {id:'681-3457',code:'681-3457',generic:'ETT Tape',name:'Tape Waterproof Adhesv .5x2.5yd',category:'IV Supplies',supplier:'Henry Schein',unitSize:'36/BX',costPerUnit:0.35,alert:8},
-  {id:'570-0887',code:'570-0887',generic:'IVF Tubing',name:'IV Admin Set 15 DRP 2 Port 105"',category:'IV Supplies',supplier:'Henry Schein',unitSize:'CS=50/EA',costPerUnit:2.95,alert:20},
-  {id:'777-9475',code:'777-9475',generic:'EKG Electrodes',name:'Red Dot Electrode Adult 4x3-1/2cm Foam',category:'Monitoring',supplier:'Henry Schein',unitSize:'50/BG',costPerUnit:0.23,alert:50},
-  {id:'106-1241',code:'106-1241',generic:'SCD Sleeve Medium',name:'SCD Express Sleeve Knee Medium',category:'Surgical Supplies',supplier:'Henry Schein',unitSize:'5PR/CA',costPerUnit:56.44,alert:2},
-  {id:'113-9573',code:'113-9573',generic:'SCD Sleeve Large',name:'SCD Express Sleeve Knee Pair Large',category:'Surgical Supplies',supplier:'Henry Schein',unitSize:'5PR/CA',costPerUnit:70.40,alert:2},
-  {id:'570-3485',code:'570-3485',generic:'Gloves N300 Large',name:'N300 Nitrile Exam Gloves Large Black 300ct',category:'Other',supplier:'Henry Schein',unitSize:'300/BX',costPerUnit:0.04,alert:100},
-  {id:'570-3490',code:'570-3490',generic:'Gloves N200 Large',name:'N200 Nitrile Exam Gloves Large Black 200ct',category:'Other',supplier:'Henry Schein',unitSize:'200/BX',costPerUnit:0.06,alert:100},
-  {id:'00904-6720-59',code:'00904-6720-59',generic:'Tylenol',name:'Acetaminophen 500mg Caplets',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'100 caplets',costPerUnit:0.04,alert:20},
-  {id:'00093-3174-31',code:'00093-3174-31',generic:'Albuterol Inhaler',name:'Albuterol HFA Inhaler (Proair) 200 dose',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1 inhaler',costPerUnit:16.00,alert:2},
-  {id:'00143-9875-25',code:'00143-9875-25',generic:'Amiodarone',name:'Amiodarone 150mg/3mL vials',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'3mLx25 vials',costPerUnit:1.32,alert:5},
-  {id:'00904-6794-89',code:'00904-6794-89',generic:'Aspirin 81mg',name:'Aspirin 81mg chewable',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'90 tablets',costPerUnit:0.03,alert:20},
-  {id:'64253-0400-91',code:'64253-0400-91',generic:'Atropine',name:'Atropine 1mg/10mL syringes',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx10 syringes',costPerUnit:11.20,alert:3},
-  {id:'00641-6145-25',code:'00641-6145-25',generic:'Decadron (Dexamethasone)',name:'Dexamethasone 4mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:0.96,alert:10},
-  {id:'71288-0505-03',code:'71288-0505-03',generic:'Precedex (Dexmedetomidine)',name:'Dexmedetomidine 200mcg/2mL vials',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'2mLx25 vials',costPerUnit:2.84,alert:5},
-  {id:'76329-3302-01',code:'76329-3302-01',generic:'D50',name:'Dextrose 50% 50mL Syringe',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'50mLx10 syringes',costPerUnit:20.90,alert:3},
-  {id:'25021-0319-10',code:'25021-0319-10',generic:'Cardizem (Diltiazem)',name:'Diltiazem 50mg/10mL',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx10 vials',costPerUnit:6.20,alert:3},
-  {id:'72485-0101-25',code:'72485-0101-25',generic:'Benadryl (Diphenhydramine)',name:'Diphenhydramine 50mg/mL',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:1.08,alert:5},
-  {id:'70700-0249-25',code:'70700-0249-25',generic:'Ephedrine',name:'Ephedrine 50mg/mL Vial',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:4.40,alert:5},
-  {id:'76329-3318-01',code:'76329-3318-01',generic:'Epinephrine',name:'Epinephrine 0.1mg/mL Syringe',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'10mLx10 syringes',costPerUnit:14.00,alert:3},
-  {id:'55150-0194-10',code:'55150-0194-10',generic:'Esmolol',name:'Esmolol 10mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx25 vials',costPerUnit:2.24,alert:5},
-  {id:'70860-0751-02',code:'70860-0751-02',generic:'Pepcid (Famotidine)',name:'Famotidine 20mg/2mL SDV',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'2mLx25 vials',costPerUnit:0.84,alert:5},
-  {id:'71288-0203-05',code:'71288-0203-05',generic:'Lasix (Furosemide)',name:'Furosemide 40mg/4mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'4mLx25 vials',costPerUnit:0.72,alert:5},
-  {id:'66794-0204-42',code:'66794-0204-42',generic:'Robinul (Glycopyrrolate)',name:'Glycopyrrolate 1mg/5mL Vial',category:'Reversal Agents',supplier:'Smith Pharmacy',unitSize:'5mLx25 vials',costPerUnit:2.12,alert:10},
-  {id:'00641-6231-25',code:'00641-6231-25',generic:'Hydralazine',name:'Hydralazine 20mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:3.20,alert:5},
-  {id:'76204-0600-30',code:'76204-0600-30',generic:'DuoNeb (Ipratropium/Albuterol)',name:'Ipratropium 0.5mg-Albuterol 3mg/mL Nebulizer',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'3mLx30 vials',costPerUnit:0.30,alert:5},
-  {id:'72266-0118-25',code:'72266-0118-25',generic:'Toradol (Ketorolac)',name:'Ketorolac 30mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:0.76,alert:10},
-  {id:'0143-9509-10',code:'0143-9509-10',generic:'Ketamine',name:'Ketamine HCI Injection 500mg/5mL',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'5mL vial',costPerUnit:14.67,alert:2},
-  {id:'36000-0322-02',code:'36000-0322-02',generic:'Labetalol',name:'Labetalol 100mg/20mL MDV',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'20mL vial',costPerUnit:4.00,alert:3},
-  {id:'00264-7750-00',code:'00264-7750-00',generic:'Lactated Ringers',name:'Lactated Ringers 1L Bag',category:'Fluids',supplier:'Smith Pharmacy',unitSize:'1Lx12 bags',costPerUnit:3.42,alert:8},
-  {id:'00143-9595-25',code:'00143-9595-25',generic:'Lidocaine 1%',name:'Lidocaine 1% SDV preservative-free',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'5mLx25 vials',costPerUnit:1.76,alert:10},
-  {id:'00009-3073-01',code:'00009-3073-01',generic:'Solumedrol (Methylprednisolone)',name:'Methylprednisolone 40mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mL vial',costPerUnit:9.00,alert:2},
-  {id:'23155-0240-41',code:'23155-0240-41',generic:'Reglan (Metoclopramide)',name:'Metoclopramide 10mg/2mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'2mLx25 vials',costPerUnit:1.40,alert:5},
-  {id:'36000-0033-10',code:'36000-0033-10',generic:'Metoprolol',name:'Metoprolol 5mg/5mL SDV',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'5mLx10 vials',costPerUnit:0.90,alert:3},
-  {id:'70069-0671-10',code:'70069-0671-10',generic:'Nubain (Nalbuphine)',name:'Nalbuphine 10mg/mL ampule',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx10 ampules',costPerUnit:6.90,alert:5},
-  {id:'23155-0518-41',code:'23155-0518-41',generic:'Neostigmine',name:'Neostigmine 10mg/10mL MDV',category:'Reversal Agents',supplier:'Smith Pharmacy',unitSize:'10mLx10 vials',costPerUnit:3.70,alert:3},
-  {id:'69339-0174-41',code:'69339-0174-41',generic:'NitroTabs (Nitroglycerin)',name:'Nitroglycerin 0.4mg SL tabs',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'25ct bottle',costPerUnit:10.00,alert:5},
-  {id:'60505-6130-05',code:'60505-6130-05',generic:'Zofran (Ondansetron)',name:'Ondansetron 4mg/2mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'2mLx25 vials',costPerUnit:0.44,alert:10},
-  {id:'00904-6761-30',code:'00904-6761-30',generic:'Afrin (Oxymetazoline)',name:'Oxymetazoline 0.5% Nasal Spray',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1 bottle 15mL',costPerUnit:3.00,alert:3},
-  {id:'70756-0621-25',code:'70756-0621-25',generic:'Neo (Phenylephrine)',name:'Phenylephrine 10mg SDV (10mg/mL)',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'1mLx25 vials',costPerUnit:1.20,alert:5},
-  {id:'23155-0345-44',code:'23155-0345-44',generic:'Propofol 20mL vials',name:'Propofol 200mg/20mL Vials (20 COUNT)',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'20mLx20 vials',costPerUnit:2.30,alert:20},
-  {id:'23155-0345-42',code:'23155-0345-42',generic:'Propofol 50mL vials',name:'Propofol 500mg/50mL Vials (20 COUNT)',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'50mLx20 vials',costPerUnit:5.20,alert:40},
-  {id:'00487-5901-99',code:'00487-5901-99',generic:'Racemic Epi',name:'Racepinephrine-S2 2.25% soln',category:'Emergency Drugs',supplier:'Smith Pharmacy',unitSize:'1mLx30 vials',costPerUnit:2.53,alert:6},
-  {id:'43066-0007-10',code:'43066-0007-10',generic:'Roc (Rocuronium)',name:'Rocuronium 50mg/5mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'5mLx10 vials',costPerUnit:3.70,alert:3},
-  {id:'70069-0301-25',code:'70069-0301-25',generic:'Sux (Succinylcholine)',name:'Succinylcholine 20mg/mL Vial',category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx25 vials',costPerUnit:2.08,alert:5},
+  {id:'141-1719',code:'141-1719',generic:'Face Mask O2',name:"Mask O2 Elongated 7\' Tube",category:'Airway Supplies',supplier:'Medline Industries Inc.',unitSize:'50/CA',costPerUnit:1.34,devStock:0,joshStock:52,alert:25},
+  {id:'420-9994',code:'420-9994',generic:'Nasal Atomizer',name:"Nasal Atomization Device W/O Syringe",category:'Airway Supplies',supplier:'LMA North-America',unitSize:'CS=25/EA',costPerUnit:7.67,devStock:0,joshStock:48,alert:20},
+  {id:'987-0285',code:'987-0285',generic:'20G IV',name:"Insyte Autoguard BC PNK 20Gx1.16",category:'IV Supplies',supplier:'Becton-Dickinson',unitSize:'50/BX',costPerUnit:2.31,devStock:0,joshStock:45,alert:20},
+  {id:'987-0284',code:'987-0284',generic:'22G IV',name:"Insyte Autoguard BC BL 22Gx1",category:'IV Supplies',supplier:'Becton-Dickinson',unitSize:'50/BX',costPerUnit:2.31,devStock:0,joshStock:48,alert:20},
+  {id:'118-7249',code:'118-7249',generic:'KY Jelly',name:"Lubricating Jelly Fliptop 2oz/Sterile",category:'Supplies',supplier:'HR Healthcare',unitSize:'EA',costPerUnit:1.55,devStock:0,joshStock:6,alert:3},
+  {id:'777-9152',code:'777-9152',generic:'Tegaderm',name:"Tegaderm Transparent Dressing 2.4x2.8",category:'Supplies',supplier:'3M Medical Products',unitSize:'100/BX',costPerUnit:0.26,devStock:0,joshStock:100,alert:20},
+  {id:'777-7305',code:'777-7305',generic:'Eye Tape',name:"Tape Transpore Plast Transprnt 1\"x10yd",category:'Supplies',supplier:'3M Medical Products',unitSize:'EA',costPerUnit:0.82,devStock:0,joshStock:12,alert:5},
+  {id:'146-4280',code:'146-4280',generic:'LMA 2.5',name:"Airway LMA Unique SU Size 2.5",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'10/BX',costPerUnit:7.69,devStock:0,joshStock:4,alert:3},
+  {id:'LMA-4',code:'LMA-4',generic:'LMA 4',name:"LMA Unique Size 4",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'EA',costPerUnit:7.69,devStock:0,joshStock:3,alert:2},
+  {id:'LMA-5',code:'LMA-5',generic:'LMA 5',name:"LMA Unique Size 5",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'EA',costPerUnit:7.69,devStock:0,joshStock:5,alert:2},
+  {id:'136-3903',code:'136-3903',generic:'ETT 4.0',name:"Airway Silicone w/Cuff Pilot Size 4",category:'Airway Supplies',supplier:'LMA North-America',unitSize:'10/BX',costPerUnit:7.69,devStock:0,joshStock:0,alert:3},
+  {id:'136-3901',code:'136-3901',generic:'ETT 5.0',name:"Airway Silicone w/Cuff Pilot Size 5",category:'Airway Supplies',supplier:'LMA North-America',unitSize:'10/BX',costPerUnit:7.69,devStock:0,joshStock:0,alert:3},
+  {id:'139-3110',code:'139-3110',generic:'LMA 3',name:"Airway LMA Unique w/Cuff Sze 3 Mask",category:'Teleflex LLC',supplier:'Teleflex LLC',unitSize:'10/BX',costPerUnit:7.69,devStock:0,joshStock:4,alert:3},
+  {id:'113-5785',code:'113-5785',generic:'Nasal ETT 4.0',name:"AGT Nasal Tube Cuffed ET 4.0",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'10/BX',costPerUnit:5.98,devStock:0,joshStock:5,alert:3},
+  {id:'113-2941',code:'113-2941',generic:'Nasal ETT 4.5',name:"Cannula Nasal Cuff w/Tube 4.5\'",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'10/BX',costPerUnit:5.98,devStock:0,joshStock:5,alert:3},
+  {id:'743-0717',code:'743-0717',generic:'Nasal ETT 5.0',name:"Tube Endotrach Preformed 5.0MM",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'10/BX',costPerUnit:5.98,devStock:0,joshStock:5,alert:3},
+  {id:'146-9367',code:'146-9367',generic:'Nasal ETT 5.5',name:"Endotracheal Tube Preformed 5.5mm",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'CS=10/EA',costPerUnit:5.98,devStock:0,joshStock:5,alert:3},
+  {id:'491-8760',code:'491-8760',generic:'Nasal ETT 6.0',name:"Tube Endotrach 6.0mm Agt Nasal",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'EA',costPerUnit:5.98,devStock:0,joshStock:5,alert:3},
+  {id:'147-3037',code:'147-3037',generic:'Nasal ETT 6.5',name:"Pref AGT Endotrach Tubes 6.5mm",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'EA',costPerUnit:5.98,devStock:0,joshStock:3,alert:3},
+  {id:'123-5611',code:'123-5611',generic:'Nasal ETT 7.0',name:"Tube Endo Trach Nasal Cuffed 7mm",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'EA',costPerUnit:5.98,devStock:0,joshStock:5,alert:3},
+  {id:'743-3905',code:'743-3905',generic:'Nasal ETT 7.5',name:"Tube Endotrach Preformed 7.5MM",category:'Airway Supplies',supplier:'Teleflex LLC',unitSize:'EA',costPerUnit:5.98,devStock:0,joshStock:5,alert:3},
+  {id:'112-7097',code:'112-7097',generic:'Blunt Needle',name:"Needle Blunt Fill 18Gx1.5",category:'Supplies',supplier:'Henry Shein Inc.',unitSize:'100/BX',costPerUnit:0.13,devStock:0,joshStock:78,alert:20},
+  {id:'148-6288',code:'148-6288',generic:'TB Syringe',name:"Syringe Hypodermic TB LuerLock 1cc",category:'Supplies',supplier:'Nipro Medical Corp',unitSize:'100/BX',costPerUnit:0.17,devStock:0,joshStock:100,alert:20},
+  {id:'987-0248',code:'987-0248',generic:'3CC Syringe',name:"Luer-Lok Syringe Only 3cc",category:'Supplies',supplier:'Becton-Dickinson',unitSize:'100/BX',costPerUnit:0.11,devStock:0,joshStock:395,alert:50},
+  {id:'127-8254',code:'127-8254',generic:'10CC Syringe',name:"Syringe 10cc LL w/o Needle 10ml",category:'Supplies',supplier:'Becton-Dickinson',unitSize:'100/BX',costPerUnit:0.17,devStock:0,joshStock:107,alert:20},
+  {id:'987-3800',code:'987-3800',generic:'50CC Syringe',name:"Syringe w/o Needle LL 50ml",category:'Supplies',supplier:'Becton-Dickinson',unitSize:'30/BX',costPerUnit:0.79,devStock:0,joshStock:75,alert:10},
+  {id:'570-3406',code:'570-3406',generic:'IV Start Kit',name:"IV Start Kit w/ Chloraprep",category:'IV Supplies',supplier:'Henry Shein Inc.',unitSize:'EA',costPerUnit:1.56,devStock:0,joshStock:45,alert:10},
+  {id:'114-0817',code:'114-0817',generic:'Propofol Tubing',name:"Anesthesia Ext Tube 72\"",category:'Airway Supplies',supplier:'Wall Medical Inc',unitSize:'EA',costPerUnit:3.68,devStock:0,joshStock:26,alert:10},
+  {id:'681-3457',code:'681-3457',generic:'ETT Tape',name:"Tape Waterproof Adhesv .5x2.5yd",category:'Supplies',supplier:'Dukal LLC',unitSize:'EA',costPerUnit:0.35,devStock:0,joshStock:19,alert:5},
+  {id:'570-0887',code:'570-0887',generic:'IVF Tubing',name:"IV Admin Set 15 DRP 2 Port 105\"",category:'IV Supplies',supplier:'Henry Shein Inc.',unitSize:'EA',costPerUnit:2.95,devStock:0,joshStock:31,alert:10},
+  {id:'145-7149',code:'145-7149',generic:'Nasal Cannula',name:"Cannula CO2 Sampling Female 7 Adult",category:'Airway Supplies',supplier:'Medline Industries Inc.',unitSize:'EA',costPerUnit:3.93,devStock:0,joshStock:8,alert:5},
+  {id:'700-1576',code:'700-1576',generic:'NPA 28',name:"Robertazzi Naso Airway 28/FR",category:'Airway Supplies',supplier:'Medsource International',unitSize:'EA',costPerUnit:3.67,devStock:0,joshStock:20,alert:5},
+  {id:'700-1577',code:'700-1577',generic:'NPA 30',name:"Robertazzi Naso Airway 30/FR",category:'Airway Supplies',supplier:'Medsource International',unitSize:'EA',costPerUnit:3.67,devStock:0,joshStock:20,alert:5},
+  {id:'700-1579',code:'700-1579',generic:'NPA 34',name:"Robertazzi Naso Airway 34/FR",category:'Airway Supplies',supplier:'Medsource International',unitSize:'EA',costPerUnit:3.67,devStock:0,joshStock:40,alert:5},
+  {id:'106-1241',code:'106-1241',generic:'SCD Medium',name:"SCD Express Sleeve Knee Medium",category:'Supplies',supplier:'Cardinal Health',unitSize:'EA',costPerUnit:56.44,devStock:0,joshStock:3,alert:1},
+  {id:'113-9573',code:'113-9573',generic:'SCD Large',name:"SCD Express Sleeve Knee Pair Large",category:'Supplies',supplier:'Cardinal Health',unitSize:'EA',costPerUnit:70.4,devStock:0,joshStock:3,alert:1},
+  {id:'122-8718',code:'122-8718',generic:'JacksonRees Circuit',name:"Circuit Anesthesia JacksonRees",category:'Airway Supplies',supplier:'Medline Industries Inc.',unitSize:'EA',costPerUnit:12.6,devStock:0,joshStock:16,alert:5},
+  {id:'627-0136',code:'627-0136',generic:'Mask 5',name:"Mask Anesthesia Prem Cushion Sz 5",category:'Airway Supplies',supplier:'Trinity Medical Devices',unitSize:'EA',costPerUnit:0.28,devStock:0,joshStock:7,alert:3},
+  {id:'627-0140',code:'627-0140',generic:'Mask 4',name:"Mask Anesthesia Prem Cushion Sz 4",category:'Airway Supplies',supplier:'Trinity Medical Devices',unitSize:'EA',costPerUnit:0.28,devStock:0,joshStock:0,alert:3},
+  {id:'627-0141',code:'627-0141',generic:'Mask 3',name:"Mask Anesthesia Prem Cushion Sz 3",category:'Airway Supplies',supplier:'Trinity Medical Devices',unitSize:'EA',costPerUnit:0.28,devStock:0,joshStock:20,alert:3},
+  {id:'570-3485',code:'570-3485',generic:'Gloves N300',name:"N300 Nitrile Exam Gloves Large Black Non-Sterile",category:'Supplies',supplier:'Criterion',unitSize:'1 Box',costPerUnit:0.04,devStock:0,joshStock:1,alert:1},
+  {id:'570-3490',code:'570-3490',generic:'Gloves N200',name:"N200 Nitrile Exam Gloves Large Black Non-Sterile",category:'Supplies',supplier:'Criterion',unitSize:'1 Box',costPerUnit:0.06,devStock:0,joshStock:1,alert:1},
+  {id:'777-9475',code:'777-9475',generic:'EKG Sticker',name:"Red Dot Electrocardiogram Electrode Adult 4x3-1/2cm Foam",category:'Supplies',supplier:'3M Medical Products',unitSize:'2 Bag',costPerUnit:0.23,devStock:0,joshStock:2,alert:1},
+  {id:'149-6489',code:'149-6489',generic:'Magills',name:"Magill Catheter Forceps 8\"",category:'Supplies',supplier:'Elmed Instruments',unitSize:'EA',costPerUnit:10.66,devStock:0,joshStock:50,alert:5},
+  {id:'3WSTOPCOK',code:'3WSTOPCOK',generic:'3 Way Stop Cock',name:"3 Way Stop Cock",category:'Supplies',supplier:'Various',unitSize:'EA',costPerUnit:0.5,devStock:0,joshStock:100,alert:10},
+  {id:'CO2CONN',code:'CO2CONN',generic:'CO2 Connector',name:"CO2 Connector",category:'Supplies',supplier:'Various',unitSize:'EA',costPerUnit:0.5,devStock:0,joshStock:100,alert:10},
+  {id:'00904-6720-59',code:'00904-6720-59',generic:'Tylenol',name:"Acetaminophen 500mg Caplets",category:'Drugs / Medications',supplier:'Various',unitSize:'100ct',costPerUnit:0.04,devStock:0,joshStock:100,alert:10},
+  {id:'00093-3174-31',code:'00093-3174-31',generic:'Albuterol',name:"Albuterol HFA Inhaler (Proair) 200 dose",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:16.0,devStock:0,joshStock:4,alert:2},
+  {id:'00143-9875-25',code:'00143-9875-25',generic:'Amiodarone',name:"Amiodarone 150mg/3mL vials",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:1.32,devStock:0,joshStock:7,alert:3},
+  {id:'00904-6794-89',code:'00904-6794-89',generic:'ASA',name:"Aspirin 81mg chewable",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:0.03,devStock:0,joshStock:90,alert:10},
+  {id:'64253-0400-91',code:'64253-0400-91',generic:'Atropine',name:"Atropine 1mg/10mL syringes",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:11.2,devStock:0,joshStock:5,alert:3},
+  {id:'00641-6145-25',code:'00641-6145-25',generic:'Decadron',name:"Dexamethasone 4mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:0.96,devStock:0,joshStock:20,alert:5},
+  {id:'71288-0505-03',code:'71288-0505-03',generic:'Precedex',name:"Dexmedetomidine 200mcg/2mL vials",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.84,devStock:0,joshStock:12,alert:3},
+  {id:'76329-3302-01',code:'76329-3302-01',generic:'D50',name:"Dextrose 50% 50mL Syringe",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:20.9,devStock:0,joshStock:5,alert:2},
+  {id:'25021-0319-10',code:'25021-0319-10',generic:'Cardizem',name:"Diltiazem 50mg/10mL",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:6.2,devStock:0,joshStock:5,alert:2},
+  {id:'72485-0101-25',code:'72485-0101-25',generic:'Benadryl',name:"Diphenhydramine 50mg/mL",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:1.08,devStock:0,joshStock:10,alert:3},
+  {id:'70700-0249-25',code:'70700-0249-25',generic:'Ephedrine',name:"Ephedrine 50mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:4.4,devStock:0,joshStock:11,alert:3},
+  {id:'76329-3318-01',code:'76329-3318-01',generic:'Epi',name:"Epinephrine 0.1mg/mL Syringe",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:14.0,devStock:0,joshStock:5,alert:2},
+  {id:'55150-0194-10',code:'55150-0194-10',generic:'Esmolol',name:"Esmolol 10mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.24,devStock:0,joshStock:11,alert:3},
+  {id:'70860-0751-02',code:'70860-0751-02',generic:'Pepcid',name:"Famotidine 20mg/2mL SDV",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:0.84,devStock:0,joshStock:9,alert:3},
+  {id:'71288-0203-05',code:'71288-0203-05',generic:'Lasix',name:"Furosemide 40mg/4mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:0.72,devStock:0,joshStock:10,alert:3},
+  {id:'66794-0204-42',code:'66794-0204-42',generic:'Robinul',name:"Glycopyrrolate 1mg/5mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.12,devStock:0,joshStock:25,alert:5},
+  {id:'00641-6231-25',code:'00641-6231-25',generic:'Hydralazine',name:"Hydralazine 20mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:3.2,devStock:0,joshStock:12,alert:3},
+  {id:'76204-0600-30',code:'76204-0600-30',generic:'DuoNeb',name:"Ipratropium 0.5mg-Albuterol 3mg/mL Neb Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:0.3,devStock:0,joshStock:5,alert:2},
+  {id:'72266-0118-25',code:'72266-0118-25',generic:'Toradol',name:"Ketorolac 30mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:0.76,devStock:0,joshStock:22,alert:5},
+  {id:'36000-0322-02',code:'36000-0322-02',generic:'Labetalol',name:"Labetalol 100mg/20mL MDV",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:4.0,devStock:0,joshStock:4,alert:2},
+  {id:'00264-7750-00',code:'00264-7750-00',generic:'Lactated Ringers',name:"Lactated Ringers 1L Bag",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:3.42,devStock:0,joshStock:9,alert:3},
+  {id:'00143-9595-25',code:'00143-9595-25',generic:'Lidocaine 1%',name:"Lidocaine 1% SDV (preservative-free)",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:1.76,devStock:0,joshStock:10,alert:3},
+  {id:'00009-3073-01',code:'00009-3073-01',generic:'Solumedrol',name:"Methylprednisolone 40mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:9.0,devStock:0,joshStock:1,alert:1},
+  {id:'23155-0240-41',code:'23155-0240-41',generic:'Reglan',name:"Metoclopramide 10mg/2mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:1.4,devStock:0,joshStock:25,alert:5},
+  {id:'36000-0033-10',code:'36000-0033-10',generic:'Metoprolol',name:"Metoprolol 5mg/5mL SDV",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:0.9,devStock:0,joshStock:5,alert:2},
+  {id:'70069-0671-10',code:'70069-0671-10',generic:'Nubain (Nalbuphine)',name:"Nalbuphine 10mg/mL ampule",category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx25',costPerUnit:6.9,devStock:0,joshStock:9,alert:5},
+  {id:'23155-0518-41',code:'23155-0518-41',generic:'Neostigmine',name:"Neostigmine 10mg/10mL MDV",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:3.7,devStock:0,joshStock:10,alert:3},
+  {id:'69339-0174-41',code:'69339-0174-41',generic:'Nitro Tabs',name:"Nitroglycerin 0.4mg SL tabs",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:10.0,devStock:0,joshStock:25,alert:5},
+  {id:'60505-6130-05',code:'60505-6130-05',generic:'Zofran',name:"Ondansetron 4mg/2mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:0.44,devStock:0,joshStock:23,alert:5},
+  {id:'00904-6761-30',code:'00904-6761-30',generic:'Afrin',name:"Oxymetazoline (Afrin) 0.5% Nasal Spray",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:3.0,devStock:0,joshStock:5,alert:2},
+  {id:'70756-0621-25',code:'70756-0621-25',generic:'Neo',name:"Phenylephrine 10mg SDV",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:1.2,devStock:0,joshStock:12,alert:3},
+  {id:'23155-0345-44',code:'23155-0345-44',generic:'Propofol 20mL',name:"Propofol 200mg/20mL Vials",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.3,devStock:0,joshStock:39,alert:5},
+  {id:'23155-0345-42',code:'23155-0345-42',generic:'Propofol 50mL',name:"Propofol 500mg/50mL Vials",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:5.2,devStock:0,joshStock:87,alert:5},
+  {id:'00487-5901-99',code:'00487-5901-99',generic:'Racemic',name:"Racepinephrine-S2 2.25% soln",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.53,devStock:0,joshStock:15,alert:3},
+  {id:'43066-0007-10',code:'43066-0007-10',generic:'Roc',name:"Rocuronium 50mg/5mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:3.7,devStock:0,joshStock:4,alert:2},
+  {id:'70069-0301-25',code:'70069-0301-25',generic:'Sux (Succinylcholine)',name:"Succinylcholine 20mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.08,devStock:0,joshStock:10,alert:3},
+  {id:'0143-9509-10',code:'0143-9509-10',generic:'Ketamine',name:"Ketamine HCI Injection 500mg/5mL",category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx25',costPerUnit:14.67,devStock:0,joshStock:5,alert:2},
+  {id:'LTA-kit',code:'LTA-kit',generic:'LTA',name:"LTA Kit",category:'Supplies',supplier:'Various',unitSize:'EA',costPerUnit:5.0,devStock:0,joshStock:2,alert:1},
+  {id:'VERSED-MDZ',code:'VERSED-MDZ',generic:'Versed (Midazolam)',name:"Midazolam 5mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.5,devStock:0,joshStock:12,alert:3},
+  {id:'LIDO2PCT',code:'LIDO2PCT',generic:'Lido 2%',name:"Lidocaine 2% SDV",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:1.5,devStock:0,joshStock:50,alert:5},
+  {id:'VASOPRESSIN',code:'VASOPRESSIN',generic:'Vasopressin',name:"Vasopressin 20units/mL",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:3.0,devStock:0,joshStock:0,alert:2},
+  {id:'ANCEF',code:'ANCEF',generic:'Ancef',name:"Cefazolin 1g/10mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.5,devStock:0,joshStock:25,alert:5}
 ];
 
 const DEFAULT_STOCK = {
@@ -1449,6 +1458,36 @@ async function initData() {
       items = ITEM_TEMPLATE.map(t=>({...t, stockDev:DEFAULT_STOCK[t.id]||0, stockJosh:DEFAULT_STOCK[t.id]||0}));
       setDoc(doc(db,'atlas','inventory'),{items});
     }
+    // Sync prices and Josh stock from latest template
+    let inventoryUpdated = false;
+    ITEM_TEMPLATE.forEach(template => {
+      const existing = items.find(i => i.id === template.id);
+      if(existing) {
+        // Update price if changed
+        if(existing.costPerUnit !== template.costPerUnit) {
+          if(!existing.priceHistory) existing.priceHistory = [];
+          existing.priceHistory.unshift({
+            date: new Date().toISOString().split('T')[0],
+            oldCost: existing.costPerUnit,
+            newCost: template.costPerUnit,
+            changedBy: 'system-sync'
+          });
+          existing.costPerUnit = template.costPerUnit;
+          inventoryUpdated = true;
+        }
+        // Update Josh stock if it's 0 and template has stock
+        if(existing.joshStock === 0 && template.joshStock > 0) {
+          existing.joshStock = template.joshStock;
+          inventoryUpdated = true;
+        }
+      } else {
+        // Add new item from template
+        items.push({...template});
+        inventoryUpdated = true;
+      }
+    });
+    if(inventoryUpdated) await saveInventory();
+
     linkCSInvIds();
     refreshItemSelect();
     renderInventory();
