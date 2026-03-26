@@ -5204,12 +5204,14 @@ async function renderReviewTomorrow() {
 
 // ── SYNC PRICES FROM TEMPLATE ──
 window.syncPricesFromTemplate = async function() {
-  const confirmed = confirm(
-    'This will update ALL unit prices and add any missing items from the master template.\n\n' +
-    'Josh stock will be updated for items that currently have 0 stock.\n\n' +
-    'Existing stock levels for items already in inventory will NOT be changed.\n\n' +
-    'Continue?'
+  const forceStock = confirm(
+    'Update Josh\'s stock to the exact counts from yesterday\'s inventory?\n\n' +
+    'YES — Force update Josh\'s stock to template numbers (use this for fresh inventory count)\n' +
+    'NO — Only update items where Josh stock is currently 0\n\n' +
+    'All unit prices will be updated either way.'
   );
+
+  const confirmed = confirm('Proceed with sync?');
   if(!confirmed) return;
 
   let priceUpdates = 0;
@@ -5219,7 +5221,7 @@ window.syncPricesFromTemplate = async function() {
   ITEM_TEMPLATE.forEach(template => {
     const existing = items.find(i => i.id === template.id);
     if(existing) {
-      // Update price
+      // Always update price
       if(existing.costPerUnit !== template.costPerUnit) {
         if(!existing.priceHistory) existing.priceHistory = [];
         existing.priceHistory.unshift({
@@ -5231,10 +5233,17 @@ window.syncPricesFromTemplate = async function() {
         existing.costPerUnit = template.costPerUnit;
         priceUpdates++;
       }
-      // Update Josh stock only if currently 0 and template has stock
-      if((existing.joshStock === 0 || existing.joshStock === undefined) && template.joshStock > 0) {
-        existing.joshStock = template.joshStock;
-        stockUpdates++;
+      // Update Josh stock: force if YES, otherwise only if 0
+      if(forceStock) {
+        if(existing.joshStock !== template.joshStock) {
+          existing.joshStock = template.joshStock;
+          stockUpdates++;
+        }
+      } else {
+        if((existing.joshStock === 0 || existing.joshStock === undefined) && template.joshStock > 0) {
+          existing.joshStock = template.joshStock;
+          stockUpdates++;
+        }
       }
     } else {
       // New item — add with full template data
