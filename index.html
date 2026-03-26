@@ -1637,6 +1637,273 @@ window.setHistoryFilter = function(f) {
   renderHistory();
 };
 
+// ── CALENDAR ──
+const GCAL_CLIENT_ID = '677020713040-6smv4mss68prvd3mqnq3pkotcea8l16v.apps.googleusercontent.com';
+const GCAL_SCOPES = 'https://www.googleapis.com/auth/calendar.events';
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let calFilter = 'all';
+let gcalToken = null;
+let gcalTokenClient = null;
+
+window.setCalFilter = function(f) {
+  calFilter = f;
+  ['all','dev','josh'].forEach(x => {
+    const btn = document.getElementById('calbtn-'+x);
+    if(!btn) return;
+    if(x===f) {
+      btn.style.background = x==='dev'?'var(--dev)':x==='josh'?'var(--josh)':'var(--info)';
+      btn.style.color = '#fff';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text-muted)';
+    }
+  });
+  window.buildCalendar();
+};
+
+window.changeMonth = function(dir) {
+  calMonth += dir;
+  if(calMonth > 11) { calMonth=0; calYear++; }
+  if(calMonth < 0)  { calMonth=11; calYear--; }
+  window.buildCalendar();
+};
+
+function getCalEvents() {
+  try {
+    const preopDays  = parseInt(document.getElementById('cal-preop-days')?.value)  || 30;
+    const depositDays = parseInt(document.getElementById('cal-deposit-days')?.value) || 14;
+    const records = window._cachedPreopRecords || [];
+    const events = [];
+
+    records.forEach(r => {
+      try {
+        if(calFilter !== 'all' && r.worker !== calFilter) return;
+        const surgDate = r['po-surgeryDate'];
+        if(!surgDate || surgDate === '—') return;
+        const caseId   = r['po-caseId']   || '—';
+        const provider = r['po-provider'] || '';
+        const worker   = r.worker         || 'dev';
+        const wname    = worker==='dev'?'Devarsh':'Josh';
+        const email    = r['po-patientEmail'] || '';
+
+        events.push({ type:'surgery', date:surgDate, label:`🔴 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+
+        const callD = new Date(surgDate+'T12:00:00');
+        callD.setDate(callD.getDate() - preopDays);
+        events.push({ type:'preop-call', date:callD.toISOString().split('T')[0], label:`📞 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+
+        const depD = new Date(surgDate+'T12:00:00');
+        depD.setDate(depD.getDate() - depositDays);
+        events.push({ type:'deposit', date:depD.toISOString().split('T')[0], label:`💰 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+      } catch(rowErr) { console.warn('Calendar row error:', rowErr); }
+    });
+
+    return events;
+  } catch(e) {
+    console.error('getCalEvents error:', e);
+    return [];
+  }
+}
+
+window.buildCalendar = async function() {
+  const grid  = document.getElementById('cal-grid');
+  const label = document.getElementById('cal-month-label');
+  if(!grid) {
+    console.error('cal-grid not found');
+    const calTab = document.getElementById('tab-calendar');
+    if(calTab) calTab.innerHTML += '<div style="padding:20px;color:red;">Error: Calendar grid element not found. Please refresh.</div>';
+    return;
+  }
+  // Show loading state
+  grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text-faint);">Loading calendar...</div>';
+
+  try {
+    // Load preop records
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    window._cachedPreopRecords = snap.exists() ? (snap.data().records||[]) : [];
+  } catch(e) {
+    console.warn('Calendar: could not load preop records', e);
+    window._cachedPreopRecords = window._cachedPreopRecords || [];
+  }
+
+  // Merge finalized cases
+  try {
+    const caseRecs = (cases||[]).filter(c=>!c.draft&&c.date).map(c=>({
+      'po-surgeryDate':c.date,'po-caseId':c.caseId,'po-provider':c.provider,
+      'po-patientEmail':'',worker:c.worker
+    }));
+    const existingIds = new Set((window._cachedPreopRecords||[]).map(r=>r['po-caseId']));
+    window._cachedPreopRecords = [
+      ...(window._cachedPreopRecords||[]),
+      ...caseRecs.filter(c=>!existingIds.has(c['po-caseId']))
+    ];
+  } catch(e) { console.warn('Calendar: could not merge cases', e); }
+
+  const months = ['January','February','March','April','May','June','July',
+    'August','September','October','November','December'];
+  if(label) label.textContent = `${months[calMonth]} ${calYear}`;
+
+  let events = [];
+  try { events = getCalEvents(); } catch(e) { console.warn('getCalEvents error', e); }
+
+  const today = new Date().toISOString().split('T')[0];
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const prevDays = new Date(calYear, calMonth, 0).getDate();
+
+  // Clear grid but keep it visible
+  grid.innerHTML = '';
+
+  // Day headers
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => {
+    const h = document.createElement('div');
+    h.style.cssText = 'background:var(--info);color:#fff;text-align:center;padding:8px 4px;font-size:11px;font-weight:600;letter-spacing:.5px;';
+    h.textContent = d;
+    grid.appendChild(h);
+  });
+
+  // Prev month padding
+  for(let i=firstDay-1;i>=0;i--) {
+    const d = document.createElement('div');
+    d.style.cssText = 'background:var(--surface2);min-height:80px;padding:6px;';
+    d.innerHTML = `<div style="font-size:11px;color:var(--text-faint);">${prevDays-i}</div>`;
+    grid.appendChild(d);
+  }
+
+  // Current month days
+  for(let day=1;day<=daysInMonth;day++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const dayEvents = events.filter(e=>e.date===dateStr);
+    const isToday = dateStr===today;
+
+    const d = document.createElement('div');
+    d.style.cssText = `background:${isToday?'var(--info-light)':'var(--surface)'};min-height:80px;padding:6px;border:1px solid transparent;`;
+
+    const numEl = document.createElement('div');
+    numEl.style.cssText = `font-size:12px;font-weight:${isToday?'700':'500'};color:${isToday?'var(--info)':'var(--text-muted)'};margin-bottom:3px;`;
+    numEl.textContent = day;
+    d.appendChild(numEl);
+
+    dayEvents.forEach(e => {
+      const ev = document.createElement('div');
+      const colors = {
+        surgery:'background:#fee2e2;color:#b91c1c;',
+        'preop-call':'background:#dbeafe;color:#1d4ed8;',
+        deposit:'background:#dcfce7;color:#166534;'
+      };
+      ev.style.cssText = `font-size:10px;font-weight:500;padding:2px 4px;border-radius:3px;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${colors[e.type]||''}`;
+      ev.textContent = e.label;
+      ev.title = e.detail || e.label;
+      ev.onclick = () => { try { showCalDetail(e); } catch(err) { console.warn(err); } };
+      d.appendChild(ev);
+    });
+
+    grid.appendChild(d);
+  }
+
+  // Next month padding
+  const total = Math.ceil((firstDay+daysInMonth)/7)*7;
+  for(let i=1;i<=total-(firstDay+daysInMonth);i++) {
+    const d = document.createElement('div');
+    d.style.cssText = 'background:var(--surface2);min-height:80px;padding:6px;';
+    d.innerHTML = `<div style="font-size:11px;color:var(--text-faint);">${i}</div>`;
+    grid.appendChild(d);
+  }
+
+  console.log('Calendar rendered:', months[calMonth], calYear, 'Events:', events.length);
+};
+// Alias for showTab compatibility
+window.renderCalendar = window.buildCalendar;
+
+function showCalDetail(e) {
+  const det = document.getElementById('cal-event-detail');
+  const con = document.getElementById('cal-event-detail-content');
+  if(!det||!con) return;
+  const typeLabel = {surgery:'🔴 Surgery','preop-call':'📞 Pre-Op Call Due',deposit:'💰 Deposit Due'};
+  const typeColor = {surgery:'var(--warn)','preop-call':'var(--info)',deposit:'var(--accent)'};
+  con.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-size:14px;font-weight:600;color:${typeColor[e.type]||'var(--text)'};">${typeLabel[e.type]||e.type}</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Case: <strong>${e.caseId}</strong> · ${e.date}</div>
+        ${e.provider?`<div style="font-size:13px;color:var(--text-muted);">Provider: ${e.provider}</div>`:''}
+        ${e.email?`<div style="font-size:13px;color:var(--text-muted);">Patient Email: ${e.email}</div>`:''}
+        <div style="font-size:13px;color:var(--text-muted);">Surgery Date: ${e.surgDate}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${gcalToken
+          ? `<button class="gcal-btn" onclick="addSingleEventToGCal(${JSON.stringify(JSON.stringify(e))})" style="font-size:12px;padding:6px 12px;">+ Add to Google Calendar</button>`
+          : `<button class="gcal-btn" onclick="connectGoogleCalendar()" style="font-size:12px;padding:6px 12px;">Connect Google Calendar</button>`}
+        <button onclick="document.getElementById('cal-event-detail').style.display='none'" class="btn btn-ghost btn-sm">Close</button>
+      </div>
+    </div>`;
+  det.style.display = 'block';
+}
+
+window.showCalEventDetail = showCalDetail;
+
+window.connectGoogleCalendar = function() {
+  if(!gcalTokenClient) {
+    gcalTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GCAL_CLIENT_ID,
+      scope: GCAL_SCOPES,
+      callback: (resp) => {
+        if(resp.error) return;
+        gcalToken = resp.access_token;
+        const btn = document.getElementById('gcal-connect-btn');
+        const syncBtn = document.getElementById('gcal-sync-btn');
+        const status = document.getElementById('gcal-status');
+        if(btn) btn.style.display='none';
+        if(syncBtn) syncBtn.style.display='inline-flex';
+        if(status) status.innerHTML='<span style="background:var(--accent-light);color:var(--accent);border:1px solid var(--accent-mid);border-radius:var(--radius-sm);padding:5px 13px;font-size:12px;font-weight:500;">✓ Connected</span>';
+        syncAllToGoogleCalendar();
+      }
+    });
+  }
+  gcalTokenClient.requestAccessToken();
+};
+
+window.syncAllToGoogleCalendar = async function() {
+  if(!gcalToken) { connectGoogleCalendar(); return; }
+  const events = getCalEvents();
+  if(!events.length) { alert('No events to sync.'); return; }
+  const syncBtn = document.getElementById('gcal-sync-btn');
+  if(syncBtn) syncBtn.textContent='Syncing...';
+  let synced=0, failed=0;
+  for(const e of events) {
+    try { await pushToGCal(e); synced++; } catch(err) { failed++; }
+  }
+  if(syncBtn) syncBtn.textContent='↻ Sync All';
+  alert(`✓ Synced ${synced} events to Google Calendar${failed>0?`
+${failed} failed`:''}!`);
+};
+
+window.addSingleEventToGCal = async function(eStr) {
+  let e; try { e = JSON.parse(eStr); } catch(ex) { return; }
+  if(!gcalToken) { connectGoogleCalendar(); return; }
+  try { await pushToGCal(e); alert(`✓ Added to Google Calendar!`); } catch(err) { alert('Error: '+err.message); }
+};
+
+async function pushToGCal(e) {
+  const titles = {surgery:'Surgery','preop-call':'Pre-Op Call Due',deposit:'Deposit Due'};
+  const colorIds = {surgery:'11','preop-call':'9',deposit:'10'};
+  const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+    method:'POST',
+    headers:{'Authorization':`Bearer ${gcalToken}`,'Content-Type':'application/json'},
+    body: JSON.stringify({
+      summary:`Atlas: ${titles[e.type]||e.type} — ${e.caseId}`,
+      description:`Case: ${e.caseId}\nProvider: ${e.provider}\nSurgery Date: ${e.surgDate}${e.email?'\nPatient Email: '+e.email:''}`,
+      start:{date:e.date}, end:{date:e.date},
+      colorId: colorIds[e.type]||'9',
+      reminders:{useDefault:false,overrides:[{method:'email',minutes:24*60},{method:'popup',minutes:60}]}
+    })
+  });
+  if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'Failed'); }
+}
+
+
+
 window.showTab = function(tab) {
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
@@ -4679,271 +4946,6 @@ window.startCaseFromPreop = async function(preopId) {
     alert('Error loading case: ' + e.message);
   }
 };
-
-// ── CALENDAR ──
-const GCAL_CLIENT_ID = '677020713040-6smv4mss68prvd3mqnq3pkotcea8l16v.apps.googleusercontent.com';
-const GCAL_SCOPES = 'https://www.googleapis.com/auth/calendar.events';
-let calYear = new Date().getFullYear();
-let calMonth = new Date().getMonth();
-let calFilter = 'all';
-let gcalToken = null;
-let gcalTokenClient = null;
-
-window.setCalFilter = function(f) {
-  calFilter = f;
-  ['all','dev','josh'].forEach(x => {
-    const btn = document.getElementById('calbtn-'+x);
-    if(!btn) return;
-    if(x===f) {
-      btn.style.background = x==='dev'?'var(--dev)':x==='josh'?'var(--josh)':'var(--info)';
-      btn.style.color = '#fff';
-    } else {
-      btn.style.background = 'transparent';
-      btn.style.color = 'var(--text-muted)';
-    }
-  });
-  window.buildCalendar();
-};
-
-window.changeMonth = function(dir) {
-  calMonth += dir;
-  if(calMonth > 11) { calMonth=0; calYear++; }
-  if(calMonth < 0)  { calMonth=11; calYear--; }
-  window.buildCalendar();
-};
-
-function getCalEvents() {
-  try {
-    const preopDays  = parseInt(document.getElementById('cal-preop-days')?.value)  || 30;
-    const depositDays = parseInt(document.getElementById('cal-deposit-days')?.value) || 14;
-    const records = window._cachedPreopRecords || [];
-    const events = [];
-
-    records.forEach(r => {
-      try {
-        if(calFilter !== 'all' && r.worker !== calFilter) return;
-        const surgDate = r['po-surgeryDate'];
-        if(!surgDate || surgDate === '—') return;
-        const caseId   = r['po-caseId']   || '—';
-        const provider = r['po-provider'] || '';
-        const worker   = r.worker         || 'dev';
-        const wname    = worker==='dev'?'Devarsh':'Josh';
-        const email    = r['po-patientEmail'] || '';
-
-        events.push({ type:'surgery', date:surgDate, label:`🔴 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
-
-        const callD = new Date(surgDate+'T12:00:00');
-        callD.setDate(callD.getDate() - preopDays);
-        events.push({ type:'preop-call', date:callD.toISOString().split('T')[0], label:`📞 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
-
-        const depD = new Date(surgDate+'T12:00:00');
-        depD.setDate(depD.getDate() - depositDays);
-        events.push({ type:'deposit', date:depD.toISOString().split('T')[0], label:`💰 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
-      } catch(rowErr) { console.warn('Calendar row error:', rowErr); }
-    });
-
-    return events;
-  } catch(e) {
-    console.error('getCalEvents error:', e);
-    return [];
-  }
-}
-
-window.buildCalendar = async function() {
-  const grid  = document.getElementById('cal-grid');
-  const label = document.getElementById('cal-month-label');
-  if(!grid) {
-    console.error('cal-grid not found');
-    const calTab = document.getElementById('tab-calendar');
-    if(calTab) calTab.innerHTML += '<div style="padding:20px;color:red;">Error: Calendar grid element not found. Please refresh.</div>';
-    return;
-  }
-  // Show loading state
-  grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text-faint);">Loading calendar...</div>';
-
-  try {
-    // Load preop records
-    const snap = await getDoc(doc(db,'atlas','preop'));
-    window._cachedPreopRecords = snap.exists() ? (snap.data().records||[]) : [];
-  } catch(e) {
-    console.warn('Calendar: could not load preop records', e);
-    window._cachedPreopRecords = window._cachedPreopRecords || [];
-  }
-
-  // Merge finalized cases
-  try {
-    const caseRecs = (cases||[]).filter(c=>!c.draft&&c.date).map(c=>({
-      'po-surgeryDate':c.date,'po-caseId':c.caseId,'po-provider':c.provider,
-      'po-patientEmail':'',worker:c.worker
-    }));
-    const existingIds = new Set((window._cachedPreopRecords||[]).map(r=>r['po-caseId']));
-    window._cachedPreopRecords = [
-      ...(window._cachedPreopRecords||[]),
-      ...caseRecs.filter(c=>!existingIds.has(c['po-caseId']))
-    ];
-  } catch(e) { console.warn('Calendar: could not merge cases', e); }
-
-  const months = ['January','February','March','April','May','June','July',
-    'August','September','October','November','December'];
-  if(label) label.textContent = `${months[calMonth]} ${calYear}`;
-
-  let events = [];
-  try { events = getCalEvents(); } catch(e) { console.warn('getCalEvents error', e); }
-
-  const today = new Date().toISOString().split('T')[0];
-  const firstDay = new Date(calYear, calMonth, 1).getDay();
-  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
-  const prevDays = new Date(calYear, calMonth, 0).getDate();
-
-  // Clear grid but keep it visible
-  grid.innerHTML = '';
-
-  // Day headers
-  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => {
-    const h = document.createElement('div');
-    h.style.cssText = 'background:var(--info);color:#fff;text-align:center;padding:8px 4px;font-size:11px;font-weight:600;letter-spacing:.5px;';
-    h.textContent = d;
-    grid.appendChild(h);
-  });
-
-  // Prev month padding
-  for(let i=firstDay-1;i>=0;i--) {
-    const d = document.createElement('div');
-    d.style.cssText = 'background:var(--surface2);min-height:80px;padding:6px;';
-    d.innerHTML = `<div style="font-size:11px;color:var(--text-faint);">${prevDays-i}</div>`;
-    grid.appendChild(d);
-  }
-
-  // Current month days
-  for(let day=1;day<=daysInMonth;day++) {
-    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const dayEvents = events.filter(e=>e.date===dateStr);
-    const isToday = dateStr===today;
-
-    const d = document.createElement('div');
-    d.style.cssText = `background:${isToday?'var(--info-light)':'var(--surface)'};min-height:80px;padding:6px;border:1px solid transparent;`;
-
-    const numEl = document.createElement('div');
-    numEl.style.cssText = `font-size:12px;font-weight:${isToday?'700':'500'};color:${isToday?'var(--info)':'var(--text-muted)'};margin-bottom:3px;`;
-    numEl.textContent = day;
-    d.appendChild(numEl);
-
-    dayEvents.forEach(e => {
-      const ev = document.createElement('div');
-      const colors = {
-        surgery:'background:#fee2e2;color:#b91c1c;',
-        'preop-call':'background:#dbeafe;color:#1d4ed8;',
-        deposit:'background:#dcfce7;color:#166534;'
-      };
-      ev.style.cssText = `font-size:10px;font-weight:500;padding:2px 4px;border-radius:3px;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${colors[e.type]||''}`;
-      ev.textContent = e.label;
-      ev.title = e.detail || e.label;
-      ev.onclick = () => { try { showCalDetail(e); } catch(err) { console.warn(err); } };
-      d.appendChild(ev);
-    });
-
-    grid.appendChild(d);
-  }
-
-  // Next month padding
-  const total = Math.ceil((firstDay+daysInMonth)/7)*7;
-  for(let i=1;i<=total-(firstDay+daysInMonth);i++) {
-    const d = document.createElement('div');
-    d.style.cssText = 'background:var(--surface2);min-height:80px;padding:6px;';
-    d.innerHTML = `<div style="font-size:11px;color:var(--text-faint);">${i}</div>`;
-    grid.appendChild(d);
-  }
-
-  console.log('Calendar rendered:', months[calMonth], calYear, 'Events:', events.length);
-};
-// Alias for showTab compatibility
-window.renderCalendar = window.buildCalendar;
-
-function showCalDetail(e) {
-  const det = document.getElementById('cal-event-detail');
-  const con = document.getElementById('cal-event-detail-content');
-  if(!det||!con) return;
-  const typeLabel = {surgery:'🔴 Surgery','preop-call':'📞 Pre-Op Call Due',deposit:'💰 Deposit Due'};
-  const typeColor = {surgery:'var(--warn)','preop-call':'var(--info)',deposit:'var(--accent)'};
-  con.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
-      <div>
-        <div style="font-size:14px;font-weight:600;color:${typeColor[e.type]||'var(--text)'};">${typeLabel[e.type]||e.type}</div>
-        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Case: <strong>${e.caseId}</strong> · ${e.date}</div>
-        ${e.provider?`<div style="font-size:13px;color:var(--text-muted);">Provider: ${e.provider}</div>`:''}
-        ${e.email?`<div style="font-size:13px;color:var(--text-muted);">Patient Email: ${e.email}</div>`:''}
-        <div style="font-size:13px;color:var(--text-muted);">Surgery Date: ${e.surgDate}</div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${gcalToken
-          ? `<button class="gcal-btn" onclick="addSingleEventToGCal(${JSON.stringify(JSON.stringify(e))})" style="font-size:12px;padding:6px 12px;">+ Add to Google Calendar</button>`
-          : `<button class="gcal-btn" onclick="connectGoogleCalendar()" style="font-size:12px;padding:6px 12px;">Connect Google Calendar</button>`}
-        <button onclick="document.getElementById('cal-event-detail').style.display='none'" class="btn btn-ghost btn-sm">Close</button>
-      </div>
-    </div>`;
-  det.style.display = 'block';
-}
-
-window.showCalEventDetail = showCalDetail;
-
-window.connectGoogleCalendar = function() {
-  if(!gcalTokenClient) {
-    gcalTokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: GCAL_CLIENT_ID,
-      scope: GCAL_SCOPES,
-      callback: (resp) => {
-        if(resp.error) return;
-        gcalToken = resp.access_token;
-        const btn = document.getElementById('gcal-connect-btn');
-        const syncBtn = document.getElementById('gcal-sync-btn');
-        const status = document.getElementById('gcal-status');
-        if(btn) btn.style.display='none';
-        if(syncBtn) syncBtn.style.display='inline-flex';
-        if(status) status.innerHTML='<span style="background:var(--accent-light);color:var(--accent);border:1px solid var(--accent-mid);border-radius:var(--radius-sm);padding:5px 13px;font-size:12px;font-weight:500;">✓ Connected</span>';
-        syncAllToGoogleCalendar();
-      }
-    });
-  }
-  gcalTokenClient.requestAccessToken();
-};
-
-window.syncAllToGoogleCalendar = async function() {
-  if(!gcalToken) { connectGoogleCalendar(); return; }
-  const events = getCalEvents();
-  if(!events.length) { alert('No events to sync.'); return; }
-  const syncBtn = document.getElementById('gcal-sync-btn');
-  if(syncBtn) syncBtn.textContent='Syncing...';
-  let synced=0, failed=0;
-  for(const e of events) {
-    try { await pushToGCal(e); synced++; } catch(err) { failed++; }
-  }
-  if(syncBtn) syncBtn.textContent='↻ Sync All';
-  alert(`✓ Synced ${synced} events to Google Calendar${failed>0?`
-${failed} failed`:''}!`);
-};
-
-window.addSingleEventToGCal = async function(eStr) {
-  let e; try { e = JSON.parse(eStr); } catch(ex) { return; }
-  if(!gcalToken) { connectGoogleCalendar(); return; }
-  try { await pushToGCal(e); alert(`✓ Added to Google Calendar!`); } catch(err) { alert('Error: '+err.message); }
-};
-
-async function pushToGCal(e) {
-  const titles = {surgery:'Surgery','preop-call':'Pre-Op Call Due',deposit:'Deposit Due'};
-  const colorIds = {surgery:'11','preop-call':'9',deposit:'10'};
-  const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-    method:'POST',
-    headers:{'Authorization':`Bearer ${gcalToken}`,'Content-Type':'application/json'},
-    body: JSON.stringify({
-      summary:`Atlas: ${titles[e.type]||e.type} — ${e.caseId}`,
-      description:`Case: ${e.caseId}\nProvider: ${e.provider}\nSurgery Date: ${e.surgDate}${e.email?'\nPatient Email: '+e.email:''}`,
-      start:{date:e.date}, end:{date:e.date},
-      colorId: colorIds[e.type]||'9',
-      reminders:{useDefault:false,overrides:[{method:'email',minutes:24*60},{method:'popup',minutes:60}]}
-    })
-  });
-  if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'Failed'); }
-}
 
 
 // ── BMI CALCULATOR ──
