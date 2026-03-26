@@ -1948,7 +1948,7 @@ function renderHistory() {
             <span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
             ${c.draft?'<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">DRAFT</span>':''}
           </div>
-          <div class="case-date">${c.date} · ${c.caseId}${c.provider?' · '+c.provider:''}</div>
+          <div class="case-date">${fmtDate(c.date)} · ${c.caseId}${c.provider?' · '+c.provider:''}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <div class="case-cost">${c.draft?'In Progress':'$'+c.total.toFixed(2)}</div>
@@ -2402,7 +2402,7 @@ async function renderPreopHistory() {
               ${r['po-caseId'] || 'No Case ID'}
               <span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
             </div>
-            <div class="case-date">Surgery: ${r['po-surgeryDate']||'—'} · Provider: ${r['po-provider']||'—'}</div>
+            <div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
             <button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit</button>
@@ -2789,7 +2789,7 @@ function renderCaseLog() {
       </div>
       ${sorted.map((c,i) => `
         <div style="display:grid;grid-template-columns:110px 1fr 120px 90px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;background:${i%2===0?'transparent':'var(--surface2)'};">
-          <div style="font-size:13px;font-family:'DM Mono',monospace;">${c.date}</div>
+          <div style="font-size:13px;font-family:'DM Mono',monospace;">${fmtDate(c.date)}</div>
           <div style="font-size:13px;font-weight:500;">${c.procedure||'—'}
             ${c.notes?`<div style="font-size:11px;color:var(--text-faint);">${c.notes}</div>`:''}
             ${c.caseComments?`<div style="font-size:11px;color:var(--text-faint);font-style:italic;">${c.caseComments}</div>`:''}
@@ -2806,6 +2806,14 @@ function renderCaseLog() {
 
 // ── CONTROLLED SUBSTANCES ──
 const STRIPE_WORKER_URL = 'https://gentle-voice-6881.blue-disk-9b10.workers.dev';
+
+// ── DATE FORMATTER ──
+function fmtDate(dateStr) {
+  if(!dateStr || dateStr === '—') return dateStr || '—';
+  const parts = dateStr.split('-');
+  if(parts.length !== 3) return dateStr;
+  return `${parts[1]}/${parts[2]}/${parts[0]}`;
+}
 
 const CS_DRUGS = {
   nubain:   { label: 'Nubain (Nalbuphine)',  invId: '70069-0671-10', keywords: ['nubain','nalbuphine'], vialML: 1 },
@@ -3162,7 +3170,7 @@ async function renderCSLog() {
         </div>
         ${entries.map((e,i) => `
           <div style="display:grid;grid-template-columns:90px 70px 1fr 80px 80px 70px 60px 80px 80px;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center;background:${i%2===0?'transparent':'var(--surface2)'};">
-            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.date||'—'}</div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;">${fmtDate(e.date)||'—'}</div>
             <div style="font-size:12px;color:var(--text-faint);">${e.savedAt?new Date(e.savedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—'}</div>
             <div style="font-size:12px;font-weight:500;">${e.caseId||'—'}<div style="font-size:11px;color:var(--text-faint);">${e.provider||''}</div></div>
             <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.amountGiven||0} mL</div>
@@ -3243,7 +3251,7 @@ window.downloadCSLogPDF = async function() {
     }
     if(i%2===0) { doc.setFillColor(...lightGray); doc.rect(10, y, W-20, 10, 'F'); }
     doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...black);
-    doc.text(e.date||'—', cols[0], y+7);
+    doc.text(fmtDate(e.date)||'—', cols[0], y+7);
     doc.text(e.savedAt?new Date(e.savedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—', cols[1], y+7);
     doc.text((e.caseId||'—').substring(0,20), cols[2], y+7);
     doc.text(`${e.amountGiven||0} mL`, cols[3], y+7);
@@ -3600,7 +3608,7 @@ function renderSavedInvoices(invoices) {
             ${inv.invoiceNum}
             <span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
           </div>
-          <div class="case-date">${inv.date} · ${inv.location}</div>
+          <div class="case-date">${fmtDate(inv.date)} · ${inv.location}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
           <div class="case-cost">$${inv.total.toFixed(2)}</div>
@@ -4148,7 +4156,8 @@ async function renderMidCase() {
     const draft = drafts.find(d => d.caseId === caseId);
     const pill = r.worker==='dev' ? 'pill-dev' : 'pill-josh';
     const wname = r.worker==='dev' ? 'Devarsh' : 'Josh';
-    const surgDate = r['po-surgeryDate'] || '—';
+    const surgDate = r['po-surgeryDate'] || '—'; // raw for logic
+    const surgDateFmt = fmtDate(r['po-surgeryDate']) || '—';
     const provider = r['po-provider'] || '—';
 
     // Summarize checked conditions
@@ -4168,7 +4177,7 @@ async function renderMidCase() {
             }
           </div>
           <div class="case-date">
-            Surgery: ${surgDate} · Provider: ${provider}
+            Surgery: ${surgDateFmt} · Provider: ${provider}
             ${r['po-allergies'] ? ' · <span style="color:var(--warn);">⚠ Allergies</span>' : ''}
           </div>
           ${r['po-patientEmail'] ? `<div style="margin-top:4px;display:flex;align-items:center;gap:8px;">
@@ -4191,7 +4200,7 @@ async function renderMidCase() {
       </div>
       <div class="case-items-list" id="midcase-detail-${r.id}">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px;font-size:13px;">
-          <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Surgery Date</strong><div>${r['po-surgeryDate']||'—'}</div></div>
+          <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Surgery Date</strong><div>${fmtDate(r['po-surgeryDate'])||'—'}</div></div>
           <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Call Date/Time</strong><div>${r['po-callDateTime']||'—'}</div></div>
           <div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint);">Mallampati</strong><div style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace;">${r['mallampati']||'—'}</div></div>
           
@@ -4221,7 +4230,7 @@ async function renderMidCase() {
             <span class="worker-pill ${pill}" style="font-size:10px;">${wname}</span>
             <span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">DRAFT</span>
           </div>
-          <div class="case-date">${d.date} · ${d.provider||'—'}</div>
+          <div class="case-date">${fmtDate(d.date)} · ${d.provider||'—'}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <button onclick="resumeCase('${d.id}')" class="btn btn-primary btn-sm" style="font-size:11px;">Finalize Case →</button>
@@ -4827,7 +4836,7 @@ window.previewDraft = async function(id) {
 
     document.getElementById('preview-title').textContent = r['po-caseId'] || 'Draft';
     document.getElementById('preview-subtitle').textContent =
-      `Surgery: ${r['po-surgeryDate']||'—'} · Provider: ${r['po-provider']||'—'}`;
+      `Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}`;
 
     // Build condition flags
     const cvFlags = ['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase());
@@ -4859,7 +4868,7 @@ window.previewDraft = async function(id) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">
         <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);margin-bottom:4px;">Surgery Date</div>
-          <div style="font-size:15px;font-weight:500;">${r['po-surgeryDate']||'—'}</div>
+          <div style="font-size:15px;font-weight:500;">${fmtDate(r['po-surgeryDate'])||'—'}</div>
         </div>
         <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);margin-bottom:4px;">Mallampati</div>
