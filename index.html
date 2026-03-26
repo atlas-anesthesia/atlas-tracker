@@ -1752,7 +1752,13 @@ window.saveCase = async function() {
   if(window._editingCaseId) {
     const idx = cases.findIndex(x => x.id === window._editingCaseId);
     if(idx !== -1) {
-      const total = caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
+      const suppliesTotal = caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
+      const csTotal = csEntries.reduce((sum,entry)=>{
+        const cpm=getCostPerML(entry.drug);
+        const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
+        return sum+cpm*mg;
+      },0);
+      const total = suppliesTotal + csTotal;
       cases[idx] = {
         ...cases[idx],
         caseId, procedure:proc, provider, date, notes,
