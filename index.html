@@ -4693,68 +4693,82 @@ window.changeMonth = function(dir) {
 };
 
 function getCalEvents() {
-  const preopDays  = parseInt(document.getElementById('cal-preop-days')?.value)  || 30;
-  const depositDays = parseInt(document.getElementById('cal-deposit-days')?.value) || 14;
-  const records = window._cachedPreopRecords || [];
-  const events = [];
+  try {
+    const preopDays  = parseInt(document.getElementById('cal-preop-days')?.value)  || 30;
+    const depositDays = parseInt(document.getElementById('cal-deposit-days')?.value) || 14;
+    const records = window._cachedPreopRecords || [];
+    const events = [];
 
-  records.forEach(r => {
-    if(calFilter !== 'all' && r.worker !== calFilter) return;
-    const surgDate = r['po-surgeryDate'];
-    if(!surgDate) return;
-    const caseId   = r['po-caseId']       || '—';
-    const provider = r['po-provider']     || '';
-    const worker   = r.worker             || 'dev';
-    const wname    = worker==='dev'?'Devarsh':'Josh';
-    const email    = r['po-patientEmail'] || '';
+    records.forEach(r => {
+      try {
+        if(calFilter !== 'all' && r.worker !== calFilter) return;
+        const surgDate = r['po-surgeryDate'];
+        if(!surgDate || surgDate === '—') return;
+        const caseId   = r['po-caseId']   || '—';
+        const provider = r['po-provider'] || '';
+        const worker   = r.worker         || 'dev';
+        const wname    = worker==='dev'?'Devarsh':'Josh';
+        const email    = r['po-patientEmail'] || '';
 
-    // Surgery
-    events.push({ type:'surgery', date:surgDate, label:`🔴 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+        events.push({ type:'surgery', date:surgDate, label:`🔴 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
 
-    // Pre-op call
-    const callD = new Date(surgDate+'T12:00:00');
-    callD.setDate(callD.getDate() - preopDays);
-    events.push({ type:'preop-call', date:callD.toISOString().split('T')[0], label:`📞 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+        const callD = new Date(surgDate+'T12:00:00');
+        callD.setDate(callD.getDate() - preopDays);
+        events.push({ type:'preop-call', date:callD.toISOString().split('T')[0], label:`📞 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
 
-    // Deposit
-    const depD = new Date(surgDate+'T12:00:00');
-    depD.setDate(depD.getDate() - depositDays);
-    events.push({ type:'deposit', date:depD.toISOString().split('T')[0], label:`💰 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
-  });
+        const depD = new Date(surgDate+'T12:00:00');
+        depD.setDate(depD.getDate() - depositDays);
+        events.push({ type:'deposit', date:depD.toISOString().split('T')[0], label:`💰 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+      } catch(rowErr) { console.warn('Calendar row error:', rowErr); }
+    });
 
-  return events;
+    return events;
+  } catch(e) {
+    console.error('getCalEvents error:', e);
+    return [];
+  }
 }
 
 window.buildCalendar = async function() {
   const grid  = document.getElementById('cal-grid');
   const label = document.getElementById('cal-month-label');
-  if(!grid) return;
+  if(!grid) { console.error('cal-grid not found'); return; }
 
-  // Load preop records
   try {
+    // Load preop records
     const snap = await getDoc(doc(db,'atlas','preop'));
     window._cachedPreopRecords = snap.exists() ? (snap.data().records||[]) : [];
   } catch(e) {
+    console.warn('Calendar: could not load preop records', e);
     window._cachedPreopRecords = window._cachedPreopRecords || [];
   }
 
-  // Also add finalized cases
-  const caseRecs = cases.filter(c=>!c.draft&&c.date).map(c=>({
-    'po-surgeryDate':c.date,'po-caseId':c.caseId,'po-provider':c.provider,
-    'po-patientEmail':'',worker:c.worker
-  }));
-  const existingIds = new Set((window._cachedPreopRecords||[]).map(r=>r['po-caseId']));
-  window._cachedPreopRecords = [...(window._cachedPreopRecords||[]), ...caseRecs.filter(c=>!existingIds.has(c['po-caseId']))];
+  // Merge finalized cases
+  try {
+    const caseRecs = (cases||[]).filter(c=>!c.draft&&c.date).map(c=>({
+      'po-surgeryDate':c.date,'po-caseId':c.caseId,'po-provider':c.provider,
+      'po-patientEmail':'',worker:c.worker
+    }));
+    const existingIds = new Set((window._cachedPreopRecords||[]).map(r=>r['po-caseId']));
+    window._cachedPreopRecords = [
+      ...(window._cachedPreopRecords||[]),
+      ...caseRecs.filter(c=>!existingIds.has(c['po-caseId']))
+    ];
+  } catch(e) { console.warn('Calendar: could not merge cases', e); }
 
-  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const months = ['January','February','March','April','May','June','July',
+    'August','September','October','November','December'];
   if(label) label.textContent = `${months[calMonth]} ${calYear}`;
 
-  const events  = getCalEvents();
-  const today   = new Date().toISOString().split('T')[0];
+  let events = [];
+  try { events = getCalEvents(); } catch(e) { console.warn('getCalEvents error', e); }
+
+  const today = new Date().toISOString().split('T')[0];
   const firstDay = new Date(calYear, calMonth, 1).getDay();
   const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
   const prevDays = new Date(calYear, calMonth, 0).getDate();
 
+  // Clear grid but keep it visible
   grid.innerHTML = '';
 
   // Day headers
@@ -4773,14 +4787,14 @@ window.buildCalendar = async function() {
     grid.appendChild(d);
   }
 
-  // Current month
+  // Current month days
   for(let day=1;day<=daysInMonth;day++) {
     const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const dayEvents = events.filter(e=>e.date===dateStr);
     const isToday = dateStr===today;
 
     const d = document.createElement('div');
-    d.style.cssText = `background:${isToday?'var(--info-light)':'var(--surface)'};min-height:80px;padding:6px;`;
+    d.style.cssText = `background:${isToday?'var(--info-light)':'var(--surface)'};min-height:80px;padding:6px;border:1px solid transparent;`;
 
     const numEl = document.createElement('div');
     numEl.style.cssText = `font-size:12px;font-weight:${isToday?'700':'500'};color:${isToday?'var(--info)':'var(--text-muted)'};margin-bottom:3px;`;
@@ -4789,10 +4803,15 @@ window.buildCalendar = async function() {
 
     dayEvents.forEach(e => {
       const ev = document.createElement('div');
-      const colors = {surgery:'background:#fee2e2;color:#b91c1c;','preop-call':'background:#dbeafe;color:#1d4ed8;',deposit:'background:#dcfce7;color:#166534;'};
+      const colors = {
+        surgery:'background:#fee2e2;color:#b91c1c;',
+        'preop-call':'background:#dbeafe;color:#1d4ed8;',
+        deposit:'background:#dcfce7;color:#166534;'
+      };
       ev.style.cssText = `font-size:10px;font-weight:500;padding:2px 4px;border-radius:3px;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${colors[e.type]||''}`;
       ev.textContent = e.label;
-      ev.onclick = () => showCalDetail(e);
+      ev.title = e.detail || e.label;
+      ev.onclick = () => { try { showCalDetail(e); } catch(err) { console.warn(err); } };
       d.appendChild(ev);
     });
 
@@ -4807,8 +4826,9 @@ window.buildCalendar = async function() {
     d.innerHTML = `<div style="font-size:11px;color:var(--text-faint);">${i}</div>`;
     grid.appendChild(d);
   }
-};
 
+  console.log('Calendar rendered:', months[calMonth], calYear, 'Events:', events.length);
+};
 // Alias for showTab compatibility
 window.renderCalendar = window.buildCalendar;
 
