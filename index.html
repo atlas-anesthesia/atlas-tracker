@@ -1456,13 +1456,23 @@ function uid(){return Math.random().toString(36).substr(2,9);}
 function generateCaseId(worker, date) {
   const w = worker === 'dev' ? 'DEV' : 'JOSH';
   const d = (date || new Date().toISOString().split('T')[0]).replace(/-/g,'');
-  // Count existing cases for this worker+date to get sequence number
-  const existing = cases.filter(c => {
-    const cid = c.caseId || '';
-    return cid.includes(w) && cid.includes(d);
-  });
-  const seq = String(existing.length + 1).padStart(3, '0');
-  return `ATL-${w}-${d}-${seq}`;
+  const prefix = `ATL-${w}-${d}-`;
+
+  // Only count unique finalized (non-draft) cases for this prefix
+  // Exclude the currently-being-edited case to avoid incrementing on edit
+  const existingNums = cases
+    .filter(c => !c.draft && (c.caseId||'').startsWith(prefix) && c.id !== window._editingCaseId && c.id !== window._activeDraftId)
+    .map(c => parseInt((c.caseId||'').replace(prefix,'')) || 0);
+
+  // Also count pre-op records for this date/worker
+  const preopNums = (window._cachedPreopRecords||[])
+    .filter(r => (r['po-caseId']||'').startsWith(prefix))
+    .map(r => parseInt((r['po-caseId']||'').replace(prefix,'')) || 0);
+
+  const allNums = [...existingNums, ...preopNums];
+  const maxNum = allNums.length > 0 ? Math.max(...allNums) : 0;
+  const seq = String(maxNum + 1).padStart(3, '0');
+  return `${prefix}${seq}`;
 }
 
 function updateCaseIdDisplays() {
@@ -2251,7 +2261,15 @@ window.savePreop = async function() {
       }
     } catch(e) { console.error(e); }
   }
-  const generatedId = generateCaseId(currentWorker, surgeryDate);
+  // Check if a pre-op already exists for this date+worker — reuse its ID
+  const snap0 = await getDoc(doc(db,'atlas','preop'));
+  const existingRecs = snap0.exists() ? (snap0.data().records||[]) : [];
+  const w0 = currentWorker==='dev'?'DEV':'JOSH';
+  const d0 = surgeryDate.replace(/-/g,'');
+  const existingMatch = existingRecs.find(r =>
+    (r['po-caseId']||'').startsWith(`ATL-${w0}-${d0}-`) && r.worker === currentWorker
+  );
+  const generatedId = existingMatch ? existingMatch['po-caseId'] : generateCaseId(currentWorker, surgeryDate);
   textData['po-caseId'] = generatedId;
 
   // Update the display too
@@ -2260,8 +2278,11 @@ window.savePreop = async function() {
   if(display) display.textContent = generatedId;
   if(input) input.value = generatedId;
 
+  // Check if a record already exists with this caseId — update instead of duplicate
+  const existingRecIdx = existingRecs.findIndex(r => r['po-caseId'] === generatedId && r.worker === currentWorker);
+
   const record = {
-    id: uid(),
+    id: existingRecIdx !== -1 ? existingRecs[existingRecIdx].id : uid(),
     savedAt: new Date().toISOString(),
     worker: currentWorker,
     ...textData,
@@ -2271,7 +2292,13 @@ window.savePreop = async function() {
   // Save pre-op record to Firestore
   const preopSnap = await getDoc(doc(db,'atlas','preop'));
   const existing = preopSnap.exists() ? (preopSnap.data().records || []) : [];
-  existing.unshift(record);
+  // Update if same caseId+worker already exists, otherwise add new
+  const dupeIdx = existing.findIndex(r => r['po-caseId'] === generatedId && r.worker === currentWorker);
+  if(dupeIdx !== -1) {
+    existing[dupeIdx] = record;
+  } else {
+    existing.unshift(record);
+  }
   setSyncing(true);
   await setDoc(doc(db,'atlas','preop'), { records: existing });
   setSyncing(false);
