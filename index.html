@@ -1758,7 +1758,8 @@ window.saveCase = async function() {
         caseId, procedure:proc, provider, date, notes,
         caseComments:comments, worker:currentWorker,
         items: caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
-        total
+        savedCsEntries: csEntries.map(e=>({...e})),
+        csTotal, total
       };
       setSyncing(true);
       await saveCases();
@@ -1785,6 +1786,8 @@ window.saveCase = async function() {
     id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
     caseComments:comments,
     items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
+    savedCsEntries:csEntries.map(e=>({...e})),
+    csTotal:csTotal2,
     total,imageData:pendingImageData||null
   });
   caseItems.forEach(item=>{
@@ -2033,6 +2036,14 @@ window.editFinalizedCase = function(id) {
         stock: invItem ? getStock(invItem, currentWorker) : parseFloat(i.qty) || 1
       };
     });
+
+    // Restore CS entries if saved on the case
+    if(c.savedCsEntries && c.savedCsEntries.length) {
+      csEntries = c.savedCsEntries.map(e => ({...e}));
+    } else {
+      csEntries = [];
+    }
+    renderCSEntries();
     renderCaseSupplies();
     refreshItemSelect();
 
