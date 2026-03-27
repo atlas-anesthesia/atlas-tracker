@@ -233,6 +233,7 @@
     <button onclick="showTab('inventory')">Inventory</button>
     <button onclick="showTab('calendar')">Calendar</button>
     <button onclick="showTab('invoice')">Invoice</button>
+    <button onclick="showTab('analytics')">Analytics</button>
     <div class="nav-dropdown" id="reports-dropdown">
       <button class="nav-dropdown-btn" id="reports-dropdown-btn" onclick="toggleReportsDropdown()">
         Reports <span class="arrow">▼</span>
@@ -469,6 +470,10 @@
           <label>Date of Surgery</label><input type="date" id="po-surgeryDate" oninput="updatePreopCaseIdDisplay()" onchange="updatePreopCaseIdDisplay()">
           <label>Date/Time of Call</label><input type="datetime-local" id="po-callDateTime">
           <label>Provider</label><input type="text" id="po-provider" placeholder="e.g. Dr. Smith">
+          <label>Surgery Center</label>
+          <select id="po-surgery-center">
+            <option value="">— Select surgery center —</option>
+          </select>
           <label>Invoice Email</label>
           <input type="text" id="po-patientEmail" placeholder="patient@email.com">
         </div>
@@ -1046,6 +1051,88 @@
       </div>
     </div>
 
+    <!-- ANALYTICS TAB -->
+    <div class="section" id="tab-analytics">
+      <div class="action-bar">
+        <h2>Analytics & Projected Income</h2>
+      </div>
+
+      <!-- Surgery Centers Management -->
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div class="card-title" style="margin-bottom:0;">Surgery Centers & Rates</div>
+          <button class="btn btn-ghost btn-sm" onclick="showAddCenterForm()">+ Add Center</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">Set rates per surgery center. These will be used to estimate projected income for each case.</div>
+
+        <!-- Add center form -->
+        <div id="add-center-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div>
+              <label>Surgery Center Name</label>
+              <input type="text" id="sc-name" placeholder="e.g. Wio Oral Surgery">
+            </div>
+            <div>
+              <label>First Hour Rate ($)</label>
+              <input type="number" id="sc-first-hour" min="0" step="0.01" placeholder="e.g. 800.00">
+            </div>
+            <div>
+              <label>Per 15-min Rate ($)</label>
+              <input type="number" id="sc-per-15" min="0" step="0.01" placeholder="e.g. 150.00">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-success btn-sm" onclick="saveCenter()">✓ Save Center</button>
+            <button class="btn btn-ghost btn-sm" onclick="hideAddCenterForm()">Cancel</button>
+          </div>
+        </div>
+
+        <div id="surgery-centers-list"></div>
+      </div>
+
+      <!-- Analytics grid -->
+      <div class="grid-2" style="margin-bottom:18px;">
+        <!-- Josh stats -->
+        <div class="card">
+          <div class="card-title" style="color:var(--josh);">Josh — Summary</div>
+          <div id="analytics-josh"></div>
+        </div>
+        <!-- Dev stats -->
+        <div class="card">
+          <div class="card-title" style="color:var(--dev);">Devarsh — Summary</div>
+          <div id="analytics-dev"></div>
+        </div>
+      </div>
+
+      <!-- Monthly breakdown -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">Monthly Breakdown</div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;">
+          <select id="analytics-year" onchange="renderAnalytics()" style="width:120px;">
+          </select>
+          <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;display:flex;">
+            <button id="abtn-all" onclick="setAnalyticsFilter('all')" style="background:var(--info);color:#fff;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;">All</button>
+            <button id="abtn-dev" onclick="setAnalyticsFilter('dev')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted);">Devarsh</button>
+            <button id="abtn-josh" onclick="setAnalyticsFilter('josh')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted);">Josh</button>
+          </div>
+        </div>
+        <div id="analytics-monthly"></div>
+      </div>
+
+      <!-- Per-case projected income -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">Per-Case Projected Income</div>
+        <div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">Based on surgery center rates × case duration. Select duration to estimate income per case.</div>
+        <div id="analytics-cases"></div>
+      </div>
+
+      <!-- Surgery center breakdown -->
+      <div class="card">
+        <div class="card-title">Breakdown by Surgery Center</div>
+        <div id="analytics-by-center"></div>
+      </div>
+    </div>
+
     <!-- CS LOG TAB -->
     <div class="section" id="tab-cs-log">
       <div class="action-bar">
@@ -1508,6 +1595,7 @@ onAuthStateChanged(auth, async (user) => {
     loadSavedInvoices();
     setInvoiceProvider();
     setTimeout(wireEKGDetection, 600);
+    loadSurgeryCenters();
     // Pre-warm calendar data
     setTimeout(() => {
       if(window.buildCalendar) window.buildCalendar();
@@ -1998,6 +2086,7 @@ window.showTab = function(tab) {
   if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
   if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); }
   if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
+  if(tab==='analytics') { renderAnalytics(); renderSurgeryCenters(); }
   if(tab==='calendar') {
     setTimeout(buildCalendar, 50);
   }
@@ -2188,6 +2277,7 @@ window.saveCase = async function() {
   cases.unshift({
     id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
     caseComments:comments,
+    surgeryCenter: (() => { const preopRec = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===caseId); return preopRec?.['po-surgery-center']||''; })(),
     items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
     savedCsEntries:csEntries.map(e=>({...e})),
     csTotal:csTotal2,
@@ -2747,7 +2837,7 @@ function getPreopCheckboxes() {
 }
 
 function getPreopTextFields() {
-  const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
+  const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-surgery-center','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
     'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
     'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
   const data = {};
@@ -5418,6 +5508,306 @@ window.syncPricesFromTemplate = async function() {
     setSyncing(false);
     alert('Error saving: ' + e.message);
     console.error(e);
+  }
+};
+
+// ── SURGERY CENTERS ──
+let surgeryCenters = []; // loaded from Firebase
+
+async function loadSurgeryCenters() {
+  try {
+    const snap = await getDoc(doc(db,'atlas','surgerycenters'));
+    surgeryCenters = snap.exists() ? (snap.data().centers || []) : [];
+  } catch(e) { console.warn('loadSurgeryCenters:', e); surgeryCenters = []; }
+  populateCenterDropdowns();
+}
+
+async function saveSurgeryCenters() {
+  await setDoc(doc(db,'atlas','surgerycenters'), { centers: surgeryCenters });
+}
+
+function populateCenterDropdowns() {
+  // Pre-Op dropdown
+  const sel = document.getElementById('po-surgery-center');
+  if(sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— Select surgery center —</option>' +
+      surgeryCenters.map(c => `<option value="${c.id}"${cur===c.id?' selected':''}>${c.name}</option>`).join('');
+  }
+}
+
+window.onSurgeryCenterChange = function() {
+  const sel = document.getElementById('po-surgery-center');
+  const ratesEl = document.getElementById('po-center-rates');
+  if(!sel || !ratesEl) return;
+  const center = surgeryCenters.find(c => c.id === sel.value);
+  if(center) {
+    ratesEl.style.display = 'block';
+    ratesEl.innerHTML = `<strong>${center.name}</strong> · 1st hour: <strong>$${center.firstHour.toFixed(2)}</strong> · Per 15-min: <strong>$${center.per15.toFixed(2)}</strong>`;
+  } else {
+    ratesEl.style.display = 'none';
+  }
+};
+
+window.showAddCenterForm = function() {
+  document.getElementById('add-center-form').style.display = 'block';
+};
+
+window.hideAddCenterForm = function() {
+  document.getElementById('add-center-form').style.display = 'none';
+  ['sc-name','sc-first-hour','sc-per-15'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  window._editingCenterId = null;
+};
+
+window.saveCenter = async function() {
+  const name = document.getElementById('sc-name')?.value.trim();
+  const firstHour = parseFloat(document.getElementById('sc-first-hour')?.value) || 0;
+  const per15 = parseFloat(document.getElementById('sc-per-15')?.value) || 0;
+  if(!name) { alert('Please enter a surgery center name.'); return; }
+
+  if(window._editingCenterId) {
+    const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
+    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15 };
+  } else {
+    surgeryCenters.push({ id: uid(), name, firstHour, per15 });
+  }
+
+  setSyncing(true);
+  await saveSurgeryCenters();
+  setSyncing(false);
+  hideAddCenterForm();
+  renderSurgeryCenters();
+  populateCenterDropdowns();
+  renderAnalytics();
+};
+
+window.editCenter = function(id) {
+  const c = surgeryCenters.find(x => x.id === id);
+  if(!c) return;
+  window._editingCenterId = id;
+  document.getElementById('sc-name').value = c.name;
+  document.getElementById('sc-first-hour').value = c.firstHour;
+  document.getElementById('sc-per-15').value = c.per15;
+  document.getElementById('add-center-form').style.display = 'block';
+  document.getElementById('add-center-form').scrollIntoView({ behavior:'smooth' });
+};
+
+window.deleteCenter = async function(id) {
+  const c = surgeryCenters.find(x => x.id === id);
+  if(!confirm(`Delete "${c?.name}"?`)) return;
+  surgeryCenters = surgeryCenters.filter(x => x.id !== id);
+  setSyncing(true);
+  await saveSurgeryCenters();
+  setSyncing(false);
+  renderSurgeryCenters();
+  populateCenterDropdowns();
+  renderAnalytics();
+};
+
+function renderSurgeryCenters() {
+  const el = document.getElementById('surgery-centers-list');
+  if(!el) return;
+  if(!surgeryCenters.length) {
+    el.innerHTML = '<div class="empty-state">No surgery centers added yet</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
+      <span>Center Name</span><span>1st Hour</span><span>Per 15-min</span><span></span>
+    </div>
+    ${surgeryCenters.map(c => `
+      <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center;">
+        <div style="font-size:14px;font-weight:500;">${c.name}</div>
+        <div style="font-size:14px;font-family:'DM Mono',monospace;">$${c.firstHour.toFixed(2)}</div>
+        <div style="font-size:14px;font-family:'DM Mono',monospace;">$${c.per15.toFixed(2)}</div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="editCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏</button>
+          <button onclick="deleteCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">🗑</button>
+        </div>
+      </div>`).join('')}`;
+}
+
+// ── ANALYTICS ──
+let analyticsFilter = 'all';
+
+window.setAnalyticsFilter = function(f) {
+  analyticsFilter = f;
+  ['all','dev','josh'].forEach(x => {
+    const btn = document.getElementById('abtn-'+x);
+    if(!btn) return;
+    btn.style.background = x===f ? (x==='dev'?'var(--dev)':x==='josh'?'var(--josh)':'var(--info)') : 'transparent';
+    btn.style.color = x===f ? '#fff' : 'var(--text-muted)';
+  });
+  renderAnalytics();
+};
+
+function estimateIncome(c) {
+  // Find surgery center
+  const centerId = c.surgeryCenter || '';
+  const center = surgeryCenters.find(sc => sc.id === centerId);
+  if(!center) return null;
+  // Default 2 hours if no duration
+  const mins = c.durationMins || 120;
+  const extraMins = Math.max(0, mins - 60);
+  const extra15 = Math.ceil(extraMins / 15);
+  return center.firstHour + (extra15 * center.per15);
+}
+
+function getCenterName(centerId) {
+  return surgeryCenters.find(c => c.id === centerId)?.name || '—';
+}
+
+window.renderAnalytics = function() {
+  const yearSel = document.getElementById('analytics-year');
+  const allYears = [...new Set((cases||[]).filter(c=>!c.draft&&c.date).map(c=>c.date.substring(0,4)))].sort().reverse();
+  if(yearSel) {
+    const curYear = yearSel.value || new Date().getFullYear().toString();
+    yearSel.innerHTML = allYears.map(y=>`<option value="${y}"${y===curYear?' selected':''}>${y}</option>`).join('');
+  }
+  const selectedYear = yearSel?.value || new Date().getFullYear().toString();
+
+  const finalized = (cases||[]).filter(c => !c.draft && c.date);
+  const devCases  = finalized.filter(c => c.worker === 'dev');
+  const joshCases = finalized.filter(c => c.worker === 'josh');
+
+  // Days worked = unique dates
+  const uniqueDays = arr => new Set(arr.map(c=>c.date)).size;
+
+  // Total income from cost field
+  const totalCost = arr => arr.reduce((s,c) => s + (parseFloat(c.total)||0), 0);
+
+  // Projected income
+  const projIncome = arr => arr.reduce((s,c) => {
+    const est = estimateIncome(c);
+    return s + (est || 0);
+  }, 0);
+
+  const projCount = arr => arr.filter(c => estimateIncome(c) !== null).length;
+
+  // Render summary cards
+  const renderSummary = (arr, elId) => {
+    const el = document.getElementById(elId);
+    if(!el) return;
+    const proj = projIncome(arr);
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Total Cases</div>
+          <div style="font-size:24px;font-weight:600;font-family:'DM Mono',monospace;">${arr.length}</div>
+        </div>
+        <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Days Worked</div>
+          <div style="font-size:24px;font-weight:600;font-family:'DM Mono',monospace;">${uniqueDays(arr)}</div>
+        </div>
+        <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Supply Cost</div>
+          <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:var(--warn);">$${totalCost(arr).toFixed(2)}</div>
+        </div>
+        <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Projected Income</div>
+          <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:var(--accent);">${proj > 0 ? '$'+proj.toFixed(2) : '—'}</div>
+          ${proj > 0 ? `<div style="font-size:10px;color:var(--text-faint);">${projCount(arr)} of ${arr.length} cases have center rates</div>` : '<div style="font-size:10px;color:var(--text-faint);">Link cases to surgery centers</div>'}
+        </div>
+      </div>`;
+  };
+
+  renderSummary(devCases, 'analytics-dev');
+  renderSummary(joshCases, 'analytics-josh');
+
+  // Monthly breakdown
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const filtered = analyticsFilter === 'all' ? finalized : finalized.filter(c=>c.worker===analyticsFilter);
+  const yearCases = filtered.filter(c => c.date.startsWith(selectedYear));
+
+  const byMonth = {};
+  for(let m=0; m<12; m++) byMonth[m] = [];
+  yearCases.forEach(c => {
+    const m = parseInt(c.date.split('-')[1]) - 1;
+    byMonth[m].push(c);
+  });
+
+  const monthEl = document.getElementById('analytics-monthly');
+  if(monthEl) {
+    const yearTotal = yearCases.reduce((s,c)=>s+(parseFloat(c.total)||0),0);
+    const yearProj = projIncome(yearCases);
+    monthEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:80px 60px 60px 100px 100px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
+        <span>Month</span><span>Cases</span><span>Days</span><span>Supply Cost</span><span>Proj. Income</span>
+      </div>
+      ${months.map((m,i) => {
+        const mc = byMonth[i];
+        if(!mc.length) return `<div style="display:grid;grid-template-columns:80px 60px 60px 100px 100px;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);color:var(--text-faint);font-size:13px;">
+          <span>${m}</span><span>—</span><span>—</span><span>—</span><span>—</span></div>`;
+        const proj = projIncome(mc);
+        return `<div style="display:grid;grid-template-columns:80px 60px 60px 100px 100px;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;align-items:center;">
+          <span style="font-weight:500;">${m}</span>
+          <span>${mc.length}</span>
+          <span>${uniqueDays(mc)}</span>
+          <span style="font-family:'DM Mono',monospace;color:var(--warn);">$${totalCost(mc).toFixed(2)}</span>
+          <span style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500;">${proj>0?'$'+proj.toFixed(2):'—'}</span>
+        </div>`;
+      }).join('')}
+      <div style="display:grid;grid-template-columns:80px 60px 60px 100px 100px;gap:8px;padding:10px 0;border-top:2px solid var(--border-strong);font-size:13px;font-weight:600;">
+        <span>Total ${selectedYear}</span>
+        <span>${yearCases.length}</span>
+        <span>${uniqueDays(yearCases)}</span>
+        <span style="font-family:'DM Mono',monospace;color:var(--warn);">$${yearTotal.toFixed(2)}</span>
+        <span style="font-family:'DM Mono',monospace;color:var(--accent);">${yearProj>0?'$'+yearProj.toFixed(2):'—'}</span>
+      </div>`;
+  }
+
+  // Per-case projected income
+  const caseEl = document.getElementById('analytics-cases');
+  if(caseEl) {
+    const withCenter = filtered.filter(c => c.surgeryCenter && surgeryCenters.find(sc=>sc.id===c.surgeryCenter));
+    if(!withCenter.length) {
+      caseEl.innerHTML = '<div class="empty-state">No cases linked to surgery centers yet. Select a surgery center in Pre-Op or edit existing cases.</div>';
+    } else {
+      caseEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:100px 1fr 120px 80px 100px 100px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
+          <span>Date</span><span>Case</span><span>Center</span><span>Mins</span><span>Supply Cost</span><span>Proj. Income</span>
+        </div>
+        ${withCenter.sort((a,b)=>b.date.localeCompare(a.date)).map(c => {
+          const est = estimateIncome(c);
+          const center = surgeryCenters.find(sc=>sc.id===c.surgeryCenter);
+          return `<div style="display:grid;grid-template-columns:100px 1fr 120px 80px 100px 100px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;align-items:center;">
+            <span style="font-family:'DM Mono',monospace;font-size:11px;">${fmtDate(c.date)}</span>
+            <span style="font-weight:500;">${c.caseId||'—'}<div style="font-size:11px;color:var(--text-faint);">${c.procedure||''}</div></span>
+            <span style="font-size:12px;">${center?.name||'—'}</span>
+            <span style="color:var(--text-faint);">${c.durationMins||'—'}</span>
+            <span style="font-family:'DM Mono',monospace;color:var(--warn);">$${(parseFloat(c.total)||0).toFixed(2)}</span>
+            <span style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500;">${est!==null?'$'+est.toFixed(2):'—'}</span>
+          </div>`;
+        }).join('')}`;
+    }
+  }
+
+  // By center breakdown
+  const centerEl = document.getElementById('analytics-by-center');
+  if(centerEl) {
+    if(!surgeryCenters.length) {
+      centerEl.innerHTML = '<div class="empty-state">No surgery centers added yet.</div>';
+    } else {
+      centerEl.innerHTML = surgeryCenters.map(sc => {
+        const scCases = filtered.filter(c => c.surgeryCenter === sc.id);
+        const proj = projIncome(scCases);
+        return `<div style="padding:14px 0;border-bottom:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+            <div>
+              <div style="font-size:14px;font-weight:600;">${sc.name}</div>
+              <div style="font-size:12px;color:var(--text-faint);margin-top:2px;">1st hr: $${sc.firstHour.toFixed(2)} · Per 15-min: $${sc.per15.toFixed(2)}</div>
+            </div>
+            <div style="display:flex;gap:14px;text-align:right;">
+              <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);">Cases</div><div style="font-size:18px;font-weight:600;">${scCases.length}</div></div>
+              <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);">Proj. Income</div><div style="font-size:18px;font-weight:600;color:var(--accent);">${proj>0?'$'+proj.toFixed(2):'—'}</div></div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
   }
 };
 
