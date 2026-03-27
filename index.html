@@ -1864,7 +1864,8 @@ function showCalDetail(e) {
           </div>` : ''}
         </div>
         ${e.email ? `<div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;font-family:'DM Mono',monospace;">📧 ${e.email}</div>` : ''}
-        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px;">
+          <button onclick="document.getElementById('cal-detail-modal').style.display='none';viewPreopFromCalendar('${e.caseId}')" class="btn btn-primary btn-sm" style="font-size:12px;">📋 View Pre-Op</button>
           ${gcalToken
             ? `<button class="gcal-btn btn-sm" onclick="addSingleEventToGCal(${JSON.stringify(JSON.stringify(e))});document.getElementById('cal-detail-modal').style.display='none';" style="font-size:12px;padding:6px 14px;">+ Add to Google Cal</button>`
             : `<button class="gcal-btn btn-sm" onclick="connectGoogleCalendar()" style="font-size:12px;padding:6px 14px;">Connect Google Cal</button>`}
@@ -1874,6 +1875,41 @@ function showCalDetail(e) {
     </div>`;
   modal.style.display = 'flex';
 }
+
+window.viewPreopFromCalendar = async function(caseId) {
+  // Find the pre-op record with this caseId
+  try {
+    let records = window._rawPreopRecords || [];
+    if(!records.length) {
+      const snap = await getDoc(doc(db,'atlas','preop'));
+      records = snap.exists() ? (snap.data().records||[]) : [];
+      window._rawPreopRecords = records;
+    }
+    const record = records.find(r => r['po-caseId'] === caseId);
+    if(record) {
+      // Open preview modal
+      previewDraft(record.id);
+    } else {
+      // No pre-op record — check if it's a finalized case and open case history
+      const c = cases.find(c => c.caseId === caseId);
+      if(c) {
+        showTab('history');
+        setTimeout(() => {
+          const el = document.getElementById('detail_' + c.id);
+          if(el) {
+            el.classList.add('open');
+            el.scrollIntoView({ behavior:'smooth', block:'center' });
+          }
+        }, 300);
+      } else {
+        alert('No pre-op record found for ' + caseId);
+      }
+    }
+  } catch(e) {
+    console.error(e);
+    alert('Error loading pre-op: ' + e.message);
+  }
+};
 
 window.showCalEventDetail = showCalDetail;
 
