@@ -1183,7 +1183,7 @@
 </div>
 
     <!-- CALENDAR TAB -->
-    <div class="section" id="tab-calendar" style="padding:0 16px;">
+    <div class="section" id="tab-calendar">
       <div class="action-bar">
         <h2>Calendar</h2>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -1198,10 +1198,22 @@
       </div>
 
       <!-- Legend -->
-      <div style="display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;">
-        <div style="display:flex;align-items:center;gap:6px;font-size:12px;"><div style="width:12px;height:12px;border-radius:2px;background:#fee2e2;"></div> Surgery</div>
-        <div style="display:flex;align-items:center;gap:6px;font-size:12px;"><div style="width:12px;height:12px;border-radius:2px;background:#dbeafe;"></div> Pre-Op Call</div>
-        <div style="display:flex;align-items:center;gap:6px;font-size:12px;"><div style="width:12px;height:12px;border-radius:2px;background:#dcfce7;"></div> Deposit Due</div>
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#b91c1c;"></div>
+          <span style="font-size:12px;font-weight:500;color:var(--text-muted);">🔴 Surgery</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#1d4ed8;"></div>
+          <span style="font-size:12px;font-weight:500;color:var(--text-muted);">📞 Pre-Op Call Due</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#166534;"></div>
+          <span style="font-size:12px;font-weight:500;color:var(--text-muted);">💰 Deposit Due</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;">
+          <span style="font-size:12px;color:var(--text-faint);">Click any event for details</span>
+        </div>
       </div>
 
       <!-- Settings + Filter -->
@@ -1809,28 +1821,58 @@ window.renderCalendar = buildCalendar;
 window.buildCalendar = buildCalendar;
 
 function showCalDetail(e) {
-  const det = document.getElementById('cal-event-detail');
-  const con = document.getElementById('cal-event-detail-content');
-  if(!det||!con) return;
   const typeLabel = {surgery:'🔴 Surgery','preop-call':'📞 Pre-Op Call Due',deposit:'💰 Deposit Due'};
-  const typeColor = {surgery:'var(--warn)','preop-call':'var(--info)',deposit:'var(--accent)'};
-  con.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
-      <div>
-        <div style="font-size:14px;font-weight:600;color:${typeColor[e.type]||'var(--text)'};">${typeLabel[e.type]||e.type}</div>
-        <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Case: <strong>${e.caseId}</strong> · ${e.date}</div>
-        ${e.provider?`<div style="font-size:13px;color:var(--text-muted);">Provider: ${e.provider}</div>`:''}
-        ${e.email?`<div style="font-size:13px;color:var(--text-muted);">Patient Email: ${e.email}</div>`:''}
-        <div style="font-size:13px;color:var(--text-muted);">Surgery Date: ${e.surgDate}</div>
+  const typeBg = {surgery:'#fee2e2','preop-call':'#dbeafe',deposit:'#dcfce7'};
+  const typeColor = {surgery:'#b91c1c','preop-call':'#1d4ed8',deposit:'#166534'};
+
+  // Create or reuse modal
+  let modal = document.getElementById('cal-detail-modal');
+  if(!modal) {
+    modal = document.createElement('div');
+    modal.id = 'cal-detail-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;align-items:center;justify-content:center;padding:20px;';
+    modal.onclick = (ev) => { if(ev.target===modal) modal.style.display='none'; };
+    document.body.appendChild(modal);
+  }
+
+  const bg = typeBg[e.type] || 'var(--surface2)';
+  const col = typeColor[e.type] || 'var(--text)';
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:var(--radius);max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;">
+      <div style="background:${bg};padding:16px 20px;border-bottom:2px solid ${col}22;">
+        <div style="font-size:15px;font-weight:700;color:${col};">${typeLabel[e.type]||e.type}</div>
+        <div style="font-size:12px;color:${col};opacity:.8;margin-top:2px;">${e.caseId}</div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${gcalToken
-          ? `<button class="gcal-btn" onclick="addSingleEventToGCal(${JSON.stringify(JSON.stringify(e))})" style="font-size:12px;padding:6px 12px;">+ Add to Google Calendar</button>`
-          : `<button class="gcal-btn" onclick="connectGoogleCalendar()" style="font-size:12px;padding:6px 12px;">Connect Google Calendar</button>`}
-        <button onclick="document.getElementById('cal-event-detail').style.display='none'" class="btn btn-ghost btn-sm">Close</button>
+      <div style="padding:18px 20px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+          <div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm);">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px;">Surgery Date</div>
+            <div style="font-size:13px;font-weight:500;">${fmtDate(e.surgDate)}</div>
+          </div>
+          <div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm);">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px;">Event Date</div>
+            <div style="font-size:13px;font-weight:500;">${fmtDate(e.date)}</div>
+          </div>
+          ${e.provider ? `<div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm);">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px;">Provider</div>
+            <div style="font-size:13px;">${e.provider}</div>
+          </div>` : ''}
+          ${e.worker ? `<div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm);">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px;">Worker</div>
+            <div style="font-size:13px;">${e.worker==='dev'?'Devarsh':'Josh'}</div>
+          </div>` : ''}
+        </div>
+        ${e.email ? `<div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;font-family:'DM Mono',monospace;">📧 ${e.email}</div>` : ''}
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+          ${gcalToken
+            ? `<button class="gcal-btn btn-sm" onclick="addSingleEventToGCal(${JSON.stringify(JSON.stringify(e))});document.getElementById('cal-detail-modal').style.display='none';" style="font-size:12px;padding:6px 14px;">+ Add to Google Cal</button>`
+            : `<button class="gcal-btn btn-sm" onclick="connectGoogleCalendar()" style="font-size:12px;padding:6px 14px;">Connect Google Cal</button>`}
+          <button onclick="document.getElementById('cal-detail-modal').style.display='none'" class="btn btn-ghost btn-sm">Close</button>
+        </div>
       </div>
     </div>`;
-  det.style.display = 'block';
+  modal.style.display = 'flex';
 }
 
 window.showCalEventDetail = showCalDetail;
