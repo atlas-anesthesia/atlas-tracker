@@ -1986,19 +1986,20 @@ function showCalDetail(e) {
 }
 
 window.viewPreopFromCalendar = async function(caseId) {
-  if(!caseId) return;
+  if(!caseId) { alert('caseId is empty!'); return; }
+  alert('viewPreopFromCalendar fired! caseId = ' + caseId);
   try {
-    // Try pre-op draft first
     const snap = await getDoc(doc(db,'atlas','preop'));
     const records = snap.exists() ? (snap.data().records||[]) : [];
-    window._rawPreopRecords = records;
+    alert('Records loaded: ' + records.length + ' total');
     const record = records.find(r => (r['po-caseId']||'').trim() === caseId.trim());
+    alert('Record found: ' + (record ? 'YES id='+record.id : 'NO'));
     if(record) {
       window.previewDraft(record.id);
       return;
     }
-    // Try finalized case
     const c = (cases||[]).find(x => (x.caseId||'').trim() === caseId.trim());
+    alert('Finalized case found: ' + (c ? 'YES' : 'NO') + ' | cases total: ' + cases.length);
     if(c) {
       showTab('history');
       await new Promise(r => setTimeout(r, 300));
@@ -2009,12 +2010,9 @@ window.viewPreopFromCalendar = async function(caseId) {
         el.classList.add('open');
         el.scrollIntoView({ behavior:'smooth', block:'center' });
       }
-      return;
     }
-    alert('No record found for: ' + caseId);
   } catch(err) {
-    console.error(err);
-    alert('Error: ' + err.message);
+    alert('ERROR: ' + err.message);
   }
 };
 
