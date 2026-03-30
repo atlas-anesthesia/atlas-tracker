@@ -1912,10 +1912,9 @@ window.buildCalendar = buildCalendar;
 function showCalDetail(e) {
   window._calDetailCaseId = e.caseId;
   const typeLabel = {surgery:'🔴 Surgery','preop-call':'📞 Pre-Op Call Due',deposit:'💰 Deposit Due'};
-  const typeBg = {surgery:'#fee2e2','preop-call':'#dbeafe',deposit:'#dcfce7'};
+  const typeBg    = {surgery:'#fee2e2','preop-call':'#dbeafe',deposit:'#dcfce7'};
   const typeColor = {surgery:'#b91c1c','preop-call':'#1d4ed8',deposit:'#166534'};
 
-  // Create or reuse modal
   let modal = document.getElementById('cal-detail-modal');
   if(!modal) {
     modal = document.createElement('div');
@@ -1925,9 +1924,10 @@ function showCalDetail(e) {
     document.body.appendChild(modal);
   }
 
-  const bg = typeBg[e.type] || 'var(--surface2)';
+  const bg  = typeBg[e.type]    || 'var(--surface2)';
   const col = typeColor[e.type] || 'var(--text)';
 
+  // Build inner HTML (no onclick strings — we attach listeners below)
   modal.innerHTML = `
     <div style="background:var(--surface);border-radius:var(--radius);max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;">
       <div style="background:${bg};padding:16px 20px;border-bottom:2px solid ${col}22;">
@@ -1955,15 +1955,33 @@ function showCalDetail(e) {
         </div>
         ${e.email ? `<div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;font-family:'DM Mono',monospace;">📧 ${e.email}</div>` : ''}
         <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px;">
-          <button onclick="document.getElementById('cal-detail-modal').style.display='none';viewPreopFromCalendar(window._calDetailCaseId)" class="btn btn-primary btn-sm" style="font-size:12px;">📋 View Pre-Op</button>
-          ${gcalToken
-            ? `<button class="gcal-btn btn-sm" onclick="addSingleEventToGCal(${JSON.stringify(JSON.stringify(e))});document.getElementById('cal-detail-modal').style.display='none';" style="font-size:12px;padding:6px 14px;">+ Add to Google Cal</button>`
-            : `<button class="gcal-btn btn-sm" onclick="connectGoogleCalendar()" style="font-size:12px;padding:6px 14px;">Connect Google Cal</button>`}
-          <button onclick="document.getElementById('cal-detail-modal').style.display='none'" class="btn btn-ghost btn-sm">Close</button>
+          <button id="cal-view-preop-btn" class="btn btn-primary btn-sm" style="font-size:12px;">📋 View Pre-Op</button>
+          <button id="cal-gcal-btn" class="btn btn-ghost btn-sm" style="font-size:12px;padding:6px 14px;">${gcalToken ? '+ Add to Google Cal' : 'Connect Google Cal'}</button>
+          <button id="cal-close-btn" class="btn btn-ghost btn-sm">Close</button>
         </div>
       </div>
     </div>`;
+
   modal.style.display = 'flex';
+
+  // Attach event listeners AFTER innerHTML is set
+  document.getElementById('cal-close-btn').addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+
+  document.getElementById('cal-view-preop-btn').addEventListener('click', () => {
+    modal.style.display = 'none';
+    window.viewPreopFromCalendar(window._calDetailCaseId);
+  });
+
+  document.getElementById('cal-gcal-btn').addEventListener('click', () => {
+    if(gcalToken) {
+      addSingleEventToGCal(JSON.stringify(e));
+      modal.style.display = 'none';
+    } else {
+      connectGoogleCalendar();
+    }
+  });
 }
 
 window.viewPreopFromCalendar = async function(caseId) {
