@@ -1971,9 +1971,7 @@ function showCalDetail(e) {
 
   modal.querySelector('#cal-view-preop-btn').addEventListener('click', () => {
     modal.style.display = 'none';
-    const caseId = e.caseId; // use closure var directly, not window._calDetailCaseId
-    console.log('View Pre-Op clicked, caseId:', caseId);
-    viewPreopFromCalendar(caseId);
+    window.viewPreopFromCalendar(e.caseId);
   });
 
   modal.querySelector('#cal-gcal-btn').addEventListener('click', () => {
