@@ -1989,35 +1989,39 @@ function showCalDetail(e) {
 window.viewPreopFromCalendar = async function(caseId) {
   if(!caseId) { alert('No case ID found.'); return; }
   try {
-    // Load fresh from Firebase every time
     const snap = await getDoc(doc(db,'atlas','preop'));
     const records = snap.exists() ? (snap.data().records||[]) : [];
     window._rawPreopRecords = records;
-
     const record = records.find(r => (r['po-caseId']||'').trim() === caseId.trim());
 
     if(record) {
-      // Navigate to Mid-Case tab and open the preview there
+      // Has pre-op — go to Mid-Case and open preview
       showTab('mid-case');
-      await renderMidCase();
-      setTimeout(() => {
-        previewDraft(record.id);
-      }, 400);
+      setTimeout(async () => {
+        await renderMidCase();
+        setTimeout(() => previewDraft(record.id), 300);
+      }, 200);
     } else {
-      // Finalized case — go to history
+      // Finalized — go to Case History and expand that exact case
       const c = (cases||[]).find(x => (x.caseId||'').trim() === caseId.trim());
       if(c) {
         showTab('history');
         setTimeout(() => {
-          const el = document.getElementById('detail_' + c.id);
-          if(el) { el.classList.add('open'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
-        }, 400);
+          renderHistory();
+          setTimeout(() => {
+            const el = document.getElementById('detail_' + c.id);
+            if(el) {
+              el.classList.add('open');
+              el.scrollIntoView({ behavior:'smooth', block:'center' });
+            }
+          }, 300);
+        }, 200);
       } else {
-        alert('Pre-op record not found for: ' + caseId);
+        alert('No record found for: ' + caseId);
       }
     }
   } catch(err) {
-    console.error('viewPreopFromCalendar error:', err);
+    console.error('viewPreopFromCalendar:', err);
     alert('Error: ' + err.message);
   }
 };
