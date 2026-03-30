@@ -1985,41 +1985,34 @@ function showCalDetail(e) {
 }
 
 window.viewPreopFromCalendar = async function(caseId) {
-  if(!caseId) { alert('No case ID found.'); return; }
+  if(!caseId) return;
   try {
+    // Try pre-op draft first
     const snap = await getDoc(doc(db,'atlas','preop'));
     const records = snap.exists() ? (snap.data().records||[]) : [];
     window._rawPreopRecords = records;
     const record = records.find(r => (r['po-caseId']||'').trim() === caseId.trim());
-
     if(record) {
-      // Has pre-op — go to Mid-Case and open preview
-      showTab('mid-case');
-      setTimeout(async () => {
-        await renderMidCase();
-        setTimeout(() => previewDraft(record.id), 300);
-      }, 200);
-    } else {
-      // Finalized — go to Case History and expand that exact case
-      const c = (cases||[]).find(x => (x.caseId||'').trim() === caseId.trim());
-      if(c) {
-        showTab('history');
-        setTimeout(() => {
-          renderHistory();
-          setTimeout(() => {
-            const el = document.getElementById('detail_' + c.id);
-            if(el) {
-              el.classList.add('open');
-              el.scrollIntoView({ behavior:'smooth', block:'center' });
-            }
-          }, 300);
-        }, 200);
-      } else {
-        alert('No record found for: ' + caseId);
-      }
+      window.previewDraft(record.id);
+      return;
     }
+    // Try finalized case
+    const c = (cases||[]).find(x => (x.caseId||'').trim() === caseId.trim());
+    if(c) {
+      showTab('history');
+      await new Promise(r => setTimeout(r, 300));
+      renderHistory();
+      await new Promise(r => setTimeout(r, 300));
+      const el = document.getElementById('detail_' + c.id);
+      if(el) {
+        el.classList.add('open');
+        el.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+      return;
+    }
+    alert('No record found for: ' + caseId);
   } catch(err) {
-    console.error('viewPreopFromCalendar:', err);
+    console.error(err);
     alert('Error: ' + err.message);
   }
 };
