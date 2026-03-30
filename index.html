@@ -1964,17 +1964,19 @@ function showCalDetail(e) {
 
   modal.style.display = 'flex';
 
-  // Attach event listeners AFTER innerHTML is set
-  document.getElementById('cal-close-btn').addEventListener('click', () => {
+  // Use modal.querySelector to avoid ID conflicts with static HTML
+  modal.querySelector('#cal-close-btn').addEventListener('click', () => {
     modal.style.display = 'none';
   });
 
-  document.getElementById('cal-view-preop-btn').addEventListener('click', () => {
+  modal.querySelector('#cal-view-preop-btn').addEventListener('click', () => {
     modal.style.display = 'none';
-    window.viewPreopFromCalendar(window._calDetailCaseId);
+    const caseId = e.caseId; // use closure var directly, not window._calDetailCaseId
+    console.log('View Pre-Op clicked, caseId:', caseId);
+    viewPreopFromCalendar(caseId);
   });
 
-  document.getElementById('cal-gcal-btn').addEventListener('click', () => {
+  modal.querySelector('#cal-gcal-btn').addEventListener('click', () => {
     if(gcalToken) {
       addSingleEventToGCal(JSON.stringify(e));
       modal.style.display = 'none';
@@ -1985,37 +1987,38 @@ function showCalDetail(e) {
 }
 
 window.viewPreopFromCalendar = async function(caseId) {
-  console.log('viewPreopFromCalendar called with:', caseId);
+  if(!caseId) { alert('No case ID found.'); return; }
   try {
-    let records = window._rawPreopRecords || [];
-    if(!records.length) {
-      const snap = await getDoc(doc(db,'atlas','preop'));
-      records = snap.exists() ? (snap.data().records||[]) : [];
-      window._rawPreopRecords = records;
-    }
-    const record = records.find(r => (r['po-caseId']||'').trim() === (caseId||'').trim());
+    // Load fresh from Firebase every time
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records||[]) : [];
+    window._rawPreopRecords = records;
+
+    const record = records.find(r => (r['po-caseId']||'').trim() === caseId.trim());
+
     if(record) {
-      // Open preview modal
-      previewDraft(record.id);
+      // Navigate to Mid-Case tab and open the preview there
+      showTab('mid-case');
+      await renderMidCase();
+      setTimeout(() => {
+        previewDraft(record.id);
+      }, 400);
     } else {
-      // No pre-op record — check if it's a finalized case and open case history
-      const c = cases.find(c => c.caseId === caseId);
+      // Finalized case — go to history
+      const c = (cases||[]).find(x => (x.caseId||'').trim() === caseId.trim());
       if(c) {
         showTab('history');
         setTimeout(() => {
           const el = document.getElementById('detail_' + c.id);
-          if(el) {
-            el.classList.add('open');
-            el.scrollIntoView({ behavior:'smooth', block:'center' });
-          }
-        }, 300);
+          if(el) { el.classList.add('open'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+        }, 400);
       } else {
-        alert('No pre-op record found for ' + caseId);
+        alert('Pre-op record not found for: ' + caseId);
       }
     }
-  } catch(e) {
-    console.error(e);
-    alert('Error loading pre-op: ' + e.message);
+  } catch(err) {
+    console.error('viewPreopFromCalendar error:', err);
+    alert('Error: ' + err.message);
   }
 };
 
