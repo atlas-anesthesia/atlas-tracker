@@ -1970,6 +1970,7 @@ function showCalDetail(e) {
   });
 
   modal.querySelector('#cal-view-preop-btn').addEventListener('click', () => {
+    alert('Button clicked! CaseId = ' + e.caseId);
     modal.style.display = 'none';
     window.viewPreopFromCalendar(e.caseId);
   });
