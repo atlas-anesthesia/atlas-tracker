@@ -129,7 +129,7 @@
   .inv-row:last-child{border-bottom:none;}
   .inv-header{display:grid;grid-template-columns:1.8fr 80px 70px 70px 90px 110px 80px;gap:8px;padding-bottom:7px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);}
   .inv-row input{padding:5px 8px;font-size:13px;width:100%;}
-  .cat-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);padding:14px 0 6px;}
+  .cat-label{font-size:12px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);padding:14px 0 6px;}
 
   /* ── CALENDAR ── */
   .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
@@ -1525,7 +1525,7 @@ const ITEM_TEMPLATE = [
   {id:'76329-3302-01',code:'76329-3302-01',generic:'D50',name:"Dextrose 50% 50mL Syringe",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:20.9,devStock:0,joshStock:0,alert:2},
   {id:'25021-0319-10',code:'25021-0319-10',generic:'Cardizem',name:"Diltiazem 50mg/10mL",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:6.2,devStock:0,joshStock:0,alert:2},
   {id:'72485-0101-25',code:'72485-0101-25',generic:'Benadryl',name:"Diphenhydramine 50mg/mL",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:1.08,devStock:0,joshStock:0,alert:3},
-  {id:'70700-0249-25',code:'70700-0249-25',generic:'Ephedrine',name:"Ephedrine 50mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:4.4,devStock:0,joshStock:0,alert:3},
+  {id:'70700-0249-25',code:'70700-0249-25',generic:'Ephedrine',name:"Ephedrine 50mg/mL Vial",category:'Controlled Substances',supplier:'Various',unitSize:'EA',costPerUnit:4.4,devStock:0,joshStock:0,alert:3},
   {id:'76329-3318-01',code:'76329-3318-01',generic:'Epi',name:"Epinephrine 0.1mg/mL Syringe",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:14.0,devStock:0,joshStock:0,alert:2},
   {id:'55150-0194-10',code:'55150-0194-10',generic:'Esmolol',name:"Esmolol 10mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.24,devStock:0,joshStock:0,alert:3},
   {id:'70860-0751-02',code:'70860-0751-02',generic:'Pepcid',name:"Famotidine 20mg/2mL SDV",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:0.84,devStock:0,joshStock:0,alert:3},
@@ -1551,9 +1551,9 @@ const ITEM_TEMPLATE = [
   {id:'00487-5901-99',code:'00487-5901-99',generic:'Racemic',name:"Racepinephrine-S2 2.25% soln",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.53,devStock:0,joshStock:0,alert:3},
   {id:'43066-0007-10',code:'43066-0007-10',generic:'Roc',name:"Rocuronium 50mg/5mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:3.7,devStock:0,joshStock:0,alert:2},
   {id:'70069-0301-25',code:'70069-0301-25',generic:'Sux (Succinylcholine)',name:"Succinylcholine 20mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.08,devStock:0,joshStock:0,alert:3},
-  {id:'0143-9509-10',code:'0143-9509-10',generic:'Ketamine',name:"Ketamine HCI Injection 500mg/5mL",category:'Drugs / Medications',supplier:'Smith Pharmacy',unitSize:'10mLx25',costPerUnit:14.67,devStock:0,joshStock:0,alert:2},
+  {id:'0143-9509-10',code:'0143-9509-10',generic:'Ketamine',name:"Ketamine HCI Injection 500mg/5mL",category:'Controlled Substances',supplier:'Smith Pharmacy',unitSize:'10mLx25',costPerUnit:14.67,devStock:0,joshStock:0,alert:2},
   {id:'LTA-kit',code:'LTA-kit',generic:'LTA',name:"LTA Kit",category:'Supplies',supplier:'Various',unitSize:'EA',costPerUnit:5.0,devStock:0,joshStock:0,alert:1},
-  {id:'VERSED-MDZ',code:'VERSED-MDZ',generic:'Versed (Midazolam)',name:"Midazolam 5mg/mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.5,devStock:0,joshStock:0,alert:3},
+  {id:'VERSED-MDZ',code:'VERSED-MDZ',generic:'Versed (Midazolam)',name:"Midazolam 5mg/mL Vial",category:'Controlled Substances',supplier:'Various',unitSize:'EA',costPerUnit:2.5,devStock:0,joshStock:0,alert:3},
   {id:'LIDO2PCT',code:'LIDO2PCT',generic:'Lido 2%',name:"Lidocaine 2% SDV",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:1.5,devStock:0,joshStock:0,alert:5},
   {id:'VASOPRESSIN',code:'VASOPRESSIN',generic:'Vasopressin',name:"Vasopressin 20units/mL",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:3.0,devStock:0,joshStock:0,alert:2},
   {id:'ANCEF',code:'ANCEF',generic:'Ancef',name:"Cefazolin 1g/10mL Vial",category:'Drugs / Medications',supplier:'Various',unitSize:'EA',costPerUnit:2.5,devStock:0,joshStock:0,alert:5}
@@ -2263,8 +2263,8 @@ function renderCaseSupplies() {
   // Add CS estimated cost to total display
   const csTotal = csEntries.reduce((sum, entry) => {
     const cpm = getCostPerMG(entry.drug);
-    const mg = (parseFloat(entry.amountGiven)||0) + (parseFloat(entry.wastedAmt)||0);
-    return sum + cpm * mg;
+    const ml = (parseFloat(entry.amountGiven)||0) + (parseFloat(entry.wastedAmt)||0);
+    return sum + cpm * ml;
   }, 0);
   const grandTotal = total + csTotal;
   document.getElementById('caseTotalDisplay').textContent='$'+grandTotal.toFixed(2);
@@ -2348,8 +2348,8 @@ window.saveCase = async function() {
       const suppliesTotal = caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
       const csTotal = csEntries.reduce((sum,entry)=>{
         const cpm=getCostPerMG(entry.drug);
-        const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
-        return sum+cpm*mg;
+        const ml=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
+        return sum+cpm*ml;
       },0);
       const total = suppliesTotal + csTotal;
       cases[idx] = {
@@ -3563,12 +3563,12 @@ function fmtDate(dateStr) {
 }
 
 const CS_DRUGS = {
-  ephedrine: { label: 'Ephedrine',           invId: '70700-0249-25', keywords: ['ephedrine'],           vialML: 1,  mgPerML: 50  },
-  ketamine:  { label: 'Ketamine',            invId: '0143-9509-10',  keywords: ['ketamine'],            vialML: 5,  mgPerML: 100 },
-  versed:    { label: 'Versed (Midazolam)',  invId: null,            keywords: ['versed','midazolam'],  vialML: 2,  mgPerML: 5   }
+  ephedrine: { label: 'Ephedrine',           invId: '70700-0249-25', keywords: ['ephedrine'],           vialML: 1  },
+  ketamine:  { label: 'Ketamine',            invId: '0143-9509-10',  keywords: ['ketamine'],            vialML: 5  },
+  versed:    { label: 'Versed (Midazolam)',  invId: null,            keywords: ['versed','midazolam'],  vialML: 2  }
 };
 
-// Returns cost per MG (not mL) for a CS drug
+// Returns cost per mL for a CS drug based on vial size
 function getCostPerMG(drugKey) {
   const drug = CS_DRUGS[drugKey];
   if(!drug) return 0;
@@ -3576,9 +3576,8 @@ function getCostPerMG(drugKey) {
   const invId = drug.invId;
   if(!invId) return 0;
   const invItem = items.find(i => i.id === invId);
-  if(!invItem || !drug.vialML || !drug.mgPerML) return 0;
-  const totalMG = drug.vialML * drug.mgPerML;
-  return invItem.costPerUnit / totalMG;
+  if(!invItem || !drug.vialML) return 0;
+  return invItem.costPerUnit / drug.vialML; // cost per mL
 }
 
 // Legacy alias — use getCostPerMG going forward
@@ -3642,14 +3641,13 @@ function renderCSEntries() {
   container.innerHTML = csEntries.map((entry, idx) => {
     const inv = CS_DRUGS[entry.drug]?.invId ? items.find(i => i.id === CS_DRUGS[entry.drug].invId) : null;
     const stock = inv ? getStock(inv, currentWorker) : '?';
-    const costPerMG = getCostPerMG(entry.drug);
+    const costPerML = getCostPerMG(entry.drug); // returns cost per mL
     const drug = CS_DRUGS[entry.drug];
-    const vialMG = drug ? (drug.vialML * (drug.mgPerML||1)) : 1;
     const vialCost = inv ? inv.costPerUnit : 0;
     const amtGiven = parseFloat(entry.amountGiven) || 0;
     const wasted = parseFloat(entry.wastedAmt) || 0;
-    const totalMG = amtGiven + wasted;
-    const estimatedCost = costPerMG * totalMG;
+    const totalML = amtGiven + wasted;
+    const estimatedCost = costPerML * totalML;
     csTotal += estimatedCost;
     const ei = idx; // alias to avoid any closure issues
 
@@ -3660,7 +3658,7 @@ function renderCSEntries() {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
         <div style="font-size:14px;font-weight:500;">${CS_DRUGS[entry.drug]?.label || entry.drug}</div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:11px;color:var(--text-faint);">Stock: ${stock} vials · $${vialCost.toFixed(2)}/vial · $${costPerMG.toFixed(4)}/mg (${drug?.mgPerML||'?'}mg/mL)</span>
+          <span style="font-size:11px;color:var(--text-faint);">Stock: ${stock} vials · $${vialCost.toFixed(2)}/vial · $${costPerML.toFixed(2)}/mL</span>
           <button onclick="window.removeCSEntry(${ei})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:20px;line-height:1;">×</button>
         </div>
       </div>
@@ -3668,19 +3666,19 @@ function renderCSEntries() {
       <!-- Fields row -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Amount Given (mg)</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Amount Given (mL)</div>
           <input type="number" min="0" step="0.1" value="${entry.amountGiven}" placeholder="0"
             onchange="window.updateCSEntry(${ei},'amountGiven',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Left in Vial (mg)</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Left in Vial (mL)</div>
           <input type="number" min="0" step="0.1" value="${entry.leftInVial}" placeholder="0.0"
             onchange="window.updateCSEntry(${ei},'leftInVial',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Wasted (mg)</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Wasted (mL)</div>
           <input type="number" min="0" step="0.1" value="${entry.wastedAmt}" placeholder="0.0"
             onchange="window.updateCSEntry(${ei},'wastedAmt',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
@@ -3688,10 +3686,10 @@ function renderCSEntries() {
         <div>
           <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Estimated Cost</div>
           <div style="padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);text-align:center;">
-            ${totalMG > 0 && costPerMG > 0
+            ${totalML > 0 && costPerML > 0
               ? `<div style="font-size:15px;font-weight:500;font-family:'DM Mono',monospace;color:var(--warn);">≈ $${estimatedCost.toFixed(2)}</div>
-                 <div style="font-size:10px;color:var(--text-faint);">${totalMG.toFixed(1)} mg × $${costPerMG.toFixed(4)}/mg</div>`
-              : `<div style="font-size:13px;color:var(--text-faint);">Enter mg above</div>`
+                 <div style="font-size:10px;color:var(--text-faint);">${totalML.toFixed(2)} mL × $${costPerML.toFixed(2)}/mL</div>`
+              : `<div style="font-size:13px;color:var(--text-faint);">Enter mL above</div>`
             }
           </div>
         </div>
@@ -3927,9 +3925,9 @@ async function renderCSLog() {
             <div style="font-size:12px;font-family:'DM Mono',monospace;">${fmtDate(e.date)||'—'}</div>
             <div style="font-size:12px;color:var(--text-faint);">${e.savedAt?new Date(e.savedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—'}</div>
             <div style="font-size:12px;font-weight:500;">${e.caseId||'—'}<div style="font-size:11px;color:var(--text-faint);">${e.provider||''}</div></div>
-            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.amountGiven||0} mg</div>
-            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.leftInVial||0} mg</div>
-            <div style="font-size:12px;font-family:'DM Mono',monospace;color:${e.wastedAmt>0?'var(--warn)':'var(--text-faint)'};">${e.wastedAmt||0} mg</div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.amountGiven||0} mL</div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;">${e.leftInVial||0} mL</div>
+            <div style="font-size:12px;font-family:'DM Mono',monospace;color:${e.wastedAmt>0?'var(--warn)':'var(--text-faint)'};">${e.wastedAmt||0} mL</div>
             <div style="text-align:center;">${e.newBottle?'<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 6px;border-radius:10px;">YES</span>':'—'}</div>
             <div style="font-size:11px;color:var(--text-muted);">${e.worker==='dev'?'Devarsh':'Josh'}</div>
             <div>${e.witnessSignature?`<img src="${e.witnessSignature}" style="height:30px;border:1px solid var(--border);border-radius:3px;background:#fff;" title="Witness signature">`:'<span style="font-size:11px;color:var(--warn);">No sig</span>'}</div>
@@ -4008,9 +4006,9 @@ window.downloadCSLogPDF = async function() {
     doc.text(fmtDate(e.date)||'—', cols[0], y+7);
     doc.text(e.savedAt?new Date(e.savedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'—', cols[1], y+7);
     doc.text((e.caseId||'—').substring(0,20), cols[2], y+7);
-    doc.text(`${e.amountGiven||0} mg`, cols[3], y+7);
-    doc.text(`${e.leftInVial||0} mg`, cols[4], y+7);
-    if(e.wastedAmt>0) { doc.setTextColor(...warn); doc.text(`${e.wastedAmt} mg`, cols[5], y+7); doc.setTextColor(...black); }
+    doc.text(`${e.amountGiven||0} mL`, cols[3], y+7);
+    doc.text(`${e.leftInVial||0} mL`, cols[4], y+7);
+    if(e.wastedAmt>0) { doc.setTextColor(...warn); doc.text(`${e.wastedAmt} mL`, cols[5], y+7); doc.setTextColor(...black); }
     else doc.text('—', cols[5], y+7);
     doc.text(e.newBottle?'YES':'—', cols[6], y+7);
     doc.text(e.worker==='dev'?'D. Murthy':'J. Condado', cols[7], y+7);
