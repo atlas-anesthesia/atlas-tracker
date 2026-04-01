@@ -2325,6 +2325,7 @@ window.saveCase = async function() {
     endTime: document.getElementById('caseEndTime')?.value || '',
     caseComments:comments,
     surgeryCenter: (() => { const preopRec = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===caseId); return preopRec?.['po-surgery-center']||''; })(),
+    patientEmail: (() => { const preopRec = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===caseId); return preopRec?.['po-patientEmail']||''; })(),
     items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
     savedCsEntries:csEntries.map(e=>({...e})),
     csTotal:csTotal2,
@@ -2532,13 +2533,26 @@ function renderHistory() {
           <div class="case-date">${fmtDate(c.date)} · ${c.caseId}${c.provider?' · '+c.provider:''}</div>
           ${(() => {
             const inv = invoices.find(i => i.linkedCaseId === c.caseId);
-            return inv
-              ? `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
-                  <span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">✓ INVOICED</span>
-                  <span style="font-size:11px;color:var(--text-faint);">${inv.invoiceNum} · $${inv.total.toFixed(2)}</span>
-                  <button onclick="event.stopPropagation();window.redownloadInvoice('${inv.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;">⬇ PDF</button>
-                </div>`
-              : `<div style="margin-top:4px;"><span style="background:#fef3cd;color:#92400e;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">⚠ NOT INVOICED</span></div>`;
+            const invHtml = inv
+              ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">✓ INVOICED</span>
+                 <span style="font-size:11px;color:var(--text-faint);">${inv.invoiceNum} · $${inv.total.toFixed(2)}</span>
+                 <button onclick="event.stopPropagation();window.redownloadInvoice('${inv.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;">⬇ PDF</button>`
+              : c.manuallyInvoiced
+                ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">✓ INVOICED</span>
+                   <span style="font-size:11px;color:var(--text-faint);">${c.manuallyInvoicedNote||'Manual'}</span>`
+                : `<span style="background:#fef3cd;color:#92400e;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">⚠ NOT INVOICED</span>
+                   <button onclick="event.stopPropagation();window.markCaseInvoiced('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent);">✓ Mark Invoiced</button>`;
+
+            const paidHtml = c.manuallyPaid
+              ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">💰 PAID</span>`
+              : c.patientEmail
+                ? `<span id="hist-deposit-${c.id}" style="font-size:10px;color:var(--text-faint);">Checking deposit...</span>
+                   <button onclick="event.stopPropagation();window.markCasePaid('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent);">✓ Mark Paid</button>`
+                : `<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">⚠ NOT PAID</span>
+                   <button onclick="event.stopPropagation();window.markCasePaid('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent);">✓ Mark Paid</button>`;
+
+            return `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${invHtml}</div>
+                    <div style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${paidHtml}</div>`;
           })()}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
@@ -2558,6 +2572,9 @@ function renderHistory() {
       </div>
     </div>`;
   }).join('');
+
+  // Auto-check Stripe deposits for history cases
+  setTimeout(() => checkHistoryDeposits(filtered), 500);
 }
 
 window.editFinalizedCase = function(id) {
@@ -3572,6 +3589,7 @@ function renderCSEntries() {
     const totalMG = amtGiven + wasted;
     const estimatedCost = costPerMG * totalMG;
     csTotal += estimatedCost;
+    const ei = idx; // alias to avoid any closure issues
 
     return `
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:12px;">
@@ -3581,7 +3599,7 @@ function renderCSEntries() {
         <div style="font-size:14px;font-weight:500;">${CS_DRUGS[entry.drug]?.label || entry.drug}</div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:11px;color:var(--text-faint);">Stock: ${stock} vials · $${vialCost.toFixed(2)}/vial · $${costPerMG.toFixed(4)}/mg (${drug?.mgPerML||'?'}mg/mL)</span>
-          <button onclick="removeCSEntry(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:20px;line-height:1;">×</button>
+          <button onclick="window.removeCSEntry(${ei})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:20px;line-height:1;">×</button>
         </div>
       </div>
 
@@ -3590,19 +3608,19 @@ function renderCSEntries() {
         <div>
           <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Amount Given (mg)</div>
           <input type="number" min="0" step="0.1" value="${entry.amountGiven}" placeholder="0"
-            onchange="updateCSEntry(${idx},'amountGiven',this.value)"
+            onchange="window.updateCSEntry(${ei},'amountGiven',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
         </div>
         <div>
           <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Left in Vial (mg)</div>
           <input type="number" min="0" step="0.1" value="${entry.leftInVial}" placeholder="0.0"
-            onchange="updateCSEntry(${idx},'leftInVial',this.value)"
+            onchange="window.updateCSEntry(${ei},'leftInVial',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
         </div>
         <div>
           <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Wasted (mg)</div>
           <input type="number" min="0" step="0.1" value="${entry.wastedAmt}" placeholder="0.0"
-            onchange="updateCSEntry(${idx},'wastedAmt',this.value)"
+            onchange="window.updateCSEntry(${ei},'wastedAmt',this.value)"
             style="width:100%;padding:8px 10px;font-size:14px;text-align:center;">
         </div>
         <div>
@@ -3638,15 +3656,15 @@ function renderCSEntries() {
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:12px;color:var(--text-faint);font-weight:500;">Witness:</span>
             ${entry.witnessSignature
-              ? `<div style="display:flex;align-items:center;gap:6px;"><img src="${entry.witnessSignature}" style="height:32px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px;"><button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;">Re-sign</button></div>`
-              : `<button class="btn btn-ghost btn-sm" onclick="openWitnessModal(${idx})" style="font-size:11px;color:var(--warn);border-color:var(--warn);">✍ Witness Sign</button>`
+              ? `<div style="display:flex;align-items:center;gap:6px;"><img src="${entry.witnessSignature}" style="height:32px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px;"><button class="btn btn-ghost btn-sm" onclick="window.openWitnessModal(${ei})" style="font-size:11px;">Re-sign</button></div>`
+              : `<button class="btn btn-ghost btn-sm" onclick="window.openWitnessModal(${ei})" style="font-size:11px;color:var(--warn);border-color:var(--warn);">✍ Witness Sign</button>`
             }
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:12px;color:var(--text-faint);font-weight:500;">Provider:</span>
             ${entry.providerSignature
-              ? `<div style="display:flex;align-items:center;gap:6px;"><img src="${entry.providerSignature}" style="height:32px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px;"><button class="btn btn-ghost btn-sm" onclick="openCSProviderModal(${idx})" style="font-size:11px;">Re-sign</button></div>`
-              : `<button class="btn btn-ghost btn-sm" onclick="openCSProviderModal(${idx})" style="font-size:11px;color:var(--info);border-color:var(--info);">✍ Provider Sign</button>`
+              ? `<div style="display:flex;align-items:center;gap:6px;"><img src="${entry.providerSignature}" style="height:32px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px;"><button class="btn btn-ghost btn-sm" onclick="window.openCSProviderModal(${ei})" style="font-size:11px;">Re-sign</button></div>`
+              : `<button class="btn btn-ghost btn-sm" onclick="window.openCSProviderModal(${ei})" style="font-size:11px;color:var(--info);border-color:var(--info);">✍ Provider Sign</button>`
             }
           </div>
         </div>
