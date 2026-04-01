@@ -310,6 +310,16 @@
           <label>Provider</label><input type="text" id="provider" placeholder="e.g. Dr. Smith">
           <label>Date</label><input type="date" id="caseDate" oninput="updateCaseIdDisplays()">
           <label>Notes</label><input type="text" id="caseNotes" placeholder="Optional notes">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label>Start Time</label>
+              <input type="time" id="caseStartTime" onchange="updateDraftInvoicePreview()">
+            </div>
+            <div>
+              <label>End Time</label>
+              <input type="time" id="caseEndTime" onchange="updateDraftInvoicePreview()">
+            </div>
+          </div>
         <label>Comments</label>
         <textarea id="caseComments" placeholder="Additional comments, observations, or special circumstances..." style="width:100%;padding:8px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:70px;margin-top:4px;"></textarea>
           <div style="margin-top:14px;">
@@ -329,6 +339,20 @@
           <div id="liveSummary"><div class="empty-state">Add supplies below to see cost summary</div></div>
         </div>
       </div>
+      <!-- DRAFT INVOICE PREVIEW -->
+      <div id="draft-invoice-card" style="display:none;margin-bottom:18px;">
+        <div class="card" style="border-left:3px solid var(--accent);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div class="card-title" style="margin-bottom:0;color:var(--accent);">Draft Invoice</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="editDraftInvoice()" style="font-size:11px;">✏ Edit in Invoice</button>
+              <button class="btn btn-primary btn-sm" onclick="finalizeDraftInvoicePDF()" style="font-size:11px;">⬇ Generate PDF</button>
+            </div>
+          </div>
+          <div id="draft-invoice-content"></div>
+        </div>
+      </div>
+
       <!-- PRE-OP SUMMARY (auto-populated) -->
       <div id="finalize-preop-summary" style="display:none;margin-bottom:18px;">
         <div class="card" style="border-left:3px solid var(--info);">
@@ -1012,8 +1036,14 @@
         <button class="btn btn-ghost" onclick="clearInvoice()">Clear</button>
       </div>
 
-      <!-- Saved Invoices -->
+      <!-- Draft Invoices -->
       <div class="action-bar" style="margin-top:8px;">
+        <h2 style="font-size:15px;color:var(--accent);">📋 Draft Invoices</h2>
+      </div>
+      <div id="draftInvoicesList"><div class="empty-state" style="font-size:13px;">No draft invoices yet — add start/end time in Finalize Case to auto-generate one</div></div>
+
+      <!-- Saved Invoices -->
+      <div class="action-bar" style="margin-top:24px;">
         <h2 style="font-size:15px;">Saved Invoices</h2>
       </div>
       <div id="savedInvoicesList"><div class="empty-state">No invoices saved yet</div></div>
@@ -2095,11 +2125,11 @@ window.showTab = function(tab) {
   }
   if(tab==='new-case') refreshDraftPicker();
   if(tab==='inventory') renderInventory();
-  if(tab==='history') renderHistory();
+  if(tab==='history') { loadSavedInvoices().then(() => renderHistory()); }
   if(tab==='reports') renderReports();
   if(tab==='preop-history') renderPreopHistory();
   if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
-  if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); }
+  if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); renderDraftInvoices(); }
   if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
   if(tab==='analytics') { renderAnalytics(); renderSurgeryCenters(); }
   if(tab==='calendar') {
@@ -2291,6 +2321,8 @@ window.saveCase = async function() {
   const total=suppliesTotal2+csTotal2;
   cases.unshift({
     id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
+    startTime: document.getElementById('caseStartTime')?.value || '',
+    endTime: document.getElementById('caseEndTime')?.value || '',
     caseComments:comments,
     surgeryCenter: (() => { const preopRec = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===caseId); return preopRec?.['po-surgery-center']||''; })(),
     items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
@@ -2321,6 +2353,12 @@ window.clearCase=function(){
   ['caseId','procedure','provider','caseNotes','caseComments'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   const preopSummary = document.getElementById('finalize-preop-summary');
   if(preopSummary) preopSummary.style.display = 'none';
+  const draftCard = document.getElementById('draft-invoice-card');
+  if(draftCard) draftCard.style.display = 'none';
+  const startEl = document.getElementById('caseStartTime');
+  const endEl = document.getElementById('caseEndTime');
+  if(startEl) startEl.value = '';
+  if(endEl) endEl.value = '';
   document.getElementById('caseDate').value=new Date().toISOString().split('T')[0];
   // Clear BMI displays
   ['po-height-cm','po-weight-kg','po-bmi'].forEach(id => {
@@ -2476,6 +2514,7 @@ function renderHistory() {
   const el=document.getElementById('caseHistoryList');
   let filtered=cases;
   if(currentHistoryFilter!=='all') filtered=cases.filter(c=>c.worker===currentHistoryFilter);
+  const invoices = window._savedInvoices || [];
   if(!filtered.length){el.innerHTML='<div class="empty-state">No cases recorded yet</div>';return;}
   el.innerHTML=filtered.map(c=>{
     const pill=c.worker==='dev'?'pill-dev':'pill-josh';
@@ -2489,6 +2528,16 @@ function renderHistory() {
             ${c.draft?'<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;">DRAFT</span>':''}
           </div>
           <div class="case-date">${fmtDate(c.date)} · ${c.caseId}${c.provider?' · '+c.provider:''}</div>
+          ${(() => {
+            const inv = invoices.find(i => i.linkedCaseId === c.caseId);
+            return inv
+              ? `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+                  <span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">✓ INVOICED</span>
+                  <span style="font-size:11px;color:var(--text-faint);">${inv.invoiceNum} · $${inv.total.toFixed(2)}</span>
+                  <button onclick="event.stopPropagation();window.redownloadInvoice('${inv.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;">⬇ PDF</button>
+                </div>`
+              : `<div style="margin-top:4px;"><span style="background:#fef3cd;color:#92400e;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">⚠ NOT INVOICED</span></div>`;
+          })()}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <div class="case-cost">${c.draft?'In Progress':'$'+c.total.toFixed(2)}</div>
@@ -4164,6 +4213,9 @@ window.generateInvoicePDF = function() {
   doc.save(`Atlas-Invoice-${invoiceNum}.pdf`);
 
   // Save invoice record to Firestore
+  // Link invoice to case if generated from a draft
+  const linkedCaseId = window._draftInvoiceData?.caseId || '';
+
   const invoiceRecord = {
     id: uid(),
     invoiceNum,
@@ -4179,7 +4231,8 @@ window.generateInvoicePDF = function() {
     per15Rate,
     total,
     savedAt: new Date().toISOString(),
-    worker: currentWorker
+    worker: currentWorker,
+    linkedCaseId
   };
   saveInvoiceRecord(invoiceRecord);
 };
@@ -4202,9 +4255,12 @@ async function loadSavedInvoices() {
   try {
     const snap = await getDoc(doc(db,'atlas','invoices'));
     const invoices = snap.exists() ? (snap.data().invoices || []) : [];
+    window._savedInvoices = invoices;
     renderSavedInvoices(invoices);
+    return invoices;
   } catch(e) {
     console.error('Error loading invoices:', e);
+    return [];
   }
 }
 
@@ -5582,6 +5638,7 @@ window.onInvoiceCenterChange = function() {
 };
 
 window.onSurgeryCenterChange = function() {
+  updateDraftInvoicePreview();
   const sel = document.getElementById('po-surgery-center');
   const ratesEl = document.getElementById('po-center-rates');
   if(!sel || !ratesEl) return;
@@ -5962,6 +6019,154 @@ async function renderTransferLog() {
     console.error(e);
   }
 }
+
+// ── DRAFT INVOICE ──
+
+function roundUpTo15(mins) {
+  if(mins <= 60) return 60;
+  const extra = mins - 60;
+  return 60 + Math.ceil(extra / 15) * 15;
+}
+
+function calcDraftInvoice(startTime, endTime, firstHourRate, per15Rate) {
+  if(!startTime || !endTime || !firstHourRate) return null;
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  const totalMins = (eh * 60 + em) - (sh * 60 + sm);
+  if(totalMins <= 0) return null;
+
+  const roundedMins = roundUpTo15(totalMins);
+  const actualH = Math.floor(totalMins / 60);
+  const actualM = totalMins % 60;
+  const billedH = Math.floor(roundedMins / 60);
+  const billedM = roundedMins % 60;
+  const actualStr = `${actualH}h${actualM > 0 ? ' ' + actualM + 'm' : ''}`;
+  const billedStr = `${billedH}h${billedM > 0 ? ' ' + billedM + 'm' : ''}`;
+
+  let total = 0;
+  if(roundedMins <= 60) {
+    total = firstHourRate;
+  } else {
+    const extraMins = roundedMins - 60;
+    total = firstHourRate + (extraMins / 15) * per15Rate;
+  }
+
+  const fmt12 = t => {
+    const [h, m] = t.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+  };
+
+  return { total, roundedMins, actualStr, billedStr, totalMins,
+    startFmt: fmt12(startTime), endFmt: fmt12(endTime) };
+}
+
+window.updateDraftInvoicePreview = function() {
+  const startTime = document.getElementById('caseStartTime')?.value;
+  const endTime   = document.getElementById('caseEndTime')?.value;
+  const card      = document.getElementById('draft-invoice-card');
+  const content   = document.getElementById('draft-invoice-content');
+  if(!card || !content) return;
+
+  if(!startTime || !endTime) { card.style.display = 'none'; return; }
+
+  // Get surgery center rates
+  const centerId = document.getElementById('po-surgery-center')?.value || '';
+  const center = surgeryCenters.find(c => c.id === centerId);
+  const firstHourRate = parseFloat(center?.firstHour) || 0;
+  const per15Rate = parseFloat(center?.per15) || 0;
+
+  const calc = calcDraftInvoice(startTime, endTime, firstHourRate, per15Rate);
+  if(!calc) { card.style.display = 'none'; return; }
+
+  const centerName = center?.name || document.getElementById('po-surgery-center')?.options[document.getElementById('po-surgery-center')?.selectedIndex]?.text || '—';
+  const caseId = document.getElementById('caseId')?.value || '—';
+  const caseDate = document.getElementById('caseDate')?.value || '';
+  const provider = document.getElementById('provider')?.value || '';
+
+  content.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
+      <div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+        <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px;">Time</div>
+        <div style="font-size:13px;font-weight:500;">${calc.startFmt} → ${calc.endFmt}</div>
+        <div style="font-size:11px;color:var(--text-faint);">Actual: ${calc.actualStr} · Billed: ${calc.billedStr}</div>
+      </div>
+      <div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);">
+        <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px;">Surgery Center</div>
+        <div style="font-size:13px;font-weight:500;">${centerName}</div>
+        ${center ? `<div style="font-size:11px;color:var(--text-faint);">$${center.firstHour.toFixed(2)} / hr · $${center.per15.toFixed(2)} / 15min</div>` : '<div style="font-size:11px;color:var(--warn);">No center selected — rates not applied</div>'}
+      </div>
+      <div style="padding:8px 12px;background:var(--accent-light);border-radius:var(--radius-sm);border:1px solid var(--accent-mid);">
+        <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--accent);margin-bottom:2px;">Estimated Total</div>
+        <div style="font-size:20px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);">${center ? '$'+calc.total.toFixed(2) : '—'}</div>
+      </div>
+    </div>`;
+
+  card.style.display = 'block';
+
+  // Store draft data for invoice tab
+  window._draftInvoiceData = {
+    caseId, date: caseDate, location: centerName, centerId,
+    provider, startTime, endTime,
+    firstHour: firstHourRate, per15: per15Rate,
+    calc
+  };
+
+  renderDraftInvoices();
+};
+
+function renderDraftInvoices() {
+  const el = document.getElementById('draftInvoicesList');
+  if(!el) return;
+  const d = window._draftInvoiceData;
+  if(!d || !d.startTime || !d.endTime) {
+    el.innerHTML = '<div class="empty-state" style="font-size:13px;">No draft invoices yet — add start/end time in Finalize Case to auto-generate one</div>';
+    return;
+  }
+  const calc = d.calc;
+  el.innerHTML = `
+    <div class="case-item" style="border-left:3px solid var(--accent);">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-size:14px;font-weight:600;">${d.caseId} <span style="font-size:11px;font-weight:400;color:var(--text-faint);">· ${fmtDate(d.date)}</span></div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:3px;">${d.location} · ${calc.startFmt} → ${calc.endFmt}</div>
+          <div style="font-size:12px;color:var(--text-faint);margin-top:2px;">Actual: ${calc.actualStr} · Billed: ${calc.billedStr}</div>
+          ${d.firstHour ? `<div style="font-size:13px;font-weight:600;color:var(--accent);margin-top:4px;font-family:'DM Mono',monospace;">$${calc.total.toFixed(2)}</div>` : '<div style="font-size:12px;color:var(--warn);margin-top:4px;">Add surgery center rates in Analytics to calculate</div>'}
+        </div>
+        <div style="display:flex;gap:8px;flex-direction:column;align-items:flex-end;">
+          <button class="btn btn-primary btn-sm" onclick="loadDraftIntoInvoice()" style="font-size:11px;">✏ Edit Invoice</button>
+          <button class="btn btn-ghost btn-sm" onclick="finalizeDraftInvoicePDF()" style="font-size:11px;">⬇ Generate PDF</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+window.loadDraftIntoInvoice = function() {
+  const d = window._draftInvoiceData;
+  if(!d) return;
+  showTab('invoice');
+  setTimeout(() => {
+    const el = id => document.getElementById(id);
+    if(el('inv-location')) el('inv-location').value = d.location;
+    if(el('inv-date')) el('inv-date').value = d.date;
+    if(el('inv-start')) el('inv-start').value = d.startTime;
+    if(el('inv-end')) el('inv-end').value = d.endTime;
+    if(el('inv-first-hour')) el('inv-first-hour').value = d.firstHour || '';
+    if(el('inv-per-15')) el('inv-per-15').value = d.per15 || '';
+    if(el('inv-location-select') && d.centerId) el('inv-location-select').value = d.centerId;
+    calculateInvoice();
+  }, 200);
+};
+
+window.editDraftInvoice = window.loadDraftIntoInvoice;
+
+window.finalizeDraftInvoicePDF = function() {
+  loadDraftIntoInvoice();
+  setTimeout(() => {
+    window.generateInvoicePDF();
+  }, 600);
+};
 
 // ── REPORTS DROPDOWN ──
 window.toggleReportsDropdown = function() {
