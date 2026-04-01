@@ -2048,14 +2048,38 @@ function showCalDetail(e) {
 window.viewPreopFromCalendar = async function(caseId) {
   if(!caseId) return;
   try {
+    // Load preop records fresh
     const snap = await getDoc(doc(db,'atlas','preop'));
     const records = snap.exists() ? (snap.data().records||[]) : [];
     window._rawPreopRecords = records;
+
     const record = records.find(r => (r['po-caseId']||'').trim() === caseId.trim());
+
     if(record) {
-      window.previewDraft(record.id);
+      // It's a draft — go to Mid-Case and highlight the card
+      await renderMidCase();
+      showTab('mid-case');
+      await new Promise(r => setTimeout(r, 300));
+
+      // Find the card by caseId text and scroll to + highlight it
+      const cards = document.querySelectorAll('#midCaseList .case-item');
+      let found = false;
+      cards.forEach(card => {
+        if(card.textContent.includes(caseId)) {
+          found = true;
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.style.outline = '3px solid var(--info)';
+          card.style.transition = 'outline 0.3s';
+          setTimeout(() => { card.style.outline = ''; }, 2500);
+        }
+      });
+
+      // Also open the preview modal for the full details
+      setTimeout(() => window.previewDraft(record.id), 400);
       return;
     }
+
+    // Finalized case — go to Case History and expand it
     const c = (cases||[]).find(x => (x.caseId||'').trim() === caseId.trim());
     if(c) {
       showTab('history');
@@ -2063,12 +2087,21 @@ window.viewPreopFromCalendar = async function(caseId) {
       renderHistory();
       await new Promise(r => setTimeout(r, 300));
       const el = document.getElementById('detail_' + c.id);
-      if(el) { el.classList.add('open'); el.scrollIntoView({ behavior:'smooth', block:'center' }); }
+      if(el) {
+        el.classList.add('open');
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const parent = el.previousElementSibling || el.closest('.case-item');
+        if(parent) {
+          parent.style.outline = '3px solid var(--info)';
+          setTimeout(() => { parent.style.outline = ''; }, 2500);
+        }
+      }
     } else {
       alert('No record found for: ' + caseId);
     }
   } catch(err) {
-    console.error(err);
+    console.error('viewPreopFromCalendar error:', err);
+    alert('Error: ' + err.message);
   }
 };
 
