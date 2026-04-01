@@ -968,7 +968,10 @@
           <div class="card-title">Service Details</div>
 
           <label>Location / Facility Name</label>
-          <input type="text" id="inv-location" placeholder="e.g. Bright Smiles Dental">
+          <select id="inv-location-select" onchange="onInvoiceCenterChange()" style="margin-bottom:6px;">
+            <option value="">— Select a surgery center —</option>
+          </select>
+          <input type="text" id="inv-location" placeholder="Or type a custom location name">
 
           <label>Date of Service</label>
           <input type="date" id="inv-date">
@@ -5547,7 +5550,36 @@ function populateCenterDropdowns() {
     sel.innerHTML = '<option value="">— Select surgery center —</option>' +
       surgeryCenters.map(c => `<option value="${c.id}"${cur===c.id?' selected':''}>${c.name}</option>`).join('');
   }
+  // Invoice dropdown
+  const invSel = document.getElementById('inv-location-select');
+  if(invSel) {
+    const cur = invSel.value;
+    invSel.innerHTML = '<option value="">— Select a surgery center —</option>' +
+      surgeryCenters.map(c => `<option value="${c.id}"${cur===c.id?' selected':''}>${c.name}</option>`).join('');
+  }
 }
+
+window.onInvoiceCenterChange = function() {
+  const sel = document.getElementById('inv-location-select');
+  const locationInput = document.getElementById('inv-location');
+  const firstHourInput = document.getElementById('inv-first-hour');
+  const per15Input = document.getElementById('inv-per-15');
+  if(!sel) return;
+
+  const center = surgeryCenters.find(c => c.id === sel.value);
+  if(center) {
+    // Auto-fill location name and rates
+    if(locationInput) locationInput.value = center.name;
+    if(firstHourInput) { firstHourInput.value = center.firstHour.toFixed(2); }
+    if(per15Input) { per15Input.value = center.per15.toFixed(2); }
+    calculateInvoice();
+  } else {
+    // Cleared — reset rates but keep custom location text
+    if(firstHourInput) firstHourInput.value = '';
+    if(per15Input) per15Input.value = '';
+    calculateInvoice();
+  }
+};
 
 window.onSurgeryCenterChange = function() {
   const sel = document.getElementById('po-surgery-center');
