@@ -2053,9 +2053,6 @@ window.viewPreopFromCalendar = async function(caseId) {
     window._rawPreopRecords = records;
     const record = records.find(r => (r['po-caseId']||'').trim() === caseId.trim());
     if(record) {
-      // Navigate to Mid-Case tab first, then open preview
-      showTab('mid-case');
-      await new Promise(r => setTimeout(r, 400));
       window.previewDraft(record.id);
       return;
     }
@@ -5434,8 +5431,13 @@ window.onOtherToggle = function(checkbox) {
 // ── PREVIEW DRAFT ──
 window.previewDraft = async function(id) {
   try {
-    const snap = await getDoc(doc(db,'atlas','preop'));
-    const records = snap.exists() ? (snap.data().records||[]) : [];
+    // Use cached records if available, otherwise fetch
+    let records = window._rawPreopRecords || [];
+    if(!records.length || !records.find(x => x.id === id)) {
+      const snap = await getDoc(doc(db,'atlas','preop'));
+      records = snap.exists() ? (snap.data().records||[]) : [];
+      window._rawPreopRecords = records;
+    }
     const r = records.find(x => x.id === id);
     if(!r) { alert('Record not found.'); return; }
 
