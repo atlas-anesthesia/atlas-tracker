@@ -6022,12 +6022,6 @@ async function renderTransferLog() {
 
 // ── DRAFT INVOICE ──
 
-function roundUpTo15(mins) {
-  if(mins <= 60) return 60;
-  const extra = mins - 60;
-  return 60 + Math.ceil(extra / 15) * 15;
-}
-
 function calcDraftInvoice(startTime, endTime, firstHourRate, per15Rate) {
   if(!startTime || !endTime || !firstHourRate) return null;
   const [sh, sm] = startTime.split(':').map(Number);
@@ -6035,7 +6029,8 @@ function calcDraftInvoice(startTime, endTime, firstHourRate, per15Rate) {
   const totalMins = (eh * 60 + em) - (sh * 60 + sm);
   if(totalMins <= 0) return null;
 
-  const roundedMins = roundUpTo15(totalMins);
+  // First hour is flat; extra time rounds up to nearest 15-min block
+  const roundedMins = totalMins <= 60 ? 60 : 60 + Math.ceil((totalMins - 60) / 15) * 15;
   const actualH = Math.floor(totalMins / 60);
   const actualM = totalMins % 60;
   const billedH = Math.floor(roundedMins / 60);
