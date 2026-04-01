@@ -3137,15 +3137,30 @@ function prefillNewCase(preopRecord) {
 
 window.clearPreop = function() {
   // Clear text fields
-  ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-iv-difficulty-comment','po-anesthesia-issues-comment',
+  ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel',
+   'po-height-ft','po-height-in','po-weight-lbs','po-iv-difficulty-comment','po-anesthesia-issues-comment',
    'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
-   'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other'].forEach(id => {
+   'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other',
+   'po-est-hours'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.value = '';
   });
-  // Clear checkboxes
+  // Clear dropdowns
+  const surgCenterSel = document.getElementById('po-surgery-center');
+  if(surgCenterSel) surgCenterSel.value = '';
+  // Clear checkboxes and radios
   document.querySelectorAll('#tab-preop input[type="checkbox"]').forEach(el => el.checked = false);
   document.querySelectorAll('#tab-preop input[type="radio"]').forEach(el => el.checked = false);
+  // Clear BMI displays
+  ['po-height-cm','po-weight-kg','po-bmi'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.textContent = '—';
+  });
+  // Clear case ID display
+  const caseIdDisplay = document.getElementById('po-caseId-display');
+  if(caseIdDisplay) caseIdDisplay.textContent = '';
+  // Reset editing state
+  window._editingPreopId = null;
 };
 
 async function renderPreopHistory() {
