@@ -1756,7 +1756,7 @@ window.setWorker = function(w) {
   const ind=document.getElementById('workerIndicator');
   ind.className='worker-pill '+(w==='dev'?'pill-dev':'pill-josh');
   ind.textContent=(w==='dev'?'Devarsh':'Josh')+"'s inventory will be updated";
-  caseItems=[];renderCaseSupplies();refreshItemSelect();
+  if(!window._editingCaseId) { caseItems=[]; renderCaseSupplies(); refreshItemSelect(); }
   updateCaseIdDisplays();
   updatePreopCaseIdDisplay();
 };
@@ -2579,7 +2579,20 @@ window.editFinalizedCase = function(id) {
   setTimeout(() => {
     const el = eid => document.getElementById(eid);
 
-    // Restore items
+    // Set worker FIRST (before restoring items, to avoid worker-triggered clear)
+    setWorker(c.worker || currentWorker);
+
+    // Fill form fields
+    if(el('caseId')) el('caseId').value = c.caseId || '';
+    if(el('procedure')) el('procedure').value = c.procedure || '';
+    if(el('provider')) el('provider').value = c.provider || '';
+    if(el('caseDate')) el('caseDate').value = c.date || '';
+    if(el('caseNotes')) el('caseNotes').value = c.notes || '';
+    if(el('caseComments')) el('caseComments').value = c.caseComments || '';
+    if(el('caseStartTime')) el('caseStartTime').value = c.startTime || '';
+    if(el('caseEndTime')) el('caseEndTime').value = c.endTime || '';
+
+    // Restore items AFTER setWorker so it doesn't wipe them
     caseItems = (c.items || []).map(i => {
       const invItem = items.find(x => x.id === i.id);
       return {
@@ -2596,18 +2609,6 @@ window.editFinalizedCase = function(id) {
     csEntries = (c.savedCsEntries && c.savedCsEntries.length)
       ? c.savedCsEntries.map(e => ({...e}))
       : [];
-
-    // Fill form fields
-    if(el('caseId')) el('caseId').value = c.caseId || '';
-    if(el('procedure')) el('procedure').value = c.procedure || '';
-    if(el('provider')) el('provider').value = c.provider || '';
-    if(el('caseDate')) el('caseDate').value = c.date || '';
-    if(el('caseNotes')) el('caseNotes').value = c.notes || '';
-    if(el('caseComments')) el('caseComments').value = c.caseComments || '';
-    if(el('caseStartTime')) el('caseStartTime').value = c.startTime || '';
-    if(el('caseEndTime')) el('caseEndTime').value = c.endTime || '';
-
-    setWorker(c.worker || currentWorker);
 
     renderCSEntries();
     renderCaseSupplies();
