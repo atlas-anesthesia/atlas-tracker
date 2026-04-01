@@ -2615,8 +2615,8 @@ window.editFinalizedCase = function(id) {
     const banner = document.createElement('div');
     banner.id = 'case-edit-banner';
     banner.style.cssText = 'background:var(--info-light);border:1px solid #b8cfe8;border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;';
-    banner.innerHTML = \`<span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing: \${c.caseId || c.procedure}</span>
-      <button onclick="cancelEditCase()" class="btn btn-ghost btn-sm" style="font-size:11px;">Cancel Edit</button>\`;
+    banner.innerHTML = '<span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing: ' + (c.caseId || c.procedure) + '</span>' +
+      '<button onclick="cancelEditCase()" class="btn btn-ghost btn-sm" style="font-size:11px;">Cancel Edit</button>';
     const actionBar = document.querySelector('#tab-new-case .action-bar');
     if(actionBar) actionBar.insertAdjacentElement('afterend', banner);
 
