@@ -3103,6 +3103,21 @@ window.savePreop = async function() {
   // Pre-fill the New Case form with pre-op info
   prefillNewCase(record);
 
+  // Check if surgery is within 30 days — send immediate pre-op call reminder
+  const today2 = new Date().toISOString().split('T')[0];
+  const surgDate2 = textData['po-surgeryDate'];
+  if(surgDate2) {
+    const daysUntil = Math.ceil((new Date(surgDate2+'T12:00:00') - new Date(today2+'T12:00:00')) / (1000*60*60*24));
+    if(daysUntil > 0 && daysUntil <= 30) {
+      // Surgery is within 30 days — trigger immediate pre-op call reminder
+      try {
+        const reminderWorkerUrl = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
+        fetch(reminderWorkerUrl + '?immediate=1&caseId=' + encodeURIComponent(textData['po-caseId'] || '')).catch(()=>{});
+        console.log('Immediate pre-op call reminder triggered for', textData['po-caseId'], '(' + daysUntil + ' days until surgery)');
+      } catch(e) { console.warn('Could not trigger reminder:', e); }
+    }
+  }
+
   alert('✓ Pre-Op saved! New Case has been pre-filled — head to New Case to finish logging supplies.');
   clearPreop();
 
