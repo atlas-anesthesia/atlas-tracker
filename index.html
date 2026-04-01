@@ -3965,7 +3965,7 @@ window.calculateInvoice = function() {
   const actualStr = aHrs>0?`${aHrs}h ${aMins>0?aMins+'m':''}`.trim():`${aMins}m`;
 
   summaryEl.innerHTML = `
-    <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Actual: ${actualStr} → Rounded up to ${timeStr}</div>
+    <div style="font-size:12px;color:var(--text-faint);margin-bottom:8px;">Actual: ${actualStr}   ·   Billed: ${timeStr}</div>
     ${breakdown}
   `;
   totalEl.textContent = '$' + total.toFixed(2);
@@ -4133,7 +4133,7 @@ window.generateInvoicePDF = function() {
   doc.text('TIME DETAIL', 20, y + 8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...black);
-  doc.text(`Start: ${fmtTime(start)}   |   End: ${fmtTime(end)}   |   Actual Duration: ${actualStr}   |   Billed Duration: ${timeStr} (rounded up to nearest 15 min)`, 20, y + 16);
+  doc.text(`Start: ${fmtTime(start)}   |   End: ${fmtTime(end)}   |   Actual Duration: ${actualStr}   |   Billed Duration: ${timeStr}`, 20, y + 16);
 
   y += 30;
 
