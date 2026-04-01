@@ -57,7 +57,7 @@
   .nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;padding:0 32px;}
   .nav button{background:none;border:none;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text-muted);padding:13px 0;margin-right:26px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;}
   .nav button.active{color:var(--info);border-bottom-color:var(--info);font-weight:500;}
-  .container{max-width:1200px;margin:0 auto;padding:24px 64px;} #tab-calendar .card{max-width:900px;margin-left:auto;margin-right:auto;}
+  .container{max-width:1200px;margin:0 auto;padding:24px 64px;}
   .section{display:none;}.section.active{display:block;}
   .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
   .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;}
@@ -1320,7 +1320,7 @@
 
     <!-- CALENDAR TAB -->
     <div class="section" id="tab-calendar">
-      <div class="action-bar" style="max-width:900px;margin-left:auto;margin-right:auto;">
+      <div class="action-bar" >
         <h2>Calendar</h2>
         <div style="display:flex;align-items:center;gap:10px;">
           <button class="btn btn-ghost btn-sm" onclick="buildCalendar()" style="font-size:12px;">↻ Refresh</button>
@@ -1334,7 +1334,7 @@
       </div>
 
       <!-- Legend -->
-      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;max-width:900px;margin-left:auto;margin-right:auto;">
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
         <div style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;">
           <div style="width:10px;height:10px;border-radius:50%;background:#b91c1c;"></div>
           <span style="font-size:12px;font-weight:500;color:var(--text-muted);">🔴 Surgery</span>
@@ -1353,7 +1353,7 @@
       </div>
 
       <!-- Settings + Filter -->
-      <div class="card" style="margin-bottom:14px;padding:12px 18px;max-width:900px;margin-left:auto;margin-right:auto;">
+      <div class="card" style="margin-bottom:14px;padding:12px 18px;">
         <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:12px;font-weight:500;color:var(--text-muted);">Pre-Op Call</span>
@@ -1374,7 +1374,7 @@
       </div>
 
       <!-- Month nav -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;max-width:900px;margin-left:auto;margin-right:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <button class="btn btn-ghost btn-sm" onclick="changeMonth(-1)">← Prev</button>
         <span id="cal-month-label" style="font-size:17px;font-weight:500;"></span>
         <button class="btn btn-ghost btn-sm" onclick="changeMonth(1)">Next →</button>
