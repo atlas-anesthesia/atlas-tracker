@@ -2349,6 +2349,8 @@ window.saveCase = async function() {
 };
 
 window.clearCase=function(){
+  // Don't clear if actively editing a case
+  if(window._editingCaseId) return;
   caseItems=[];
   ['caseId','procedure','provider','caseNotes','caseComments'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   const preopSummary = document.getElementById('finalize-preop-summary');
@@ -2562,50 +2564,50 @@ window.editFinalizedCase = function(id) {
   const c = cases.find(x => x.id === id);
   if(!c) return;
 
-  // Load the case into the Finalize Case tab
+  // Set editing ID FIRST so clearCase/refreshDraftPicker won't interfere
+  window._editingCaseId = id;
+
+  // Fill all fields before switching tab
+  const el = eid => document.getElementById(eid);
+
+  // Load case items
+  caseItems = (c.items || []).map(i => {
+    const invItem = items.find(x => x.id === i.id);
+    return {
+      id: i.id,
+      generic: i.generic || i.name || 'Unknown',
+      name: i.name || i.generic || 'Unknown',
+      cost: parseFloat(i.cost) || 0,
+      qty: parseFloat(i.qty) || 1,
+      stock: invItem ? getStock(invItem, currentWorker) : parseFloat(i.qty) || 1
+    };
+  });
+
+  // Restore CS entries
+  csEntries = (c.savedCsEntries && c.savedCsEntries.length)
+    ? c.savedCsEntries.map(e => ({...e}))
+    : [];
+
+  // Now switch tab (refreshDraftPicker runs but _editingCaseId is already set)
   showTab('new-case');
 
-  // Fill fields
+  // Fill form fields after tab switch
   setTimeout(() => {
-    const caseIdEl = document.getElementById('caseId');
-    const procEl = document.getElementById('procedure');
-    const provEl = document.getElementById('provider');
-    const dateEl = document.getElementById('caseDate');
-    const notesEl = document.getElementById('caseNotes');
-    const commentsEl = document.getElementById('caseComments');
+    if(el('caseId')) el('caseId').value = c.caseId || '';
+    if(el('procedure')) el('procedure').value = c.procedure || '';
+    if(el('provider')) el('provider').value = c.provider || '';
+    if(el('caseDate')) el('caseDate').value = c.date || '';
+    if(el('caseNotes')) el('caseNotes').value = c.notes || '';
+    if(el('caseComments')) el('caseComments').value = c.caseComments || '';
+    if(el('caseStartTime')) el('caseStartTime').value = c.startTime || '';
+    if(el('caseEndTime')) el('caseEndTime').value = c.endTime || '';
 
-    if(caseIdEl) caseIdEl.value = c.caseId || '';
-    if(procEl) procEl.value = c.procedure || '';
-    if(provEl) provEl.value = c.provider || '';
-    if(dateEl) dateEl.value = c.date || '';
-    if(notesEl) notesEl.value = c.notes || '';
-    if(commentsEl) commentsEl.value = c.caseComments || '';
+    setWorker(c.worker || currentWorker);
 
-    // Load case items — ensure proper types
-    caseItems = (c.items || []).map(i => {
-      const invItem = items.find(x => x.id === i.id);
-      return {
-        id: i.id,
-        generic: i.generic || i.name || 'Unknown',
-        name: i.name || i.generic || 'Unknown',
-        cost: parseFloat(i.cost) || 0,
-        qty: parseFloat(i.qty) || 1,
-        stock: invItem ? getStock(invItem, currentWorker) : parseFloat(i.qty) || 1
-      };
-    });
-
-    // Restore CS entries if saved on the case
-    if(c.savedCsEntries && c.savedCsEntries.length) {
-      csEntries = c.savedCsEntries.map(e => ({...e}));
-    } else {
-      csEntries = [];
-    }
     renderCSEntries();
     renderCaseSupplies();
     refreshItemSelect();
-
-    // Store editing ID
-    window._editingCaseId = id;
+    updateCaseIdDisplays();
 
     // Show edit banner
     const existing = document.getElementById('case-edit-banner');
@@ -2613,16 +2615,14 @@ window.editFinalizedCase = function(id) {
     const banner = document.createElement('div');
     banner.id = 'case-edit-banner';
     banner.style.cssText = 'background:var(--info-light);border:1px solid #b8cfe8;border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;';
-    banner.innerHTML = `
-      <span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing case: ${c.caseId || c.procedure}</span>
-      <button onclick="cancelEditCase()" class="btn btn-ghost btn-sm" style="font-size:11px;">Cancel Edit</button>`;
+    banner.innerHTML = \`<span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing: \${c.caseId || c.procedure}</span>
+      <button onclick="cancelEditCase()" class="btn btn-ghost btn-sm" style="font-size:11px;">Cancel Edit</button>\`;
     const actionBar = document.querySelector('#tab-new-case .action-bar');
     if(actionBar) actionBar.insertAdjacentElement('afterend', banner);
 
-    // Update save button text
     const saveBtn = document.querySelector('#tab-new-case .btn-success');
     if(saveBtn) saveBtn.textContent = '✓ Save Edits & Update Inventory';
-  }, 100);
+  }, 150);
 };
 
 window.cancelEditCase = function() {
