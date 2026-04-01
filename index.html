@@ -3608,7 +3608,7 @@ function renderCSEntries() {
         <div>
           <div style="font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Estimated Cost</div>
           <div style="padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);text-align:center;">
-            ${totalML > 0 && costPerML > 0
+            ${totalMG > 0 && costPerMG > 0
               ? `<div style="font-size:15px;font-weight:500;font-family:'DM Mono',monospace;color:var(--warn);">≈ $${estimatedCost.toFixed(2)}</div>
                  <div style="font-size:10px;color:var(--text-faint);">${totalMG.toFixed(1)} mg × $${costPerMG.toFixed(4)}/mg</div>`
               : `<div style="font-size:13px;color:var(--text-faint);">Enter mg above</div>`
