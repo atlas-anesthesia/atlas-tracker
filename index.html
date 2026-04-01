@@ -499,6 +499,8 @@
           <select id="po-surgery-center">
             <option value="">— Select surgery center —</option>
           </select>
+          <label>Estimated Hours</label>
+          <input type="number" id="po-est-hours" min="0.5" max="12" step="0.5" placeholder="e.g. 2.5">
           <label>Invoice Email</label>
           <input type="text" id="po-patientEmail" placeholder="patient@email.com">
         </div>
@@ -1161,9 +1163,23 @@
       </div>
 
       <!-- Surgery center breakdown -->
-      <div class="card">
+      <div class="card" style="margin-bottom:18px;">
         <div class="card-title">Breakdown by Surgery Center</div>
         <div id="analytics-by-center"></div>
+      </div>
+
+      <!-- Weekly Report -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div class="card-title" style="margin-bottom:0;">Weekly Distribution Report</div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input type="date" id="weekly-report-date" style="font-size:12px;padding:5px 8px;" title="Pick any day in the week">
+            <button class="btn btn-ghost btn-sm" onclick="renderWeeklyReport()" style="font-size:12px;">↻ Refresh</button>
+            <button class="btn btn-ghost btn-sm" onclick="window.print()" style="font-size:12px;">🖨 Print</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">Monday–Sunday week. Shows how much should be distributed to each provider and how much Atlas earned.</div>
+        <div id="weekly-report-content"></div>
       </div>
     </div>
 
@@ -2925,7 +2941,7 @@ function getPreopCheckboxes() {
 }
 
 function getPreopTextFields() {
-  const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-surgery-center','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
+  const fields = ['po-caseId','po-surgeryDate','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
     'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
     'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
   const data = {};
@@ -5788,8 +5804,10 @@ function getCenterName(centerId) {
 }
 
 window.renderAnalytics = function() {
+  const PERSONAL_RATE = 600; // $600/hr personal rate for both providers
   const yearSel = document.getElementById('analytics-year');
   const allYears = [...new Set((cases||[]).filter(c=>!c.draft&&c.date).map(c=>c.date.substring(0,4)))].sort().reverse();
+  if(!allYears.length) allYears.push(new Date().getFullYear().toString());
   if(yearSel) {
     const curYear = yearSel.value || new Date().getFullYear().toString();
     yearSel.innerHTML = allYears.map(y=>`<option value="${y}"${y===curYear?' selected':''}>${y}</option>`).join('');
@@ -5800,29 +5818,80 @@ window.renderAnalytics = function() {
   const devCases  = finalized.filter(c => c.worker === 'dev');
   const joshCases = finalized.filter(c => c.worker === 'josh');
 
-  // Days worked = unique dates
   const uniqueDays = arr => new Set(arr.map(c=>c.date)).size;
+  const totalCost  = arr => arr.reduce((s,c) => s + (parseFloat(c.total)||0), 0);
 
-  // Total income from cost field
-  const totalCost = arr => arr.reduce((s,c) => s + (parseFloat(c.total)||0), 0);
+  // Actual income from invoices (real billed amounts)
+  const allInvoices = window._savedInvoices || [];
+  const actualIncome = (arr) => {
+    return arr.reduce((s,c) => {
+      const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
+      return s + (inv ? parseFloat(inv.total)||0 : 0);
+    }, 0);
+  };
 
-  // Projected income
-  const projIncome = arr => arr.reduce((s,c) => {
-    const est = estimateIncome(c);
-    return s + (est || 0);
+  // Hours from start/end time (actual)
+  const actualHours = (arr) => arr.reduce((s,c) => {
+    if(!c.startTime || !c.endTime) return s;
+    const [sh,sm] = c.startTime.split(':').map(Number);
+    const [eh,em] = c.endTime.split(':').map(Number);
+    const mins = (eh*60+em)-(sh*60+sm);
+    return s + (mins > 0 ? mins/60 : 0);
   }, 0);
 
-  const projCount = arr => arr.filter(c => estimateIncome(c) !== null).length;
+  // Atlas projected income from surgery center rates
+  const atlasProjected = (arr) => arr.reduce((s,c) => {
+    const est = estimateIncome(c);
+    return s + (est||0);
+  }, 0);
 
-  // Render summary cards
-  const renderSummary = (arr, elId) => {
+  // Personal projected income from est hours (pre-op) or actual hours
+  const personalProjected = (arr) => {
+    return arr.reduce((s,c) => {
+      // Try actual hours first
+      if(c.startTime && c.endTime) {
+        const [sh,sm] = c.startTime.split(':').map(Number);
+        const [eh,em] = c.endTime.split(':').map(Number);
+        const hrs = ((eh*60+em)-(sh*60+sm))/60;
+        return s + (hrs > 0 ? hrs * PERSONAL_RATE : 0);
+      }
+      // Fall back to pre-op estimated hours
+      const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
+      const estHrs = parseFloat(preop?.['po-est-hours']) || 0;
+      return s + estHrs * PERSONAL_RATE;
+    }, 0);
+  };
+
+  // Atlas actual income = invoice total - personal pay
+  const atlasActual = (arr) => {
+    return arr.reduce((s,c) => {
+      const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
+      if(!inv) return s;
+      const invTotal = parseFloat(inv.total)||0;
+      let hrs = 0;
+      if(c.startTime && c.endTime) {
+        const [sh,sm] = c.startTime.split(':').map(Number);
+        const [eh,em] = c.endTime.split(':').map(Number);
+        hrs = Math.max(0,((eh*60+em)-(sh*60+sm))/60);
+      }
+      const personalPay = hrs * PERSONAL_RATE;
+      return s + Math.max(0, invTotal - personalPay);
+    }, 0);
+  };
+
+  const renderSummary = (arr, elId, workerLabel) => {
     const el = document.getElementById(elId);
     if(!el) return;
-    const proj = projIncome(arr);
+    const hrs = actualHours(arr);
+    const projPersonal = personalProjected(arr);
+    const projAtlas = atlasProjected(arr);
+    const actIncome = actualIncome(arr);
+    const actAtlas = atlasActual(arr);
+
     el.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Total Cases</div>
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Cases</div>
           <div style="font-size:24px;font-weight:600;font-family:'DM Mono',monospace;">${arr.length}</div>
         </div>
         <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
@@ -5830,19 +5899,50 @@ window.renderAnalytics = function() {
           <div style="font-size:24px;font-weight:600;font-family:'DM Mono',monospace;">${uniqueDays(arr)}</div>
         </div>
         <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Hours Worked</div>
+          <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;">${hrs>0?hrs.toFixed(1)+'h':'—'}</div>
+        </div>
+        <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Supply Cost</div>
           <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:var(--warn);">$${totalCost(arr).toFixed(2)}</div>
         </div>
-        <div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px;">Projected Income</div>
-          <div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:var(--accent);">${proj > 0 ? '$'+proj.toFixed(2) : '—'}</div>
-          ${proj > 0 ? `<div style="font-size:10px;color:var(--text-faint);">${projCount(arr)} of ${arr.length} cases have center rates</div>` : '<div style="font-size:10px;color:var(--text-faint);">Link cases to surgery centers</div>'}
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:8px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;">Projected Income</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm);">
+            <div style="font-size:10px;font-weight:600;color:#166534;margin-bottom:2px;">👤 ${workerLabel} Personal</div>
+            <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;color:#166534;">${projPersonal>0?'$'+projPersonal.toFixed(2):'—'}</div>
+            <div style="font-size:10px;color:#166534;opacity:.7;">$600/hr</div>
+          </div>
+          <div style="padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius-sm);">
+            <div style="font-size:10px;font-weight:600;color:#1d4ed8;margin-bottom:2px;">🏢 Atlas Projected</div>
+            <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;color:#1d4ed8;">${projAtlas>0?'$'+projAtlas.toFixed(2):'—'}</div>
+            <div style="font-size:10px;color:#1d4ed8;opacity:.7;">Center rates</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:10px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;">Actual Invoiced Income</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm);">
+            <div style="font-size:10px;font-weight:600;color:#166534;margin-bottom:2px;">👤 ${workerLabel} Actual</div>
+            <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;color:#166534;">${actIncome>0?'$'+(Math.min(actIncome,actIncome)).toFixed(2):'—'}</div>
+            <div style="font-size:10px;color:#166534;opacity:.7;">From invoices</div>
+          </div>
+          <div style="padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius-sm);">
+            <div style="font-size:10px;font-weight:600;color:#1d4ed8;margin-bottom:2px;">🏢 Atlas Actual</div>
+            <div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;color:#1d4ed8;">${actAtlas>0?'$'+actAtlas.toFixed(2):'—'}</div>
+            <div style="font-size:10px;color:#1d4ed8;opacity:.7;">Invoice − personal pay</div>
+          </div>
         </div>
       </div>`;
   };
 
-  renderSummary(devCases, 'analytics-dev');
-  renderSummary(joshCases, 'analytics-josh');
+  renderSummary(devCases,  'analytics-dev',  'Devarsh');
+  renderSummary(joshCases, 'analytics-josh', 'Josh');
 
   // Monthly breakdown
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -5850,39 +5950,47 @@ window.renderAnalytics = function() {
   const yearCases = filtered.filter(c => c.date.startsWith(selectedYear));
 
   const byMonth = {};
-  for(let m=0; m<12; m++) byMonth[m] = [];
-  yearCases.forEach(c => {
-    const m = parseInt(c.date.split('-')[1]) - 1;
-    byMonth[m].push(c);
-  });
+  for(let m=0;m<12;m++) byMonth[m]=[];
+  yearCases.forEach(c => { const m=parseInt(c.date.split('-')[1])-1; byMonth[m].push(c); });
 
   const monthEl = document.getElementById('analytics-monthly');
   if(monthEl) {
-    const yearTotal = yearCases.reduce((s,c)=>s+(parseFloat(c.total)||0),0);
-    const yearProj = projIncome(yearCases);
+    const yearProjPersonal = personalProjected(yearCases);
+    const yearProjAtlas = atlasProjected(yearCases);
+    const yearActIncome = actualIncome(yearCases);
+    const yearActAtlas = atlasActual(yearCases);
     monthEl.innerHTML = `
-      <div style="display:grid;grid-template-columns:80px 60px 60px 100px 100px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
-        <span>Month</span><span>Cases</span><span>Days</span><span>Supply Cost</span><span>Proj. Income</span>
+      <div style="display:grid;grid-template-columns:70px 50px 50px 80px 90px 90px 90px 90px;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
+        <span>Month</span><span>Cases</span><span>Days</span><span>Hrs</span><span>Supply Cost</span><span>Personal Proj.</span><span>Atlas Proj.</span><span>Actual Inv.</span>
       </div>
       ${months.map((m,i) => {
         const mc = byMonth[i];
-        if(!mc.length) return `<div style="display:grid;grid-template-columns:80px 60px 60px 100px 100px;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);color:var(--text-faint);font-size:13px;">
-          <span>${m}</span><span>—</span><span>—</span><span>—</span><span>—</span></div>`;
-        const proj = projIncome(mc);
-        return `<div style="display:grid;grid-template-columns:80px 60px 60px 100px 100px;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;align-items:center;">
+        if(!mc.length) return `<div style="display:grid;grid-template-columns:70px 50px 50px 80px 90px 90px 90px 90px;gap:6px;padding:7px 0;border-bottom:1px solid var(--border);color:var(--text-faint);font-size:12px;">
+          <span>${m}</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span></div>`;
+        const hrs = actualHours(mc);
+        const pp = personalProjected(mc);
+        const ap = atlasProjected(mc);
+        const ai = actualIncome(mc);
+        return `<div style="display:grid;grid-template-columns:70px 50px 50px 80px 90px 90px 90px 90px;gap:6px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;align-items:center;">
           <span style="font-weight:500;">${m}</span>
           <span>${mc.length}</span>
           <span>${uniqueDays(mc)}</span>
+          <span>${hrs>0?hrs.toFixed(1)+'h':'—'}</span>
           <span style="font-family:'DM Mono',monospace;color:var(--warn);">$${totalCost(mc).toFixed(2)}</span>
-          <span style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500;">${proj>0?'$'+proj.toFixed(2):'—'}</span>
+          <span style="font-family:'DM Mono',monospace;color:#166534;">${pp>0?'$'+pp.toFixed(2):'—'}</span>
+          <span style="font-family:'DM Mono',monospace;color:#1d4ed8;">${ap>0?'$'+ap.toFixed(2):'—'}</span>
+          <span style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500;">${ai>0?'$'+ai.toFixed(2):'—'}</span>
         </div>`;
       }).join('')}
-      <div style="display:grid;grid-template-columns:80px 60px 60px 100px 100px;gap:8px;padding:10px 0;border-top:2px solid var(--border-strong);font-size:13px;font-weight:600;">
-        <span>Total ${selectedYear}</span>
+      <div style="display:grid;grid-template-columns:70px 50px 50px 80px 90px 90px 90px 90px;gap:6px;padding:10px 0;border-top:2px solid var(--border-strong);font-size:12px;font-weight:600;">
+        <span>Total</span>
         <span>${yearCases.length}</span>
         <span>${uniqueDays(yearCases)}</span>
-        <span style="font-family:'DM Mono',monospace;color:var(--warn);">$${yearTotal.toFixed(2)}</span>
-        <span style="font-family:'DM Mono',monospace;color:var(--accent);">${yearProj>0?'$'+yearProj.toFixed(2):'—'}</span>
+        <span>${actualHours(yearCases)>0?actualHours(yearCases).toFixed(1)+'h':'—'}</span>
+        <span style="font-family:'DM Mono',monospace;color:var(--warn);">$${totalCost(yearCases).toFixed(2)}</span>
+        <span style="font-family:'DM Mono',monospace;color:#166534;">${yearProjPersonal>0?'$'+yearProjPersonal.toFixed(2):'—'}</span>
+        <span style="font-family:'DM Mono',monospace;color:#1d4ed8;">${yearProjAtlas>0?'$'+yearProjAtlas.toFixed(2):'—'}</span>
+        <span style="font-family:'DM Mono',monospace;color:var(--accent);">${yearActIncome>0?'$'+yearActIncome.toFixed(2):'—'}</span>
       </div>`;
   }
 
@@ -5891,22 +5999,27 @@ window.renderAnalytics = function() {
   if(caseEl) {
     const withCenter = filtered.filter(c => c.surgeryCenter && surgeryCenters.find(sc=>sc.id===c.surgeryCenter));
     if(!withCenter.length) {
-      caseEl.innerHTML = '<div class="empty-state">No cases linked to surgery centers yet. Select a surgery center in Pre-Op or edit existing cases.</div>';
+      caseEl.innerHTML = '<div class="empty-state">No cases linked to surgery centers yet.</div>';
     } else {
       caseEl.innerHTML = `
-        <div style="display:grid;grid-template-columns:100px 1fr 120px 80px 100px 100px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
-          <span>Date</span><span>Case</span><span>Center</span><span>Mins</span><span>Supply Cost</span><span>Proj. Income</span>
+        <div style="display:grid;grid-template-columns:90px 1fr 100px 60px 80px 90px 90px 90px;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
+          <span>Date</span><span>Case</span><span>Center</span><span>Hrs</span><span>Supply</span><span>Personal</span><span>Atlas Proj.</span><span>Actual Inv.</span>
         </div>
         ${withCenter.sort((a,b)=>b.date.localeCompare(a.date)).map(c => {
           const est = estimateIncome(c);
           const center = surgeryCenters.find(sc=>sc.id===c.surgeryCenter);
-          return `<div style="display:grid;grid-template-columns:100px 1fr 120px 80px 100px 100px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;align-items:center;">
-            <span style="font-family:'DM Mono',monospace;font-size:11px;">${fmtDate(c.date)}</span>
-            <span style="font-weight:500;">${c.caseId||'—'}<div style="font-size:11px;color:var(--text-faint);">${c.procedure||''}</div></span>
-            <span style="font-size:12px;">${center?.name||'—'}</span>
-            <span style="color:var(--text-faint);">${c.durationMins||'—'}</span>
+          const hrs = (() => { if(!c.startTime||!c.endTime) return 0; const [sh,sm]=c.startTime.split(':').map(Number);const [eh,em]=c.endTime.split(':').map(Number);return Math.max(0,((eh*60+em)-(sh*60+sm))/60); })();
+          const personal = hrs > 0 ? hrs * PERSONAL_RATE : (() => { const preop=(window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId); return (parseFloat(preop?.['po-est-hours'])||0)*PERSONAL_RATE; })();
+          const inv = allInvoices.find(i=>i.linkedCaseId===c.caseId);
+          return `<div style="display:grid;grid-template-columns:90px 1fr 100px 60px 80px 90px 90px 90px;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;align-items:center;">
+            <span style="font-family:'DM Mono',monospace;font-size:10px;">${fmtDate(c.date)}</span>
+            <span style="font-weight:500;">${c.caseId||'—'}<div style="font-size:10px;color:var(--text-faint);">${c.procedure||''}</div></span>
+            <span style="font-size:11px;">${center?.name||'—'}</span>
+            <span style="color:var(--text-faint);">${hrs>0?hrs.toFixed(1)+'h':'—'}</span>
             <span style="font-family:'DM Mono',monospace;color:var(--warn);">$${(parseFloat(c.total)||0).toFixed(2)}</span>
-            <span style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500;">${est!==null?'$'+est.toFixed(2):'—'}</span>
+            <span style="font-family:'DM Mono',monospace;color:#166534;">${personal>0?'$'+personal.toFixed(2):'—'}</span>
+            <span style="font-family:'DM Mono',monospace;color:#1d4ed8;">${est!==null?'$'+est.toFixed(2):'—'}</span>
+            <span style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500;">${inv?'$'+inv.total.toFixed(2):'—'}</span>
           </div>`;
         }).join('')}`;
     }
@@ -5920,23 +6033,216 @@ window.renderAnalytics = function() {
     } else {
       centerEl.innerHTML = surgeryCenters.map(sc => {
         const scCases = filtered.filter(c => c.surgeryCenter === sc.id);
-        const proj = projIncome(scCases);
+        const proj = atlasProjected(scCases);
+        const personal = personalProjected(scCases);
+        const actual = actualIncome(scCases);
         return `<div style="padding:14px 0;border-bottom:1px solid var(--border);">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
             <div>
               <div style="font-size:14px;font-weight:600;">${sc.name}</div>
               <div style="font-size:12px;color:var(--text-faint);margin-top:2px;">1st hr: $${sc.firstHour.toFixed(2)} · Per 15-min: $${sc.per15.toFixed(2)}</div>
             </div>
-            <div style="display:flex;gap:14px;text-align:right;">
+            <div style="display:flex;gap:14px;text-align:right;flex-wrap:wrap;">
               <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);">Cases</div><div style="font-size:18px;font-weight:600;">${scCases.length}</div></div>
-              <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);">Proj. Income</div><div style="font-size:18px;font-weight:600;color:var(--accent);">${proj>0?'$'+proj.toFixed(2):'—'}</div></div>
+              <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:#166534;">Personal</div><div style="font-size:18px;font-weight:600;color:#166534;">${personal>0?'$'+personal.toFixed(2):'—'}</div></div>
+              <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:#1d4ed8;">Atlas Proj.</div><div style="font-size:18px;font-weight:600;color:#1d4ed8;">${proj>0?'$'+proj.toFixed(2):'—'}</div></div>
+              <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--accent);">Actual</div><div style="font-size:18px;font-weight:600;color:var(--accent);">${actual>0?'$'+actual.toFixed(2):'—'}</div></div>
             </div>
           </div>
         </div>`;
       }).join('');
     }
   }
+
+  // Render weekly report
+  renderWeeklyReport();
 };
+
+
+// ── WEEKLY REPORT ──
+function getWeekRange(dateStr) {
+  // Get Monday-Sunday week containing the given date
+  const d = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
+  const day = d.getDay(); // 0=Sun, 1=Mon...
+  const diffToMon = (day === 0 ? -6 : 1 - day);
+  const mon = new Date(d);
+  mon.setDate(d.getDate() + diffToMon);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  const fmt = dt => dt.toISOString().split('T')[0];
+  return { start: fmt(mon), end: fmt(sun) };
+}
+
+function renderWeeklyReport() {
+  const el = document.getElementById('weekly-report-content');
+  if(!el) return;
+
+  const PERSONAL_RATE = 600;
+  const datePicker = document.getElementById('weekly-report-date');
+
+  // Default to current week if no date selected
+  if(datePicker && !datePicker.value) {
+    datePicker.value = new Date().toISOString().split('T')[0];
+  }
+  const { start, end } = getWeekRange(datePicker?.value);
+
+  const allInvoices = window._savedInvoices || [];
+  const finalized = (cases||[]).filter(c => !c.draft && c.date);
+
+  // Cases in this week
+  const weekCases = finalized.filter(c => c.date >= start && c.date <= end);
+  const devWeek  = weekCases.filter(c => c.worker === 'dev');
+  const joshWeek = weekCases.filter(c => c.worker === 'josh');
+
+  // Hours worked
+  const calcHours = (arr) => arr.reduce((s,c) => {
+    if(!c.startTime || !c.endTime) return s;
+    const [sh,sm] = c.startTime.split(':').map(Number);
+    const [eh,em] = c.endTime.split(':').map(Number);
+    return s + Math.max(0, ((eh*60+em)-(sh*60+sm))/60);
+  }, 0);
+
+  // Income from invoices
+  const invIncome = (arr) => arr.reduce((s,c) => {
+    const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
+    return s + (inv ? parseFloat(inv.total)||0 : 0);
+  }, 0);
+
+  // Personal pay (actual hours × $600)
+  const personalPay = (arr) => {
+    const hrs = calcHours(arr);
+    return hrs * PERSONAL_RATE;
+  };
+
+  // Atlas share = invoice total - personal pay
+  const atlasShare = (arr) => {
+    return arr.reduce((s,c) => {
+      const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
+      if(!inv) return s;
+      const [sh,sm] = (c.startTime||'').split(':').map(Number);
+      const [eh,em] = (c.endTime||'').split(':').map(Number);
+      const hrs = (c.startTime && c.endTime) ? Math.max(0,((eh*60+em)-(sh*60+sm))/60) : 0;
+      return s + Math.max(0, (parseFloat(inv.total)||0) - hrs*PERSONAL_RATE);
+    }, 0);
+  };
+
+  // Projected personal (for cases without invoices, use est hours)
+  const projPersonal = (arr) => arr.reduce((s,c) => {
+    if(c.startTime && c.endTime) {
+      const [sh,sm]=c.startTime.split(':').map(Number);
+      const [eh,em]=c.endTime.split(':').map(Number);
+      return s + Math.max(0,((eh*60+em)-(sh*60+sm))/60)*PERSONAL_RATE;
+    }
+    const preop = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId);
+    return s + (parseFloat(preop?.['po-est-hours'])||0)*PERSONAL_RATE;
+  }, 0);
+
+  const devHrs   = calcHours(devWeek);
+  const joshHrs  = calcHours(joshWeek);
+  const devInv   = invIncome(devWeek);
+  const joshInv  = invIncome(joshWeek);
+  const devPay   = devHrs > 0 ? devHrs * PERSONAL_RATE : projPersonal(devWeek);
+  const joshPay  = joshHrs > 0 ? joshHrs * PERSONAL_RATE : projPersonal(joshWeek);
+  const devAtlas = atlasShare(devWeek);
+  const joshAtlas= atlasShare(joshWeek);
+  const totalAtlas = devAtlas + joshAtlas;
+  const totalInv = devInv + joshInv;
+
+  const providerCard = (name, workerCases, hrs, inv, pay, atlas, color) => {
+    const hasActual = inv > 0;
+    return `
+    <div style="flex:1;min-width:240px;background:var(--surface2);border-radius:var(--radius);padding:18px;border-top:3px solid ${color};">
+      <div style="font-size:16px;font-weight:700;color:${color};margin-bottom:14px;">${name}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div><div style="font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;">Cases</div><div style="font-size:20px;font-weight:600;">${workerCases.length}</div></div>
+        <div><div style="font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;">Hours</div><div style="font-size:20px;font-weight:600;">${hrs>0?hrs.toFixed(1)+'h':'est.'}</div></div>
+      </div>
+      ${workerCases.length ? `
+      <div style="border-top:1px solid var(--border);padding-top:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-size:12px;color:var(--text-faint);">Total Invoiced</span>
+          <span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:500;">${hasActual?'$'+inv.toFixed(2):'Not invoiced'}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-size:12px;color:var(--text-faint);">Atlas Share</span>
+          <span style="font-family:'DM Mono',monospace;font-size:14px;color:#1d4ed8;">${hasActual?'$'+atlas.toFixed(2):'—'}</span>
+        </div>
+        <div style="background:${color}22;border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;">
+          <div style="font-size:11px;font-weight:600;color:${color};text-transform:uppercase;margin-bottom:3px;">💰 Should Receive</div>
+          <div style="font-size:22px;font-weight:700;font-family:'DM Mono',monospace;color:${color};">$${pay.toFixed(2)}</div>
+          <div style="font-size:10px;color:${color};opacity:.7;">${hrs>0?hrs.toFixed(1)+' hrs × $600/hr':'Estimated from pre-op hrs'}</div>
+        </div>
+      </div>` : '<div style="font-size:13px;color:var(--text-faint);margin-top:10px;">No cases this week</div>'}
+    </div>`;
+  };
+
+  const caseRows = weekCases.length ? weekCases.map(c => {
+    const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
+    const [sh,sm] = (c.startTime||'').split(':').map(Number);
+    const [eh,em] = (c.endTime||'').split(':').map(Number);
+    const hrs = (c.startTime && c.endTime) ? Math.max(0,((eh*60+em)-(sh*60+sm))/60) : 0;
+    const pay = hrs > 0 ? hrs * PERSONAL_RATE : (() => { const p=(window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId); return (parseFloat(p?.['po-est-hours'])||0)*PERSONAL_RATE; })();
+    const wname = c.worker === 'dev' ? 'Devarsh' : 'Josh';
+    const wcolor = c.worker === 'dev' ? 'var(--dev)' : 'var(--josh)';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:7px 8px;font-size:12px;">${fmtDate(c.date)}</td>
+      <td style="padding:7px 8px;font-size:12px;font-weight:500;">${c.caseId||'—'}</td>
+      <td style="padding:7px 8px;"><span style="background:${wcolor}22;color:${wcolor};font-size:10px;font-weight:600;padding:1px 7px;border-radius:8px;">${wname}</span></td>
+      <td style="padding:7px 8px;font-size:12px;font-family:'DM Mono',monospace;">${hrs>0?hrs.toFixed(1)+'h':'—'}</td>
+      <td style="padding:7px 8px;font-size:12px;font-family:'DM Mono',monospace;">${inv?'$'+parseFloat(inv.total).toFixed(2):'—'}</td>
+      <td style="padding:7px 8px;font-size:12px;font-family:'DM Mono',monospace;color:#166534;font-weight:500;">$${pay.toFixed(2)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text-faint);font-size:13px;">No cases this week</td></tr>`;
+
+  el.innerHTML = `
+    <div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:18px;font-size:13px;color:var(--info);font-weight:500;">
+      Week of ${fmtDate(start)} — ${fmtDate(end)}
+    </div>
+
+    <!-- Provider cards -->
+    <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+      ${providerCard('Devarsh', devWeek, devHrs, devInv, devPay, devAtlas, 'var(--dev)')}
+      ${providerCard('Josh', joshWeek, joshHrs, joshInv, joshPay, joshAtlas, 'var(--josh)')}
+      <div style="flex:1;min-width:200px;background:var(--surface2);border-radius:var(--radius);padding:18px;border-top:3px solid var(--info);">
+        <div style="font-size:16px;font-weight:700;color:var(--info);margin-bottom:14px;">🏢 Atlas</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--text-faint);">Total Invoiced</span>
+          <span style="font-family:'DM Mono',monospace;font-weight:500;">${totalInv>0?'$'+totalInv.toFixed(2):'—'}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--text-faint);">Dev Pay Out</span>
+          <span style="font-family:'DM Mono',monospace;color:#dc2626;">−$${devPay.toFixed(2)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--text-faint);">Josh Pay Out</span>
+          <span style="font-family:'DM Mono',monospace;color:#dc2626;">−$${joshPay.toFixed(2)}</span>
+        </div>
+        <div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;">
+          <div style="font-size:11px;font-weight:600;color:var(--info);text-transform:uppercase;margin-bottom:3px;">🏢 Atlas Keeps</div>
+          <div style="font-size:22px;font-weight:700;font-family:'DM Mono',monospace;color:var(--info);">${totalAtlas>0?'$'+totalAtlas.toFixed(2):'—'}</div>
+          <div style="font-size:10px;color:var(--info);opacity:.7;">From invoiced cases</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Case breakdown table -->
+    <div style="border-top:1px solid var(--border);padding-top:14px;">
+      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:10px;">Case Breakdown</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:var(--surface2);">
+            <th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left;">Date</th>
+            <th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left;">Case</th>
+            <th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left;">Provider</th>
+            <th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left;">Hours</th>
+            <th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left;">Invoiced</th>
+            <th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left;">Provider Pay</th>
+          </tr>
+        </thead>
+        <tbody>${caseRows}</tbody>
+      </table>
+    </div>`;
+}
 
 // ── CS TRANSFER LOG ──
 window.showAddTransferForm = function() {
