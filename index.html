@@ -2567,18 +2567,12 @@ window.editFinalizedCase = function(id) {
   // Set editing ID FIRST so clearCase won't fire
   window._editingCaseId = id;
 
-  alert('editFinalizedCase: case found\ncaseId='+c.caseId+'\nitems='+c.items?.length+'\n_editingCaseId='+window._editingCaseId);
-
   // Switch tab first
   showTab('new-case');
-
-  alert('After showTab\n_editingCaseId still='+window._editingCaseId+'\ncaseItems.length='+caseItems.length);
 
   // Fill everything in setTimeout so tab has fully rendered
   setTimeout(() => {
     const el = eid => document.getElementById(eid);
-
-    alert('Inside setTimeout\n_editingCaseId='+window._editingCaseId);
 
     // Restore items
     caseItems = (c.items || []).map(i => {
@@ -2628,7 +2622,7 @@ window.editFinalizedCase = function(id) {
 
     const saveBtn = document.querySelector('#tab-new-case .btn-success');
     if(saveBtn) saveBtn.textContent = '✓ Save Edits & Update Inventory';
-  }, 150);
+  }, 300);
 };
 
 window.cancelEditCase = function() {
@@ -2759,6 +2753,8 @@ function refreshDraftPicker() {
 }
 
 window.loadDraftFromPicker = function() {
+  // Don't interfere if we're editing a finalized case
+  if(window._editingCaseId) return;
   const sel = document.getElementById('draftCasePicker');
   const id = sel.value;
   if(!id) {
