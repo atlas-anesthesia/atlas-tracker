@@ -2567,10 +2567,15 @@ window.editFinalizedCase = function(id) {
   // Set editing ID FIRST so clearCase won't fire
   window._editingCaseId = id;
 
-  // Switch tab first
-  showTab('new-case');
+  // Manually switch to Finalize Case tab without triggering refreshDraftPicker
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  const tabEl = document.getElementById('tab-new-case');
+  if(tabEl) tabEl.classList.add('active');
+  const navBtn = document.querySelector("[onclick=\"showTab('new-case')\"]");
+  if(navBtn) navBtn.classList.add('active');
 
-  // Fill everything in setTimeout so tab has fully rendered
+  // Fill everything immediately (no setTimeout needed since we didn't call showTab)
   setTimeout(() => {
     const el = eid => document.getElementById(eid);
 
