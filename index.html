@@ -2567,12 +2567,18 @@ window.editFinalizedCase = function(id) {
   // Set editing ID FIRST so clearCase won't fire
   window._editingCaseId = id;
 
+  alert('editFinalizedCase: case found\ncaseId='+c.caseId+'\nitems='+c.items?.length+'\n_editingCaseId='+window._editingCaseId);
+
   // Switch tab first
   showTab('new-case');
+
+  alert('After showTab\n_editingCaseId still='+window._editingCaseId+'\ncaseItems.length='+caseItems.length);
 
   // Fill everything in setTimeout so tab has fully rendered
   setTimeout(() => {
     const el = eid => document.getElementById(eid);
+
+    alert('Inside setTimeout\n_editingCaseId='+window._editingCaseId);
 
     // Restore items
     caseItems = (c.items || []).map(i => {
