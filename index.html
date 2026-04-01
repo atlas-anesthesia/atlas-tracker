@@ -309,7 +309,6 @@
           <label>Procedure</label><input type="text" id="procedure" placeholder="e.g. Total knee replacement">
           <label>Provider</label><input type="text" id="provider" placeholder="e.g. Dr. Smith">
           <label>Date</label><input type="date" id="caseDate" oninput="updateCaseIdDisplays()">
-          <label>Notes</label><input type="text" id="caseNotes" placeholder="Optional notes">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div>
               <label>Start Time</label>
@@ -1335,7 +1334,7 @@
       </div>
 
       <!-- Legend -->
-      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;max-width:900px;margin-left:auto;margin-right:auto;">
         <div style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;">
           <div style="width:10px;height:10px;border-radius:50%;background:#b91c1c;"></div>
           <span style="font-size:12px;font-weight:500;color:var(--text-muted);">🔴 Surgery</span>
@@ -1354,7 +1353,7 @@
       </div>
 
       <!-- Settings + Filter -->
-      <div class="card" style="margin-bottom:14px;padding:12px 18px;">
+      <div class="card" style="margin-bottom:14px;padding:12px 18px;max-width:900px;margin-left:auto;margin-right:auto;">
         <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:12px;font-weight:500;color:var(--text-muted);">Pre-Op Call</span>
@@ -1375,7 +1374,7 @@
       </div>
 
       <!-- Month nav -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;max-width:900px;margin-left:auto;margin-right:auto;">
         <button class="btn btn-ghost btn-sm" onclick="changeMonth(-1)">← Prev</button>
         <span id="cal-month-label" style="font-size:17px;font-weight:500;"></span>
         <button class="btn btn-ghost btn-sm" onclick="changeMonth(1)">Next →</button>
@@ -1741,10 +1740,17 @@ function generateCaseId(worker, date) {
 }
 
 function updateCaseIdDisplays() {
-  const date = document.getElementById('caseDate')?.value || new Date().toISOString().split('T')[0];
-  const id = generateCaseId(currentWorker, date);
   const ncDisplay = document.getElementById('caseId-display');
   const ncInput = document.getElementById('caseId');
+  // If editing a case, keep the original case ID — never regenerate
+  if(window._editingCaseId) {
+    const c = cases.find(x => x.id === window._editingCaseId);
+    if(c && ncDisplay) ncDisplay.textContent = c.caseId;
+    if(c && ncInput) ncInput.value = c.caseId;
+    return;
+  }
+  const date = document.getElementById('caseDate')?.value || new Date().toISOString().split('T')[0];
+  const id = generateCaseId(currentWorker, date);
   if(ncDisplay) ncDisplay.textContent = id;
   if(ncInput) ncInput.value = id;
 }
@@ -2009,7 +2015,7 @@ function showCalDetail(e) {
         </div>
         ${e.email ? `<div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;font-family:'DM Mono',monospace;">📧 ${e.email}</div>` : ''}
         <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px;">
-          <button id="cal-view-preop-btn" class="btn btn-primary btn-sm" style="font-size:12px;">📋 View Pre-Op</button>
+          <button id="cal-view-preop-btn" class="btn btn-primary btn-sm" style="font-size:12px;">📋 View Pre-Op / Case</button>
           <button id="cal-gcal-btn" class="btn btn-ghost btn-sm" style="font-size:12px;padding:6px 14px;">${gcalToken ? '+ Add to Google Cal' : 'Connect Google Cal'}</button>
           <button id="cal-close-btn" class="btn btn-ghost btn-sm">Close</button>
         </div>
@@ -2314,7 +2320,7 @@ window.saveCase = async function() {
       const total = suppliesTotal + csTotal;
       cases[idx] = {
         ...cases[idx],
-        caseId, procedure:proc, provider, date, notes,
+        caseId: cases[idx].caseId, procedure:proc, provider, date, notes: cases[idx].notes||'',
         caseComments:comments, worker:currentWorker,
         items: caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
         savedCsEntries: csEntries.map(e=>({...e})),
