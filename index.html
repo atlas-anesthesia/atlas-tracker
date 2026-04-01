@@ -2562,75 +2562,74 @@ function renderHistory() {
 
 window.editFinalizedCase = function(id) {
   const c = cases.find(x => x.id === id);
-  if(!c) return;
+  if(!c) { alert('Case not found'); return; }
 
-  // Set editing ID FIRST so clearCase won't fire
+  // 1. Set editing flag immediately
   window._editingCaseId = id;
 
-  // Manually switch to Finalize Case tab without triggering refreshDraftPicker
+  // 2. Set worker (with guard active, won't clear caseItems)
+  currentWorker = c.worker || 'josh';
+
+  // 3. Restore supplies and CS directly
+  caseItems = (c.items || []).map(i => {
+    const inv = items.find(x => x.id === i.id);
+    return {
+      id: i.id,
+      generic: i.generic || i.name || 'Unknown',
+      name: i.name || i.generic || 'Unknown',
+      cost: parseFloat(i.cost) || 0,
+      qty: parseFloat(i.qty) || 1,
+      stock: inv ? getStock(inv, currentWorker) : parseFloat(i.qty) || 1
+    };
+  });
+  csEntries = (c.savedCsEntries || []).map(e => ({...e}));
+
+  // 4. Switch tab manually (bypasses refreshDraftPicker)
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
   const tabEl = document.getElementById('tab-new-case');
   if(tabEl) tabEl.classList.add('active');
-  const navBtn = document.querySelector("[onclick=\"showTab('new-case')\"]");
-  if(navBtn) navBtn.classList.add('active');
 
-  // Fill everything immediately (no setTimeout needed since we didn't call showTab)
+  // 5. Fill form + render after short delay
   setTimeout(() => {
-    const el = eid => document.getElementById(eid);
+    const el = id => document.getElementById(id);
+    if(el('caseId'))      el('caseId').value      = c.caseId || '';
+    if(el('procedure'))   el('procedure').value   = c.procedure || '';
+    if(el('provider'))    el('provider').value    = c.provider || '';
+    if(el('caseDate'))    el('caseDate').value    = c.date || '';
+    if(el('caseNotes'))   el('caseNotes').value   = c.notes || '';
+    if(el('caseComments'))el('caseComments').value= c.caseComments || '';
+    if(el('caseStartTime'))el('caseStartTime').value = c.startTime || '';
+    if(el('caseEndTime'))  el('caseEndTime').value   = c.endTime || '';
 
-    // Set worker FIRST (before restoring items, to avoid worker-triggered clear)
-    setWorker(c.worker || currentWorker);
+    // Update worker UI without clearing items
+    const devBtn  = document.getElementById('wbtn-dev');
+    const joshBtn = document.getElementById('wbtn-josh');
+    const ind     = document.getElementById('workerIndicator');
+    if(devBtn)  devBtn.className  = 'worker-btn' + (currentWorker==='dev' ?' active-dev':'');
+    if(joshBtn) joshBtn.className = 'worker-btn' + (currentWorker==='josh'?' active-josh':'');
+    if(ind) { ind.className = 'worker-pill ' + (currentWorker==='dev'?'pill-dev':'pill-josh'); ind.textContent = (currentWorker==='dev'?'Devarsh':'Josh') + "'s inventory will be updated"; }
 
-    // Fill form fields
-    if(el('caseId')) el('caseId').value = c.caseId || '';
-    if(el('procedure')) el('procedure').value = c.procedure || '';
-    if(el('provider')) el('provider').value = c.provider || '';
-    if(el('caseDate')) el('caseDate').value = c.date || '';
-    if(el('caseNotes')) el('caseNotes').value = c.notes || '';
-    if(el('caseComments')) el('caseComments').value = c.caseComments || '';
-    if(el('caseStartTime')) el('caseStartTime').value = c.startTime || '';
-    if(el('caseEndTime')) el('caseEndTime').value = c.endTime || '';
-
-    // Restore items AFTER setWorker so it doesn't wipe them
-    caseItems = (c.items || []).map(i => {
-      const invItem = items.find(x => x.id === i.id);
-      return {
-        id: i.id,
-        generic: i.generic || i.name || 'Unknown',
-        name: i.name || i.generic || 'Unknown',
-        cost: parseFloat(i.cost) || 0,
-        qty: parseFloat(i.qty) || 1,
-        stock: invItem ? getStock(invItem, currentWorker) : parseFloat(i.qty) || 1
-      };
-    });
-
-    // Restore CS entries
-    csEntries = (c.savedCsEntries && c.savedCsEntries.length)
-      ? c.savedCsEntries.map(e => ({...e}))
-      : [];
-
-    renderCSEntries();
+    // Render supplies and CS
     renderCaseSupplies();
+    renderCSEntries();
     refreshItemSelect();
     updateCaseIdDisplays();
 
-    // Show edit banner
-    const existing = document.getElementById('case-edit-banner');
-    if(existing) existing.remove();
+    // Edit banner
+    const old = document.getElementById('case-edit-banner');
+    if(old) old.remove();
     const banner = document.createElement('div');
     banner.id = 'case-edit-banner';
     banner.style.cssText = 'background:var(--info-light);border:1px solid #b8cfe8;border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;';
-    banner.innerHTML = '<span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing: ' + (c.caseId || c.procedure) + '</span>' +
-      '<button onclick="cancelEditCase()" class="btn btn-ghost btn-sm" style="font-size:11px;">Cancel Edit</button>';
-    const actionBar = document.querySelector('#tab-new-case .action-bar');
-    if(actionBar) actionBar.insertAdjacentElement('afterend', banner);
+    banner.innerHTML = '<span style="font-size:13px;color:var(--info);font-weight:500;">✏ Editing: ' + (c.caseId||c.procedure) + '</span><button onclick="cancelEditCase()" class="btn btn-ghost btn-sm" style="font-size:11px;">Cancel Edit</button>';
+    const bar = document.querySelector('#tab-new-case .action-bar');
+    if(bar) bar.insertAdjacentElement('afterend', banner);
 
     const saveBtn = document.querySelector('#tab-new-case .btn-success');
     if(saveBtn) saveBtn.textContent = '✓ Save Edits & Update Inventory';
-  }, 300);
+  }, 100);
 };
-
 window.cancelEditCase = function() {
   window._editingCaseId = null;
   const banner = document.getElementById('case-edit-banner');
