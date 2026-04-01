@@ -1161,6 +1161,13 @@
         <div id="analytics-cases"></div>
       </div>
 
+      <!-- Upcoming Scheduled Projections -->
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title">📅 Upcoming Scheduled Cases (Projected)</div>
+        <div style="font-size:12px;color:var(--text-faint);margin-bottom:12px;">Pre-op drafts with surgery center and estimated hours — projected income before finalization.</div>
+        <div id="analytics-scheduled"></div>
+      </div>
+
       <!-- Surgery center breakdown -->
       <div class="card" style="margin-bottom:18px;">
         <div class="card-title">Breakdown by Surgery Center</div>
@@ -2196,7 +2203,17 @@ window.showTab = function(tab, pushState=true) {
   if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
   if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); renderDraftInvoices(); }
   if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
-  if(tab==='analytics') { renderAnalytics(); renderSurgeryCenters(); }
+  if(tab==='analytics') {
+    // Ensure preop records are loaded for projections
+    if(!window._rawPreopRecords || !window._rawPreopRecords.length) {
+      getDoc(doc(db,'atlas','preop')).then(snap => {
+        window._rawPreopRecords = snap.exists() ? (snap.data().records||[]) : [];
+        renderAnalytics(); renderSurgeryCenters();
+      }).catch(() => { renderAnalytics(); renderSurgeryCenters(); });
+    } else {
+      renderAnalytics(); renderSurgeryCenters();
+    }
+  }
   if(tab==='calendar') {
     setTimeout(buildCalendar, 50);
   }
@@ -5886,12 +5903,24 @@ window.setAnalyticsFilter = function(f) {
 };
 
 function estimateIncome(c) {
-  // Find surgery center
-  const centerId = c.surgeryCenter || '';
+  // Find surgery center from case or linked preop
+  const centerId = c.surgeryCenter || (window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId)?.['po-surgery-center'] || '';
   const center = surgeryCenters.find(sc => sc.id === centerId);
   if(!center) return null;
-  // Default 2 hours if no duration
-  const mins = c.durationMins || 120;
+  // Use actual hours, durationMins, or pre-op estimated hours
+  let hrs = 0;
+  if(c.startTime && c.endTime) {
+    const [sh,sm] = c.startTime.split(':').map(Number);
+    const [eh,em] = c.endTime.split(':').map(Number);
+    hrs = Math.max(0, ((eh*60+em)-(sh*60+sm))/60);
+  } else if(c.durationMins) {
+    hrs = c.durationMins / 60;
+  } else {
+    const preop = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId);
+    hrs = parseFloat(preop?.['po-est-hours']) || 0;
+  }
+  if(!hrs) return null;
+  const mins = hrs * 60;
   const extraMins = Math.max(0, mins - 60);
   const extra15 = Math.ceil(extraMins / 15);
   return center.firstHour + (extra15 * center.per15);
@@ -6039,8 +6068,25 @@ window.renderAnalytics = function() {
       </div>`;
   };
 
+  // Also include pre-op draft cases for projections
+  const preopRecords = window._rawPreopRecords || [];
+  const scheduledDev  = preopRecords.filter(r => r.worker === 'dev'  && r['po-surgeryDate'] >= new Date().toISOString().split('T')[0]);
+  const scheduledJosh = preopRecords.filter(r => r.worker === 'josh' && r['po-surgeryDate'] >= new Date().toISOString().split('T')[0]);
+
+  // Convert preop records to case-like objects for projection
+  const toCaseLike = (r) => ({
+    caseId: r['po-caseId'],
+    date: r['po-surgeryDate'],
+    worker: r.worker,
+    surgeryCenter: r['po-surgery-center'],
+    items: [], total: 0, savedCsEntries: []
+  });
+
   renderSummary(devCases,  'analytics-dev',  'Devarsh');
   renderSummary(joshCases, 'analytics-josh', 'Josh');
+
+  // Render scheduled (upcoming draft) projections
+  renderScheduledProjections(scheduledDev, scheduledJosh);
 
   // Monthly breakdown
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -6591,6 +6637,58 @@ window.finalizeDraftInvoicePDF = function() {
     window.generateInvoicePDF();
   }, 600);
 };
+
+// ── SCHEDULED PROJECTIONS ──
+function renderScheduledProjections(scheduledDev, scheduledJosh) {
+  const el = document.getElementById('analytics-scheduled');
+  if(!el) return;
+  const PERSONAL_RATE = 600;
+  const allScheduled = [...scheduledDev, ...scheduledJosh].sort((a,b) => (a['po-surgeryDate']||'').localeCompare(b['po-surgeryDate']||''));
+
+  if(!allScheduled.length) {
+    el.innerHTML = '<div class="empty-state">No upcoming scheduled cases with pre-op records</div>';
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:90px 1fr 80px 120px 90px 90px 90px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);">
+      <span>Surgery</span><span>Case</span><span>Worker</span><span>Center</span><span>Est. Hrs</span><span>Personal</span><span>Atlas</span>
+    </div>
+    ${allScheduled.map(r => {
+      const wname = r.worker === 'dev' ? 'Devarsh' : 'Josh';
+      const wpill = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
+      const center = surgeryCenters.find(sc => sc.id === r['po-surgery-center']);
+      const estHrs = parseFloat(r['po-est-hours']) || 0;
+      const personalProj = estHrs * PERSONAL_RATE;
+      let atlasProj = null;
+      if(center && estHrs) {
+        const mins = estHrs * 60;
+        const extraMins = Math.max(0, mins - 60);
+        const extra15 = Math.ceil(extraMins / 15);
+        atlasProj = center.firstHour + (extra15 * center.per15);
+      }
+      return `<div style="display:grid;grid-template-columns:90px 1fr 80px 120px 90px 90px 90px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px;align-items:center;">
+        <span style="font-family:'DM Mono',monospace;font-size:11px;">${fmtDate(r['po-surgeryDate'])}</span>
+        <span style="font-weight:500;">${r['po-caseId']||'—'}<div style="font-size:10px;color:var(--text-faint);">${r['po-provider']||''}</div></span>
+        <span><span class="worker-pill ${wpill}" style="font-size:10px;">${wname}</span></span>
+        <span style="font-size:11px;">${center?.name||'<span style="color:var(--warn);">No center</span>'}</span>
+        <span style="font-family:'DM Mono',monospace;">${estHrs>0?estHrs+'h':'<span style="color:var(--warn);">—</span>'}</span>
+        <span style="font-family:'DM Mono',monospace;color:#166534;font-weight:500;">${personalProj>0?'$'+personalProj.toFixed(2):'—'}</span>
+        <span style="font-family:'DM Mono',monospace;color:#1d4ed8;font-weight:500;">${atlasProj?'$'+atlasProj.toFixed(2):'—'}</span>
+      </div>`;
+    }).join('')}
+    <div style="display:grid;grid-template-columns:90px 1fr 80px 120px 90px 90px 90px;gap:8px;padding:10px 0;border-top:2px solid var(--border-strong);font-size:12px;font-weight:600;">
+      <span>Totals</span><span>${allScheduled.length} cases</span><span></span><span></span><span></span>
+      <span style="font-family:'DM Mono',monospace;color:#166534;">$${allScheduled.reduce((s,r)=>{const h=parseFloat(r['po-est-hours'])||0;return s+h*PERSONAL_RATE;},0).toFixed(2)}</span>
+      <span style="font-family:'DM Mono',monospace;color:#1d4ed8;">$${allScheduled.reduce((s,r)=>{
+        const c=surgeryCenters.find(sc=>sc.id===r['po-surgery-center']);
+        const h=parseFloat(r['po-est-hours'])||0;
+        if(!c||!h) return s;
+        const mins=h*60;const e=Math.max(0,mins-60);const e15=Math.ceil(e/15);
+        return s+c.firstHour+(e15*c.per15);
+      },0).toFixed(2)}</span>
+    </div>`;
+}
 
 // ── BROWSER BACK BUTTON ──
 window.addEventListener('popstate', (event) => {
