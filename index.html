@@ -2564,35 +2564,35 @@ window.editFinalizedCase = function(id) {
   const c = cases.find(x => x.id === id);
   if(!c) return;
 
-  // Set editing ID FIRST so clearCase/refreshDraftPicker won't interfere
+  // Set editing ID FIRST so clearCase won't fire
   window._editingCaseId = id;
 
-  // Fill all fields before switching tab
-  const el = eid => document.getElementById(eid);
-
-  // Load case items
-  caseItems = (c.items || []).map(i => {
-    const invItem = items.find(x => x.id === i.id);
-    return {
-      id: i.id,
-      generic: i.generic || i.name || 'Unknown',
-      name: i.name || i.generic || 'Unknown',
-      cost: parseFloat(i.cost) || 0,
-      qty: parseFloat(i.qty) || 1,
-      stock: invItem ? getStock(invItem, currentWorker) : parseFloat(i.qty) || 1
-    };
-  });
-
-  // Restore CS entries
-  csEntries = (c.savedCsEntries && c.savedCsEntries.length)
-    ? c.savedCsEntries.map(e => ({...e}))
-    : [];
-
-  // Now switch tab (refreshDraftPicker runs but _editingCaseId is already set)
+  // Switch tab first
   showTab('new-case');
 
-  // Fill form fields after tab switch
+  // Fill everything in setTimeout so tab has fully rendered
   setTimeout(() => {
+    const el = eid => document.getElementById(eid);
+
+    // Restore items
+    caseItems = (c.items || []).map(i => {
+      const invItem = items.find(x => x.id === i.id);
+      return {
+        id: i.id,
+        generic: i.generic || i.name || 'Unknown',
+        name: i.name || i.generic || 'Unknown',
+        cost: parseFloat(i.cost) || 0,
+        qty: parseFloat(i.qty) || 1,
+        stock: invItem ? getStock(invItem, currentWorker) : parseFloat(i.qty) || 1
+      };
+    });
+
+    // Restore CS entries
+    csEntries = (c.savedCsEntries && c.savedCsEntries.length)
+      ? c.savedCsEntries.map(e => ({...e}))
+      : [];
+
+    // Fill form fields
     if(el('caseId')) el('caseId').value = c.caseId || '';
     if(el('procedure')) el('procedure').value = c.procedure || '';
     if(el('provider')) el('provider').value = c.provider || '';
