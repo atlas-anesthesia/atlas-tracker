@@ -1391,6 +1391,24 @@ console.error(e);
 }
 };
 window.toggleCase=function(id){document.getElementById('detail_'+id).classList.toggle('open');};
+window.toggleMidCaseDropdown=function(id){
+  document.querySelectorAll('[id^="midcase-menu-"]').forEach(m=>{
+    if(m.id!=='midcase-menu-'+id) m.style.display='none';
+  });
+  const m=document.getElementById('midcase-menu-'+id);
+  if(m) m.style.display=m.style.display==='none'?'block':'none';
+};
+window.toggleHistoryDropdown=function(id){
+  // Close all other open menus first
+  document.querySelectorAll('[id^="history-menu-"]').forEach(m=>{
+    if(m.id!=='history-menu-'+id) m.style.display='none';
+  });
+  const m=document.getElementById('history-menu-'+id);
+  if(m) m.style.display=m.style.display==='none'?'block':'none';
+};
+document.addEventListener('click',function(){
+  document.querySelectorAll('[id^="history-menu-"],[id^="midcase-menu-"]').forEach(m=>m.style.display='none');
+});
 window.openLightbox=function(caseId){
 const c=cases.find(x=>x.id===caseId);
 if(!c||!c.imageData)return;
@@ -3160,7 +3178,14 @@ ${hasDraft && draft
 ? `<button onclick="event.stopPropagation();resumeCase('${draft.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button>`
 : `<button onclick="event.stopPropagation();startCaseFromPreop('${r.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button>`
 }
-<button onclick="event.stopPropagation();previewDraft('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">👁 Preview</button><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit Draft</button><button onclick="event.stopPropagation();deleteMidCase('preop','${r.id}','${caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑 Delete</button></div></div><div class="case-items-list" id="midcase-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px;font-size:13px"><div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Surgery Date</strong><div>${fmtDate(r['po-surgeryDate'])||'—'}</div></div><div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Call Date/Time</strong><div>${r['po-callDateTime']||'—'}</div></div><div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Mallampati</strong><div style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace">${r['mallampati']||'—'}</div></div>
+<div style="position:relative;display:inline-block">
+<button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">Actions ▾</button>
+<div id="midcase-menu-${r.id}" style="display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;min-width:150px;overflow:hidden">
+<button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');previewDraft('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">👁 Preview</button>
+<button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');editPreopRecord('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">✏ Edit Draft</button>
+<button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');deleteMidCase('preop','${r.id}','${caseId}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--warn);font-family:inherit">🗑 Delete</button>
+</div>
+</div></div></div><div class="case-items-list" id="midcase-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px;font-size:13px"><div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Surgery Date</strong><div>${fmtDate(r['po-surgeryDate'])||'—'}</div></div><div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Call Date/Time</strong><div>${r['po-callDateTime']||'—'}</div></div><div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Mallampati</strong><div style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace">${r['mallampati']||'—'}</div></div>
 ${r['po-allergies']?`<div style="grid-column:1/-1"><strong style="font-size:10px;text-transform:uppercase;color:var(--warn)">⚠ Allergies</strong><div style="color:var(--warn)">${r['po-allergies']}</div></div>`:''}
 ${r['po-medications']?`<div style="grid-column:1/-1"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Medications</strong><div>${r['po-medications']}</div></div>`:''}
 ${r['po-comments']?`<div style="grid-column:1/-1"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Comments</strong><div style="font-style:italic">${r['po-comments']}</div></div>`:''}
