@@ -1154,6 +1154,7 @@ renderCSEntries();
 await Promise.all([saveInventory(), saveCases()]);
 clearCase();
 alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
+showTab('history');
 };
 window.clearCase=function(){
 // Don't clear if actively editing a case
