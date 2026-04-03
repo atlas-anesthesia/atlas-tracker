@@ -1721,18 +1721,8 @@ const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records || []) : [];
 const record = records.find(r => r['po-caseId'] === preopCaseId);
 if(!record) { alert('Pre-op record not found for Case ID: ' + preopCaseId); return; }
-// Pre-fill pre-op form with existing record and navigate there
-Object.keys(record).forEach(key => {
-const el = document.getElementById(key);
-if(!el) return;
-if(el.type === 'checkbox') el.checked = !!record[key];
-else if(el.type !== 'radio') el.value = record[key] || '';
-});
-if(record['mallampati']) {
-const radio = document.querySelector(`input[name="mallampati"][value="${record['mallampati']}"]`);
-if(radio) radio.checked = true;
-}
-showTab('preop');
+// Route through editPreopRecord so _editingPreopId is set and no new draft is created on save
+await editPreopRecord(record.id);
 } catch(e) {
 alert('Error loading pre-op record.');
 console.error(e);
