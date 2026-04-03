@@ -3806,7 +3806,7 @@ document.getElementById('add-center-form').style.display = 'block';
 };
 window.hideAddCenterForm = function() {
 document.getElementById('add-center-form').style.display = 'none';
-['sc-name','sc-first-hour','sc-per-15'].forEach(id => {
+['sc-name','sc-first-hour','sc-per-15','sc-provider','sc-invoice-email'].forEach(id => {
 const el = document.getElementById(id);
 if(el) el.value = '';
 });
@@ -3817,11 +3817,13 @@ const name = document.getElementById('sc-name')?.value.trim();
 const firstHour = parseFloat(document.getElementById('sc-first-hour')?.value) || 0;
 const per15 = parseFloat(document.getElementById('sc-per-15')?.value) || 0;
 if(!name) { alert('Please enter a surgery center name.'); return; }
+const provider = document.getElementById('sc-provider')?.value.trim() || '';
+const invoiceEmail = document.getElementById('sc-invoice-email')?.value.trim() || '';
 if(window._editingCenterId) {
 const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
-if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15 };
+if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail };
 } else {
-surgeryCenters.push({ id: uid(), name, firstHour, per15 });
+surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail });
 }
 setSyncing(true);
 await saveSurgeryCenters();
@@ -3838,6 +3840,8 @@ window._editingCenterId = id;
 document.getElementById('sc-name').value = c.name;
 document.getElementById('sc-first-hour').value = c.firstHour;
 document.getElementById('sc-per-15').value = c.per15;
+document.getElementById('sc-provider').value = c.provider || '';
+document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
 document.getElementById('add-center-form').style.display = 'block';
 document.getElementById('add-center-form').scrollIntoView({ behavior:'smooth' });
 };
