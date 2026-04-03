@@ -1749,8 +1749,7 @@ const caseIdDisplay = document.getElementById('po-caseId-display');
 if(caseIdDisplay) caseIdDisplay.textContent = '';
 // Reset editing state
 window._editingPreopId = null;
-// Reset deposit status
-window.setDepositStatus('not-paid');
+// Reset deposit status (handled per-record in Mid-Case)
 };
 async function renderPreopHistory() {
 const el = document.getElementById('preopHistoryList');
