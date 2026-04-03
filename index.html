@@ -4150,7 +4150,36 @@ const calcMyPay = arr => arr.reduce((s,c)=>{
 const pay = estimateIncome(c);
 return s+(pay||0);
 },0);
-// Invoiced: sum of saved invoices
+// Invoiced: sum of invoices by month+worker (not by case linkage — invoices may not be linked to a case)
+// This function takes a month index (0-11) and year string
+const sumInvoicesByMonth = (monthIdx, yearStr) => {
+const worker = analyticsFilter; // 'all', 'dev', or 'josh'
+return allInvoices
+.filter(inv => {
+// Match by date
+const d = inv.rawDate || '';
+const parts = d.split('-');
+if(parts.length < 2) return false;
+if(parts[0] !== yearStr) return false;
+if(parseInt(parts[1])-1 !== monthIdx) return false;
+// Match by worker — use inv.worker if set, otherwise infer from provider name
+if(worker !== 'all') {
+if(inv.worker) {
+if(inv.worker !== worker) return false;
+} else {
+// Fallback: infer from provider field
+const prov = (inv.provider || '').toLowerCase();
+const isJosh = prov.includes('josh') || prov.includes('condado');
+const isDev = prov.includes('devarsh') || prov.includes('murthy');
+if(worker === 'josh' && !isJosh) return false;
+if(worker === 'dev' && !isDev) return false;
+}
+}
+return true;
+})
+.reduce((s,inv)=>s+(parseFloat(inv.total)||0),0);
+};
+// Keep old sumInvoices for compatibility (used for per-case linkage elsewhere)
 const sumInvoices = arr => arr.reduce((s,c)=>{
 const inv=allInvoices.find(i=>i.linkedCaseId===c.caseId);
 return s+(inv?parseFloat(inv.total)||0:0);
@@ -4188,7 +4217,8 @@ const totProjPay = calcProjPay(yearCases);
 const totMyPay = calcMyPay(yearCases);
 const totInv = sumInvoices(yearCases);
 const totSupply = calcSupply(yearCases);
-const totAtlas = Math.max(0, totInv - totMyPay - totSupply);
+const totInvByDate = Array.from({length:12},(_,i)=>sumInvoicesByMonth(i,selectedYear)).reduce((a,b)=>a+b,0);
+const totAtlas = Math.max(0, totInvByDate - totMyPay - totSupply);
 const totUpcomingCases = upcomingPreops.length;
 const totUpcomingDays = new Set(upcomingPreops.map(r=>r['po-surgeryDate'])).size;
 const totUpcomingProj = upcomingProjPay(upcomingPreops);
@@ -4213,7 +4243,7 @@ d_('center'),d_('center'),d_('center'),d_(),d_(),d_(),d_(),d_()
 const hrs = calcHours(mc);
 const projPay = calcProjPay(mc) + upcomingProjPay(uc);
 const myPay = calcMyPay(mc);
-const inv = sumInvoices(mc);
+const inv = sumInvoicesByMonth(i, selectedYear);
 const supply = calcSupply(mc);
 const atlas = Math.max(0, inv - myPay - supply);
 const totalCases = mc.length + uc.length;
@@ -4241,9 +4271,9 @@ casesLabel,
 <span style="font-size:13px;font-weight:700;text-align:center;font-family:'DM Mono',monospace">${totHrs>0?totHrs.toFixed(1):'—'}</span>
 <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${totProjPay>0?'$'+totProjPay.toFixed(2):'—'}</span>
 <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#166534;text-align:right">${totMyPay>0?'$'+totMyPay.toFixed(2):'—'}</span>
-<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${totInv>0?'$'+totInv.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${totInvByDate>0?'$'+totInvByDate.toFixed(2):'—'}</span>
 <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--warn);text-align:right">${totSupply>0?'$'+totSupply.toFixed(2):'—'}</span>
-<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--info);text-align:right">${totInv>0?'$'+totAtlas.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--info);text-align:right">${totInvByDate>0?'$'+totAtlas.toFixed(2):'—'}</span>
 </div>` +
 (totUpcomingCases > 0 ? `<div style="display:grid;grid-template-columns:${cols};gap:5px;padding:8px 0;border-top:1px dashed var(--border);align-items:center;background:rgba(29,53,87,0.03)">
 <span style="font-size:12px;font-weight:600;color:var(--info);font-style:italic">Upcoming</span>
