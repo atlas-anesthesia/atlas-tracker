@@ -1116,6 +1116,16 @@
               <input type="number" id="sc-per-15" min="0" step="0.01" placeholder="e.g. 150.00">
             </div>
           </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div>
+              <label>Default Provider <span style="font-size:11px;color:var(--text-faint);font-weight:400;">(optional — auto-fills in Pre-Op)</span></label>
+              <input type="text" id="sc-provider" placeholder="e.g. Dr. Smith">
+            </div>
+            <div>
+              <label>Invoice Email <span style="font-size:11px;color:var(--text-faint);font-weight:400;">(optional — auto-fills invoice email)</span></label>
+              <input type="text" id="sc-invoice-email" placeholder="e.g. billing@center.com">
+            </div>
+          </div>
           <div style="display:flex;gap:10px;">
             <button class="btn btn-success btn-sm" onclick="saveCenter()">✓ Save Center</button>
             <button class="btn btn-ghost btn-sm" onclick="hideAddCenterForm()">Cancel</button>
@@ -5780,13 +5790,11 @@ window.onInvoiceCenterChange = function() {
 
   const center = surgeryCenters.find(c => c.id === sel.value);
   if(center) {
-    // Auto-fill location name and rates
     if(locationInput) locationInput.value = center.name;
-    if(firstHourInput) { firstHourInput.value = center.firstHour.toFixed(2); }
-    if(per15Input) { per15Input.value = center.per15.toFixed(2); }
+    if(firstHourInput) firstHourInput.value = center.firstHour.toFixed(2);
+    if(per15Input) per15Input.value = center.per15.toFixed(2);
     calculateInvoice();
   } else {
-    // Cleared — reset rates but keep custom location text
     if(firstHourInput) firstHourInput.value = '';
     if(per15Input) per15Input.value = '';
     calculateInvoice();
@@ -5796,14 +5804,20 @@ window.onInvoiceCenterChange = function() {
 window.onSurgeryCenterChange = function() {
   updateDraftInvoicePreview();
   const sel = document.getElementById('po-surgery-center');
-  const ratesEl = document.getElementById('po-center-rates');
-  if(!sel || !ratesEl) return;
+  if(!sel) return;
+
   const center = surgeryCenters.find(c => c.id === sel.value);
   if(center) {
-    ratesEl.style.display = 'block';
-    ratesEl.innerHTML = `<strong>${center.name}</strong> · 1st hour: <strong>$${center.firstHour.toFixed(2)}</strong> · Per 15-min: <strong>$${center.per15.toFixed(2)}</strong>`;
-  } else {
-    ratesEl.style.display = 'none';
+    // Auto-fill provider if center has one
+    if(center.provider) {
+      const provEl = document.getElementById('po-provider');
+      if(provEl && !provEl.value) provEl.value = center.provider;
+    }
+    // Auto-fill invoice email if center has one
+    if(center.invoiceEmail) {
+      const emailEl = document.getElementById('po-patientEmail');
+      if(emailEl && !emailEl.value) emailEl.value = center.invoiceEmail;
+    }
   }
 };
 
@@ -5878,7 +5892,11 @@ function renderSurgeryCenters() {
     </div>
     ${surgeryCenters.map(c => `
       <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center;">
-        <div style="font-size:14px;font-weight:500;">${c.name}</div>
+        <div>
+          <div style="font-size:14px;font-weight:500;">${c.name}</div>
+          ${c.provider?`<div style="font-size:11px;color:var(--text-faint);">👤 ${c.provider}</div>`:''}
+          ${c.invoiceEmail?`<div style="font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace;">📧 ${c.invoiceEmail}</div>`:''}
+        </div>
         <div style="font-size:14px;font-family:'DM Mono',monospace;">$${c.firstHour.toFixed(2)}</div>
         <div style="font-size:14px;font-family:'DM Mono',monospace;">$${c.per15.toFixed(2)}</div>
         <div style="display:flex;gap:6px;">
