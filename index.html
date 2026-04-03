@@ -1102,6 +1102,8 @@ await setDoc(doc(db,'atlas','cslog'), {entries:csLog});
 } catch(csErr) {
 console.warn('CS log update skipped:', csErr);
 }
+// Remove any draft linked to this caseId from Mid-Case
+cases = cases.filter(x => !(x.draft && x.caseId === updatedCase.caseId));
 // Clear editing state
 window._editingCaseId = null;
 const banner = document.getElementById('case-edit-banner');
@@ -1110,6 +1112,7 @@ const saveBtn = document.querySelector('#tab-new-case .btn-success');
 if(saveBtn) saveBtn.textContent = '✓ Finalize Case & Update Inventory';
 clearCase();
 renderHistory();
+renderMidCase();
 alert('✓ Case updated successfully!');
 showTab('history');
 } catch(editErr) {
@@ -1144,11 +1147,9 @@ if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.q
 });
 // Save CS entries and deduct CS inventory
 await saveCSEntriesWithCase(caseId, date, provider);
-// Now remove the draft if one was loaded — only on successful save
-if(window._activeDraftId) {
-cases = cases.filter(x => x.id !== window._activeDraftId);
+// Remove any draft linked to this caseId (whether loaded via picker or not)
+cases = cases.filter(x => !(x.draft && x.caseId === caseId));
 window._activeDraftId = null;
-}
 csEntries = [];
 renderCSEntries();
 await Promise.all([saveInventory(), saveCases()]);
