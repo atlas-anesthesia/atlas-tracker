@@ -1033,7 +1033,7 @@ const caseId=document.getElementById('caseId').value.trim()||'CASE-'+Date.now();
 const proc=document.getElementById('procedure').value.trim()||'Unnamed Procedure';
 const provider=document.getElementById('provider').value.trim();
 const date=document.getElementById('caseDate').value||new Date().toISOString().split('T')[0];
-const notes=document.getElementById('caseNotes').value.trim();
+const notes=document.getElementById('caseNotes')?document.getElementById('caseNotes').value.trim():'';
 const comments=document.getElementById('caseComments')?document.getElementById('caseComments').value.trim():'';
 // If editing an existing case, update it instead of creating new
 if(window._editingCaseId) {
@@ -1589,7 +1589,7 @@ if(ncInput) ncInput.value = c.caseId;
 document.getElementById('procedure').value = c.procedure || '';
 document.getElementById('provider').value = c.provider || '';
 document.getElementById('caseDate').value = c.date || new Date().toISOString().split('T')[0];
-document.getElementById('caseNotes').value = c.notes || '';
+if(document.getElementById('caseNotes')) document.getElementById('caseNotes').value = c.notes || '';
 // Set correct worker
 const mappedWorker = EMAIL_WORKER_MAP[currentUser.email.toLowerCase()] || 'dev';
 if(c.worker === mappedWorker) {
