@@ -1455,7 +1455,11 @@ const confirmed = confirm(
 );
 if(!confirmed) return;
 try {
-cases = cases.filter(c => c.id !== id);
+// Find the case being deleted so we can also remove any linked draft
+const caseBeingDeleted = cases.find(c => c.id === id);
+const linkedCaseId = caseBeingDeleted?.caseId;
+// Remove the case itself, plus any draft with the same caseId
+cases = cases.filter(c => c.id !== id && !(c.draft && linkedCaseId && c.caseId === linkedCaseId));
 setSyncing(true);
 await saveCases();
 setSyncing(false);
@@ -1464,6 +1468,7 @@ renderHistory();
 renderReports();
 renderCaseLog();
 renderMidCase();
+refreshDraftPicker();
 if(document.getElementById('tab-calendar')?.classList.contains('active')) {
 window._cachedPreopRecords = null;
 renderCalendar();
