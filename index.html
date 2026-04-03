@@ -239,7 +239,7 @@ Reports <span class="arrow">▼</span></button><div class="nav-dropdown-menu" id
 </label><div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:500">Time:</span><input type="time" id="po-assessTime" style="width:120px;padding:5px 8px;font-size:13px"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div><label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px"><input type="checkbox" id="po-heart-wnl" style="width:15px;height:15px"> Heart WNL
 </label><input type="text" id="po-heart-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px"></div><div><label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px"><input type="checkbox" id="po-lungs-wnl" style="width:15px;height:15px"> Lungs WNL
 </label><input type="text" id="po-lungs-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px"></div><div><label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px"><input type="checkbox" id="po-abd-wnl" style="width:15px;height:15px"> Abdomen/Extremities WNL
-</label><input type="text" id="po-abd-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px"></div><div><label style="font-size:13px;font-weight:500;margin-bottom:8px">Mallampati Score</label><div style="display:flex;gap:12px;flex-wrap:wrap"><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="1" id="po-mall-1" style="width:15px;height:15px"> 1</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="2" id="po-mall-2" style="width:15px;height:15px"> 2</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="3" id="po-mall-3" style="width:15px;height:15px"> 3</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="4" id="po-mall-4" style="width:15px;height:15px"> 4</label></div></div></div></div><div class="grid-3" style="margin-bottom:18px"><div class="card"><div class="card-title">Venipuncture</div><textarea id="po-venipuncture" placeholder="Notes..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:80px"></textarea></div><div class="card"><div class="card-title">Total Fluids</div><input type="text" id="po-totalFluids" placeholder="e.g. 500mL LR"></div><div class="card"><div class="card-title">EBL</div><input type="text" id="po-ebl" placeholder="e.g. Minimal"></div></div><div class="card" style="margin-bottom:18px"><div class="card-title">Comments</div><textarea id="po-comments" placeholder="Additional comments..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:100px"></textarea></div><div style="display:flex;gap:10px;margin-bottom:32px"><button class="btn btn-success" onclick="savePreop()">✓ Save Record</button><button class="btn btn-ghost" onclick="clearPreop()">Clear Form</button></div></div><div class="section" id="tab-preop-history"><div class="action-bar"><h2>Pre-Op Records</h2><button class="btn btn-primary btn-sm" onclick="showTab('preop')">+ New Pre-Op</button></div><div id="preopHistoryList"></div></div><div class="section" id="tab-invoice"><div class="action-bar"><h2>Invoice Generator</h2></div><div class="grid-2" style="margin-bottom:18px"><div class="card"><div class="card-title">Service Details</div><label>Location / Facility Name</label><select id="inv-location-select" onchange="onInvoiceCenterChange()" style="margin-bottom:6px"><option value="">— Select a surgery center —</option></select><input type="text" id="inv-location" placeholder="Or type a custom location name"><label>Date of Service</label><input type="date" id="inv-date"><label>Provider</label><div id="inv-provider-display" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;color:var(--text-muted)">Loading...</div><input type="hidden" id="inv-provider"><label>Start Time</label><input type="time" id="inv-start" oninput="calculateInvoice()" onchange="calculateInvoice()"><label>End Time</label><input type="time" id="inv-end" oninput="calculateInvoice()" onchange="calculateInvoice()"></div><div class="card"><div class="card-title">Rate Information</div><label>First Hour Rate ($)</label><input type="number" id="inv-first-hour" placeholder="e.g. 300.00" min="0" step="0.01" oninput="calculateInvoice()"><label>Per 15-Minute Rate ($) <span style="font-size:11px;color:var(--text-faint);font-weight:400">after first hour</span></label><input type="number" id="inv-per-15" placeholder="e.g. 75.00" min="0" step="0.01" oninput="calculateInvoice()"><div style="margin-top:20px;padding:16px;background:var(--info-light);border-radius:var(--radius-sm);border:1px solid #b8cfe8"><div style="font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px">Calculated Summary</div><div id="inv-summary" style="font-size:13px;color:var(--text-muted)">Enter times and rates to see summary</div><div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #b8cfe8;padding-top:10px"><span style="font-size:13px;font-weight:600;color:var(--info)">TOTAL DUE</span><span id="inv-total" style="font-size:24px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info)">$0.00</span></div></div></div></div><div style="display:flex;gap:12px;margin-bottom:28px"><button class="btn btn-success" onclick="generateInvoicePDF()">⬇ Download Invoice PDF</button><button class="btn btn-ghost" onclick="clearInvoice()">Clear</button></div><div class="action-bar" style="margin-top:8px"><h2 style="font-size:15px;color:var(--accent)">📋 Draft Invoices</h2></div><div id="draftInvoicesList"><div class="empty-state" style="font-size:13px">No draft invoices yet — add start/end time in Finalize Case to auto-generate one</div></div><div class="action-bar" style="margin-top:24px"><h2 style="font-size:15px">Saved Invoices</h2></div><div id="savedInvoicesList"><div class="empty-state">No invoices saved yet</div></div></div><div class="section" id="tab-caselog"><div class="action-bar"><h2>Case Log</h2></div><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px"><div class="inv-tab-bar" style="margin-bottom:0"><button class="inv-tab active" id="cltab-dev" onclick="setCaseLogTab('dev')">Devarsh</button><button class="inv-tab" id="cltab-josh" onclick="setCaseLogTab('josh')">Josh</button></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">From</label><input type="date" id="cl-date-from" style="width:145px;padding:6px 10px;font-size:13px" oninput="renderCaseLog()" onchange="renderCaseLog()"></div><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">To</label><input type="date" id="cl-date-to" style="width:145px;padding:6px 10px;font-size:13px" oninput="renderCaseLog()" onchange="renderCaseLog()"></div><button class="btn btn-ghost btn-sm" onclick="clearCaseLogDates()">Clear Dates</button><button class="btn btn-primary btn-sm" onclick="downloadCaseLogPDF()">⬇ Download PDF</button></div></div><div id="caselog-dev"><div class="grid-4" style="margin-bottom:20px" id="cl-metrics-dev"></div><div class="card" id="cl-table-dev"></div></div><div id="caselog-josh" style="display:none"><div class="grid-4" style="margin-bottom:20px" id="cl-metrics-josh"></div><div class="card" id="cl-table-josh"></div></div></div><div class="section" id="tab-analytics"><div class="action-bar"><h2>Analytics & Projected Income</h2></div><div class="card" style="margin-bottom:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Surgery Centers & Rates</div><button class="btn btn-ghost btn-sm" onclick="showAddCenterForm()">+ Add Center</button></div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">Set rates per surgery center. These will be used to estimate projected income for each case.</div><div id="add-center-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px"><div><label>Surgery Center Name</label><input type="text" id="sc-name" placeholder="e.g. Wio Oral Surgery"></div><div><label>First Hour Rate ($)</label><input type="number" id="sc-first-hour" min="0" step="0.01" placeholder="e.g. 800.00"></div><div><label>Per 15-min Rate ($)</label><input type="number" id="sc-per-15" min="0" step="0.01" placeholder="e.g. 150.00"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px"><div><label>Default Provider <span style="font-size:11px;color:var(--text-faint);font-weight:400">(optional — auto-fills in Pre-Op)</span></label><input type="text" id="sc-provider" placeholder="e.g. Dr. Smith"></div><div><label>Invoice Email <span style="font-size:11px;color:var(--text-faint);font-weight:400">(optional — auto-fills invoice email)</span></label><input type="text" id="sc-invoice-email" placeholder="e.g. billing@center.com"></div></div><div style="display:flex;gap:10px"><button class="btn btn-success btn-sm" onclick="saveCenter()">✓ Save Center</button><button class="btn btn-ghost btn-sm" onclick="hideAddCenterForm()">Cancel</button></div></div><div id="surgery-centers-list"></div></div><div class="grid-2" style="margin-bottom:18px"><div class="card"><div class="card-title" style="color:var(--josh)">Josh — Summary</div><div id="analytics-josh"></div></div><div class="card"><div class="card-title" style="color:var(--dev)">Devarsh — Summary</div><div id="analytics-dev"></div></div></div><div class="card" style="margin-bottom:18px"><div class="card-title">Monthly Breakdown</div><div style="display:flex;gap:10px;margin-bottom:14px"><select id="analytics-year" onchange="renderAnalytics()" style="width:120px"></select><div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;display:flex"><button id="abtn-all" onclick="setAnalyticsFilter('all')" style="background:var(--info);color:#fff;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer">All</button><button id="abtn-dev" onclick="setAnalyticsFilter('dev')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted)">Devarsh</button><button id="abtn-josh" onclick="setAnalyticsFilter('josh')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted)">Josh</button></div></div><div id="analytics-monthly"></div></div><div class="card" style="margin-bottom:18px"><div class="card-title">Per-Case Projected Income</div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">Based on surgery center rates × case duration. Select duration to estimate income per case.</div><div id="analytics-cases"></div></div><div class="card" style="margin-bottom:18px"><div class="card-title">📅 Upcoming Scheduled Cases (Projected)</div><div style="font-size:12px;color:var(--text-faint);margin-bottom:12px">Pre-op drafts with surgery center and estimated hours — projected income before finalization.</div><div id="analytics-scheduled"></div></div><div class="card" style="margin-bottom:18px"><div class="card-title">Breakdown by Surgery Center</div><div id="analytics-by-center"></div></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Weekly Distribution Report</div><div style="display:flex;gap:10px;align-items:center"><input type="date" id="weekly-report-date" style="font-size:12px;padding:5px 8px" title="Pick any day in the week"><button class="btn btn-ghost btn-sm" onclick="renderWeeklyReport()" style="font-size:12px">↻ Refresh</button><button class="btn btn-ghost btn-sm" onclick="window.print()" style="font-size:12px">🖨 Print</button></div></div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">Monday–Sunday week. Shows how much should be distributed to each provider and how much Atlas earned.</div><div id="weekly-report-content"></div></div></div><div class="section" id="tab-cs-log"><div class="action-bar"><h2>Controlled Substance Log</h2><button class="btn btn-primary btn-sm" onclick="downloadCSLogPDF()">⬇ Download PDF</button></div><div class="inv-tab-bar" style="margin-bottom:20px"><button class="inv-tab active" id="cstab-ephedrine" onclick="setCSTab('ephedrine')">Ephedrine</button><button class="inv-tab" id="cstab-ketamine" onclick="setCSTab('ketamine')">Ketamine</button><button class="inv-tab" id="cstab-versed" onclick="setCSTab('versed')">Versed (Midazolam)</button></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px"><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">From</label><input type="date" id="cs-date-from" style="width:145px;padding:6px 10px;font-size:13px" onchange="renderCSLog()"></div><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">To</label><input type="date" id="cs-date-to" style="width:145px;padding:6px 10px;font-size:13px" onchange="renderCSLog()"></div><button class="btn btn-ghost btn-sm" onclick="clearCSDates()">Clear</button></div><div id="cs-log-content"></div><div style="margin-top:32px"><div class="action-bar" style="margin-bottom:14px"><h2 style="font-size:15px">Drug Transfer Log <span style="font-size:12px;font-weight:400;color:var(--text-faint)">Josh → Dev</span></h2><button class="btn btn-ghost btn-sm" onclick="showAddTransferForm()">+ Record Transfer</button></div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">
+</label><input type="text" id="po-abd-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px"></div><div><label style="font-size:13px;font-weight:500;margin-bottom:8px">Mallampati Score</label><div style="display:flex;gap:12px;flex-wrap:wrap"><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="1" id="po-mall-1" style="width:15px;height:15px"> 1</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="2" id="po-mall-2" style="width:15px;height:15px"> 2</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="3" id="po-mall-3" style="width:15px;height:15px"> 3</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="4" id="po-mall-4" style="width:15px;height:15px"> 4</label></div></div></div></div><div class="grid-3" style="margin-bottom:18px"><div class="card"><div class="card-title">Venipuncture</div><textarea id="po-venipuncture" placeholder="Notes..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:80px"></textarea></div><div class="card"><div class="card-title">Total Fluids</div><input type="text" id="po-totalFluids" placeholder="e.g. 500mL LR"></div><div class="card"><div class="card-title">EBL</div><input type="text" id="po-ebl" placeholder="e.g. Minimal"></div></div><div class="card" style="margin-bottom:18px"><div class="card-title">Comments</div><textarea id="po-comments" placeholder="Additional comments..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:100px"></textarea></div><div style="display:flex;gap:10px;margin-bottom:32px"><button class="btn btn-success" onclick="savePreop()">✓ Save Record</button><button class="btn btn-ghost" onclick="clearPreop()">Clear Form</button></div></div><div class="section" id="tab-preop-history"><div class="action-bar"><h2>Pre-Op Records</h2><button class="btn btn-primary btn-sm" onclick="showTab('preop')">+ New Pre-Op</button></div><div id="preopHistoryList"></div></div><div class="section" id="tab-invoice"><div class="action-bar"><h2>Invoice Generator</h2></div><div class="grid-2" style="margin-bottom:18px"><div class="card"><div class="card-title">Service Details</div><label>Location / Facility Name</label><select id="inv-location-select" onchange="onInvoiceCenterChange()" style="margin-bottom:6px"><option value="">— Select a surgery center —</option></select><input type="text" id="inv-location" placeholder="Or type a custom location name"><label>Date of Service</label><input type="date" id="inv-date"><label>Provider</label><div id="inv-provider-display" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;color:var(--text-muted)">Loading...</div><input type="hidden" id="inv-provider"><label>Start Time</label><input type="time" id="inv-start" oninput="calculateInvoice()" onchange="calculateInvoice()"><label>End Time</label><input type="time" id="inv-end" oninput="calculateInvoice()" onchange="calculateInvoice()"></div><div class="card"><div class="card-title">Rate Information</div><label>First Hour Rate ($)</label><input type="number" id="inv-first-hour" placeholder="e.g. 300.00" min="0" step="0.01" oninput="calculateInvoice()"><label>Per 15-Minute Rate ($) <span style="font-size:11px;color:var(--text-faint);font-weight:400">after first hour</span></label><input type="number" id="inv-per-15" placeholder="e.g. 75.00" min="0" step="0.01" oninput="calculateInvoice()"><div style="margin-top:20px;padding:16px;background:var(--info-light);border-radius:var(--radius-sm);border:1px solid #b8cfe8"><div style="font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px">Calculated Summary</div><div id="inv-summary" style="font-size:13px;color:var(--text-muted)">Enter times and rates to see summary</div><div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #b8cfe8;padding-top:10px"><span style="font-size:13px;font-weight:600;color:var(--info)">TOTAL DUE</span><span id="inv-total" style="font-size:24px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info)">$0.00</span></div></div></div></div><div style="display:flex;gap:12px;margin-bottom:28px"><button class="btn btn-success" onclick="generateInvoicePDF()">⬇ Download Invoice PDF</button><button class="btn btn-ghost" onclick="clearInvoice()">Clear</button></div><div class="action-bar" style="margin-top:8px"><h2 style="font-size:15px;color:var(--accent)">📋 Draft Invoices</h2></div><div id="draftInvoicesList"><div class="empty-state" style="font-size:13px">No draft invoices yet — add start/end time in Finalize Case to auto-generate one</div></div><div class="action-bar" style="margin-top:24px"><h2 style="font-size:15px">Saved Invoices</h2></div><div id="savedInvoicesList"><div class="empty-state">No invoices saved yet</div></div></div><div class="section" id="tab-caselog"><div class="action-bar"><h2>Case Log</h2></div><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px"><div class="inv-tab-bar" style="margin-bottom:0"><button class="inv-tab active" id="cltab-dev" onclick="setCaseLogTab('dev')">Devarsh</button><button class="inv-tab" id="cltab-josh" onclick="setCaseLogTab('josh')">Josh</button></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">From</label><input type="date" id="cl-date-from" style="width:145px;padding:6px 10px;font-size:13px" oninput="renderCaseLog()" onchange="renderCaseLog()"></div><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">To</label><input type="date" id="cl-date-to" style="width:145px;padding:6px 10px;font-size:13px" oninput="renderCaseLog()" onchange="renderCaseLog()"></div><button class="btn btn-ghost btn-sm" onclick="clearCaseLogDates()">Clear Dates</button><button class="btn btn-primary btn-sm" onclick="downloadCaseLogPDF()">⬇ Download PDF</button></div></div><div id="caselog-dev"><div class="grid-4" style="margin-bottom:20px" id="cl-metrics-dev"></div><div class="card" id="cl-table-dev"></div></div><div id="caselog-josh" style="display:none"><div class="grid-4" style="margin-bottom:20px" id="cl-metrics-josh"></div><div class="card" id="cl-table-josh"></div></div></div><div class="section" id="tab-analytics"><div class="action-bar"><h2>Analytics</h2></div><div class="card" style="margin-bottom:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Surgery Centers &amp; Rates</div><button class="btn btn-ghost btn-sm" onclick="showAddCenterForm()">+ Add Center</button></div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">Set rates per surgery center.</div><div id="add-center-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px"><div><label>Surgery Center Name</label><input type="text" id="sc-name" placeholder="e.g. Wio Oral Surgery"></div><div><label>First Hour Rate ($)</label><input type="number" id="sc-first-hour" min="0" step="0.01" placeholder="e.g. 800.00"></div><div><label>Per 15-min Rate ($)</label><input type="number" id="sc-per-15" min="0" step="0.01" placeholder="e.g. 150.00"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px"><div><label>Default Provider <span style="font-size:11px;color:var(--text-faint);font-weight:400">(optional)</span></label><input type="text" id="sc-provider" placeholder="e.g. Dr. Smith"></div><div><label>Invoice Email <span style="font-size:11px;color:var(--text-faint);font-weight:400">(optional)</span></label><input type="text" id="sc-invoice-email" placeholder="e.g. billing@center.com"></div></div><div style="display:flex;gap:10px"><button class="btn btn-success btn-sm" onclick="saveCenter()">&#x2713; Save Center</button><button class="btn btn-ghost btn-sm" onclick="hideAddCenterForm()">Cancel</button></div></div><div id="surgery-centers-list"></div></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Monthly Breakdown</div><div style="display:flex;gap:10px"><select id="analytics-year" onchange="renderAnalytics()" style="width:120px"></select><div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;display:flex"><button id="abtn-all" onclick="setAnalyticsFilter('all')" style="background:var(--info);color:#fff;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer">All</button><button id="abtn-dev" onclick="setAnalyticsFilter('dev')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted)">Devarsh</button><button id="abtn-josh" onclick="setAnalyticsFilter('josh')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted)">Josh</button></div></div></div><div id="analytics-monthly"></div></div></div><div class="section" id="tab-cs-log"><div class="action-bar"><h2>Controlled Substance Log</h2><button class="btn btn-primary btn-sm" onclick="downloadCSLogPDF()">⬇ Download PDF</button></div><div class="inv-tab-bar" style="margin-bottom:20px"><button class="inv-tab active" id="cstab-ephedrine" onclick="setCSTab('ephedrine')">Ephedrine</button><button class="inv-tab" id="cstab-ketamine" onclick="setCSTab('ketamine')">Ketamine</button><button class="inv-tab" id="cstab-versed" onclick="setCSTab('versed')">Versed (Midazolam)</button></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px"><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">From</label><input type="date" id="cs-date-from" style="width:145px;padding:6px 10px;font-size:13px" onchange="renderCSLog()"></div><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">To</label><input type="date" id="cs-date-to" style="width:145px;padding:6px 10px;font-size:13px" onchange="renderCSLog()"></div><button class="btn btn-ghost btn-sm" onclick="clearCSDates()">Clear</button></div><div id="cs-log-content"></div><div style="margin-top:32px"><div class="action-bar" style="margin-bottom:14px"><h2 style="font-size:15px">Drug Transfer Log <span style="font-size:12px;font-weight:400;color:var(--text-faint)">Josh → Dev</span></h2><button class="btn btn-ghost btn-sm" onclick="showAddTransferForm()">+ Record Transfer</button></div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">
 Records controlled substance transfers from Josh (purchaser) to Dev for audit purposes.
 </div><div id="transfer-form" style="display:none" class="card" style="margin-bottom:16px"><div class="card-title">Record Drug Transfer</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px"><div><label>Date of Transfer</label><input type="date" id="tf-date"></div><div><label>Drug</label><select id="tf-drug"><option value="">— Select drug —</option><option value="Ephedrine">Ephedrine</option><option value="Ketamine">Ketamine</option><option value="Versed (Midazolam)">Versed (Midazolam)</option><option value="Nubain (Nalbuphine)">Nubain (Nalbuphine)</option><option value="Other">Other</option></select></div><div><label>Amount Transferred (mg)</label><input type="number" id="tf-amount" min="0" step="0.1" placeholder="e.g. 500"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px"><div><label>Number of Vials / Units</label><input type="number" id="tf-vials" min="1" step="1" placeholder="e.g. 2"></div><div><label>Notes (optional)</label><input type="text" id="tf-notes" placeholder="e.g. For upcoming case ATL-DEV-..."></div></div><div style="display:flex;gap:10px"><button class="btn btn-success" onclick="saveTransfer()">✓ Record Transfer</button><button class="btn btn-ghost" onclick="hideAddTransferForm()">Cancel</button></div></div><div id="transfer-log-list"></div></div></div><div id="csProviderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center"><div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="font-size:16px;font-weight:500;margin-bottom:6px">Provider Signature</div><div style="font-size:13px;color:var(--text-faint);margin-bottom:16px">Sign below using your finger or mouse</div><canvas id="csProviderCanvas" width="450" height="160"
 style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100%;touch-action:none;background:#fff;cursor:crosshair;display:block"></canvas><div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="clearCSProviderCanvas()">Clear</button><div style="display:flex;gap:10px"><button class="btn btn-ghost" onclick="closeCSProviderModal()">Cancel</button><button class="btn btn-success" onclick="saveCSProviderSig()">✓ Save Signature</button></div></div></div></div><div id="providerSigModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center"><div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="font-size:16px;font-weight:500;margin-bottom:6px">Provider Signature</div><div style="font-size:13px;color:var(--text-faint);margin-bottom:16px">Sign below using your finger or mouse</div><canvas id="providerSigCanvas" width="450" height="160"
@@ -1846,9 +1846,22 @@ existing.unshift(record);
 setSyncing(true);
 await setDoc(doc(db,'atlas','preop'), { records: existing });
 setSyncing(false);
-// Create a linked draft case if one doesn't already exist for this Case ID
+// Create or update the linked draft case for this Case ID
 const existingDraft = cases.find(c => c.caseId === record['po-caseId'] && c.draft);
-if(!existingDraft) {
+if(existingDraft) {
+// Update the existing draft's provider/date to match updated pre-op, preserve items
+const draftIdx = cases.findIndex(c => c.id === existingDraft.id);
+if(draftIdx !== -1) {
+cases[draftIdx] = {
+...cases[draftIdx],
+provider: record['po-provider'] || cases[draftIdx].provider,
+date: record['po-surgeryDate'] || cases[draftIdx].date,
+surgeryCenter: record['po-surgery-center'] || cases[draftIdx].surgeryCenter || '',
+savedAt: new Date().toISOString()
+};
+await saveCases();
+}
+} else {
 const draftCase = {
 id: uid(),
 caseId: record['po-caseId'],
@@ -1862,6 +1875,7 @@ total: 0,
 imageData: null,
 draft: true,
 preopId: record['po-caseId'],
+surgeryCenter: record['po-surgery-center'] || '',
 savedAt: new Date().toISOString()
 };
 cases.unshift(draftCase);
@@ -4093,7 +4107,7 @@ function getCenterName(centerId) {
 return surgeryCenters.find(c => c.id === centerId)?.name || '—';
 }
 window.renderAnalytics = function() {
-const PERSONAL_RATE = 600; // $600/hr personal rate for both providers
+const PERSONAL_RATE = 600;
 const yearSel = document.getElementById('analytics-year');
 const allYears = [...new Set((cases||[]).filter(c=>!c.draft&&c.date).map(c=>c.date.substring(0,4)))].sort().reverse();
 if(!allYears.length) allYears.push(new Date().getFullYear().toString());
@@ -4102,257 +4116,94 @@ const curYear = yearSel.value || new Date().getFullYear().toString();
 yearSel.innerHTML = allYears.map(y=>`<option value="${y}"${y===curYear?' selected':''}>${y}</option>`).join('');
 }
 const selectedYear = yearSel?.value || new Date().getFullYear().toString();
-const finalized = (cases||[]).filter(c => !c.draft && c.date);
-const devCases = finalized.filter(c => c.worker === 'dev');
-const joshCases = finalized.filter(c => c.worker === 'josh');
-const uniqueDays = arr => new Set(arr.map(c=>c.date)).size;
-const totalCost = arr => arr.reduce((s,c) => s + (parseFloat(c.total)||0), 0);
-// Actual income from invoices (real billed amounts)
 const allInvoices = window._savedInvoices || [];
-const actualIncome = (arr) => {
-return arr.reduce((s,c) => {
-const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
-return s + (inv ? parseFloat(inv.total)||0 : 0);
-}, 0);
-};
-// Hours from start/end time (actual)
-const actualHours = (arr) => arr.reduce((s,c) => {
-if(!c.startTime || !c.endTime) return s;
-const [sh,sm] = c.startTime.split(':').map(Number);
-const [eh,em] = c.endTime.split(':').map(Number);
-const mins = (eh*60+em)-(sh*60+sm);
-return s + (mins > 0 ? mins/60 : 0);
-}, 0);
-// Atlas projected income from surgery center rates
-const atlasProjected = (arr) => arr.reduce((s,c) => {
-const est = estimateIncome(c);
-return s + (est||0);
-}, 0);
-// Personal projected income from est hours (pre-op) or actual hours
-const personalProjected = (arr) => {
-return arr.reduce((s,c) => {
-// Try actual hours first
-if(c.startTime && c.endTime) {
-const [sh,sm] = c.startTime.split(':').map(Number);
-const [eh,em] = c.endTime.split(':').map(Number);
-const hrs = ((eh*60+em)-(sh*60+sm))/60;
-return s + (hrs > 0 ? hrs * PERSONAL_RATE : 0);
-}
-// Fall back to pre-op estimated hours
-const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
-const estHrs = parseFloat(preop?.['po-est-hours']) || 0;
-return s + estHrs * PERSONAL_RATE;
-}, 0);
-};
-// Atlas actual income = invoice total - personal pay
-const atlasActual = (arr) => {
-return arr.reduce((s,c) => {
-const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
-if(!inv) return s;
-const invTotal = parseFloat(inv.total)||0;
-let hrs = 0;
-if(c.startTime && c.endTime) {
-const [sh,sm] = c.startTime.split(':').map(Number);
-const [eh,em] = c.endTime.split(':').map(Number);
-hrs = Math.max(0,((eh*60+em)-(sh*60+sm))/60);
-}
-const personalPay = hrs * PERSONAL_RATE;
-return s + Math.max(0, invTotal - personalPay);
-}, 0);
-};
-const renderSummary = (arr, elId, workerLabel) => {
-const el = document.getElementById(elId);
-if(!el) return;
-const hrs = actualHours(arr);
-const projPersonal = personalProjected(arr);
-const projAtlas = atlasProjected(arr);
-const actIncome = actualIncome(arr);
-const actAtlas = atlasActual(arr);
-el.innerHTML = `
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px"><div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Cases</div><div style="font-size:24px;font-weight:600;font-family:'DM Mono',monospace">${arr.length}</div></div><div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Days Worked</div><div style="font-size:24px;font-weight:600;font-family:'DM Mono',monospace">${uniqueDays(arr)}</div></div><div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Hours Worked</div><div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace">${hrs>0?hrs.toFixed(1)+'h':'—'}</div></div><div style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Supply Cost</div><div style="font-size:20px;font-weight:600;font-family:'DM Mono',monospace;color:var(--warn)">$${totalCost(arr).toFixed(2)}</div></div></div><div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px">Projected Income</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;color:#166534;margin-bottom:2px">👤 ${workerLabel} Personal</div><div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;color:#166534">${projPersonal>0?'$'+projPersonal.toFixed(2):'—'}</div><div style="font-size:10px;color:#166534;opacity:.7">$600/hr</div></div><div style="padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;color:#1d4ed8;margin-bottom:2px">🏢 Atlas Projected</div><div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;color:#1d4ed8">${projAtlas>0?'$'+projAtlas.toFixed(2):'—'}</div><div style="font-size:10px;color:#1d4ed8;opacity:.7">Center rates</div></div></div></div><div style="border-top:1px solid var(--border);padding-top:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px">Actual Invoiced Income</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div style="padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;color:#166534;margin-bottom:2px">👤 ${workerLabel} Actual</div><div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;color:#166534">${actIncome>0?'$'+(Math.min(actIncome,actIncome)).toFixed(2):'—'}</div><div style="font-size:10px;color:#166534;opacity:.7">From invoices</div></div><div style="padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;color:#1d4ed8;margin-bottom:2px">🏢 Atlas Actual</div><div style="font-size:16px;font-weight:700;font-family:'DM Mono',monospace;color:#1d4ed8">${actAtlas>0?'$'+actAtlas.toFixed(2):'—'}</div><div style="font-size:10px;color:#1d4ed8;opacity:.7">Invoice − personal pay</div></div></div></div>`;
-};
-// Also include pre-op draft cases for projections
-const preopRecords = window._rawPreopRecords || [];
-const scheduledDev = preopRecords.filter(r => r.worker === 'dev' && r['po-surgeryDate'] >= new Date().toISOString().split('T')[0]);
-const scheduledJosh = preopRecords.filter(r => r.worker === 'josh' && r['po-surgeryDate'] >= new Date().toISOString().split('T')[0]);
-// Convert preop records to case-like objects for projection
-const toCaseLike = (r) => ({
-caseId: r['po-caseId'],
-date: r['po-surgeryDate'],
-worker: r.worker,
-surgeryCenter: r['po-surgery-center'],
-items: [], total: 0, savedCsEntries: []
-});
-renderSummary(devCases, 'analytics-dev', 'Devarsh');
-renderSummary(joshCases, 'analytics-josh', 'Josh');
-// Render scheduled (upcoming draft) projections
-renderScheduledProjections(scheduledDev, scheduledJosh);
-// Monthly breakdown
-const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const finalized = (cases||[]).filter(c => !c.draft && c.date);
 const filtered = analyticsFilter === 'all' ? finalized : finalized.filter(c=>c.worker===analyticsFilter);
 const yearCases = filtered.filter(c => c.date.startsWith(selectedYear));
-const byMonth = {};
-for(let m=0;m<12;m++) byMonth[m]=[];
-yearCases.forEach(c => { const m=parseInt(c.date.split('-')[1])-1; byMonth[m].push(c); });
-const monthEl = document.getElementById('analytics-monthly');
-if(monthEl) {
-const yearProjPersonal = personalProjected(yearCases);
-const yearProjAtlas = atlasProjected(yearCases);
-const yearActIncome = actualIncome(yearCases);
-const yearActAtlas = atlasActual(yearCases);
-monthEl.innerHTML = `
-<div style="display:grid;grid-template-columns:70px 50px 50px 80px 90px 90px 90px 90px;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint)"><span>Month</span><span>Cases</span><span>Days</span><span>Hrs</span><span>Supply Cost</span><span>Personal Proj.</span><span>Atlas Proj.</span><span>Actual Inv.</span></div>
-${months.map((m,i) => {
-const mc = byMonth[i];
-if(!mc.length) return `<div style="display:grid;grid-template-columns:70px 50px 50px 80px 90px 90px 90px 90px;gap:6px;padding:7px 0;border-bottom:1px solid var(--border);color:var(--text-faint);font-size:12px"><span>${m}</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span></div>`;
-const hrs = actualHours(mc);
-const pp = personalProjected(mc);
-const ap = atlasProjected(mc);
-const ai = actualIncome(mc);
-return `<div style="display:grid;grid-template-columns:70px 50px 50px 80px 90px 90px 90px 90px;gap:6px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;align-items:center"><span style="font-weight:500">${m}</span><span>${mc.length}</span><span>${uniqueDays(mc)}</span><span>${hrs>0?hrs.toFixed(1)+'h':'—'}</span><span style="font-family:'DM Mono',monospace;color:var(--warn)">$${totalCost(mc).toFixed(2)}</span><span style="font-family:'DM Mono',monospace;color:#166534">${pp>0?'$'+pp.toFixed(2):'—'}</span><span style="font-family:'DM Mono',monospace;color:#1d4ed8">${ap>0?'$'+ap.toFixed(2):'—'}</span><span style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500">${ai>0?'$'+ai.toFixed(2):'—'}</span></div>`;
-}).join('')}
-<div style="display:grid;grid-template-columns:70px 50px 50px 80px 90px 90px 90px 90px;gap:6px;padding:10px 0;border-top:2px solid var(--border-strong);font-size:12px;font-weight:600"><span>Total</span><span>${yearCases.length}</span><span>${uniqueDays(yearCases)}</span><span>${actualHours(yearCases)>0?actualHours(yearCases).toFixed(1)+'h':'—'}</span><span style="font-family:'DM Mono',monospace;color:var(--warn)">$${totalCost(yearCases).toFixed(2)}</span><span style="font-family:'DM Mono',monospace;color:#166534">${yearProjPersonal>0?'$'+yearProjPersonal.toFixed(2):'—'}</span><span style="font-family:'DM Mono',monospace;color:#1d4ed8">${yearProjAtlas>0?'$'+yearProjAtlas.toFixed(2):'—'}</span><span style="font-family:'DM Mono',monospace;color:var(--accent)">${yearActIncome>0?'$'+yearActIncome.toFixed(2):'—'}</span></div>`;
-}
-// Per-case projected income
-const caseEl = document.getElementById('analytics-cases');
-if(caseEl) {
-const withCenter = filtered.filter(c => c.surgeryCenter && surgeryCenters.find(sc=>sc.id===c.surgeryCenter));
-if(!withCenter.length) {
-caseEl.innerHTML = '<div class="empty-state">No cases linked to surgery centers yet.</div>';
-} else {
-caseEl.innerHTML = `
-<div style="display:grid;grid-template-columns:90px 1fr 100px 60px 80px 90px 90px 90px;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint)"><span>Date</span><span>Case</span><span>Center</span><span>Hrs</span><span>Supply</span><span>Personal</span><span>Atlas Proj.</span><span>Actual Inv.</span></div>
-${withCenter.sort((a,b)=>b.date.localeCompare(a.date)).map(c => {
-const est = estimateIncome(c);
-const center = surgeryCenters.find(sc=>sc.id===c.surgeryCenter);
-const hrs = (() => { if(!c.startTime||!c.endTime) return 0; const [sh,sm]=c.startTime.split(':').map(Number);const [eh,em]=c.endTime.split(':').map(Number);return Math.max(0,((eh*60+em)-(sh*60+sm))/60); })();
-const personal = hrs > 0 ? hrs * PERSONAL_RATE : (() => { const preop=(window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId); return (parseFloat(preop?.['po-est-hours'])||0)*PERSONAL_RATE; })();
-const inv = allInvoices.find(i=>i.linkedCaseId===c.caseId);
-return `<div style="display:grid;grid-template-columns:90px 1fr 100px 60px 80px 90px 90px 90px;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;align-items:center"><span style="font-family:'DM Mono',monospace;font-size:10px">${fmtDate(c.date)}</span><span style="font-weight:500">${c.caseId||'—'}<div style="font-size:10px;color:var(--text-faint)">${c.procedure||''}</div></span><span style="font-size:11px">${center?.name||'—'}</span><span style="color:var(--text-faint)">${hrs>0?hrs.toFixed(1)+'h':'—'}</span><span style="font-family:'DM Mono',monospace;color:var(--warn)">$${(parseFloat(c.total)||0).toFixed(2)}</span><span style="font-family:'DM Mono',monospace;color:#166534">${personal>0?'$'+personal.toFixed(2):'—'}</span><span style="font-family:'DM Mono',monospace;color:#1d4ed8">${est!==null?'$'+est.toFixed(2):'—'}</span><span style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:500">${inv?'$'+inv.total.toFixed(2):'—'}</span></div>`;
-}).join('')}`;
-}
-}
-// By center breakdown
-const centerEl = document.getElementById('analytics-by-center');
-if(centerEl) {
-if(!surgeryCenters.length) {
-centerEl.innerHTML = '<div class="empty-state">No surgery centers added yet.</div>';
-} else {
-centerEl.innerHTML = surgeryCenters.map(sc => {
-const scCases = filtered.filter(c => c.surgeryCenter === sc.id);
-const proj = atlasProjected(scCases);
-const personal = personalProjected(scCases);
-const actual = actualIncome(scCases);
-return `<div style="padding:14px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div style="font-size:14px;font-weight:600">${sc.name}</div><div style="font-size:12px;color:var(--text-faint);margin-top:2px">1st hr: $${sc.firstHour.toFixed(2)} · Per 15-min: $${sc.per15.toFixed(2)}</div></div><div style="display:flex;gap:14px;text-align:right;flex-wrap:wrap"><div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint)">Cases</div><div style="font-size:18px;font-weight:600">${scCases.length}</div></div><div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:#166534">Personal</div><div style="font-size:18px;font-weight:600;color:#166534">${personal>0?'$'+personal.toFixed(2):'—'}</div></div><div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:#1d4ed8">Atlas Proj.</div><div style="font-size:18px;font-weight:600;color:#1d4ed8">${proj>0?'$'+proj.toFixed(2):'—'}</div></div><div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--accent)">Actual</div><div style="font-size:18px;font-weight:600;color:var(--accent)">${actual>0?'$'+actual.toFixed(2):'—'}</div></div></div></div></div>`;
-}).join('');
-}
-}
-// Render weekly report
-renderWeeklyReport();
-};
-// ── WEEKLY REPORT ──
-function getWeekRange(dateStr) {
-// Get Monday-Sunday week containing the given date
-const d = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
-const day = d.getDay(); // 0=Sun, 1=Mon...
-const diffToMon = (day === 0 ? -6 : 1 - day);
-const mon = new Date(d);
-mon.setDate(d.getDate() + diffToMon);
-const sun = new Date(mon);
-sun.setDate(mon.getDate() + 6);
-const fmt = dt => dt.toISOString().split('T')[0];
-return { start: fmt(mon), end: fmt(sun) };
-}
-function renderWeeklyReport() {
-const el = document.getElementById('weekly-report-content');
-if(!el) return;
-const PERSONAL_RATE = 600;
-const datePicker = document.getElementById('weekly-report-date');
-// Default to current week if no date selected
-if(datePicker && !datePicker.value) {
-datePicker.value = new Date().toISOString().split('T')[0];
-}
-const { start, end } = getWeekRange(datePicker?.value);
-const allInvoices = window._savedInvoices || [];
-const finalized = (cases||[]).filter(c => !c.draft && c.date);
-// Cases in this week
-const weekCases = finalized.filter(c => c.date >= start && c.date <= end);
-const devWeek = weekCases.filter(c => c.worker === 'dev');
-const joshWeek = weekCases.filter(c => c.worker === 'josh');
-// Hours worked
-const calcHours = (arr) => arr.reduce((s,c) => {
-if(!c.startTime || !c.endTime) return s;
-const [sh,sm] = c.startTime.split(':').map(Number);
-const [eh,em] = c.endTime.split(':').map(Number);
-return s + Math.max(0, ((eh*60+em)-(sh*60+sm))/60);
-}, 0);
-// Income from invoices
-const invIncome = (arr) => arr.reduce((s,c) => {
-const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
-return s + (inv ? parseFloat(inv.total)||0 : 0);
-}, 0);
-// Personal pay (actual hours × $600)
-const personalPay = (arr) => {
-const hrs = calcHours(arr);
-return hrs * PERSONAL_RATE;
-};
-// Atlas share = invoice total - personal pay
-const atlasShare = (arr) => {
-return arr.reduce((s,c) => {
-const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
-if(!inv) return s;
-const [sh,sm] = (c.startTime||'').split(':').map(Number);
-const [eh,em] = (c.endTime||'').split(':').map(Number);
-const hrs = (c.startTime && c.endTime) ? Math.max(0,((eh*60+em)-(sh*60+sm))/60) : 0;
-return s + Math.max(0, (parseFloat(inv.total)||0) - hrs*PERSONAL_RATE);
-}, 0);
-};
-// Projected personal (for cases without invoices, use est hours)
-const projPersonal = (arr) => arr.reduce((s,c) => {
-if(c.startTime && c.endTime) {
+const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// Helpers
+const uniqueDays = arr => new Set(arr.map(c=>c.date)).size;
+const supplyCost = arr => arr.reduce((s,c)=>s+(parseFloat(c.total)||0),0);
+const calcHours = arr => arr.reduce((s,c)=>{
+if(!c.startTime||!c.endTime) return s;
 const [sh,sm]=c.startTime.split(':').map(Number);
 const [eh,em]=c.endTime.split(':').map(Number);
-return s + Math.max(0,((eh*60+em)-(sh*60+sm))/60)*PERSONAL_RATE;
-}
-const preop = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId);
-return s + (parseFloat(preop?.['po-est-hours'])||0)*PERSONAL_RATE;
-}, 0);
-const devHrs = calcHours(devWeek);
-const joshHrs = calcHours(joshWeek);
-const devInv = invIncome(devWeek);
-const joshInv = invIncome(joshWeek);
-const devPay = devHrs > 0 ? devHrs * PERSONAL_RATE : projPersonal(devWeek);
-const joshPay = joshHrs > 0 ? joshHrs * PERSONAL_RATE : projPersonal(joshWeek);
-const devAtlas = atlasShare(devWeek);
-const joshAtlas= atlasShare(joshWeek);
-const totalAtlas = devAtlas + joshAtlas;
-const totalInv = devInv + joshInv;
-const providerCard = (name, workerCases, hrs, inv, pay, atlas, color) => {
-const hasActual = inv > 0;
-return `
-<div style="flex:1;min-width:240px;background:var(--surface2);border-radius:var(--radius);padding:18px;border-top:3px solid ${color}"><div style="font-size:16px;font-weight:700;color:${color};margin-bottom:14px">${name}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px"><div><div style="font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase">Cases</div><div style="font-size:20px;font-weight:600">${workerCases.length}</div></div><div><div style="font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase">Hours</div><div style="font-size:20px;font-weight:600">${hrs>0?hrs.toFixed(1)+'h':'est.'}</div></div></div>
-${workerCases.length ? `
-<div style="border-top:1px solid var(--border);padding-top:10px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:12px;color:var(--text-faint)">Total Invoiced</span><span style="font-family:'DM Mono',monospace;font-size:14px;font-weight:500">${hasActual?'$'+inv.toFixed(2):'Not invoiced'}</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:12px;color:var(--text-faint)">Atlas Share</span><span style="font-family:'DM Mono',monospace;font-size:14px;color:#1d4ed8">${hasActual?'$'+atlas.toFixed(2):'—'}</span></div><div style="background:${color}22;border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px"><div style="font-size:11px;font-weight:600;color:${color};text-transform:uppercase;margin-bottom:3px">💰 Should Receive</div><div style="font-size:22px;font-weight:700;font-family:'DM Mono',monospace;color:${color}">$${pay.toFixed(2)}</div><div style="font-size:10px;color:${color};opacity:.7">${hrs>0?hrs.toFixed(1)+' hrs × $600/hr':'Estimated from pre-op hrs'}</div></div></div>` : '<div style="font-size:13px;color:var(--text-faint);margin-top:10px">No cases this week</div>'}
-</div>`;
+return s+Math.max(0,((eh*60+em)-(sh*60+sm))/60);
+},0);
+// Projected hours: actual if available, else pre-op estimated
+const projHours = arr => arr.reduce((s,c)=>{
+if(c.startTime&&c.endTime){const[sh,sm]=c.startTime.split(':').map(Number);const[eh,em]=c.endTime.split(':').map(Number);const h=Math.max(0,((eh*60+em)-(sh*60+sm))/60);return s+h;}
+const preop=(window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId);
+return s+(parseFloat(preop?.['po-est-hours'])||0);
+},0);
+const sumInvoices = arr => arr.reduce((s,c)=>{
+const inv=allInvoices.find(i=>i.linkedCaseId===c.caseId);
+return s+(inv?parseFloat(inv.total)||0:0);
+},0);
+// Build monthly data
+const byMonth = {};
+for(let m=0;m<12;m++) byMonth[m]=[];
+yearCases.forEach(c=>{const m=parseInt(c.date.split('-')[1])-1;byMonth[m].push(c);});
+const monthEl = document.getElementById('analytics-monthly');
+if(!monthEl) return;
+// 9 columns now (added Proj. Pay)
+const cols = '90px 55px 50px 55px 105px 105px 105px 105px 105px';
+const hdr = (label, align='left', title='') => `<span style="text-align:${align}"${title?` title="${title}"`:''}>${label}</span>`;
+const gridRow = (cells, style='') =>
+`<div style="display:grid;grid-template-columns:${cols};gap:5px;${style}">${cells.join('')}</div>`;
+const totHrs = calcHours(yearCases);
+const totProjHrs = projHours(yearCases);
+const totInv = sumInvoices(yearCases);
+const totSupply = supplyCost(yearCases);
+const totMyPay = totHrs * PERSONAL_RATE;
+const totProjPay = totProjHrs * PERSONAL_RATE;
+const totAtlas = Math.max(0, totInv - totMyPay - totSupply);
+monthEl.innerHTML =
+gridRow([
+hdr('Month'), hdr('Cases','center'), hdr('Days','center'), hdr('Hrs','center'),
+hdr('Proj. Pay','right','$600 × estimated hrs (pre-op)'),
+hdr('My Pay','right','$600 × actual hrs worked'),
+hdr('Invoiced','right'), hdr('Supply Cost','right'), hdr('Atlas Takeaway','right')
+], 'padding-bottom:8px;border-bottom:2px solid var(--border-strong);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)') +
+months.map((m,i)=>{
+const mc = byMonth[i];
+const empty = s => `<span style="color:var(--text-faint);font-size:12px;text-align:${s}">—</span>`;
+if(!mc.length) return gridRow([
+`<span style="color:var(--text-faint);font-size:12px">${m}</span>`,
+empty('center'),empty('center'),empty('center'),
+empty('right'),empty('right'),empty('right'),empty('right'),empty('right')
+], 'padding:6px 0;border-bottom:1px solid var(--border)');
+const hrs = calcHours(mc);
+const pHrs = projHours(mc);
+const inv = sumInvoices(mc);
+const supply = supplyCost(mc);
+const myPay = hrs * PERSONAL_RATE;
+const projPay = pHrs * PERSONAL_RATE;
+const atlas = Math.max(0, inv - myPay - supply);
+return gridRow([
+`<span style="font-size:13px;font-weight:600">${m}</span>`,
+`<span style="font-size:13px;text-align:center">${mc.length}</span>`,
+`<span style="font-size:13px;text-align:center">${uniqueDays(mc)}</span>`,
+`<span style="font-size:13px;text-align:center;font-family:'DM Mono',monospace">${hrs>0?hrs.toFixed(1):'—'}</span>`,
+`<span style="font-size:12px;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${projPay>0?'$'+projPay.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:#166534;text-align:right">${myPay>0?'$'+myPay.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${inv>0?'$'+inv.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--warn);text-align:right">${supply>0?'$'+supply.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--info);font-weight:600;text-align:right">${inv>0?'$'+atlas.toFixed(2):'—'}</span>`
+], 'padding:7px 0;border-bottom:1px solid var(--border);align-items:center');
+}).join('') +
+gridRow([
+`<span style="font-size:13px;font-weight:700">Total</span>`,
+`<span style="font-size:13px;font-weight:700;text-align:center">${yearCases.length}</span>`,
+`<span style="font-size:13px;font-weight:700;text-align:center">${uniqueDays(yearCases)}</span>`,
+`<span style="font-size:13px;font-weight:700;text-align:center;font-family:'DM Mono',monospace">${totHrs>0?totHrs.toFixed(1):'—'}</span>`,
+`<span style="font-size:12px;font-weight:700;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${totProjPay>0?'$'+totProjPay.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#166534;text-align:right">${totMyPay>0?'$'+totMyPay.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${totInv>0?'$'+totInv.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--warn);text-align:right">${totSupply>0?'$'+totSupply.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--info);text-align:right">${totInv>0?'$'+totAtlas.toFixed(2):'—'}</span>`
+], 'padding:10px 0;border-top:2px solid var(--border-strong);align-items:center');
 };
-const caseRows = weekCases.length ? weekCases.map(c => {
-const inv = allInvoices.find(i => i.linkedCaseId === c.caseId);
-const [sh,sm] = (c.startTime||'').split(':').map(Number);
-const [eh,em] = (c.endTime||'').split(':').map(Number);
-const hrs = (c.startTime && c.endTime) ? Math.max(0,((eh*60+em)-(sh*60+sm))/60) : 0;
-const pay = hrs > 0 ? hrs * PERSONAL_RATE : (() => { const p=(window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId); return (parseFloat(p?.['po-est-hours'])||0)*PERSONAL_RATE; })();
-const wname = c.worker === 'dev' ? 'Devarsh' : 'Josh';
-const wcolor = c.worker === 'dev' ? 'var(--dev)' : 'var(--josh)';
-return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 8px;font-size:12px">${fmtDate(c.date)}</td><td style="padding:7px 8px;font-size:12px;font-weight:500">${c.caseId||'—'}</td><td style="padding:7px 8px"><span style="background:${wcolor}22;color:${wcolor};font-size:10px;font-weight:600;padding:1px 7px;border-radius:8px">${wname}</span></td><td style="padding:7px 8px;font-size:12px;font-family:'DM Mono',monospace">${hrs>0?hrs.toFixed(1)+'h':'—'}</td><td style="padding:7px 8px;font-size:12px;font-family:'DM Mono',monospace">${inv?'$'+parseFloat(inv.total).toFixed(2):'—'}</td><td style="padding:7px 8px;font-size:12px;font-family:'DM Mono',monospace;color:#166534;font-weight:500">$${pay.toFixed(2)}</td></tr>`;
-}).join('') : `<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text-faint);font-size:13px">No cases this week</td></tr>`;
-el.innerHTML = `
-<div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px 16px;margin-bottom:18px;font-size:13px;color:var(--info);font-weight:500">
-Week of ${fmtDate(start)} — ${fmtDate(end)}
-</div><div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
-${providerCard('Devarsh', devWeek, devHrs, devInv, devPay, devAtlas, 'var(--dev)')}
-${providerCard('Josh', joshWeek, joshHrs, joshInv, joshPay, joshAtlas, 'var(--josh)')}
-<div style="flex:1;min-width:200px;background:var(--surface2);border-radius:var(--radius);padding:18px;border-top:3px solid var(--info)"><div style="font-size:16px;font-weight:700;color:var(--info);margin-bottom:14px">🏢 Atlas</div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12px;color:var(--text-faint)">Total Invoiced</span><span style="font-family:'DM Mono',monospace;font-weight:500">${totalInv>0?'$'+totalInv.toFixed(2):'—'}</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12px;color:var(--text-faint)">Dev Pay Out</span><span style="font-family:'DM Mono',monospace;color:#dc2626">−$${devPay.toFixed(2)}</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12px;color:var(--text-faint)">Josh Pay Out</span><span style="font-family:'DM Mono',monospace;color:#dc2626">−$${joshPay.toFixed(2)}</span></div><div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px"><div style="font-size:11px;font-weight:600;color:var(--info);text-transform:uppercase;margin-bottom:3px">🏢 Atlas Keeps</div><div style="font-size:22px;font-weight:700;font-family:'DM Mono',monospace;color:var(--info)">${totalAtlas>0?'$'+totalAtlas.toFixed(2):'—'}</div><div style="font-size:10px;color:var(--info);opacity:.7">From invoiced cases</div></div></div></div><div style="border-top:1px solid var(--border);padding-top:14px"><div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:10px">Case Breakdown</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--surface2)"><th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left">Date</th><th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left">Case</th><th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left">Provider</th><th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left">Hours</th><th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left">Invoiced</th><th style="padding:7px 8px;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);text-align:left">Provider Pay</th></tr></thead><tbody>${caseRows}</tbody></table></div>`;
-}
 // ── CS TRANSFER LOG ──
 window.showAddTransferForm = function() {
 const form = document.getElementById('transfer-form');
