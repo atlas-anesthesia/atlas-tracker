@@ -4155,6 +4155,8 @@ const sumInvoices = arr => arr.reduce((s,c)=>{
 const inv=allInvoices.find(i=>i.linkedCaseId===c.caseId);
 return s+(inv?parseFloat(inv.total)||0:0);
 },0);
+// Supply cost: sum of case totals
+const calcSupply = arr => arr.reduce((s,c)=>s+(parseFloat(c.total)||0),0);
 // Projected pay for upcoming preops: est hours × $600
 const upcomingProjPay = arr => arr.reduce((s,r)=>{
 return s+(parseFloat(r['po-est-hours'])||0)*600;
@@ -4174,7 +4176,7 @@ if(m>=0&&m<12) upcomingByMonth[m].push(r);
 const monthEl = document.getElementById('analytics-monthly');
 if(!monthEl) return;
 // Columns: Month | Cases | Days | Hrs | Proj.Pay | My Pay | Invoiced | Atlas Takeaway
-const cols = '90px 60px 55px 60px 110px 110px 110px 110px';
+const cols = '90px 60px 55px 60px 105px 105px 105px 105px 105px';
 const hdr = (label, align='left', title='') =>
 `<span style="text-align:${align}"${title?` title="${title}"`:''}>${label}</span>`;
 const gridRow = (cells, style='') =>
@@ -4185,7 +4187,8 @@ const totHrs = calcHours(yearCases);
 const totProjPay = calcProjPay(yearCases);
 const totMyPay = calcMyPay(yearCases);
 const totInv = sumInvoices(yearCases);
-const totAtlas = Math.max(0, totInv - totMyPay);
+const totSupply = calcSupply(yearCases);
+const totAtlas = Math.max(0, totInv - totMyPay - totSupply);
 const totUpcomingCases = upcomingPreops.length;
 const totUpcomingDays = new Set(upcomingPreops.map(r=>r['po-surgeryDate'])).size;
 const totUpcomingProj = upcomingProjPay(upcomingPreops);
@@ -4195,7 +4198,8 @@ hdr('Month'), hdr('Cases','center'), hdr('Days','center'), hdr('Hrs','center'),
 hdr('Proj. Pay','right','Pre-op est. hrs × $600'),
 hdr('My Pay','right','Actual hrs × center rate'),
 hdr('Invoiced','right'),
-hdr('Atlas Takeaway','right','Invoiced − My Pay')
+hdr('Supply Cost','right'),
+hdr('Atlas Takeaway','right','Invoiced − My Pay − Supply Cost')
 ], 'padding-bottom:8px;border-bottom:2px solid var(--border-strong);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)') +
 months.map((m,i)=>{
 const mc = byMonth[i];
@@ -4204,13 +4208,14 @@ const hasFinalized = mc.length > 0;
 const hasUpcoming = uc.length > 0;
 if(!hasFinalized && !hasUpcoming) return gridRow([
 `<span style="color:var(--text-faint);font-size:12px">${m}</span>`,
-d_('center'),d_('center'),d_('center'),d_(),d_(),d_(),d_()
+d_('center'),d_('center'),d_('center'),d_(),d_(),d_(),d_(),d_()
 ], 'padding:6px 0;border-bottom:1px solid var(--border)');
 const hrs = calcHours(mc);
 const projPay = calcProjPay(mc) + upcomingProjPay(uc);
 const myPay = calcMyPay(mc);
 const inv = sumInvoices(mc);
-const atlas = Math.max(0, inv - myPay);
+const supply = calcSupply(mc);
+const atlas = Math.max(0, inv - myPay - supply);
 const totalCases = mc.length + uc.length;
 const totalDays = new Set([...mc.map(c=>c.date),...uc.map(r=>r['po-surgeryDate'])]).size;
 // Label upcoming count if mixed
@@ -4225,6 +4230,7 @@ casesLabel,
 `<span style="font-size:13px;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${projPay>0?'$'+projPay.toFixed(2):'—'}</span>`,
 `<span style="font-size:13px;font-family:'DM Mono',monospace;color:#166534;text-align:right">${myPay>0?'$'+myPay.toFixed(2):'—'}</span>`,
 `<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${inv>0?'$'+inv.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--warn);text-align:right">${supply>0?'$'+supply.toFixed(2):'—'}</span>`,
 `<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--info);font-weight:600;text-align:right">${inv>0?'$'+atlas.toFixed(2):'—'}</span>`
 ], `padding:7px 0;border-bottom:1px solid var(--border);align-items:center${uc.length>0?';background:rgba(29,53,87,0.02)':''}`);
 }).join('') +
@@ -4236,6 +4242,7 @@ casesLabel,
 <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${totProjPay>0?'$'+totProjPay.toFixed(2):'—'}</span>
 <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#166534;text-align:right">${totMyPay>0?'$'+totMyPay.toFixed(2):'—'}</span>
 <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${totInv>0?'$'+totInv.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--warn);text-align:right">${totSupply>0?'$'+totSupply.toFixed(2):'—'}</span>
 <span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--info);text-align:right">${totInv>0?'$'+totAtlas.toFixed(2):'—'}</span>
 </div>` +
 (totUpcomingCases > 0 ? `<div style="display:grid;grid-template-columns:${cols};gap:5px;padding:8px 0;border-top:1px dashed var(--border);align-items:center;background:rgba(29,53,87,0.03)">
@@ -4244,6 +4251,7 @@ casesLabel,
 <span style="font-size:12px;text-align:center;color:var(--info)">${totUpcomingDays}</span>
 <span style="font-size:12px;text-align:center;color:var(--text-faint)">—</span>
 <span style="font-size:12px;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${totUpcomingProj>0?'$'+totUpcomingProj.toFixed(2):'—'}</span>
+<span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
 <span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
 <span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
 <span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
