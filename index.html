@@ -4101,102 +4101,153 @@ function getCenterName(centerId) {
 return surgeryCenters.find(c => c.id === centerId)?.name || '—';
 }
 window.renderAnalytics = function() {
-const PERSONAL_RATE = 600;
 const yearSel = document.getElementById('analytics-year');
-const allYears = [...new Set((cases||[]).filter(c=>!c.draft&&c.date).map(c=>c.date.substring(0,4)))].sort().reverse();
+const today = new Date().toISOString().split('T')[0];
+const allInvoices = window._savedInvoices || [];
+const preops = window._rawPreopRecords || [];
+// Collect all years from finalized cases + upcoming preops
+const finalized = (cases||[]).filter(c => !c.draft && c.date);
+const allYears = [...new Set([
+...finalized.map(c=>c.date.substring(0,4)),
+...preops.filter(r=>r['po-surgeryDate']>today).map(r=>(r['po-surgeryDate']||'').substring(0,4))
+].filter(Boolean))].sort().reverse();
 if(!allYears.length) allYears.push(new Date().getFullYear().toString());
 if(yearSel) {
 const curYear = yearSel.value || new Date().getFullYear().toString();
 yearSel.innerHTML = allYears.map(y=>`<option value="${y}"${y===curYear?' selected':''}>${y}</option>`).join('');
 }
 const selectedYear = yearSel?.value || new Date().getFullYear().toString();
-const allInvoices = window._savedInvoices || [];
-const finalized = (cases||[]).filter(c => !c.draft && c.date);
 const filtered = analyticsFilter === 'all' ? finalized : finalized.filter(c=>c.worker===analyticsFilter);
 const yearCases = filtered.filter(c => c.date.startsWith(selectedYear));
+// Upcoming preops for selected year (not yet finalized)
+const finalizedCaseIds = new Set(finalized.map(c=>c.caseId));
+const upcomingPreops = preops.filter(r => {
+const d = r['po-surgeryDate']||'';
+if(!d.startsWith(selectedYear)) return false;
+if(d <= today) return false;
+if(analyticsFilter !== 'all' && r.worker !== analyticsFilter) return false;
+// exclude if already finalized
+return !finalizedCaseIds.has(r['po-caseId']);
+});
 const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-// Helpers
+// ── Helpers ──
 const uniqueDays = arr => new Set(arr.map(c=>c.date)).size;
-const supplyCost = arr => arr.reduce((s,c)=>s+(parseFloat(c.total)||0),0);
+// Actual hours from finalize case start/end
 const calcHours = arr => arr.reduce((s,c)=>{
 if(!c.startTime||!c.endTime) return s;
 const [sh,sm]=c.startTime.split(':').map(Number);
 const [eh,em]=c.endTime.split(':').map(Number);
 return s+Math.max(0,((eh*60+em)-(sh*60+sm))/60);
 },0);
-// Projected hours: actual if available, else pre-op estimated
-const projHours = arr => arr.reduce((s,c)=>{
-if(c.startTime&&c.endTime){const[sh,sm]=c.startTime.split(':').map(Number);const[eh,em]=c.endTime.split(':').map(Number);const h=Math.max(0,((eh*60+em)-(sh*60+sm))/60);return s+h;}
-const preop=(window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId);
-return s+(parseFloat(preop?.['po-est-hours'])||0);
+// Projected pay: pre-op est hours × $600
+const calcProjPay = arr => arr.reduce((s,c)=>{
+const preop=preops.find(r=>r['po-caseId']===c.caseId);
+const estHrs=parseFloat(preop?.['po-est-hours'])||0;
+return s+estHrs*600;
 },0);
+// My Pay: actual hours × surgery center rates (estimateIncome uses start/end time)
+const calcMyPay = arr => arr.reduce((s,c)=>{
+const pay = estimateIncome(c);
+return s+(pay||0);
+},0);
+// Invoiced: sum of saved invoices
 const sumInvoices = arr => arr.reduce((s,c)=>{
 const inv=allInvoices.find(i=>i.linkedCaseId===c.caseId);
 return s+(inv?parseFloat(inv.total)||0:0);
 },0);
-// Build monthly data
+// Projected pay for upcoming preops: est hours × $600
+const upcomingProjPay = arr => arr.reduce((s,r)=>{
+return s+(parseFloat(r['po-est-hours'])||0)*600;
+},0);
+// Group finalized cases by month
 const byMonth = {};
 for(let m=0;m<12;m++) byMonth[m]=[];
-yearCases.forEach(c=>{const m=parseInt(c.date.split('-')[1])-1;byMonth[m].push(c);});
+yearCases.forEach(c=>{const m=parseInt(c.date.split('-')[1])-1; if(m>=0&&m<12) byMonth[m].push(c);});
+// Group upcoming preops by month
+const upcomingByMonth = {};
+for(let m=0;m<12;m++) upcomingByMonth[m]=[];
+upcomingPreops.forEach(r=>{
+const d=r['po-surgeryDate']||'';
+const m=parseInt(d.split('-')[1])-1;
+if(m>=0&&m<12) upcomingByMonth[m].push(r);
+});
 const monthEl = document.getElementById('analytics-monthly');
 if(!monthEl) return;
-// 9 columns now (added Proj. Pay)
-const cols = '90px 55px 50px 55px 105px 105px 105px 105px 105px';
-const hdr = (label, align='left', title='') => `<span style="text-align:${align}"${title?` title="${title}"`:''}>${label}</span>`;
+// Columns: Month | Cases | Days | Hrs | Proj.Pay | My Pay | Invoiced | Atlas Takeaway
+const cols = '90px 60px 55px 60px 110px 110px 110px 110px';
+const hdr = (label, align='left', title='') =>
+`<span style="text-align:${align}"${title?` title="${title}"`:''}>${label}</span>`;
 const gridRow = (cells, style='') =>
 `<div style="display:grid;grid-template-columns:${cols};gap:5px;${style}">${cells.join('')}</div>`;
+const d_ = (align='right') => `<span style="color:var(--text-faint);font-size:12px;text-align:${align}">—</span>`;
+// Totals
 const totHrs = calcHours(yearCases);
-const totProjHrs = projHours(yearCases);
+const totProjPay = calcProjPay(yearCases);
+const totMyPay = calcMyPay(yearCases);
 const totInv = sumInvoices(yearCases);
-const totSupply = supplyCost(yearCases);
-const totMyPay = totHrs * PERSONAL_RATE;
-const totProjPay = totProjHrs * PERSONAL_RATE;
-const totAtlas = Math.max(0, totInv - totMyPay - totSupply);
+const totAtlas = Math.max(0, totInv - totMyPay);
+const totUpcomingCases = upcomingPreops.length;
+const totUpcomingDays = new Set(upcomingPreops.map(r=>r['po-surgeryDate'])).size;
+const totUpcomingProj = upcomingProjPay(upcomingPreops);
 monthEl.innerHTML =
 gridRow([
 hdr('Month'), hdr('Cases','center'), hdr('Days','center'), hdr('Hrs','center'),
-hdr('Proj. Pay','right','$600 × estimated hrs (pre-op)'),
-hdr('My Pay','right','$600 × actual hrs worked'),
-hdr('Invoiced','right'), hdr('Supply Cost','right'), hdr('Atlas Takeaway','right')
+hdr('Proj. Pay','right','Pre-op est. hrs × $600'),
+hdr('My Pay','right','Actual hrs × center rate'),
+hdr('Invoiced','right'),
+hdr('Atlas Takeaway','right','Invoiced − My Pay')
 ], 'padding-bottom:8px;border-bottom:2px solid var(--border-strong);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)') +
 months.map((m,i)=>{
 const mc = byMonth[i];
-const empty = s => `<span style="color:var(--text-faint);font-size:12px;text-align:${s}">—</span>`;
-if(!mc.length) return gridRow([
+const uc = upcomingByMonth[i];
+const hasFinalized = mc.length > 0;
+const hasUpcoming = uc.length > 0;
+if(!hasFinalized && !hasUpcoming) return gridRow([
 `<span style="color:var(--text-faint);font-size:12px">${m}</span>`,
-empty('center'),empty('center'),empty('center'),
-empty('right'),empty('right'),empty('right'),empty('right'),empty('right')
+d_('center'),d_('center'),d_('center'),d_(),d_(),d_(),d_()
 ], 'padding:6px 0;border-bottom:1px solid var(--border)');
 const hrs = calcHours(mc);
-const pHrs = projHours(mc);
+const projPay = calcProjPay(mc) + upcomingProjPay(uc);
+const myPay = calcMyPay(mc);
 const inv = sumInvoices(mc);
-const supply = supplyCost(mc);
-const myPay = hrs * PERSONAL_RATE;
-const projPay = pHrs * PERSONAL_RATE;
-const atlas = Math.max(0, inv - myPay - supply);
+const atlas = Math.max(0, inv - myPay);
+const totalCases = mc.length + uc.length;
+const totalDays = new Set([...mc.map(c=>c.date),...uc.map(r=>r['po-surgeryDate'])]).size;
+// Label upcoming count if mixed
+const casesLabel = uc.length > 0
+? `<span style="font-size:13px;text-align:center">${mc.length}<span style="font-size:10px;color:var(--info);font-style:italic"> +${uc.length}</span></span>`
+: `<span style="font-size:13px;text-align:center">${mc.length}</span>`;
 return gridRow([
 `<span style="font-size:13px;font-weight:600">${m}</span>`,
-`<span style="font-size:13px;text-align:center">${mc.length}</span>`,
-`<span style="font-size:13px;text-align:center">${uniqueDays(mc)}</span>`,
+casesLabel,
+`<span style="font-size:13px;text-align:center">${totalDays}</span>`,
 `<span style="font-size:13px;text-align:center;font-family:'DM Mono',monospace">${hrs>0?hrs.toFixed(1):'—'}</span>`,
-`<span style="font-size:12px;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${projPay>0?'$'+projPay.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${projPay>0?'$'+projPay.toFixed(2):'—'}</span>`,
 `<span style="font-size:13px;font-family:'DM Mono',monospace;color:#166534;text-align:right">${myPay>0?'$'+myPay.toFixed(2):'—'}</span>`,
 `<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${inv>0?'$'+inv.toFixed(2):'—'}</span>`,
-`<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--warn);text-align:right">${supply>0?'$'+supply.toFixed(2):'—'}</span>`,
 `<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--info);font-weight:600;text-align:right">${inv>0?'$'+atlas.toFixed(2):'—'}</span>`
-], 'padding:7px 0;border-bottom:1px solid var(--border);align-items:center');
+], `padding:7px 0;border-bottom:1px solid var(--border);align-items:center${uc.length>0?';background:rgba(29,53,87,0.02)':''}`);
 }).join('') +
-gridRow([
-`<span style="font-size:13px;font-weight:700">Total</span>`,
-`<span style="font-size:13px;font-weight:700;text-align:center">${yearCases.length}</span>`,
-`<span style="font-size:13px;font-weight:700;text-align:center">${uniqueDays(yearCases)}</span>`,
-`<span style="font-size:13px;font-weight:700;text-align:center;font-family:'DM Mono',monospace">${totHrs>0?totHrs.toFixed(1):'—'}</span>`,
-`<span style="font-size:12px;font-weight:700;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${totProjPay>0?'$'+totProjPay.toFixed(2):'—'}</span>`,
-`<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#166534;text-align:right">${totMyPay>0?'$'+totMyPay.toFixed(2):'—'}</span>`,
-`<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${totInv>0?'$'+totInv.toFixed(2):'—'}</span>`,
-`<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--warn);text-align:right">${totSupply>0?'$'+totSupply.toFixed(2):'—'}</span>`,
-`<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--info);text-align:right">${totInv>0?'$'+totAtlas.toFixed(2):'—'}</span>`
-], 'padding:10px 0;border-top:2px solid var(--border-strong);align-items:center');
+`<div style="display:grid;grid-template-columns:${cols};gap:5px;padding:10px 0;border-top:2px solid var(--border-strong);align-items:center">
+<span style="font-size:13px;font-weight:700">Finalized</span>
+<span style="font-size:13px;font-weight:700;text-align:center">${yearCases.length}</span>
+<span style="font-size:13px;font-weight:700;text-align:center">${uniqueDays(yearCases)}</span>
+<span style="font-size:13px;font-weight:700;text-align:center;font-family:'DM Mono',monospace">${totHrs>0?totHrs.toFixed(1):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${totProjPay>0?'$'+totProjPay.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#166534;text-align:right">${totMyPay>0?'$'+totMyPay.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${totInv>0?'$'+totInv.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--info);text-align:right">${totInv>0?'$'+totAtlas.toFixed(2):'—'}</span>
+</div>` +
+(totUpcomingCases > 0 ? `<div style="display:grid;grid-template-columns:${cols};gap:5px;padding:8px 0;border-top:1px dashed var(--border);align-items:center;background:rgba(29,53,87,0.03)">
+<span style="font-size:12px;font-weight:600;color:var(--info);font-style:italic">Upcoming</span>
+<span style="font-size:12px;text-align:center;color:var(--info)">${totUpcomingCases}</span>
+<span style="font-size:12px;text-align:center;color:var(--info)">${totUpcomingDays}</span>
+<span style="font-size:12px;text-align:center;color:var(--text-faint)">—</span>
+<span style="font-size:12px;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${totUpcomingProj>0?'$'+totUpcomingProj.toFixed(2):'—'}</span>
+<span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
+<span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
+<span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
+</div>` : '');
 };
 // ── CS TRANSFER LOG ──
 window.showAddTransferForm = function() {
