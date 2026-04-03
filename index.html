@@ -1797,7 +1797,12 @@ alert('✓ Pre-Op record updated!');
 showTab('mid-case');
 return;
 }
-} catch(e) { console.error(e); }
+} catch(e) {
+setSyncing(false);
+alert('Error updating pre-op: ' + e.message);
+console.error(e);
+return;
+}
 }
 // Check if a pre-op already exists for this date+worker — reuse its ID
 const snap0 = await getDoc(doc(db,'atlas','preop'));
@@ -1924,9 +1929,7 @@ if(el) el.textContent = '—';
 // Clear case ID display
 const caseIdDisplay = document.getElementById('po-caseId-display');
 if(caseIdDisplay) caseIdDisplay.textContent = '';
-// Reset editing state
-window._editingPreopId = null;
-// Reset deposit status (handled per-record in Mid-Case)
+// NOTE: do NOT reset _editingPreopId here — editing state is managed by editPreopRecord/cancelEditPreop/savePreop
 };
 async function renderPreopHistory() {
 const el = document.getElementById('preopHistoryList');
