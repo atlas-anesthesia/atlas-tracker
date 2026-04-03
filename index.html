@@ -1338,6 +1338,20 @@ const bar = document.querySelector('#tab-new-case .action-bar');
 if(bar) bar.insertAdjacentElement('afterend', banner);
 const saveBtn = document.querySelector('#tab-new-case .btn-success');
 if(saveBtn) saveBtn.textContent = '✓ Save Edits & Update Inventory';
+// Load pre-op summary for this specific case
+const linkedPreop = (window._cachedPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
+if(linkedPreop) {
+populateFinalizeFromPreop(linkedPreop);
+} else {
+// Hide stale summary while we fetch
+const stale = document.getElementById('finalize-preop-summary');
+if(stale) stale.style.display = 'none';
+getDoc(doc(db,'atlas','preop')).then(snap => {
+const records = snap.exists() ? (snap.data().records||[]) : [];
+const preop = records.find(r => r['po-caseId'] === c.caseId);
+if(preop) populateFinalizeFromPreop(preop);
+}).catch(()=>{});
+}
 }, 100);
 };
 window.cancelEditCase = function() {
