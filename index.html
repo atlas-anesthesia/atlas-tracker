@@ -502,6 +502,7 @@
           <input type="number" id="po-est-hours" min="0.5" max="12" step="0.5" placeholder="e.g. 2.5">
           <label>Invoice Email</label>
           <input type="text" id="po-patientEmail" placeholder="patient@email.com">
+
         </div>
 
         <!-- RIGHT: Pre-Op Call Info -->
@@ -2635,13 +2636,15 @@ function renderHistory() {
                 : `<span style="background:#fef3cd;color:#92400e;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">⚠ NOT INVOICED</span>
                    <button onclick="event.stopPropagation();window.markCaseInvoiced('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent);">✓ Mark Invoiced</button>`;
 
-            const paidHtml = c.manuallyPaid
-              ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">💰 PAID</span>`
-              : c.patientEmail
-                ? `<span id="hist-deposit-${c.id}" style="font-size:10px;color:var(--text-faint);">Checking deposit...</span>
-                   <button onclick="event.stopPropagation();window.markCasePaid('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent);">✓ Mark Paid</button>`
-                : `<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">⚠ NOT PAID</span>
-                   <button onclick="event.stopPropagation();window.markCasePaid('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent);">✓ Mark Paid</button>`;
+            const preopRec = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId);
+            const ds = c.depositStatus || preopRec?.['po-depositStatus'] || 'not-paid';
+            const pn = c.paymentNotes || preopRec?.['po-paymentNotes'] || '';
+            const paidHtml = ds === 'paid'
+              ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">✓ DEPOSIT PAID</span>${pn?`<span style="font-size:10px;color:var(--text-faint);">${pn}</span>`:''}`
+              : ds === 'waived'
+              ? `<span style="background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">— DEPOSIT WAIVED</span>`
+              : `<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;">✗ DEPOSIT NOT PAID</span>
+                 <button onclick="event.stopPropagation();window.markCaseDepositPaid('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent);">✓ Mark Paid</button>`;
 
             return `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${invHtml}</div>
                     <div style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${paidHtml}</div>`;
@@ -3188,6 +3191,8 @@ window.clearPreop = function() {
   if(caseIdDisplay) caseIdDisplay.textContent = '';
   // Reset editing state
   window._editingPreopId = null;
+  // Reset deposit status
+  window.setDepositStatus('not-paid');
 };
 
 async function renderPreopHistory() {
@@ -5011,10 +5016,23 @@ async function renderMidCase() {
             Surgery: ${surgDateFmt} · Provider: ${provider}
             ${r['po-allergies'] ? ' · <span style="color:var(--warn);">⚠ Allergies</span>' : ''}
           </div>
-          ${r['po-patientEmail'] ? `<div style="margin-top:4px;display:flex;align-items:center;gap:8px;">
-            <span style="font-size:11px;color:var(--text-faint);">💳 Deposit:</span>
-            <span id="deposit-badge-${r.id}" style="font-size:11px;color:var(--text-faint);">Checking...</span>
-          </div>` : ''}
+          <div style="margin-top:10px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;">💰 Deposit Status</div>
+            <div style="display:flex;gap:6px;margin-bottom:8px;">
+              <button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','not-paid')"
+                style="flex:1;padding:6px 4px;border-radius:6px;border:2px solid ${(r['po-depositStatus']||'not-paid')==='not-paid'?'#fca5a5':'var(--border)'};background:${(r['po-depositStatus']||'not-paid')==='not-paid'?'#fee2e2':'var(--surface)'};color:${(r['po-depositStatus']||'not-paid')==='not-paid'?'#b91c1c':'var(--text-muted)'};font-size:11px;font-weight:600;cursor:pointer;">✗ Not Paid</button>
+              <button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','paid')"
+                style="flex:1;padding:6px 4px;border-radius:6px;border:2px solid ${r['po-depositStatus']==='paid'?'#86efac':'var(--border)'};background:${r['po-depositStatus']==='paid'?'#dcfce7':'var(--surface)'};color:${r['po-depositStatus']==='paid'?'#166534':'var(--text-muted)'};font-size:11px;font-weight:600;cursor:pointer;">✓ Paid</button>
+              <button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','waived')"
+                style="flex:1;padding:6px 4px;border-radius:6px;border:2px solid ${r['po-depositStatus']==='waived'?'#d1d5db':'var(--border)'};background:${r['po-depositStatus']==='waived'?'#f3f4f6':'var(--surface)'};color:${r['po-depositStatus']==='waived'?'#6b7280':'var(--text-muted)'};font-size:11px;font-weight:600;cursor:pointer;">— Waived</button>
+            </div>
+            <input type="text" id="midcase-pay-notes-${r.id}"
+              placeholder="Payment notes: method, ref #, amount…"
+              value="${r['po-paymentNotes']||''}"
+              onclick="event.stopPropagation()"
+              onchange="event.stopPropagation();window.saveMidCasePaymentNotes('${r.id}',this.value)"
+              style="width:100%;padding:6px 10px;font-size:12px;box-sizing:border-box;">
+          </div>
           ${allFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
             ${allFlags.map(f=>`<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;">${f}</span>`).join('')}
           </div>` : ''}
@@ -5027,6 +5045,14 @@ async function renderMidCase() {
           <button onclick="event.stopPropagation();previewDraft('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">👁 Preview</button>
           <button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;">✏ Edit Draft</button>
           <button onclick="event.stopPropagation();deleteMidCase('preop','${r.id}','${caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);">🗑 Delete</button>
+          <!-- Deposit Status -->
+          <div style="display:flex;gap:4px;margin-top:6px;width:100%;">
+            <button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','not-paid')" class="btn btn-sm" style="flex:1;font-size:10px;padding:3px 4px;${(r['po-depositStatus']||'not-paid')==='not-paid'?'background:#fee2e2;color:#b91c1c;border:1.5px solid #fca5a5;':'background:var(--surface2);color:var(--text-faint);border:1.5px solid var(--border);'}">✗ Not Paid</button>
+            <button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','paid')" class="btn btn-sm" style="flex:1;font-size:10px;padding:3px 4px;${(r['po-depositStatus']||'not-paid')==='paid'?'background:#dcfce7;color:#166534;border:1.5px solid #86efac;':'background:var(--surface2);color:var(--text-faint);border:1.5px solid var(--border);'}">✓ Paid</button>
+            <button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','waived')" class="btn btn-sm" style="flex:1;font-size:10px;padding:3px 4px;${(r['po-depositStatus']||'not-paid')==='waived'?'background:#f3f4f6;color:#6b7280;border:1.5px solid #d1d5db;':'background:var(--surface2);color:var(--text-faint);border:1.5px solid var(--border);'}">— Waived</button>
+          </div>
+          ${r['po-paymentNotes']?`<input type="text" placeholder="Payment notes (method, ref #, amount)" value="${r['po-paymentNotes']}" onchange="window.updatePaymentNotes('${r.id}',this.value)" onclick="event.stopPropagation()" style="width:100%;margin-top:4px;font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);">`:
+            `<input type="text" placeholder="Payment notes (method, ref #, amount)" onchange="window.updatePaymentNotes('${r.id}',this.value)" onclick="event.stopPropagation()" style="width:100%;margin-top:4px;font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);">`}
         </div>
       </div>
       <div class="case-items-list" id="midcase-detail-${r.id}">
@@ -5074,12 +5100,7 @@ async function renderMidCase() {
 
   el.innerHTML = (items_html + orphanHtml) || '<div class="empty-state">No mid-case records yet.</div>';
 
-  // Auto-check deposits for all records that have an email
-  allPreops.forEach(r => {
-    if(r['po-patientEmail']) {
-      autoCheckDeposit(r.id, r['po-patientEmail']);
-    }
-  });
+  // Deposit status is now manual — no Stripe check needed
 
   // Render Review For Tomorrow
   renderReviewTomorrow();
@@ -6707,6 +6728,72 @@ function renderScheduledProjections(scheduledDev, scheduledJosh) {
       },0).toFixed(2)}</span>
     </div>`;
 }
+
+window.setMidCaseDeposit = async function(recordId, status) {
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records||[]) : [];
+    const rec = records.find(r => r.id === recordId);
+    if(!rec) return;
+    rec['po-depositStatus'] = status;
+    await setDoc(doc(db,'atlas','preop'), { records });
+    window._rawPreopRecords = records;
+    renderMidCase();
+  } catch(e) { console.error(e); }
+};
+
+window.updatePaymentNotes = async function(recordId, notes) {
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records||[]) : [];
+    const rec = records.find(r => r.id === recordId);
+    if(!rec) return;
+    rec['po-paymentNotes'] = notes;
+    await setDoc(doc(db,'atlas','preop'), { records });
+    window._rawPreopRecords = records;
+  } catch(e) { console.error(e); }
+};
+
+window.setMidCaseDeposit = async function(recordId, status) {
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records||[]) : [];
+    const idx = records.findIndex(r => r.id === recordId);
+    if(idx === -1) return;
+    records[idx]['po-depositStatus'] = status;
+    window._rawPreopRecords = records;
+    setSyncing(true);
+    await setDoc(doc(db,'atlas','preop'), { records });
+    setSyncing(false);
+    renderMidCase();
+  } catch(e) { console.error(e); }
+};
+
+window.saveMidCasePaymentNotes = async function(recordId, notes) {
+  try {
+    const snap = await getDoc(doc(db,'atlas','preop'));
+    const records = snap.exists() ? (snap.data().records||[]) : [];
+    const idx = records.findIndex(r => r.id === recordId);
+    if(idx === -1) return;
+    records[idx]['po-paymentNotes'] = notes;
+    window._rawPreopRecords = records;
+    setSyncing(true);
+    await setDoc(doc(db,'atlas','preop'), { records });
+    setSyncing(false);
+  } catch(e) { console.error(e); }
+};
+
+window.markCaseDepositPaid = async function(caseId) {
+  const c = cases.find(x => x.id === caseId);
+  if(!c) return;
+  const note = prompt('Payment notes (optional — method, ref #, amount):', '') ?? '';
+  c.depositStatus = 'paid';
+  c.paymentNotes = note;
+  setSyncing(true);
+  await saveCases();
+  setSyncing(false);
+  renderHistory();
+};
 
 // ── BROWSER BACK BUTTON ──
 window.addEventListener('popstate', (event) => {
