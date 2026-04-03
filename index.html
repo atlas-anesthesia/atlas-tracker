@@ -1038,86 +1038,71 @@ const comments=document.getElementById('caseComments')?document.getElementById('
 // If editing an existing case, update it instead of creating new
 if(window._editingCaseId) {
 const editId = window._editingCaseId;
+try {
 let idx = cases.findIndex(x => x.id === editId);
-if(idx === -1) { alert('Error: Case not found — cannot save edit. Try refreshing the page.'); return; }
+if(idx === -1) {
+alert('Error: Case not found. Try refreshing the page.');
+return;
+}
 const oldCase = {...cases[idx]};
-const suppliesTotal = caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
+const suppliesTotal = caseItems.reduce((s,i)=>s+(parseFloat(i.cost)||0)*(parseFloat(i.qty)||0),0);
 const csTotal = csEntries.reduce((sum,entry)=>{
-const cpm=getCostPerMG(entry.drug);
-const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
-return sum+cpm*mg;
+try { const cpm=getCostPerMG(entry.drug); const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0); return sum+cpm*mg; } catch(e){ return sum; }
 },0);
 const total = suppliesTotal + csTotal;
-// ── Update the case in the array FIRST before any awaits ──
-// (prevents onSnapshot from overwriting our changes mid-save)
+// Build updated case object
 const updatedCase = {
 ...cases[idx],
-caseId: cases[idx].caseId, procedure:proc, provider, date, notes: cases[idx].notes||'',
+procedure:proc, provider, date,
 caseComments:comments, worker:currentWorker,
-items: caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
+items: caseItems.map(i=>({id:i.id,generic:i.generic||'',name:i.name||'',cost:parseFloat(i.cost)||0,qty:parseFloat(i.qty)||0,lineTotal:(parseFloat(i.cost)||0)*(parseFloat(i.qty)||0)})),
 savedCsEntries: csEntries.map(e=>({...e})),
 csTotal, total
 };
-cases[idx] = updatedCase;
-// ── Inventory diff: reverse old supply deductions, apply new ones ──
+// Inventory diff — reverse old, apply new
 (oldCase.items || []).forEach(oldItem => {
 const inv = items.find(i => i.id === oldItem.id);
-if(inv) setStock(inv, oldCase.worker || currentWorker,
-getStock(inv, oldCase.worker || currentWorker) + (parseFloat(oldItem.qty) || 0));
+if(inv) setStock(inv, oldCase.worker || currentWorker, getStock(inv, oldCase.worker || currentWorker) + (parseFloat(oldItem.qty)||0));
 });
 caseItems.forEach(item => {
 const inv = items.find(i => i.id === item.id);
-if(inv) setStock(inv, currentWorker, Math.max(0, getStock(inv, currentWorker) - item.qty));
+if(inv) setStock(inv, currentWorker, Math.max(0, getStock(inv, currentWorker) - (parseFloat(item.qty)||0)));
 });
-// ── CS log diff: remove old CS entries for this case, re-add new ──
+// Save inventory first
+setSyncing(true);
+await saveInventory();
+// Re-find index after async (onSnapshot may have replaced the array)
+const freshIdx = cases.findIndex(x => x.id === editId);
+if(freshIdx !== -1) {
+cases[freshIdx] = updatedCase;
+} else {
+cases.unshift(updatedCase);
+}
+await saveCases();
+setSyncing(false);
+// CS log update (best-effort, won't block save if it fails)
 try {
 const csSnap = await getDoc(doc(db,'atlas','cslog'));
-let csLog = csSnap.exists() ? (csSnap.data().entries || []) : [];
+let csLog = csSnap.exists() ? (csSnap.data().entries||[]) : [];
 csLog = csLog.filter(e => e.caseId !== oldCase.caseId);
-// Reverse old CS inventory deductions (newBottle only)
-linkCSInvIds();
-(oldCase.savedCsEntries || []).forEach(entry => {
-const invId = CS_DRUGS[entry.drug]?.invId;
-if(invId && entry.newBottle) {
-const invItem = items.find(i => i.id === invId);
-if(invItem) setStock(invItem, oldCase.worker || currentWorker,
-getStock(invItem, oldCase.worker || currentWorker) + 1);
-}
-});
-// Add new CS log entries and apply new CS inventory deductions
 csEntries.forEach(entry => {
-const logEntry = {
-id: uid(), drug: entry.drug, drugLabel: CS_DRUGS[entry.drug]?.label || entry.drug,
-caseId: oldCase.caseId, date, provider, worker: currentWorker,
-amountGiven: parseFloat(entry.amountGiven)||0, leftInVial: parseFloat(entry.leftInVial)||0,
-wastedAmt: parseFloat(entry.wastedAmt)||0, newBottle: entry.newBottle||false,
-witnessSignature: entry.witnessSignature||'', providerSignature: entry.providerSignature||'',
-hasOther: entry.hasOther||false, otherComment: entry.otherComment||'',
-savedAt: new Date().toISOString()
-};
-csLog.unshift(logEntry);
-linkCSInvIds();
-const invId = CS_DRUGS[entry.drug]?.invId;
-if(invId && entry.newBottle) {
-const invItem = items.find(i => i.id === invId);
-if(invItem) setStock(invItem, currentWorker, Math.max(0, getStock(invItem, currentWorker) - 1));
-}
+csLog.unshift({
+id:uid(), drug:entry.drug, drugLabel:entry.drug,
+caseId:oldCase.caseId, date, provider, worker:currentWorker,
+amountGiven:parseFloat(entry.amountGiven)||0,
+leftInVial:parseFloat(entry.leftInVial)||0,
+wastedAmt:parseFloat(entry.wastedAmt)||0,
+newBottle:entry.newBottle||false,
+witnessSignature:entry.witnessSignature||'',
+providerSignature:entry.providerSignature||'',
+savedAt:new Date().toISOString()
 });
-await setDoc(doc(db,'atlas','cslog'), { entries: csLog });
+});
+await setDoc(doc(db,'atlas','cslog'), {entries:csLog});
 } catch(csErr) {
 console.warn('CS log update skipped:', csErr);
 }
-// ── Save inventory and cases — re-find idx in case onSnapshot replaced array ──
-setSyncing(true);
-try {
-await saveInventory();
-// Re-find idx in case the snapshot listener replaced cases[] during the awaits above
-const freshIdx = cases.findIndex(x => x.id === editId);
-if(freshIdx !== -1) cases[freshIdx] = updatedCase;
-await saveCases();
-} finally {
-setSyncing(false);
-}
+// Clear editing state
 window._editingCaseId = null;
 const banner = document.getElementById('case-edit-banner');
 if(banner) banner.remove();
@@ -1127,6 +1112,11 @@ clearCase();
 renderHistory();
 alert('✓ Case updated successfully!');
 showTab('history');
+} catch(editErr) {
+setSyncing(false);
+console.error('Edit save error:', editErr);
+alert('Error saving edit: ' + editErr.message);
+}
 return;
 }
 const suppliesTotal2=caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
