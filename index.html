@@ -1290,15 +1290,28 @@ function renderHistory() {
 const el=document.getElementById('caseHistoryList');
 let filtered=cases;
 if(currentHistoryFilter!=='all') filtered=cases.filter(c=>c.worker===currentHistoryFilter);
+// Sort oldest → newest by date
+filtered = [...filtered].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 const invoices = window._savedInvoices || [];
 if(!filtered.length){el.innerHTML='<div class="empty-state">No cases recorded yet</div>';return;}
+const today = new Date().toISOString().split('T')[0];
 el.innerHTML=filtered.map(c=>{
 const pill=c.worker==='dev'?'pill-dev':'pill-josh';
 const wname=c.worker==='dev'?'Devarsh':'Josh';
-return `<div class="case-item" style="${c.draft?'border-left:3px solid var(--warn);':''}"><div class="case-item-header" onclick="toggleCase('${c.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
+const isPast = c.date && c.date < today;
+const isToday = c.date === today;
+const borderColor = c.draft ? 'var(--warn)' : isPast ? '#94a3b8' : isToday ? 'var(--accent)' : 'var(--info)';
+const bgTint = c.draft ? 'transparent' : isPast ? 'rgba(148,163,184,0.06)' : isToday ? 'rgba(45,106,79,0.04)' : 'rgba(29,53,87,0.03)';
+const dateBadge = c.draft ? '' : isPast
+? `<span style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">PAST</span>`
+: isToday
+? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">TODAY</span>`
+: `<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">UPCOMING</span>`;
+return `<div class="case-item" style="border-left:3px solid ${borderColor};background:${bgTint}"><div class="case-item-header" onclick="toggleCase('${c.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${c.caseId||'No Case ID'}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>
 ${c.draft?'<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span>':''}
+${dateBadge}
 </div><div class="case-date">${fmtDate(c.date)} · ${c.procedure||c.caseId}${c.provider?' · '+c.provider:''}</div>
 ${(() => {
 const inv = invoices.find(i => i.linkedCaseId === c.caseId);
