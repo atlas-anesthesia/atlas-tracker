@@ -1243,7 +1243,7 @@ el.innerHTML=filtered.map(c=>{
 const pill=c.worker==='dev'?'pill-dev':'pill-josh';
 const wname=c.worker==='dev'?'Devarsh':'Josh';
 return `<div class="case-item" style="${c.draft?'border-left:3px solid var(--warn);':''}"><div class="case-item-header" onclick="toggleCase('${c.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
-${c.procedure||'No Procedure Yet'}
+${c.caseId||'No Case ID'}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>
 ${c.draft?'<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span>':''}
 </div><div class="case-date">${fmtDate(c.date)} · ${c.caseId}${c.provider?' · '+c.provider:''}</div>
