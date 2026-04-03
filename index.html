@@ -1315,15 +1315,13 @@ const inv = invoices.find(i => i.linkedCaseId === c.caseId);
 const invHtml = inv
 ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✓ INVOICED</span><span style="font-size:11px;color:var(--text-faint)">${inv.invoiceNum} · $${inv.total.toFixed(2)}</span><button onclick="event.stopPropagation();window.redownloadInvoice('${inv.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px">⬇ PDF</button>`
 : c.manuallyInvoiced
-? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✓ INVOICED</span><span style="font-size:11px;color:var(--text-faint)">${c.manuallyInvoicedNote||'Manual'}</span>`
+? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✓ INVOICED</span><span style="font-size:11px;color:var(--text-faint)">${c.manuallyInvoicedNote||'Manual'}</span><button onclick="event.stopPropagation();window.unmarkCaseInvoiced('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--warn)">✕ Undo</button>`
 : `<span style="background:#fef3cd;color:#92400e;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">⚠ NOT INVOICED</span><button onclick="event.stopPropagation();window.markCaseInvoiced('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent)">✓ Mark Invoiced</button>`;
 const preopRec = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId);
 const ds = c.depositStatus || preopRec?.['po-depositStatus'] || 'not-paid';
 const pn = c.paymentNotes || preopRec?.['po-paymentNotes'] || '';
 const paidHtml = ds === 'paid'
-? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✓ DEPOSIT PAID</span>${pn?`<span style="font-size:10px;color:var(--text-faint)">${pn}</span>`:''}`
-: ds === 'waived'
-? `<span style="background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">— DEPOSIT WAIVED</span>`
+? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✓ DEPOSIT PAID</span>${pn?`<span style="font-size:10px;color:var(--text-faint)">${pn}</span>`:''}<button onclick="event.stopPropagation();window.unmarkCaseDepositPaid('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--warn)">✕ Undo</button>`
 : `<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✗ DEPOSIT NOT PAID</span><button onclick="event.stopPropagation();window.markCaseDepositPaid('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent)">✓ Mark Paid</button>`;
 return `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${invHtml}</div><div style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${paidHtml}</div>`;
 })()}
@@ -3243,20 +3241,27 @@ const provider = r['po-provider'] || '—';
 const cvFlags = ['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase());
 const pulmFlags = ['asthma','copd','uri','cpap','sleep-apnea','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '));
 const allFlags = [...cvFlags, ...pulmFlags];
-return `<div class="case-item" style="border-left:3px solid var(--info)"><div class="case-item-header" onclick="toggleMidCase('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
+const today = new Date().toISOString().split('T')[0];
+const isPast = surgDate !== '—' && surgDate < today;
+const isToday = surgDate === today;
+const borderColor = isPast ? 'var(--warn)' : isToday ? 'var(--accent)' : 'var(--info)';
+const bgTint = isPast ? 'rgba(181,69,27,0.04)' : isToday ? 'rgba(45,106,79,0.04)' : 'transparent';
+const dateLabel = isPast
+? `<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">PAST</span>`
+: isToday
+? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">TODAY</span>`
+: `<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">UPCOMING</span>`;
+return `<div class="case-item" style="border-left:3px solid ${borderColor};background:${bgTint}"><div class="case-item-header" onclick="toggleMidCase('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${caseId}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>
-${hasDraft
-? '<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span>'
-: '<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span>'
-}
+${dateLabel}
+${hasDraft ? '<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span>' : ''}
 </div><div class="case-date">
 Surgery: ${surgDateFmt} · Provider: ${provider}
 ${r['po-allergies'] ? ' · <span style="color:var(--warn)">⚠ Allergies</span>' : ''}
 </div><div style="margin-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;font-weight:600;color:var(--text-faint)">💰 Deposit:</span><button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','not-paid')"
 style="padding:3px 10px;border-radius:10px;border:1.5px solid ${(r['po-depositStatus']||'not-paid')==='not-paid'?'#fca5a5':'var(--border)'};background:${(r['po-depositStatus']||'not-paid')==='not-paid'?'#fee2e2':'transparent'};color:${(r['po-depositStatus']||'not-paid')==='not-paid'?'#b91c1c':'var(--text-faint)'};font-size:11px;font-weight:600;cursor:pointer">✗ Not Paid</button><button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','paid')"
-style="padding:3px 10px;border-radius:10px;border:1.5px solid ${r['po-depositStatus']==='paid'?'#86efac':'var(--border)'};background:${r['po-depositStatus']==='paid'?'#dcfce7':'transparent'};color:${r['po-depositStatus']==='paid'?'#166534':'var(--text-faint)'};font-size:11px;font-weight:600;cursor:pointer">✓ Paid</button><button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','waived')"
-style="padding:3px 10px;border-radius:10px;border:1.5px solid ${r['po-depositStatus']==='waived'?'#d1d5db':'var(--border)'};background:${r['po-depositStatus']==='waived'?'#f3f4f6':'transparent'};color:${r['po-depositStatus']==='waived'?'#6b7280':'var(--text-faint)'};font-size:11px;font-weight:600;cursor:pointer">— Waived</button><input type="text" id="midcase-pay-notes-${r.id}"
+style="padding:3px 10px;border-radius:10px;border:1.5px solid ${r['po-depositStatus']==='paid'?'#86efac':'var(--border)'};background:${r['po-depositStatus']==='paid'?'#dcfce7':'transparent'};color:${r['po-depositStatus']==='paid'?'#166534':'var(--text-faint)'};font-size:11px;font-weight:600;cursor:pointer">✓ Paid</button><input type="text" id="midcase-pay-notes-${r.id}"
 placeholder="Payment notes…"
 value="${r['po-paymentNotes']||''}"
 onclick="event.stopPropagation()"
@@ -3293,9 +3298,19 @@ const orphanDrafts = drafts.filter(d => !preopRecords.find(r => r['po-caseId'] =
 const orphanHtml = orphanDrafts.map(d => {
 const pill = d.worker==='dev' ? 'pill-dev' : 'pill-josh';
 const wname = d.worker==='dev' ? 'Devarsh' : 'Josh';
-return `<div class="case-item" style="border-left:3px solid var(--warn)"><div class="case-item-header"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
+const dToday = new Date().toISOString().split('T')[0];
+const dIsPast = d.date && d.date < dToday;
+const dIsToday = d.date === dToday;
+const dBorder = dIsPast ? 'var(--warn)' : dIsToday ? 'var(--accent)' : '#6b7280';
+const dBg = dIsPast ? 'rgba(181,69,27,0.04)' : dIsToday ? 'rgba(45,106,79,0.04)' : 'transparent';
+const dDateLabel = dIsPast
+? `<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">PAST</span>`
+: dIsToday
+? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">TODAY</span>`
+: `<span style="background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">UPCOMING</span>`;
+return `<div class="case-item" style="border-left:3px solid ${dBorder};background:${dBg}"><div class="case-item-header"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${d.caseId}
-<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span><span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span></div><div class="case-date">${fmtDate(d.date)} · ${d.provider||'—'}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><button onclick="resumeCase('${d.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button><button onclick="editFinalizedCase('${d.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit Draft</button><button onclick="deleteMidCase('draft','${d.id}','${d.caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑 Delete</button></div></div></div>`;
+<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>${dDateLabel}<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span></div><div class="case-date">${fmtDate(d.date)} · ${d.provider||'—'}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><button onclick="resumeCase('${d.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button><button onclick="editFinalizedCase('${d.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit Draft</button><button onclick="deleteMidCase('draft','${d.id}','${d.caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑 Delete</button></div></div></div>`;
 }).join('');
 el.innerHTML = (items_html + orphanHtml) || '<div class="empty-state">No mid-case records yet.</div>';
 // Deposit status is now manual — no Stripe check needed
@@ -4548,12 +4563,45 @@ await setDoc(doc(db,'atlas','preop'), { records });
 setSyncing(false);
 } catch(e) { console.error(e); }
 };
+window.markCaseInvoiced = async function(caseId) {
+const c = cases.find(x => x.id === caseId);
+if(!c) return;
+const note = prompt('Invoice note (optional — invoice #, amount, method):', '') ?? '';
+c.manuallyInvoiced = true;
+c.manuallyInvoicedNote = note || 'Manual';
+setSyncing(true);
+await saveCases();
+setSyncing(false);
+renderHistory();
+};
+window.unmarkCaseInvoiced = async function(caseId) {
+const c = cases.find(x => x.id === caseId);
+if(!c) return;
+if(!confirm('Remove the "Invoiced" mark from this case?')) return;
+c.manuallyInvoiced = false;
+c.manuallyInvoicedNote = '';
+setSyncing(true);
+await saveCases();
+setSyncing(false);
+renderHistory();
+};
 window.markCaseDepositPaid = async function(caseId) {
 const c = cases.find(x => x.id === caseId);
 if(!c) return;
 const note = prompt('Payment notes (optional — method, ref #, amount):', '') ?? '';
 c.depositStatus = 'paid';
 c.paymentNotes = note;
+setSyncing(true);
+await saveCases();
+setSyncing(false);
+renderHistory();
+};
+window.unmarkCaseDepositPaid = async function(caseId) {
+const c = cases.find(x => x.id === caseId);
+if(!c) return;
+if(!confirm('Reset deposit status back to "Not Paid"?')) return;
+c.depositStatus = 'not-paid';
+c.paymentNotes = '';
 setSyncing(true);
 await saveCases();
 setSyncing(false);
