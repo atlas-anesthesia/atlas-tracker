@@ -1037,8 +1037,10 @@ const notes=document.getElementById('caseNotes').value.trim();
 const comments=document.getElementById('caseComments')?document.getElementById('caseComments').value.trim():'';
 // If editing an existing case, update it instead of creating new
 if(window._editingCaseId) {
-const idx = cases.findIndex(x => x.id === window._editingCaseId);
-if(idx !== -1) {
+const editId = window._editingCaseId;
+let idx = cases.findIndex(x => x.id === editId);
+if(idx === -1) { alert('Error: Case not found — cannot save edit. Try refreshing the page.'); return; }
+const oldCase = {...cases[idx]};
 const suppliesTotal = caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
 const csTotal = csEntries.reduce((sum,entry)=>{
 const cpm=getCostPerMG(entry.drug);
@@ -1046,7 +1048,9 @@ const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
 return sum+cpm*mg;
 },0);
 const total = suppliesTotal + csTotal;
-cases[idx] = {
+// ── Update the case in the array FIRST before any awaits ──
+// (prevents onSnapshot from overwriting our changes mid-save)
+const updatedCase = {
 ...cases[idx],
 caseId: cases[idx].caseId, procedure:proc, provider, date, notes: cases[idx].notes||'',
 caseComments:comments, worker:currentWorker,
@@ -1054,19 +1058,76 @@ items: caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:
 savedCsEntries: csEntries.map(e=>({...e})),
 csTotal, total
 };
+cases[idx] = updatedCase;
+// ── Inventory diff: reverse old supply deductions, apply new ones ──
+(oldCase.items || []).forEach(oldItem => {
+const inv = items.find(i => i.id === oldItem.id);
+if(inv) setStock(inv, oldCase.worker || currentWorker,
+getStock(inv, oldCase.worker || currentWorker) + (parseFloat(oldItem.qty) || 0));
+});
+caseItems.forEach(item => {
+const inv = items.find(i => i.id === item.id);
+if(inv) setStock(inv, currentWorker, Math.max(0, getStock(inv, currentWorker) - item.qty));
+});
+// ── CS log diff: remove old CS entries for this case, re-add new ──
+try {
+const csSnap = await getDoc(doc(db,'atlas','cslog'));
+let csLog = csSnap.exists() ? (csSnap.data().entries || []) : [];
+csLog = csLog.filter(e => e.caseId !== oldCase.caseId);
+// Reverse old CS inventory deductions (newBottle only)
+linkCSInvIds();
+(oldCase.savedCsEntries || []).forEach(entry => {
+const invId = CS_DRUGS[entry.drug]?.invId;
+if(invId && entry.newBottle) {
+const invItem = items.find(i => i.id === invId);
+if(invItem) setStock(invItem, oldCase.worker || currentWorker,
+getStock(invItem, oldCase.worker || currentWorker) + 1);
+}
+});
+// Add new CS log entries and apply new CS inventory deductions
+csEntries.forEach(entry => {
+const logEntry = {
+id: uid(), drug: entry.drug, drugLabel: CS_DRUGS[entry.drug]?.label || entry.drug,
+caseId: oldCase.caseId, date, provider, worker: currentWorker,
+amountGiven: parseFloat(entry.amountGiven)||0, leftInVial: parseFloat(entry.leftInVial)||0,
+wastedAmt: parseFloat(entry.wastedAmt)||0, newBottle: entry.newBottle||false,
+witnessSignature: entry.witnessSignature||'', providerSignature: entry.providerSignature||'',
+hasOther: entry.hasOther||false, otherComment: entry.otherComment||'',
+savedAt: new Date().toISOString()
+};
+csLog.unshift(logEntry);
+linkCSInvIds();
+const invId = CS_DRUGS[entry.drug]?.invId;
+if(invId && entry.newBottle) {
+const invItem = items.find(i => i.id === invId);
+if(invItem) setStock(invItem, currentWorker, Math.max(0, getStock(invItem, currentWorker) - 1));
+}
+});
+await setDoc(doc(db,'atlas','cslog'), { entries: csLog });
+} catch(csErr) {
+console.warn('CS log update skipped:', csErr);
+}
+// ── Save inventory and cases — re-find idx in case onSnapshot replaced array ──
 setSyncing(true);
+try {
+await saveInventory();
+// Re-find idx in case the snapshot listener replaced cases[] during the awaits above
+const freshIdx = cases.findIndex(x => x.id === editId);
+if(freshIdx !== -1) cases[freshIdx] = updatedCase;
 await saveCases();
+} finally {
 setSyncing(false);
+}
 window._editingCaseId = null;
 const banner = document.getElementById('case-edit-banner');
 if(banner) banner.remove();
 const saveBtn = document.querySelector('#tab-new-case .btn-success');
 if(saveBtn) saveBtn.textContent = '✓ Finalize Case & Update Inventory';
 clearCase();
+renderHistory();
 alert('✓ Case updated successfully!');
 showTab('history');
 return;
-}
 }
 const suppliesTotal2=caseItems.reduce((s,i)=>s+i.cost*i.qty,0);
 const csTotal2=csEntries.reduce((sum,entry)=>{
