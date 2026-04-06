@@ -4663,31 +4663,31 @@ if(dropdown && !dropdown.contains(e.target)) closeReportsDropdown();
 let _faxRecord = null;
 
 // Called from the Send Fax button on the pre-op form itself (reads current form values)
-window.openFaxModalFromForm = async function() {
-  // Save the form first so nothing is lost
-  await savePreop();
-  // Build a record object from the current form fields
+window.openFaxModalFromForm = function() {
+  // Read all form fields directly — no save, no clear, nothing changes
   const r = {};
-  // Collect all inputs/selects/textareas in the preop tab
   document.querySelectorAll('#tab-preop input, #tab-preop select, #tab-preop textarea').forEach(el => {
-    if(el.id) {
-      if(el.type === 'checkbox') r[el.id] = el.checked;
-      else if(el.type === 'radio') { if(el.checked) r[el.name] = el.value; }
-      else r[el.id] = el.value;
-    }
+    if(!el.id) return;
+    if(el.type === 'checkbox') r[el.id] = el.checked;
+    else if(el.type === 'radio') { if(el.checked) r[el.name] = el.value; }
+    else r[el.id] = el.value;
   });
-  // Also get the hidden caseId
-  r['po-caseId'] = document.getElementById('po-caseId')?.value || document.getElementById('po-caseId-display')?.textContent || '';
-  r.worker = window._currentWorker || (document.getElementById('wbtn-dev')?.classList.contains('active-dev') ? 'dev' : 'josh');
+  // Case ID from display or hidden input
+  r['po-caseId'] = document.getElementById('po-caseId')?.value ||
+                   document.getElementById('po-caseId-display')?.textContent?.trim() || '(unsaved)';
+  // Worker
+  const devActive = document.getElementById('wbtn-dev')?.classList.contains('active-dev');
+  r.worker = (typeof currentWorker !== 'undefined' ? currentWorker : null) || (devActive ? 'dev' : 'josh');
 
   _faxRecord = r;
 
-  // Auto-fill fax from surgery center if saved
+  // Auto-fill fax number from surgery center if one is saved
   const centerId = document.getElementById('po-surgery-center')?.value;
   const center = (window.surgeryCenters||[]).find(c => c.id === centerId);
   const faxInput = document.getElementById('fax-destination');
   if(faxInput) faxInput.value = center?.faxNumber || '';
 
+  // Build preview and show modal
   document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
   document.getElementById('faxModal').style.display = 'flex';
 };
@@ -4741,6 +4741,10 @@ window.confirmAndSendFax = async function() {
     });
     const data = await res.json();
     if(res.ok && data.success) {
+      // Save the pre-op record silently if we're on the assessment form
+      if(document.getElementById('tab-preop')?.classList.contains('active')) {
+        try { await savePreop(); } catch(e) {}
+      }
       alert('✅ Fax sent to ' + faxNumber + '!
 SID: ' + (data.sid || 'N/A'));
       closeFaxModal();
