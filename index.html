@@ -239,7 +239,7 @@ Reports <span class="arrow">▼</span></button><div class="nav-dropdown-menu" id
 </label><div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:500">Time:</span><input type="time" id="po-assessTime" style="width:120px;padding:5px 8px;font-size:13px"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div><label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px"><input type="checkbox" id="po-heart-wnl" style="width:15px;height:15px"> Heart WNL
 </label><input type="text" id="po-heart-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px"></div><div><label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px"><input type="checkbox" id="po-lungs-wnl" style="width:15px;height:15px"> Lungs WNL
 </label><input type="text" id="po-lungs-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px"></div><div><label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px"><input type="checkbox" id="po-abd-wnl" style="width:15px;height:15px"> Abdomen/Extremities WNL
-</label><input type="text" id="po-abd-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px"></div><div><label style="font-size:13px;font-weight:500;margin-bottom:8px">Mallampati Score</label><div style="display:flex;gap:12px;flex-wrap:wrap"><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="1" id="po-mall-1" style="width:15px;height:15px"> 1</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="2" id="po-mall-2" style="width:15px;height:15px"> 2</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="3" id="po-mall-3" style="width:15px;height:15px"> 3</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="4" id="po-mall-4" style="width:15px;height:15px"> 4</label></div></div></div></div><div class="grid-3" style="margin-bottom:18px"><div class="card"><div class="card-title">Venipuncture</div><textarea id="po-venipuncture" placeholder="Notes..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:80px"></textarea></div><div class="card"><div class="card-title">Total Fluids</div><input type="text" id="po-totalFluids" placeholder="e.g. 500mL LR"></div><div class="card"><div class="card-title">EBL</div><input type="text" id="po-ebl" placeholder="e.g. Minimal"></div></div><div class="card" style="margin-bottom:18px"><div class="card-title">Comments</div><textarea id="po-comments" placeholder="Additional comments..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:100px"></textarea></div><div style="display:flex;gap:10px;margin-bottom:32px"><button class="btn btn-success" onclick="savePreop()">✓ Save Record</button><button class="btn btn-ghost" onclick="clearPreop()">Clear Form</button></div></div><div class="section" id="tab-preop-history"><div class="action-bar"><h2>Pre-Op Records</h2><button class="btn btn-primary btn-sm" onclick="showTab('preop')">+ New Pre-Op</button></div><div id="preopHistoryList"></div></div><div class="section" id="tab-invoice"><div class="action-bar"><h2>Invoice Generator</h2></div><div class="grid-2" style="margin-bottom:18px"><div class="card"><div class="card-title">Service Details</div><label>Location / Facility Name</label><select id="inv-location-select" onchange="onInvoiceCenterChange()" style="margin-bottom:6px"><option value="">— Select a surgery center —</option></select><input type="text" id="inv-location" placeholder="Or type a custom location name"><label>Date of Service</label><input type="date" id="inv-date"><label>Provider</label><div id="inv-provider-display" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;color:var(--text-muted)">Loading...</div><input type="hidden" id="inv-provider"><label>Start Time</label><input type="time" id="inv-start" oninput="calculateInvoice()" onchange="calculateInvoice()"><label>End Time</label><input type="time" id="inv-end" oninput="calculateInvoice()" onchange="calculateInvoice()"></div><div class="card"><div class="card-title">Rate Information</div><label>First Hour Rate ($)</label><input type="number" id="inv-first-hour" placeholder="e.g. 300.00" min="0" step="0.01" oninput="calculateInvoice()"><label>Per 15-Minute Rate ($) <span style="font-size:11px;color:var(--text-faint);font-weight:400">after first hour</span></label><input type="number" id="inv-per-15" placeholder="e.g. 75.00" min="0" step="0.01" oninput="calculateInvoice()"><div style="margin-top:20px;padding:16px;background:var(--info-light);border-radius:var(--radius-sm);border:1px solid #b8cfe8"><div style="font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px">Calculated Summary</div><div id="inv-summary" style="font-size:13px;color:var(--text-muted)">Enter times and rates to see summary</div><div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #b8cfe8;padding-top:10px"><span style="font-size:13px;font-weight:600;color:var(--info)">TOTAL DUE</span><span id="inv-total" style="font-size:24px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info)">$0.00</span></div></div></div></div><div style="display:flex;gap:12px;margin-bottom:28px"><button class="btn btn-success" onclick="generateInvoicePDF()">⬇ Download Invoice PDF</button><button class="btn btn-ghost" onclick="clearInvoice()">Clear</button></div><div class="action-bar" style="margin-top:8px"><h2 style="font-size:15px;color:var(--accent)">📋 Draft Invoices</h2></div><div id="draftInvoicesList"><div class="empty-state" style="font-size:13px">No draft invoices yet — add start/end time in Finalize Case to auto-generate one</div></div><div class="action-bar" style="margin-top:24px"><h2 style="font-size:15px">Saved Invoices</h2></div><div id="savedInvoicesList"><div class="empty-state">No invoices saved yet</div></div></div><div class="section" id="tab-caselog"><div class="action-bar"><h2>Case Log</h2></div><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px"><div class="inv-tab-bar" style="margin-bottom:0"><button class="inv-tab active" id="cltab-dev" onclick="setCaseLogTab('dev')">Devarsh</button><button class="inv-tab" id="cltab-josh" onclick="setCaseLogTab('josh')">Josh</button></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">From</label><input type="date" id="cl-date-from" style="width:145px;padding:6px 10px;font-size:13px" oninput="renderCaseLog()" onchange="renderCaseLog()"></div><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">To</label><input type="date" id="cl-date-to" style="width:145px;padding:6px 10px;font-size:13px" oninput="renderCaseLog()" onchange="renderCaseLog()"></div><button class="btn btn-ghost btn-sm" onclick="clearCaseLogDates()">Clear Dates</button><button class="btn btn-primary btn-sm" onclick="downloadCaseLogPDF()">⬇ Download PDF</button></div></div><div id="caselog-dev"><div class="grid-4" style="margin-bottom:20px" id="cl-metrics-dev"></div><div class="card" id="cl-table-dev"></div></div><div id="caselog-josh" style="display:none"><div class="grid-4" style="margin-bottom:20px" id="cl-metrics-josh"></div><div class="card" id="cl-table-josh"></div></div></div><div class="section" id="tab-analytics"><div class="action-bar"><h2>Analytics</h2></div><div class="card" style="margin-bottom:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Surgery Centers &amp; Rates</div><button class="btn btn-ghost btn-sm" onclick="showAddCenterForm()">+ Add Center</button></div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">Set rates per surgery center.</div><div id="add-center-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px"><div><label>Surgery Center Name</label><input type="text" id="sc-name" placeholder="e.g. Wio Oral Surgery"></div><div><label>First Hour Rate ($)</label><input type="number" id="sc-first-hour" min="0" step="0.01" placeholder="e.g. 800.00"></div><div><label>Per 15-min Rate ($)</label><input type="number" id="sc-per-15" min="0" step="0.01" placeholder="e.g. 150.00"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px"><div><label>Default Provider <span style="font-size:11px;color:var(--text-faint);font-weight:400">(optional)</span></label><input type="text" id="sc-provider" placeholder="e.g. Dr. Smith"></div><div><label>Invoice Email <span style="font-size:11px;color:var(--text-faint);font-weight:400">(optional)</span></label><input type="text" id="sc-invoice-email" placeholder="e.g. billing@center.com"></div></div><div style="margin-bottom:12px"><label>Fax Number <span style="font-size:11px;color:var(--text-faint);font-weight:400">(optional — for auto-fill)</span></label><input type="text" id="sc-fax-number" placeholder="e.g. +12345678901"></div><div style="display:flex;gap:10px"><button class="btn btn-success btn-sm" onclick="saveCenter()">&#x2713; Save Center</button><button class="btn btn-ghost btn-sm" onclick="hideAddCenterForm()">Cancel</button></div></div><div id="surgery-centers-list"></div></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Monthly Breakdown</div><div style="display:flex;gap:10px"><select id="analytics-year" onchange="renderAnalytics()" style="width:120px"></select><div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;display:flex"><button id="abtn-all" onclick="setAnalyticsFilter('all')" style="background:var(--info);color:#fff;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer">All</button><button id="abtn-dev" onclick="setAnalyticsFilter('dev')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted)">Devarsh</button><button id="abtn-josh" onclick="setAnalyticsFilter('josh')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted)">Josh</button></div></div></div><div id="analytics-monthly"></div></div></div><div class="section" id="tab-cs-log"><div class="action-bar"><h2>Controlled Substance Log</h2><button class="btn btn-primary btn-sm" onclick="downloadCSLogPDF()">⬇ Download PDF</button></div><div class="inv-tab-bar" style="margin-bottom:20px"><button class="inv-tab active" id="cstab-ephedrine" onclick="setCSTab('ephedrine')">Ephedrine</button><button class="inv-tab" id="cstab-ketamine" onclick="setCSTab('ketamine')">Ketamine</button><button class="inv-tab" id="cstab-versed" onclick="setCSTab('versed')">Versed (Midazolam)</button></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px"><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">From</label><input type="date" id="cs-date-from" style="width:145px;padding:6px 10px;font-size:13px" onchange="renderCSLog()"></div><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">To</label><input type="date" id="cs-date-to" style="width:145px;padding:6px 10px;font-size:13px" onchange="renderCSLog()"></div><button class="btn btn-ghost btn-sm" onclick="clearCSDates()">Clear</button></div><div id="cs-log-content"></div><div style="margin-top:32px"><div class="action-bar" style="margin-bottom:14px"><h2 style="font-size:15px">Drug Transfer Log <span style="font-size:12px;font-weight:400;color:var(--text-faint)">Josh → Dev</span></h2><button class="btn btn-ghost btn-sm" onclick="showAddTransferForm()">+ Record Transfer</button></div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">
+</label><input type="text" id="po-abd-notes" placeholder="Notes..." style="font-size:13px;padding:6px 10px"></div><div><label style="font-size:13px;font-weight:500;margin-bottom:8px">Mallampati Score</label><div style="display:flex;gap:12px;flex-wrap:wrap"><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="1" id="po-mall-1" style="width:15px;height:15px"> 1</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="2" id="po-mall-2" style="width:15px;height:15px"> 2</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="3" id="po-mall-3" style="width:15px;height:15px"> 3</label><label style="margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--text)"><input type="radio" name="mallampati" value="4" id="po-mall-4" style="width:15px;height:15px"> 4</label></div></div></div></div><div class="grid-3" style="margin-bottom:18px"><div class="card"><div class="card-title">Venipuncture</div><textarea id="po-venipuncture" placeholder="Notes..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:80px"></textarea></div><div class="card"><div class="card-title">Total Fluids</div><input type="text" id="po-totalFluids" placeholder="e.g. 500mL LR"></div><div class="card"><div class="card-title">EBL</div><input type="text" id="po-ebl" placeholder="e.g. Minimal"></div></div><div class="card" style="margin-bottom:18px"><div class="card-title">Comments</div><textarea id="po-comments" placeholder="Additional comments..." style="width:100%;padding:9px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;min-height:100px"></textarea></div><div style="display:flex;gap:10px;margin-bottom:32px"><button class="btn btn-success" onclick="savePreop()">✓ Save Record</button><button class="btn btn-ghost" onclick="clearPreop()">Clear Form</button><button class="btn btn-ghost" onclick="openFaxModalFromForm()" style="color:#0369a1;border-color:#0369a1">📠 Send Fax</button></div></div><div class="section" id="tab-preop-history"><div class="action-bar"><h2>Pre-Op Records</h2><button class="btn btn-primary btn-sm" onclick="showTab('preop')">+ New Pre-Op</button></div><div id="preopHistoryList"></div></div><div class="section" id="tab-invoice"><div class="action-bar"><h2>Invoice Generator</h2></div><div class="grid-2" style="margin-bottom:18px"><div class="card"><div class="card-title">Service Details</div><label>Location / Facility Name</label><select id="inv-location-select" onchange="onInvoiceCenterChange()" style="margin-bottom:6px"><option value="">— Select a surgery center —</option></select><input type="text" id="inv-location" placeholder="Or type a custom location name"><label>Date of Service</label><input type="date" id="inv-date"><label>Provider</label><div id="inv-provider-display" style="padding:8px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;color:var(--text-muted)">Loading...</div><input type="hidden" id="inv-provider"><label>Start Time</label><input type="time" id="inv-start" oninput="calculateInvoice()" onchange="calculateInvoice()"><label>End Time</label><input type="time" id="inv-end" oninput="calculateInvoice()" onchange="calculateInvoice()"></div><div class="card"><div class="card-title">Rate Information</div><label>First Hour Rate ($)</label><input type="number" id="inv-first-hour" placeholder="e.g. 300.00" min="0" step="0.01" oninput="calculateInvoice()"><label>Per 15-Minute Rate ($) <span style="font-size:11px;color:var(--text-faint);font-weight:400">after first hour</span></label><input type="number" id="inv-per-15" placeholder="e.g. 75.00" min="0" step="0.01" oninput="calculateInvoice()"><div style="margin-top:20px;padding:16px;background:var(--info-light);border-radius:var(--radius-sm);border:1px solid #b8cfe8"><div style="font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px">Calculated Summary</div><div id="inv-summary" style="font-size:13px;color:var(--text-muted)">Enter times and rates to see summary</div><div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #b8cfe8;padding-top:10px"><span style="font-size:13px;font-weight:600;color:var(--info)">TOTAL DUE</span><span id="inv-total" style="font-size:24px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info)">$0.00</span></div></div></div></div><div style="display:flex;gap:12px;margin-bottom:28px"><button class="btn btn-success" onclick="generateInvoicePDF()">⬇ Download Invoice PDF</button><button class="btn btn-ghost" onclick="clearInvoice()">Clear</button></div><div class="action-bar" style="margin-top:8px"><h2 style="font-size:15px;color:var(--accent)">📋 Draft Invoices</h2></div><div id="draftInvoicesList"><div class="empty-state" style="font-size:13px">No draft invoices yet — add start/end time in Finalize Case to auto-generate one</div></div><div class="action-bar" style="margin-top:24px"><h2 style="font-size:15px">Saved Invoices</h2></div><div id="savedInvoicesList"><div class="empty-state">No invoices saved yet</div></div></div><div class="section" id="tab-caselog"><div class="action-bar"><h2>Case Log</h2></div><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px"><div class="inv-tab-bar" style="margin-bottom:0"><button class="inv-tab active" id="cltab-dev" onclick="setCaseLogTab('dev')">Devarsh</button><button class="inv-tab" id="cltab-josh" onclick="setCaseLogTab('josh')">Josh</button></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">From</label><input type="date" id="cl-date-from" style="width:145px;padding:6px 10px;font-size:13px" oninput="renderCaseLog()" onchange="renderCaseLog()"></div><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">To</label><input type="date" id="cl-date-to" style="width:145px;padding:6px 10px;font-size:13px" oninput="renderCaseLog()" onchange="renderCaseLog()"></div><button class="btn btn-ghost btn-sm" onclick="clearCaseLogDates()">Clear Dates</button><button class="btn btn-primary btn-sm" onclick="downloadCaseLogPDF()">⬇ Download PDF</button></div></div><div id="caselog-dev"><div class="grid-4" style="margin-bottom:20px" id="cl-metrics-dev"></div><div class="card" id="cl-table-dev"></div></div><div id="caselog-josh" style="display:none"><div class="grid-4" style="margin-bottom:20px" id="cl-metrics-josh"></div><div class="card" id="cl-table-josh"></div></div></div><div class="section" id="tab-analytics"><div class="action-bar"><h2>Analytics</h2></div><div class="card" style="margin-bottom:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Surgery Centers &amp; Rates</div><button class="btn btn-ghost btn-sm" onclick="showAddCenterForm()">+ Add Center</button></div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">Set rates per surgery center.</div><div id="add-center-form" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px"><div><label>Surgery Center Name</label><input type="text" id="sc-name" placeholder="e.g. Wio Oral Surgery"></div><div><label>First Hour Rate ($)</label><input type="number" id="sc-first-hour" min="0" step="0.01" placeholder="e.g. 800.00"></div><div><label>Per 15-min Rate ($)</label><input type="number" id="sc-per-15" min="0" step="0.01" placeholder="e.g. 150.00"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px"><div><label>Default Provider <span style="font-size:11px;color:var(--text-faint);font-weight:400">(optional)</span></label><input type="text" id="sc-provider" placeholder="e.g. Dr. Smith"></div><div><label>Invoice Email <span style="font-size:11px;color:var(--text-faint);font-weight:400">(optional)</span></label><input type="text" id="sc-invoice-email" placeholder="e.g. billing@center.com"></div></div><div style="display:flex;gap:10px"><button class="btn btn-success btn-sm" onclick="saveCenter()">&#x2713; Save Center</button><button class="btn btn-ghost btn-sm" onclick="hideAddCenterForm()">Cancel</button></div></div><div id="surgery-centers-list"></div></div><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Monthly Breakdown</div><div style="display:flex;gap:10px"><select id="analytics-year" onchange="renderAnalytics()" style="width:120px"></select><div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;display:flex"><button id="abtn-all" onclick="setAnalyticsFilter('all')" style="background:var(--info);color:#fff;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer">All</button><button id="abtn-dev" onclick="setAnalyticsFilter('dev')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted)">Devarsh</button><button id="abtn-josh" onclick="setAnalyticsFilter('josh')" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 14px;cursor:pointer;color:var(--text-muted)">Josh</button></div></div></div><div id="analytics-monthly"></div></div></div><div class="section" id="tab-cs-log"><div class="action-bar"><h2>Controlled Substance Log</h2><button class="btn btn-primary btn-sm" onclick="downloadCSLogPDF()">⬇ Download PDF</button></div><div class="inv-tab-bar" style="margin-bottom:20px"><button class="inv-tab active" id="cstab-ephedrine" onclick="setCSTab('ephedrine')">Ephedrine</button><button class="inv-tab" id="cstab-ketamine" onclick="setCSTab('ketamine')">Ketamine</button><button class="inv-tab" id="cstab-versed" onclick="setCSTab('versed')">Versed (Midazolam)</button></div><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px"><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">From</label><input type="date" id="cs-date-from" style="width:145px;padding:6px 10px;font-size:13px" onchange="renderCSLog()"></div><div style="display:flex;align-items:center;gap:8px"><label style="margin:0;font-size:12px;font-weight:500;color:var(--text-muted)">To</label><input type="date" id="cs-date-to" style="width:145px;padding:6px 10px;font-size:13px" onchange="renderCSLog()"></div><button class="btn btn-ghost btn-sm" onclick="clearCSDates()">Clear</button></div><div id="cs-log-content"></div><div style="margin-top:32px"><div class="action-bar" style="margin-bottom:14px"><h2 style="font-size:15px">Drug Transfer Log <span style="font-size:12px;font-weight:400;color:var(--text-faint)">Josh → Dev</span></h2><button class="btn btn-ghost btn-sm" onclick="showAddTransferForm()">+ Record Transfer</button></div><div style="font-size:12px;color:var(--text-faint);margin-bottom:14px">
 Records controlled substance transfers from Josh (purchaser) to Dev for audit purposes.
 </div><div id="transfer-form" style="display:none" class="card" style="margin-bottom:16px"><div class="card-title">Record Drug Transfer</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px"><div><label>Date of Transfer</label><input type="date" id="tf-date"></div><div><label>Drug</label><select id="tf-drug"><option value="">— Select drug —</option><option value="Ephedrine">Ephedrine</option><option value="Ketamine">Ketamine</option><option value="Versed (Midazolam)">Versed (Midazolam)</option><option value="Nubain (Nalbuphine)">Nubain (Nalbuphine)</option><option value="Other">Other</option></select></div><div><label>Amount Transferred (mg)</label><input type="number" id="tf-amount" min="0" step="0.1" placeholder="e.g. 500"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px"><div><label>Number of Vials / Units</label><input type="number" id="tf-vials" min="1" step="1" placeholder="e.g. 2"></div><div><label>Notes (optional)</label><input type="text" id="tf-notes" placeholder="e.g. For upcoming case ATL-DEV-..."></div></div><div style="display:flex;gap:10px"><button class="btn btn-success" onclick="saveTransfer()">✓ Record Transfer</button><button class="btn btn-ghost" onclick="hideAddTransferForm()">Cancel</button></div></div><div id="transfer-log-list"></div></div></div><div id="csProviderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center"><div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="font-size:16px;font-weight:500;margin-bottom:6px">Provider Signature</div><div style="font-size:13px;color:var(--text-faint);margin-bottom:16px">Sign below using your finger or mouse</div><canvas id="csProviderCanvas" width="450" height="160"
 style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100%;touch-action:none;background:#fff;cursor:crosshair;display:block"></canvas><div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="clearCSProviderCanvas()">Clear</button><div style="display:flex;gap:10px"><button class="btn btn-ghost" onclick="closeCSProviderModal()">Cancel</button><button class="btn btn-success" onclick="saveCSProviderSig()">✓ Save Signature</button></div></div></div></div><div id="providerSigModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center"><div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="font-size:16px;font-weight:500;margin-bottom:6px">Provider Signature</div><div style="font-size:13px;color:var(--text-faint);margin-bottom:16px">Sign below using your finger or mouse</div><canvas id="providerSigCanvas" width="450" height="160"
@@ -1930,7 +1930,7 @@ const cvChecked = ['neg','htn','cad','angina','mi','chf','murmur','arrythmia'].f
 const pulmChecked = ['neg','asthma','copd','uri','o2','cpap','sleep-apnea','bl-breath-sounds','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.replace(/-/g,' ')).join(', ').toUpperCase();
 return `<div class="case-item"><div class="case-item-header" onclick="togglePreop('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${r['po-caseId'] || 'No Case ID'}
-<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="event.stopPropagation();openFaxModal('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:#0369a1">📠 Send Fax</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
+<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
 ${r['po-allergies']?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Allergies</strong><div style="font-size:13px;margin-top:3px">${r['po-allergies']}</div></div>`:''}
 ${cvChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Cardiovascular</strong><div style="font-size:13px;margin-top:3px">${cvChecked}</div></div>`:''}
 ${pulmChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Pulmonary</strong><div style="font-size:13px;margin-top:3px">${pulmChecked}</div></div>`:''}
@@ -3997,7 +3997,7 @@ document.getElementById('add-center-form').style.display = 'block';
 };
 window.hideAddCenterForm = function() {
 document.getElementById('add-center-form').style.display = 'none';
-['sc-name','sc-first-hour','sc-per-15','sc-provider','sc-invoice-email','sc-fax-number'].forEach(id => {
+['sc-name','sc-first-hour','sc-per-15','sc-provider','sc-invoice-email'].forEach(id => {
 const el = document.getElementById(id);
 if(el) el.value = '';
 });
@@ -4010,12 +4010,11 @@ const per15 = parseFloat(document.getElementById('sc-per-15')?.value) || 0;
 if(!name) { alert('Please enter a surgery center name.'); return; }
 const provider = document.getElementById('sc-provider')?.value.trim() || '';
 const invoiceEmail = document.getElementById('sc-invoice-email')?.value.trim() || '';
-const faxNumber = document.getElementById('sc-fax-number')?.value.trim() || '';
 if(window._editingCenterId) {
 const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
-if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, faxNumber };
+if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail };
 } else {
-surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, faxNumber });
+surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail });
 }
 setSyncing(true);
 await saveSurgeryCenters();
@@ -4034,7 +4033,6 @@ document.getElementById('sc-first-hour').value = c.firstHour;
 document.getElementById('sc-per-15').value = c.per15;
 document.getElementById('sc-provider').value = c.provider || '';
 document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
-document.getElementById('sc-fax-number').value = c.faxNumber || '';
 document.getElementById('add-center-form').style.display = 'block';
 document.getElementById('add-center-form').scrollIntoView({ behavior:'smooth' });
 };
@@ -4062,7 +4060,6 @@ ${surgeryCenters.map(c => `
 <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center"><div><div style="font-size:14px;font-weight:500">${c.name}</div>
 ${c.provider?`<div style="font-size:11px;color:var(--text-faint)">👤 ${c.provider}</div>`:''}
 ${c.invoiceEmail?`<div style="font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace">📧 ${c.invoiceEmail}</div>`:''}
-${c.faxNumber?`<div style="font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace">📠 ${c.faxNumber}</div>`:''}
 </div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.firstHour.toFixed(2)}</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.per15.toFixed(2)}</div><div style="display:flex;gap:6px"><button onclick="editCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏</button><button onclick="deleteCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑</button></div></div>`).join('')}`;
 }
 // ── ANALYTICS ──
@@ -4635,13 +4632,68 @@ document.addEventListener('click', function(e) {
 const dropdown = document.getElementById('reports-dropdown');
 if(dropdown && !dropdown.contains(e.target)) closeReportsDropdown();
 });
+</script>
+<!-- ── FAX MODAL ── -->
+<div id="faxModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99998;align-items:flex-start;justify-content:center;overflow-y:auto;padding:30px 16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:720px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
+    <div style="background:#1d3557;color:#fff;padding:18px 24px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:16px;font-weight:600">📠 Send Fax — Pre-Op Record</div>
+        <div style="font-size:12px;opacity:.75;margin-top:2px">Review the fax before sending</div>
+      </div>
+      <button onclick="closeFaxModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
+    </div>
+    <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax Number</label>
+        <input type="tel" id="fax-destination" placeholder="+12345678901" style="width:100%;padding:8px 11px;font-size:14px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Include country code, e.g. +1 for US</div>
+      </div>
+      <button id="fax-send-btn" onclick="confirmAndSendFax()" style="background:#1d3557;color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">✉ Confirm & Send Fax</button>
+    </div>
+    <div style="padding:20px 24px;background:#f4f4f4">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#666;margin-bottom:10px">FAX PREVIEW</div>
+      <div id="faxPreviewContent" style="background:#fff;border:1px solid #ccc;border-radius:4px;padding:28px;font-family:Arial,sans-serif;font-size:12px;color:#000;max-width:640px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,.08)"></div>
+    </div>
+  </div>
+</div>
 
-
+<script>
 // ── FAX FUNCTIONS ──
 let _faxRecord = null;
 
+// Called from the Send Fax button on the pre-op form itself (reads current form values)
+window.openFaxModalFromForm = async function() {
+  // Save the form first so nothing is lost
+  await savePreop();
+  // Build a record object from the current form fields
+  const r = {};
+  // Collect all inputs/selects/textareas in the preop tab
+  document.querySelectorAll('#tab-preop input, #tab-preop select, #tab-preop textarea').forEach(el => {
+    if(el.id) {
+      if(el.type === 'checkbox') r[el.id] = el.checked;
+      else if(el.type === 'radio') { if(el.checked) r[el.name] = el.value; }
+      else r[el.id] = el.value;
+    }
+  });
+  // Also get the hidden caseId
+  r['po-caseId'] = document.getElementById('po-caseId')?.value || document.getElementById('po-caseId-display')?.textContent || '';
+  r.worker = window._currentWorker || (document.getElementById('wbtn-dev')?.classList.contains('active-dev') ? 'dev' : 'josh');
+
+  _faxRecord = r;
+
+  // Auto-fill fax from surgery center if saved
+  const centerId = document.getElementById('po-surgery-center')?.value;
+  const center = (window.surgeryCenters||[]).find(c => c.id === centerId);
+  const faxInput = document.getElementById('fax-destination');
+  if(faxInput) faxInput.value = center?.faxNumber || '';
+
+  document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
+  document.getElementById('faxModal').style.display = 'flex';
+};
+
+// Called from the 📠 Fax button on a saved pre-op record in the history list
 window.openFaxModal = async function(id) {
-  // Load record fresh
   try {
     const snap = await getDoc(doc(db,'atlas','preop'));
     const records = snap.exists() ? (snap.data().records||[]) : [];
@@ -4649,17 +4701,12 @@ window.openFaxModal = async function(id) {
     if(!r) { alert('Record not found.'); return; }
     _faxRecord = r;
 
-    // Auto-fill fax number from surgery center if available
-    const center = surgeryCenters.find(c => c.id === r['po-surgery-center']);
+    const center = (window.surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
     const faxInput = document.getElementById('fax-destination');
     if(faxInput) faxInput.value = center?.faxNumber || '';
 
-    // Build fax preview
     document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
-
-    // Show modal
-    const modal = document.getElementById('faxModal');
-    modal.style.display = 'flex';
+    document.getElementById('faxModal').style.display = 'flex';
   } catch(e) {
     alert('Error loading record: ' + e.message);
   }
@@ -4673,7 +4720,7 @@ window.closeFaxModal = function() {
 window.confirmAndSendFax = async function() {
   const faxNumber = document.getElementById('fax-destination').value.trim();
   if(!faxNumber) { alert('Please enter a destination fax number.'); return; }
-  if(!faxNumber.startsWith('+')) { alert('Please include country code, e.g. +12345678901'); return; }
+  if(!faxNumber.startsWith('+')) { alert('Please include the country code, e.g. +12345678901'); return; }
   if(!_faxRecord) { alert('No record loaded.'); return; }
 
   const btn = document.getElementById('fax-send-btn');
@@ -4694,13 +4741,14 @@ window.confirmAndSendFax = async function() {
     });
     const data = await res.json();
     if(res.ok && data.success) {
-      alert('✅ Fax sent successfully to ' + faxNumber + '!\nFax SID: ' + (data.sid || 'N/A'));
+      alert('✅ Fax sent to ' + faxNumber + '!
+SID: ' + (data.sid || 'N/A'));
       closeFaxModal();
     } else {
       alert('❌ Fax failed: ' + (data.error || 'Unknown error'));
     }
   } catch(e) {
-    alert('❌ Error sending fax: ' + e.message);
+    alert('❌ Error: ' + e.message);
   } finally {
     btn.textContent = '✉ Confirm & Send Fax';
     btn.disabled = false;
@@ -4708,140 +4756,163 @@ window.confirmAndSendFax = async function() {
 };
 
 function buildFaxHTML(r) {
-  const today = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
-  const caseId = r['po-caseId'] || '—';
-  const provider = r['po-provider'] || '—';
+  const today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const caseId = r['po-caseId']||'—';
+  const provider = r['po-provider']||'—';
   const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
-  const worker = r.worker === 'dev' ? 'Devarsh Murthy, CRNA' : 'Josh Condado, CRNA';
-  const center = surgeryCenters.find(c => c.id === r['po-surgery-center']);
-  const centerName = center?.name || '—';
+  const callDT = r['po-callDateTime'] ? new Date(r['po-callDateTime']).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+  const worker = r.worker==='dev' ? 'Devarsh Murthy, CRNA' : 'Josh Condado, CRNA';
+  const center = (window.surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
+  const centerName = center?.name||'—';
 
-  const cvFlags = ['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase()).join(', ');
-  const ekgFlags = ['nsr','afib','bbb','lvh','chngs'].filter(x=>r['po-ekg-'+x]).map(x=>x.toUpperCase()).join(', ');
-  const pulmFlags = ['asthma','copd','uri','o2','cpap','sleep-apnea','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' ')).join(', ');
-  const gastroFlags = ['gerd','hiat-hern','ulcer'].filter(x=>r['po-gastro-'+x]).map(x=>x.toUpperCase().replace(/-/g,' ')).join(', ');
-  const renalFlags = ['dialysis','esrd'].filter(x=>r['po-renal-'+x]).map(x=>x.toUpperCase()).join(', ');
-  const neuroFlags = ['depression','anxiety-disorder','seizures','cva','nm-disease'].filter(x=>r['po-neuro-'+x]).map(x=>x.toUpperCase().replace(/-/g,' ')).join(', ');
-  const metaFlags = ['iddm','niddm','thyroid','hx-hep','obesity','morbid-obesity'].filter(x=>r['po-meta-'+x]).map(x=>x.toUpperCase().replace(/-/g,' ')).join(', ');
-  const otherFlags = ['hiv','hep-c','anemia','steroids','cancers','drug-abuse','coagulopathy','chemotherapy'].filter(x=>r['po-other-'+x]).map(x=>x.toUpperCase().replace(/-/g,' ')).join(', ');
+  // Helper: collect checked flags from checkboxes
+  const flags = (keys, prefix) => keys.filter(x=>r[prefix+x]).map(x=>x.toUpperCase().replace(/-/g,' ')).join(', ');
 
-  const row = (label, val) => val ? `<tr><td style="padding:4px 12px 4px 0;font-size:11px;font-weight:700;text-transform:uppercase;color:#555;white-space:nowrap;vertical-align:top;width:140px">${label}</td><td style="padding:4px 0;font-size:12px;color:#000">${val}</td></tr>` : '';
+  // All system findings
+  const cv     = [r['po-cv-neg']?'NEG':'', ...['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase())].filter(Boolean).join(', ');
+  const cvNote = r['po-cv-comment']||r['po-cv-other-val']||'';
+  const ekg    = [r['po-ekg-nsr']?'NSR':'', ...['afib','bbb','lvh','chngs'].filter(x=>r['po-ekg-'+x]).map(x=>x.toUpperCase())].filter(Boolean).join(', ');
+  const ekgNote= r['po-ekg-comment']||r['po-ekg-other-val']||'';
+  const pulm   = [r['po-pulm-neg']?'NEG':'', ...['asthma','copd','uri','o2','cpap','sleep-apnea','smoker','bl-breath-sounds'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
+  const pulmNote=r['po-pulm-comment']||r['po-pulm-other-val']||'';
+  const gastro = [r['po-gastro-neg']?'NEG':'', ...['gerd','hiat-hern','ulcer'].filter(x=>r['po-gastro-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
+  const gastroNote=r['po-gastro-comment']||r['po-gastro-other-val']||'';
+  const renal  = [r['po-renal-neg']?'NEG':'', ...['dialysis','esrd'].filter(x=>r['po-renal-'+x]).map(x=>x.toUpperCase())].filter(Boolean).join(', ');
+  const renalNote=r['po-renal-comment']||r['po-renal-other-val']||'';
+  const neuro  = [r['po-neuro-neg']?'NEG':'', ...['depression','anxiety-disorder','seizures','cva','nm-disease'].filter(x=>r['po-neuro-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
+  const neuroNote=r['po-neuro-comment']||r['po-neuro-other-val']||'';
+  const meta   = [r['po-meta-neg']?'NEG':'', ...['iddm','niddm','thyroid','hx-hep','obesity','morbid-obesity'].filter(x=>r['po-meta-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
+  const metaNote=r['po-meta-comment']||r['po-meta-other-val']||'';
+  const other  = [...['hiv','hep-c','anemia','steroids','cancers','drug-abuse','coagulopathy','chemotherapy'].filter(x=>r['po-other-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].join(', ');
+  const otherNote=r['po-other-comment']||r['po-other-other-val']||'';
+  const teeth  = [...['intact','missing','denture'].filter(x=>r['po-teeth-'+x]).map(x=>x.toUpperCase())].join(', ');
+  const teethNote=r['po-teeth-comment']||r['po-teeth-other-val']||'';
+  const pupil  = [r['po-pupil-normal']?'NORMAL':'', r['po-pupil-dilated']?'DILATED':'', r['po-pupil-constricted']?'CONSTRICTED':''].filter(Boolean).join(', ');
+  const pupilNote=r['po-pupil-comment']||r['po-pupil-other-val']||'';
 
-  return `
-<div style="font-family:Arial,sans-serif;color:#000;font-size:12px">
+  // Physical exam
+  const heartWNL = r['po-heart-wnl'] ? 'WNL' : '';
+  const heartNote = r['po-heart-notes']||'';
+  const lungsWNL = r['po-lungs-wnl'] ? 'WNL' : '';
+  const lungsNote = r['po-lungs-notes']||'';
+  const abdWNL = r['po-abd-wnl'] ? 'WNL' : '';
+  const abdNote = r['po-abd-notes']||'';
 
-  <!-- COVER SHEET -->
-  <div style="border-bottom:3px solid #000;padding-bottom:16px;margin-bottom:20px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start">
-      <div>
-        <div style="font-size:20px;font-weight:700;letter-spacing:1px">ATLAS ANESTHESIA</div>
-        <div style="font-size:11px;color:#444;margin-top:2px">Pre-Operative Anesthesia Assessment</div>
-      </div>
-      <div style="font-size:11px;text-align:right;color:#444">
-        <div>${today}</div>
-        <div style="margin-top:2px">CONFIDENTIAL FAX</div>
-      </div>
-    </div>
+  // Weight/BMI
+  const weightLbs = r['po-weight-lbs']||'';
+  const weightKg = r['po-weight-kg-val']||'';
+  const bmi = r['po-bmi-val']||'';
+  const heightFt = r['po-height-ft']||'';
+  const heightIn = r['po-height-in']||'';
+  const heightCm = r['po-height-cm-val']||'';
+  const weightStr = [weightLbs?weightLbs+' lbs':'', weightKg?weightKg+' kg':''].filter(Boolean).join(' / ');
+  const heightStr = [heightFt&&heightIn?heightFt+"'"+heightIn+'"':'', heightCm?heightCm+' cm':''].filter(Boolean).join(' / ');
+
+  // Vitals / VSS
+  const vss = r['po-vss']||'';
+  const assessTime = r['po-assessTime']||'';
+
+  // Driver / NPO
+  const driverName = r['po-driverName']||'';
+  const driverRel = r['po-driverRel']||'';
+  const nodriveNote = r['po-nodrive']||'';
+  const npo = r['po-npo'] ? 'Confirmed' : 'Not confirmed';
+  const qa = r['po-qa']||'';
+
+  // Helpers
+  const sec = (title) => `<tr><td colspan="4" style="padding:10px 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#333;border-bottom:1px solid #ccc">${title}</td></tr>`;
+  const row2 = (label,val,note) => (val||note) ? `<tr><td style="padding:4px 10px 4px 0;font-size:11px;font-weight:700;color:#555;white-space:nowrap;vertical-align:top;width:130px">${label}</td><td style="padding:4px 0;font-size:12px;color:#000">${val||''}${note?`<span style="color:#555;font-style:italic;font-size:11px"> — ${note}</span>`:''}` + `</td></tr>` : '';
+  const row4 = (l1,v1,l2,v2) => (v1||v2)?`<tr><td style="padding:4px 10px 4px 0;font-size:11px;font-weight:700;color:#555;white-space:nowrap;vertical-align:top;width:120px">${l1}</td><td style="padding:4px 10px 4px 0;font-size:12px;color:#000;width:160px">${v1||'—'}</td><td style="padding:4px 10px 4px 0;font-size:11px;font-weight:700;color:#555;white-space:nowrap;width:120px">${l2}</td><td style="padding:4px 0;font-size:12px;color:#000">${v2||'—'}</td></tr>`:'';
+  const flag = (val) => val ? `<span style="display:inline-block;background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;margin:1px 2px">${val}</span>` : '';
+
+  return `<div style="font-family:Arial,sans-serif;color:#000;font-size:12px;line-height:1.4">
+
+  <!-- LETTERHEAD -->
+  <div style="border-bottom:3px solid #000;padding-bottom:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start">
+    <div><div style="font-size:20px;font-weight:700;letter-spacing:1px">ATLAS ANESTHESIA</div><div style="font-size:10px;color:#555;margin-top:2px">Pre-Operative Anesthesia Assessment</div></div>
+    <div style="font-size:10px;text-align:right;color:#555"><div>${today}</div><div style="margin-top:2px;font-weight:700">CONFIDENTIAL FAX</div></div>
   </div>
 
-  <!-- FAX COVER FIELDS -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
-    <tr style="background:#f0f0f0">
-      <td style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;width:100px">TO:</td>
-      <td style="padding:8px 12px;font-size:13px;font-weight:600">${provider}</td>
-      <td style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;width:80px">DATE:</td>
-      <td style="padding:8px 12px;font-size:12px">${today}</td>
-    </tr>
-    <tr>
-      <td style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase">FROM:</td>
-      <td style="padding:8px 12px;font-size:12px">${worker}</td>
-      <td style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase">PAGES:</td>
-      <td style="padding:8px 12px;font-size:12px">1</td>
-    </tr>
-    <tr style="background:#f0f0f0">
-      <td style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase">RE:</td>
-      <td style="padding:8px 12px;font-size:12px" colspan="3">Pre-Op Assessment — Case ${caseId} — Surgery Date: ${surgDate}</td>
-    </tr>
-    <tr>
-      <td style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase">FACILITY:</td>
-      <td style="padding:8px 12px;font-size:12px" colspan="3">${centerName}</td>
-    </tr>
+  <!-- COVER FIELDS -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+    <tr style="background:#f0f0f0"><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;width:70px">TO:</td><td style="padding:6px 10px;font-size:12px;font-weight:600">${provider}</td><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;width:55px">DATE:</td><td style="padding:6px 10px;font-size:11px">${today}</td></tr>
+    <tr><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">FROM:</td><td style="padding:6px 10px;font-size:11px">${worker}</td><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">PAGES:</td><td style="padding:6px 10px;font-size:11px">1</td></tr>
+    <tr style="background:#f0f0f0"><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">RE:</td><td style="padding:6px 10px;font-size:11px" colspan="3">Pre-Op Assessment — Case <strong>${caseId}</strong> — Surgery: <strong>${surgDate}</strong></td></tr>
+    <tr><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">FACILITY:</td><td style="padding:6px 10px;font-size:11px" colspan="3">${centerName}</td></tr>
   </table>
 
-  <div style="border:1px solid #000;padding:8px 12px;font-size:11px;margin-bottom:20px;background:#fffde7">
-    <strong>CONFIDENTIALITY NOTICE:</strong> This fax contains privileged and confidential information. If you have received this in error, please notify the sender immediately and destroy this document.
-  </div>
+  <div style="border:1px solid #999;padding:6px 10px;font-size:10px;margin-bottom:14px;background:#fffde7"><strong>CONFIDENTIALITY NOTICE:</strong> This fax contains privileged and confidential health information intended solely for the named recipient. If received in error, please notify the sender immediately and destroy this document.</div>
 
-  <!-- DIVIDER -->
-  <div style="border-top:2px solid #000;margin:20px 0"></div>
+  <div style="border-top:2px solid #000;margin:14px 0"></div>
 
-  <!-- H&P SECTION -->
-  <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;border-bottom:1px solid #000;padding-bottom:6px">Pre-Operative Assessment — History & Physical</div>
+  <!-- H&P TITLE -->
+  <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;border-bottom:1px solid #000;padding-bottom:5px">Pre-Operative History & Physical</div>
 
-  ${r['po-allergies'] ? `<div style="background:#fff0f0;border:1px solid #cc0000;padding:8px 12px;margin-bottom:12px;font-size:12px"><strong style="color:#cc0000">⚠ ALLERGIES: ${r['po-allergies']}</strong></div>` : ''}
-  ${r['po-iv-difficulty'] ? `<div style="background:#fff8e1;border:1px solid #f59e0b;padding:6px 12px;margin-bottom:8px;font-size:12px"><strong>⚠ Difficult IV Access${r['po-iv-difficulty-comment']?' — '+r['po-iv-difficulty-comment']:''}</strong></div>` : ''}
-  ${r['po-anesthesia-issues'] ? `<div style="background:#fff8e1;border:1px solid #f59e0b;padding:6px 12px;margin-bottom:8px;font-size:12px"><strong>⚠ Previous Anesthesia Issues${r['po-anesthesia-issues-comment']?' — '+r['po-anesthesia-issues-comment']:''}</strong></div>` : ''}
+  <!-- ALERTS -->
+  ${r['po-allergies']?`<div style="background:#fff0f0;border:2px solid #c00;padding:7px 10px;margin-bottom:8px;font-size:11px"><strong style="color:#c00;font-size:12px">⚠ ALLERGIES: ${r['po-allergies']}</strong></div>`:''}
+  ${r['po-iv-difficulty']?`<div style="background:#fffbe6;border:1px solid #f59e0b;padding:6px 10px;margin-bottom:6px;font-size:11px"><strong>⚠ Difficult IV Access</strong>${r['po-iv-difficulty-comment']?' — '+r['po-iv-difficulty-comment']:''}</div>`:''}
+  ${r['po-anesthesia-issues']?`<div style="background:#fffbe6;border:1px solid #f59e0b;padding:6px 10px;margin-bottom:6px;font-size:11px"><strong>⚠ Previous Anesthesia Issues</strong>${r['po-anesthesia-issues-comment']?' — '+r['po-anesthesia-issues-comment']:''}</div>`:''}
 
-  <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-    ${row('Case ID', caseId)}
-    ${row('Surgery Date', surgDate)}
-    ${row('Provider', provider)}
-    ${row('Facility', centerName)}
-    ${row('Mallampati', r['mallampati'])}
-    ${row('Weight / BMI', (r['po-weight-kg-val']?r['po-weight-kg-val']+' kg':'') + (r['po-bmi-val']?' · BMI '+r['po-bmi-val']:''))}
-    ${row('Driver', r['po-driverName'] ? r['po-driverName']+(r['po-driverRel']?' ('+r['po-driverRel']+')':'') : '')}
+  <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
+
+    <!-- CASE INFO -->
+    ${sec('Case Information')}
+    ${row4('Case ID',caseId,'Surgery Date',surgDate)}
+    ${row4('Provider',provider,'Facility',centerName)}
+    ${row4('Call Date/Time',callDT,'Est. Hours',r['po-est-hours']?r['po-est-hours']+' hr':'')}
+    ${row4('Worker',worker,'Invoice Email',r['po-patientEmail']||'')}
+
+    <!-- VITALS & PHYSICAL -->
+    ${sec('Vitals & Measurements')}
+    ${row4('Height',heightStr,'Weight',weightStr)}
+    ${row4('BMI',bmi?bmi:'—','Mallampati',r['mallampati']?'Class '+r['mallampati']:'')}
+    ${row4('VSS / Vitals',vss,'Assessment Time',assessTime)}
+
+    <!-- PHYSICAL EXAM -->
+    ${sec('Physical Examination')}
+    ${row2('Heart',[heartWNL,heartNote].filter(Boolean).join(' — '))}
+    ${row2('Lungs',[lungsWNL,lungsNote].filter(Boolean).join(' — '))}
+    ${row2('Abdomen',[abdWNL,abdNote].filter(Boolean).join(' — '))}
+    ${row2('Pupils',pupil,pupilNote)}
+    ${row2('Teeth/Dentition',teeth,teethNote)}
+    ${row2('Venipuncture',r['po-venipuncture']||'')}
+
+    <!-- SYSTEMS REVIEW -->
+    ${sec('Systems Review')}
+    ${row2('Cardiovascular',cv,cvNote)}
+    ${row2('EKG',ekg,ekgNote)}
+    ${row2('Pulmonary',pulm,pulmNote)}
+    ${row2('GI / Gastro',gastro,gastroNote)}
+    ${row2('Renal',renal,renalNote)}
+    ${row2('Neurological',neuro,neuroNote)}
+    ${row2('Metabolic / Endocrine',meta,metaNote)}
+    ${row2('Other / Hematology',other,otherNote)}
+
+    <!-- HISTORY -->
+    ${sec('Medical & Social History')}
+    ${row2('Surgical History',r['po-surgicalHistory']||'')}
+    ${row2('Current Medications',r['po-medications']||'')}
+
+    <!-- PRE-OP CHECKLIST -->
+    ${sec('Pre-Op Checklist')}
+    ${row4('NPO Status',npo,'Driver',driverName?(driverName+(driverRel?' ('+driverRel+')':'')):'—')}
+    ${row2('No-Drive Note',nodriveNote)}
+    ${row2('Q&A / Notes',qa)}
+
+    <!-- INTRA-OP -->
+    ${sec('Intra-Operative')}
+    ${row4('Total Fluids',r['po-totalFluids']||'—','EBL',r['po-ebl']||'—')}
+
+    <!-- COMMENTS -->
+    ${r['po-comments']?sec('Comments')+''+row2('',r['po-comments']):''}
+
   </table>
 
-  <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-    ${row('Cardiovascular', cvFlags)}
-    ${row('EKG', ekgFlags)}
-    ${row('Pulmonary', pulmFlags)}
-    ${row('GI / Gastro', gastroFlags)}
-    ${row('Renal', renalFlags)}
-    ${row('Neurological', neuroFlags)}
-    ${row('Metabolic', metaFlags)}
-    ${row('Other', otherFlags)}
-  </table>
-
-  <table style="width:100%;border-collapse:collapse">
-    ${row('Medications', r['po-medications'])}
-    ${row('Surgical Hx', r['po-surgicalHistory'])}
-    ${row('NPO / Notes', r['po-comments'])}
-  </table>
-
-  <div style="border-top:1px solid #ccc;margin-top:20px;padding-top:10px;font-size:10px;color:#666;text-align:center">
-    Atlas Anesthesia · Pre-Operative Assessment · ${today}
+  <div style="border-top:1px solid #ccc;margin-top:14px;padding-top:8px;font-size:9px;color:#777;text-align:center">
+    Atlas Anesthesia · Pre-Operative Anesthesia Assessment · ${today} · CONFIDENTIAL
   </div>
 </div>`;
 }
-
 </script>
-<!-- ── FAX MODAL ── -->
-<div id="faxModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99998;align-items:flex-start;justify-content:center;overflow-y:auto;padding:30px 16px">
-  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:720px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
-    <!-- Header -->
-    <div style="background:#1d3557;color:#fff;padding:18px 24px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div style="font-size:16px;font-weight:600">📠 Send Fax — Pre-Op Record</div>
-        <div style="font-size:12px;opacity:.75;margin-top:2px">Preview the fax before sending</div>
-      </div>
-      <button onclick="closeFaxModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
-    </div>
-    <!-- Fax number input -->
-    <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <div style="flex:1;min-width:220px">
-        <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax Number</label>
-        <input type="tel" id="fax-destination" placeholder="+12345678901" style="width:100%;padding:8px 11px;font-size:14px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Include country code, e.g. +1 for US</div>
-      </div>
-      <button id="fax-send-btn" onclick="confirmAndSendFax()" class="btn btn-primary" style="margin-top:18px">✉ Confirm & Send Fax</button>
-    </div>
-    <!-- Fax preview -->
-    <div style="padding:24px;background:#f8f8f8">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);margin-bottom:12px">FAX PREVIEW</div>
-      <div id="faxPreviewContent" style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:32px;font-family:Arial,sans-serif;font-size:12px;color:#000;max-width:640px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,.08)"></div>
-    </div>
-  </div>
-</div>
 
 </body></html>
