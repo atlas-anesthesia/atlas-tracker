@@ -1097,6 +1097,8 @@ if(saveBtn) saveBtn.textContent = '✓ Finalize Case & Update Inventory';
 clearCase();
 renderHistory();
 renderMidCase();
+renderReports();
+if(typeof renderAnalytics === 'function') renderAnalytics();
 alert('✓ Case updated successfully!');
 showTab('history');
 } catch(editErr) {
@@ -1138,6 +1140,8 @@ csEntries = [];
 renderCSEntries();
 await Promise.all([saveInventory(), saveCases()]);
 clearCase();
+renderReports();
+if(typeof renderAnalytics === 'function') renderAnalytics();
 alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
 showTab('history');
 };
@@ -1556,8 +1560,9 @@ document.getElementById('lightbox').style.display='flex';
 window.closeLightbox=function(){document.getElementById('lightbox').style.display='none';};
 // ── REPORTS ──
 function renderReports() {
-const devCases=cases.filter(c=>c.worker==='dev');
-const joshCases=cases.filter(c=>c.worker==='josh');
+const finalized=cases.filter(c=>!c.draft);
+const devCases=finalized.filter(c=>c.worker==='dev');
+const joshCases=finalized.filter(c=>c.worker==='josh');
 function buildCard(el,label,cs,color){
 const total=cs.reduce((s,c)=>s+c.total,0);
 const avg=cs.length?total/cs.length:0;
@@ -1565,9 +1570,9 @@ el.innerHTML=`<div class="card-title" style="color:${color}">${label}</div><div 
 }
 buildCard(document.getElementById('reportDev'),'Devarsh',devCases,'var(--dev)');
 buildCard(document.getElementById('reportJosh'),'Josh',joshCases,'var(--josh)');
-buildCard(document.getElementById('reportCombined'),'Combined',cases,'var(--info)');
+buildCard(document.getElementById('reportCombined'),'Combined',finalized,'var(--info)');
 const usage={};
-cases.forEach(c=>c.items.forEach(i=>{if(!usage[i.generic])usage[i.generic]={qty:0,cost:0};usage[i.generic].qty+=i.qty;usage[i.generic].cost+=i.lineTotal;}));
+finalized.forEach(c=>c.items.forEach(i=>{if(!usage[i.generic])usage[i.generic]={qty:0,cost:0};usage[i.generic].qty+=i.qty;usage[i.generic].cost+=i.lineTotal;}));
 const sorted=Object.entries(usage).sort((a,b)=>b[1].cost-a[1].cost).slice(0,10);
 const topCard=document.getElementById('topItemsCard');
 if(!sorted.length){topCard.innerHTML='<div class="empty-state">No usage data yet</div>';return;}
