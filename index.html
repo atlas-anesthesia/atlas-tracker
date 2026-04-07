@@ -259,9 +259,21 @@ storageBucket: "atlas-ane.firebasestorage.app",
 messagingSenderId: "677020713040",
 appId: "1:677020713040:web:07f52f77fd225c607a5155"
 };
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+let app, auth, db;
+let firebaseReady = false;
+try {
+app = initializeApp(firebaseConfig);
+auth = getAuth(app);
+db = getFirestore(app);
+} catch(e) {
+console.error('Firebase init failed:', e);
+document.getElementById('loadingScreen').innerHTML =
+'<div style="text-align:center;padding:40px 20px">' +
+'<div style="font-size:18px;font-weight:600;color:#e74c3c;margin-bottom:12px">Connection Error</div>' +
+'<div style="font-size:13px;color:#999;margin-bottom:20px">Failed to initialize the connection to Atlas.<br>Error: ' + e.message + '</div>' +
+'<button onclick="location.reload()" style="padding:10px 28px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:14px;cursor:pointer">Retry</button>' +
+'</div>';
+}
 // ── STATE ──
 let items = [];
 let cases = [];
@@ -394,7 +406,28 @@ const EMAIL_WORKER_MAP = {
 'jxcondado@gmail.com': 'josh',
 'murthy.devarsh@gmail.com': 'dev'
 };
+// ── CONNECTION TIMEOUT ──
+const CONNECT_TIMEOUT_MS = 15000;
+let authStateReceived = false;
+if (auth) {
+const connectionTimer = setTimeout(() => {
+if (!authStateReceived) {
+console.error('Firebase auth state timeout after ' + CONNECT_TIMEOUT_MS + 'ms');
+const ls = document.getElementById('loadingScreen');
+if (ls && ls.style.display !== 'none') {
+ls.innerHTML =
+'<div style="text-align:center;padding:40px 20px">' +
+'<div style="font-size:18px;font-weight:600;color:#e74c3c;margin-bottom:12px">Connection Timeout</div>' +
+'<div style="font-size:13px;color:#999;margin-bottom:20px">Unable to connect to Atlas servers.<br>Please check your internet connection and try again.</div>' +
+'<button onclick="location.reload()" style="padding:10px 28px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:14px;cursor:pointer;margin-right:10px">Retry</button>' +
+'<button onclick="document.getElementById(\'loadingScreen\').style.display=\'none\';document.getElementById(\'loginScreen\').style.display=\'flex\'" style="padding:10px 28px;border-radius:8px;border:1px solid #666;background:transparent;color:#ccc;font-size:14px;cursor:pointer">Show Login</button>' +
+'</div>';
+}
+}
+}, CONNECT_TIMEOUT_MS);
 onAuthStateChanged(auth, async (user) => {
+authStateReceived = true;
+clearTimeout(connectionTimer);
 document.getElementById('loadingScreen').style.display='none';
 if(user) {
 currentUser = user;
@@ -454,6 +487,7 @@ document.getElementById('loginScreen').style.display='flex';
 document.getElementById('appScreen').style.display='none';
 }
 });
+} // end if(auth)
 // ── FIRESTORE INIT ──
 async function initData() {
 // Listen to items in real time
