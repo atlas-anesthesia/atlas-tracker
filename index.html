@@ -1922,6 +1922,7 @@ el.innerHTML = '<div class="empty-state">Loading...</div>';
 try {
 const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records || []) : [];
+window._rawPreopRecords = records; // keep cache in sync
 if(!records.length) { el.innerHTML='<div class="empty-state">No pre-op records saved yet</div>'; return; }
 el.innerHTML = records.map(r => {
 const pill = r.worker==='dev' ? 'pill-dev' : 'pill-josh';
@@ -3920,11 +3921,13 @@ console.error(e);
 };
 // ── SURGERY CENTERS ──
 let surgeryCenters = []; // loaded from Firebase
+window.surgeryCenters = surgeryCenters;
 async function loadSurgeryCenters() {
 try {
 const snap = await getDoc(doc(db,'atlas','surgerycenters'));
 surgeryCenters = snap.exists() ? (snap.data().centers || []) : [];
-} catch(e) { console.warn('loadSurgeryCenters:', e); surgeryCenters = []; }
+window.surgeryCenters = surgeryCenters;
+} catch(e) { console.warn('loadSurgeryCenters:', e); surgeryCenters = []; window.surgeryCenters = []; }
 populateCenterDropdowns();
 }
 async function saveSurgeryCenters() {
@@ -4632,33 +4635,8 @@ document.addEventListener('click', function(e) {
 const dropdown = document.getElementById('reports-dropdown');
 if(dropdown && !dropdown.contains(e.target)) closeReportsDropdown();
 });
-</script>
-<!-- ── FAX MODAL ── -->
-<div id="faxModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99998;align-items:flex-start;justify-content:center;overflow-y:auto;padding:30px 16px">
-  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:720px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
-    <div style="background:#1d3557;color:#fff;padding:18px 24px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div style="font-size:16px;font-weight:600">📠 Send Fax — Pre-Op Record</div>
-        <div style="font-size:12px;opacity:.75;margin-top:2px">Review the fax before sending</div>
-      </div>
-      <button onclick="closeFaxModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
-    </div>
-    <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
-      <div style="flex:1;min-width:220px">
-        <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax Number</label>
-        <input type="tel" id="fax-destination" placeholder="+12345678901" style="width:100%;padding:8px 11px;font-size:14px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Include country code, e.g. +1 for US</div>
-      </div>
-      <button id="fax-send-btn" onclick="confirmAndSendFax()" style="background:#1d3557;color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">✉ Confirm & Send Fax</button>
-    </div>
-    <div style="padding:20px 24px;background:#f4f4f4">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#666;margin-bottom:10px">FAX PREVIEW</div>
-      <div id="faxPreviewContent" style="background:#fff;border:1px solid #ccc;border-radius:4px;padding:28px;font-family:Arial,sans-serif;font-size:12px;color:#000;max-width:640px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,.08)"></div>
-    </div>
-  </div>
-</div>
 
-<script>
+
 // ── FAX FUNCTIONS ──
 let _faxRecord = null;
 
@@ -4683,7 +4661,7 @@ window.openFaxModalFromForm = function() {
 
   // Auto-fill fax number from surgery center if one is saved
   const centerId = document.getElementById('po-surgery-center')?.value;
-  const center = (window.surgeryCenters||[]).find(c => c.id === centerId);
+  const center = surgeryCenters.find(c => c.id === centerId);
   const faxInput = document.getElementById('fax-destination');
   if(faxInput) faxInput.value = center?.faxNumber || '';
 
@@ -4695,20 +4673,30 @@ window.openFaxModalFromForm = function() {
 // Called from the 📠 Fax button on a saved pre-op record in the history list
 window.openFaxModal = async function(id) {
   try {
-    const snap = await getDoc(doc(db,'atlas','preop'));
-    const records = snap.exists() ? (snap.data().records||[]) : [];
-    const r = records.find(x => x.id === id);
+    // Try cached records first, fall back to Firestore
+    let records = window._rawPreopRecords || [];
+    let r = records.find(x => x.id === id);
+    if(!r) {
+      // Not in cache — fetch fresh
+      const snap = await getDoc(doc(db,'atlas','preop'));
+      records = snap.exists() ? (snap.data().records||[]) : [];
+      window._rawPreopRecords = records;
+      r = records.find(x => x.id === id);
+    }
     if(!r) { alert('Record not found.'); return; }
     _faxRecord = r;
 
-    const center = (window.surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
+    const center = surgeryCenters.find(c => c.id === r['po-surgery-center']);
     const faxInput = document.getElementById('fax-destination');
     if(faxInput) faxInput.value = center?.faxNumber || '';
 
+    const modal = document.getElementById('faxModal');
+    if(!modal) { alert('Fax modal not found in DOM.'); return; }
     document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
-    document.getElementById('faxModal').style.display = 'flex';
+    modal.style.display = 'flex';
   } catch(e) {
-    alert('Error loading record: ' + e.message);
+    console.error('openFaxModal error:', e);
+    alert('Error loading fax preview: ' + e.message);
   }
 };
 
@@ -4766,7 +4754,7 @@ function buildFaxHTML(r) {
   const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
   const callDT = r['po-callDateTime'] ? new Date(r['po-callDateTime']).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
   const worker = r.worker==='dev' ? 'Devarsh Murthy, CRNA' : 'Josh Condado, CRNA';
-  const center = (window.surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
+  const center = surgeryCenters.find(c => c.id === r['po-surgery-center']);
   const centerName = center?.name||'—';
 
   // Helper: collect checked flags from checkboxes
@@ -4917,6 +4905,33 @@ function buildFaxHTML(r) {
   </div>
 </div>`;
 }
+
 </script>
+<!-- ── FAX MODAL ── -->
+<div id="faxModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99998;align-items:flex-start;justify-content:center;overflow-y:auto;padding:30px 16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:720px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
+    <div style="background:#1d3557;color:#fff;padding:18px 24px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:16px;font-weight:600">📠 Send Fax — Pre-Op Record</div>
+        <div style="font-size:12px;opacity:.75;margin-top:2px">Review the fax before sending</div>
+      </div>
+      <button onclick="closeFaxModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
+    </div>
+    <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax Number</label>
+        <input type="tel" id="fax-destination" placeholder="+12345678901" style="width:100%;padding:8px 11px;font-size:14px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Include country code, e.g. +1 for US</div>
+      </div>
+      <button id="fax-send-btn" onclick="confirmAndSendFax()" style="background:#1d3557;color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">✉ Confirm & Send Fax</button>
+    </div>
+    <div style="padding:20px 24px;background:#f4f4f4">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#666;margin-bottom:10px">FAX PREVIEW</div>
+      <div id="faxPreviewContent" style="background:#fff;border:1px solid #ccc;border-radius:4px;padding:28px;font-family:Arial,sans-serif;font-size:12px;color:#000;max-width:640px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,.08)"></div>
+    </div>
+  </div>
+</div>
+
+
 
 </body></html>
