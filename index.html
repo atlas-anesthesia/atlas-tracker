@@ -428,6 +428,14 @@ ind.textContent = (mappedWorker==='dev' ? 'Devarsh' : 'Josh') + "'s inventory wi
 // Default inventory tab to their own
 ['dev','josh','combined'].forEach(x => document.getElementById('itab-'+x).classList.toggle('active', x===mappedWorker));
 document.getElementById('userLabel').textContent = mappedWorker === 'dev' ? 'Devarsh' : 'Josh';
+// Default Case Log, CS Log, and Case History to logged-in user's perspective
+currentCaseLogTab = mappedWorker;
+['dev','josh'].forEach(x => { const el=document.getElementById('cltab-'+x); if(el) el.classList.toggle('active', x===mappedWorker); });
+document.getElementById('caselog-dev').style.display = mappedWorker==='dev' ? '' : 'none';
+document.getElementById('caselog-josh').style.display = mappedWorker==='josh' ? '' : 'none';
+currentHistoryFilter = mappedWorker;
+['all','dev','josh'].forEach(x => { const el=document.getElementById('hbtn-'+x); if(el) el.className='worker-btn'+(x===mappedWorker?' '+(mappedWorker==='dev'?'active-dev':'active-josh'):''); });
+document.getElementById('hbtn-all').className = 'worker-btn';
 document.getElementById('dateDisplay').textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 document.getElementById('caseDate').value = new Date().toISOString().split('T')[0];
 await initData();
@@ -2244,12 +2252,12 @@ return;
 }
 const sorted = [...workerCases].sort((a,b) => new Date(b.date) - new Date(a.date));
 tableEl.innerHTML = `
-<div style="display:grid;grid-template-columns:110px 1fr 120px 90px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint)"><span>Date</span><span>Procedure</span><span>Case ID</span><span>Provider</span></div>
+<div style="display:grid;grid-template-columns:110px 1fr 120px 90px 70px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint)"><span>Date</span><span>Procedure</span><span>Case ID</span><span>Provider</span><span></span></div>
 ${sorted.map((c,i) => `
-<div style="display:grid;grid-template-columns:110px 1fr 120px 90px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;background:${i%2===0?'transparent':'var(--surface2)'}"><div style="font-size:13px;font-family:'DM Mono',monospace">${fmtDate(c.date)}</div><div style="font-size:13px;font-weight:500">${c.procedure||'—'}
+<div style="display:grid;grid-template-columns:110px 1fr 120px 90px 70px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;background:${i%2===0?'transparent':'var(--surface2)'}"><div style="font-size:13px;font-family:'DM Mono',monospace">${fmtDate(c.date)}</div><div style="font-size:13px;font-weight:500">${c.procedure||'—'}
 ${c.notes?`<div style="font-size:11px;color:var(--text-faint)">${c.notes}</div>`:''}
 ${c.caseComments?`<div style="font-size:11px;color:var(--text-faint);font-style:italic">${c.caseComments}</div>`:''}
-</div><div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--text-faint)">${c.caseId||'—'}</div><div style="font-size:13px;color:var(--text-muted)">${c.provider||'—'}</div></div>`).join('')}
+</div><div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--text-faint)">${c.caseId||'—'}</div><div style="font-size:13px;color:var(--text-muted)">${c.provider||'—'}</div><div><button onclick="editFinalizedCase('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 8px">✏ Edit</button></div></div>`).join('')}
 <div style="padding-top:12px;margin-top:4px;border-top:2px solid var(--border-strong)"><span style="font-size:13px;font-weight:600;color:var(--text-muted)">${workerCases.length} case${workerCases.length!==1?'s':''} total</span></div>
 `;
 });
