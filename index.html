@@ -4683,20 +4683,22 @@ window.openFaxModal = async function(id) {
       window._rawPreopRecords = records;
       r = records.find(x => x.id === id);
     }
-    if(!r) { alert('Record not found.'); return; }
+    if(!r) { alert('Record not found. ID: ' + id + '\nCache size: ' + records.length); return; }
     _faxRecord = r;
 
-    const center = surgeryCenters.find(c => c.id === r['po-surgery-center']);
+    const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
     const faxInput = document.getElementById('fax-destination');
     if(faxInput) faxInput.value = center?.faxNumber || '';
 
     const modal = document.getElementById('faxModal');
     if(!modal) { alert('Fax modal not found in DOM.'); return; }
-    document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
+    const preview = document.getElementById('faxPreviewContent');
+    if(!preview) { alert('faxPreviewContent not found.'); return; }
+    preview.innerHTML = buildFaxHTML(r);
     modal.style.display = 'flex';
   } catch(e) {
     console.error('openFaxModal error:', e);
-    alert('Error loading fax preview: ' + e.message);
+    alert('Error: ' + e.message + '\nStack: ' + e.stack);
   }
 };
 
