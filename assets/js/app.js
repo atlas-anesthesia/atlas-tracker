@@ -649,7 +649,7 @@ if(tab==='history') { loadSavedInvoices().then(() => renderHistory()); }
 if(tab==='reports') renderReports();
 if(tab==='preop-history') renderPreopHistory();
 if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
-if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); renderDraftInvoices(); }
+if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); renderDraftInvoices(); setTimeout(injectBillingToggle, 100); }
 if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
 if(tab==='analytics') {
 // Ensure preop records are loaded for projections
@@ -4761,7 +4761,20 @@ window.deleteFlatRate = async function(centerId, flatRateId) {
 
 // ── INVOICE BILLING TYPE TOGGLE ──
 window.onBillingTypeChange = function() {
-  const type = document.getElementById('inv-billing-type')?.value;
+  // Update label styles
+  const hourlyLabel = document.getElementById('inv-billing-hourly-label');
+  const flatLabel   = document.getElementById('inv-billing-flat-label');
+  const selectedType = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
+  if(hourlyLabel && flatLabel) {
+    if(selectedType === 'hourly') {
+      hourlyLabel.style.cssText += ';border-color:var(--info);background:var(--info-light);color:var(--info)';
+      flatLabel.style.cssText   += ';border-color:var(--border);background:var(--surface);color:var(--text-muted)';
+    } else {
+      flatLabel.style.cssText   += ';border-color:var(--info);background:var(--info-light);color:var(--info)';
+      hourlyLabel.style.cssText += ';border-color:var(--border);background:var(--surface);color:var(--text-muted)';
+    }
+  }
+  const type = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
   const hourlyFields = document.getElementById('inv-hourly-fields');
   const flatFields   = document.getElementById('inv-flat-fields');
   if(!hourlyFields || !flatFields) return;
@@ -4940,7 +4953,7 @@ window.deleteFlatRate = async function(centerId, flatRateId) {
 
 // ── INVOICE BILLING TYPE TOGGLE ──
 window.onBillingTypeChange = function() {
-  const type = document.getElementById('inv-billing-type')?.value;
+  const type = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
   const hourlyFields = document.getElementById('inv-hourly-fields');
   const flatFields   = document.getElementById('inv-flat-fields');
   if(!hourlyFields || !flatFields) return;
@@ -4993,6 +5006,69 @@ window.updateInvoiceTotalDisplay = function() {
 
 
 // ── FLAT RATE INVOICE PDF ──
+
+function injectBillingToggle() {
+  if(document.getElementById('inv-billing-row')) return; // already injected
+
+  // Find the Start Time label+input block — insert billing toggle just before it
+  const startInput = document.getElementById('inv-start');
+  if(!startInput) return;
+
+  // Walk up to find the wrapper div for the Start Time field
+  let startWrapper = startInput.parentElement;
+  while(startWrapper && !startWrapper.querySelector('label') && startWrapper.parentElement) {
+    startWrapper = startWrapper.parentElement;
+  }
+  if(!startWrapper) return;
+  const parentSection = startWrapper.parentElement;
+  if(!parentSection) return;
+
+  // ── Billing Type row ──────────────────────────────────────────────────────
+  const billingRow = document.createElement('div');
+  billingRow.id = 'inv-billing-row';
+  billingRow.style.marginBottom = '18px';
+  billingRow.innerHTML =
+    '<label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:8px">Billing Type</label>' +
+    '<div style="display:flex;gap:10px">' +
+      '<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:9px 18px;border:1.5px solid var(--info);border-radius:var(--radius-sm);background:var(--info-light);color:var(--info);font-weight:500" id="inv-billing-hourly-label">' +
+        '<input type="radio" name="inv-billing-type" value="hourly" checked onchange="onBillingTypeChange()" style="width:15px;height:15px;accent-color:var(--info)"> Hourly' +
+      '</label>' +
+      '<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:9px 18px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-muted)" id="inv-billing-flat-label">' +
+        '<input type="radio" name="inv-billing-type" value="flat" onchange="onBillingTypeChange()" style="width:15px;height:15px;accent-color:var(--info)"> Flat Rate' +
+      '</label>' +
+    '</div>';
+
+  // ── Flat Rate procedure row ───────────────────────────────────────────────
+  const flatRow = document.createElement('div');
+  flatRow.id = 'inv-flat-fields';
+  flatRow.style.cssText = 'display:none;margin-bottom:18px';
+  flatRow.innerHTML =
+    '<label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:6px">Procedure (Flat Rate)</label>' +
+    '<select id="inv-flat-rate-select" onchange="onFlatRateSelect()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">' +
+      '<option value="">— Select a surgery center first —</option>' +
+    '</select>' +
+    '<div style="font-size:11px;color:var(--text-faint);margin-top:5px">Add flat rates per center in Analytics → Surgery Centers</div>';
+
+  // Insert before Start Time wrapper
+  parentSection.insertBefore(billingRow, startWrapper);
+  parentSection.insertBefore(flatRow, startWrapper);
+
+  // Style the radio labels to update on change
+  document.querySelectorAll('input[name="inv-billing-type"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      const hourlyLabel = document.getElementById('inv-billing-hourly-label');
+      const flatLabel   = document.getElementById('inv-billing-flat-label');
+      if(this.value === 'hourly') {
+        if(hourlyLabel) { hourlyLabel.style.borderColor='var(--info)'; hourlyLabel.style.background='var(--info-light)'; hourlyLabel.style.color='var(--info)'; }
+        if(flatLabel)   { flatLabel.style.borderColor='var(--border)'; flatLabel.style.background='var(--surface)'; flatLabel.style.color='var(--text-muted)'; }
+      } else {
+        if(flatLabel)   { flatLabel.style.borderColor='var(--info)'; flatLabel.style.background='var(--info-light)'; flatLabel.style.color='var(--info)'; }
+        if(hourlyLabel) { hourlyLabel.style.borderColor='var(--border)'; hourlyLabel.style.background='var(--surface)'; hourlyLabel.style.color='var(--text-muted)'; }
+      }
+    });
+  });
+}
+
 // ── BROWSER BACK BUTTON ──
 window.addEventListener('popstate', (event) => {
 const tab = event.state?.tab || 'preop';
