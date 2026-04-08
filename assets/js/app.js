@@ -4845,17 +4845,21 @@ window.onBillingTypeChange = function() {
   const hFields = document.getElementById('inv-hourly-fields');
   const fFields = document.getElementById('inv-flat-fields');
 
+  // Reset both labels first
+  if(hLabel) { hLabel.style.borderColor='var(--border)'; hLabel.style.background='var(--surface)'; hLabel.style.color='var(--text-muted)'; hLabel.style.fontWeight='500'; }
+  if(fLabel) { fLabel.style.borderColor='var(--border)'; fLabel.style.background='var(--surface)'; fLabel.style.color='var(--text-muted)'; fLabel.style.fontWeight='500'; }
+
+  // Highlight selected one
   if(type === 'flat') {
+    if(fLabel) { fLabel.style.borderColor='var(--info)'; fLabel.style.background='var(--info-light)'; fLabel.style.color='var(--info)'; fLabel.style.fontWeight='600'; }
     if(hFields) hFields.style.display = 'none';
     if(fFields) fFields.style.display = '';
-    if(fLabel)  { fLabel.style.borderColor='var(--info)'; fLabel.style.background='var(--info-light)'; fLabel.style.color='var(--info)'; }
-    if(hLabel)  { hLabel.style.borderColor='var(--border)'; hLabel.style.background='var(--surface)'; hLabel.style.color='var(--text-muted)'; }
     _renderFlatRateInfoCard();
+    populateFlatRateDropdown();
   } else {
+    if(hLabel) { hLabel.style.borderColor='var(--info)'; hLabel.style.background='var(--info-light)'; hLabel.style.color='var(--info)'; hLabel.style.fontWeight='600'; }
     if(hFields) hFields.style.display = '';
     if(fFields) fFields.style.display = 'none';
-    if(hLabel)  { hLabel.style.borderColor='var(--info)'; hLabel.style.background='var(--info-light)'; hLabel.style.color='var(--info)'; }
-    if(fLabel)  { fLabel.style.borderColor='var(--border)'; fLabel.style.background='var(--surface)'; fLabel.style.color='var(--text-muted)'; }
     _renderHourlyRateCard();
     calculateInvoice();
   }
@@ -4890,19 +4894,22 @@ window.populateFlatRateDropdown = function() {
 window.onFlatRateSelect = function() {
   const sel = document.getElementById('inv-flat-rate-select');
   const opt = sel ? sel.options[sel.selectedIndex] : null;
-  const amount = opt && opt.value ? parseFloat(opt.getAttribute('data-amount')) || 0 : 0;
-  const procedure = opt && opt.value ? opt.text.split(' — ')[0] : '';
+  const amount = (opt && opt.value) ? parseFloat(opt.getAttribute('data-amount')) || 0 : 0;
+  const procedure = (opt && opt.value) ? opt.text.split(' — ')[0].split(' -- ')[0] : '';
 
-  // Update the total display in the summary card
-  const totalEl = document.getElementById('inv-total');
+  const totalEl   = document.getElementById('inv-total');
   const summaryEl = document.getElementById('inv-summary');
-  if(totalEl) totalEl.textContent = amount > 0 ? '$' + amount.toFixed(2) : '$0.00';
-  if(summaryEl) {
-    if(amount > 0) {
-      summaryEl.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">Flat rate: <strong>' + procedure + '</strong></span>';
-    } else {
-      summaryEl.textContent = 'Select a procedure to see total';
-    }
+
+  if(amount > 0 && procedure) {
+    if(totalEl)   totalEl.textContent = '$' + amount.toFixed(2);
+    if(summaryEl) summaryEl.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center">'
+      + '<span style="font-size:13px;color:var(--text-muted)">Flat rate billing</span>'
+      + '</div>'
+      + '<div style="font-size:14px;font-weight:500;margin-top:4px;color:var(--text)">' + procedure + '</div>';
+  } else {
+    if(totalEl)   totalEl.textContent = '$0.00';
+    if(summaryEl) summaryEl.textContent = 'Select a procedure to see total';
   }
 };
 
@@ -4983,12 +4990,20 @@ function _generateFlatRateInvoicePDF(location, date, provider, procedure, total)
   doc.text('DESCRIPTION',20,y+7); doc.text('BILLING TYPE',110,y+7,{align:'center'}); doc.text('AMOUNT',W-20,y+7,{align:'right'});
   y += 12;
 
-  doc.setFillColor(...lightGray); doc.rect(14,y,W-28,10,'F');
+  // Row 1: procedure name
+  doc.setFillColor(...lightGray); doc.rect(14,y,W-28,12,'F');
   doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...black);
-  doc.text('Anesthesia Services — '+procedure,20,y+7);
-  doc.text('Flat Rate',110,y+7,{align:'center'});
+  doc.text('Anesthesia Services',20,y+8);
+  doc.text('Flat Rate',110,y+8,{align:'center'});
+  doc.text('$'+total.toFixed(2),W-20,y+8,{align:'right'});
+  y += 14;
+  // Row 2: procedure detail
+  doc.setFillColor(248,247,243); doc.rect(14,y,W-28,10,'F');
+  doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(...gray);
+  doc.text('Procedure: '+procedure,22,y+7);
+  doc.setFont('helvetica','bold'); doc.setTextColor(...navy);
   doc.text('$'+total.toFixed(2),W-20,y+7,{align:'right'});
-  y += 20;
+  y += 16;
 
   // Total
   doc.setFillColor(...navy); doc.roundedRect(120,y,W-134,18,2,2,'F');
@@ -5154,48 +5169,60 @@ window.removeFlatRateFromForm = function(idx) {
 
 
 function _renderFlatRateInfoCard() {
-  // Show flat rate table, hide hourly fields
-  var flatDisplay = document.getElementById('inv-flat-rate-display');
+  var flatDisplay  = document.getElementById('inv-flat-rate-display');
   var hourlyFields = document.getElementById('inv-hourly-rate-fields');
-  var cardTitle = document.getElementById('inv-rate-card-title');
-  if(flatDisplay) flatDisplay.style.display = '';
+  var summaryDiv   = flatDisplay ? flatDisplay.closest('.card')?.querySelector('[style*="info-light"]') : null;
+  var cardTitle    = document.getElementById('inv-rate-card-title');
+
   if(hourlyFields) hourlyFields.style.display = 'none';
-
-  var sel = document.getElementById('inv-location-select');
-  var center = (window.surgeryCenters||surgeryCenters||[]).find(function(c){ return c.id === (sel ? sel.value : ''); });
-  var frs = (center && Array.isArray(center.flatRates)) ? center.flatRates : [];
-
-  if(cardTitle) cardTitle.textContent = center ? 'Flat Rates — ' + center.name : 'Flat Rates';
+  if(flatDisplay)  flatDisplay.style.display  = '';
+  if(cardTitle) {
+    var sel = document.getElementById('inv-location-select');
+    var center = (window.surgeryCenters||surgeryCenters||[]).find(function(c){ return c.id === (sel ? sel.value : ''); });
+    cardTitle.textContent = center ? 'Flat Rates — ' + center.name : 'Flat Rates';
+  }
 
   var rowsEl = document.getElementById('inv-flat-rate-rows');
   if(!rowsEl) return;
 
-  if(!center) {
+  var sel2   = document.getElementById('inv-location-select');
+  var center2= (window.surgeryCenters||surgeryCenters||[]).find(function(c){ return c.id === (sel2 ? sel2.value : ''); });
+  var frs    = (center2 && Array.isArray(center2.flatRates)) ? center2.flatRates : [];
+
+  if(!center2) {
     rowsEl.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-faint);font-style:italic">Select a surgery center to see flat rates.</div>';
     return;
   }
   if(!frs.length) {
-    rowsEl.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-faint);font-style:italic">No flat rates for this center. Edit in Analytics to add.</div>';
+    rowsEl.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-faint);font-style:italic">No flat rates for this center.<br>Go to Analytics → edit this center → add flat rates.</div>';
     return;
   }
   rowsEl.innerHTML = frs.map(function(fr, idx) {
-    var bg = idx % 2 === 0 ? 'var(--bg)' : 'var(--surface2)';
+    var bg     = idx % 2 === 0 ? 'var(--bg)' : 'var(--surface2)';
     var border = idx < frs.length - 1 ? 'border-bottom:1px solid var(--border)' : '';
     return '<div style="display:grid;grid-template-columns:1fr auto">'
-      + '<div style="padding:10px 12px;font-size:13px;background:' + bg + ';' + border + '">' + fr.procedure + '</div>'
-      + '<div style="padding:10px 12px;font-size:14px;font-weight:600;color:var(--accent);background:' + bg + ';' + border + ';text-align:right">$' + Number(fr.amount).toFixed(2) + '</div>'
+      + '<div style="padding:10px 14px;font-size:13px;background:' + bg + ';' + border + '">' + fr.procedure + '</div>'
+      + '<div style="padding:10px 14px;font-size:14px;font-weight:600;color:var(--accent);background:' + bg + ';' + border + ';text-align:right;font-family:DM Mono,monospace">$' + Number(fr.amount).toFixed(2) + '</div>'
       + '</div>';
   }).join('');
 }
 
 function _renderHourlyRateCard() {
-  // Show hourly fields, hide flat rate table
-  var flatDisplay = document.getElementById('inv-flat-rate-display');
+  var flatDisplay  = document.getElementById('inv-flat-rate-display');
   var hourlyFields = document.getElementById('inv-hourly-rate-fields');
-  var cardTitle = document.getElementById('inv-rate-card-title');
-  if(flatDisplay) flatDisplay.style.display = 'none';
+  var cardTitle    = document.getElementById('inv-rate-card-title');
+  if(flatDisplay)  flatDisplay.style.display  = 'none';
   if(hourlyFields) hourlyFields.style.display = '';
   if(cardTitle) cardTitle.textContent = 'Rate Information';
+  // Re-wire center rates if a center is selected
+  var sel = document.getElementById('inv-location-select');
+  var center = (window.surgeryCenters||surgeryCenters||[]).find(function(c){ return c.id === (sel ? sel.value : ''); });
+  if(center) {
+    var fh  = document.getElementById('inv-first-hour');
+    var p15 = document.getElementById('inv-per-15');
+    if(fh)  fh.value  = center.firstHour.toFixed(2);
+    if(p15) p15.value = center.per15.toFixed(2);
+  }
   calculateInvoice();
 }
 
