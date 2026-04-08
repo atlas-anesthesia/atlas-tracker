@@ -95,7 +95,7 @@ Reports <span class="arrow">▼</span></button><div class="nav-dropdown-menu" id
   <option value="">— Select a surgery center —</option>
   <option value="__custom__">✏ Custom / one-off location</option>
 </select>
-<input type="text" id="inv-location" placeholder="Enter location name" style="display:none;margin-top:6px;width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">
+<input type="text" id="inv-location" placeholder="e.g. Precision Dentistry of Howard" style="display:none;margin-top:6px;width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">
 
 <label>Date of Service</label>
 <input type="date" id="inv-date">
@@ -118,7 +118,7 @@ Reports <span class="arrow">▼</span></button><div class="nav-dropdown-menu" id
       <option value="">— Select a procedure —</option>
     </select>
   </div>
-  <div id="inv-flat-custom">
+  <div id="inv-flat-custom" style="display:none">
     <label>Procedure Name</label>
     <input type="text" id="inv-custom-procedure" placeholder="e.g. Dual Arch" oninput="onCustomFlatChange()">
     <label>Flat Rate Amount ($)</label>
