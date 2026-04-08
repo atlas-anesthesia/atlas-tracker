@@ -2802,22 +2802,48 @@ totalEl.textContent = '$' + total.toFixed(2);
 return { total, roundedMins, timeStr, actualStr, breakdown };
 };
 window.generateInvoicePDF = function() {
-const location = document.getElementById('inv-location').value.trim();
-const date = document.getElementById('inv-date').value;
-const provider = document.getElementById('inv-provider').value;
-const start = document.getElementById('inv-start').value;
-const end = document.getElementById('inv-end').value;
-const firstHourRate = parseFloat(document.getElementById('inv-first-hour').value) || 0;
-const per15Rate = parseFloat(document.getElementById('inv-per-15').value) || 0;
-if(!location || !date || !start || !end) {
-alert('Please fill in all fields before generating the invoice.');
-return;
-}
-const calc = calculateInvoice();
-if(!calc) return;
-const { total, roundedMins, timeStr, actualStr } = calc;
-const invoiceNum = generateInvoiceNumber();
-const formattedDate = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  const billingType = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
+
+  // Get location — either from dropdown (center name) or manual text
+  const centerSel = document.getElementById('inv-location-select');
+  const center = (window.surgeryCenters||[]).find(c => c.id === (centerSel?.value||''));
+  const location = center ? center.name : (document.getElementById('inv-location')?.value.trim()||'');
+  const date = document.getElementById('inv-date').value;
+  const provider = document.getElementById('inv-provider').value;
+
+  if(!location || !date) {
+    alert('Please select a surgery center and date.');
+    return;
+  }
+
+  // ── FLAT RATE PATH ──────────────────────────────────────────────────────────
+  if(billingType === 'flat') {
+    const sel = document.getElementById('inv-flat-rate-select');
+    const opt = sel ? sel.options[sel.selectedIndex] : null;
+    const total = opt ? parseFloat(opt.getAttribute('data-amount'))||0 : 0;
+    const procedure = opt ? opt.text.split(' — ')[0] : '';
+    if(!total || !procedure || !opt?.value) {
+      alert('Please select a procedure from the flat rate dropdown.');
+      return;
+    }
+    _generateFlatRateInvoicePDF(location, date, provider, procedure, total);
+    return;
+  }
+
+  // ── HOURLY PATH ─────────────────────────────────────────────────────────────
+  const start = document.getElementById('inv-start').value;
+  const end = document.getElementById('inv-end').value;
+  const firstHourRate = parseFloat(document.getElementById('inv-first-hour').value) || 0;
+  const per15Rate = parseFloat(document.getElementById('inv-per-15').value) || 0;
+  if(!start || !end) {
+    alert('Please fill in start and end time.');
+    return;
+  }
+  const calc = calculateInvoice();
+  if(!calc) return;
+  const { total, roundedMins, timeStr, actualStr } = calc;
+  const invoiceNum = generateInvoiceNumber();
+  const formattedDate = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
 // Format times
 const fmtTime = t => {
 const [h, m] = t.split(':').map(Number);
