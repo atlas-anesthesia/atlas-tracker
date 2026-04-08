@@ -5114,68 +5114,51 @@ window.removeFlatRateFromForm = function(idx) {
 
 
 // ── INVOICE RATE CARD RENDERERS ──────────────────────────────────────────────
-function _getRateCard() {
-  // The Rate Information card is the second .card inside the invoice grid-2
-  const grid = document.querySelector('#tab-invoice .grid-2');
-  if(!grid) return null;
-  return grid.querySelectorAll('.card')[1] || null;
-}
+
 
 function _renderFlatRateInfoCard() {
-  const card = _getRateCard();
-  if(!card) return;
-  const sel = document.getElementById('inv-location-select');
-  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === (sel ? sel.value : ''));
-  const frs = (center && Array.isArray(center.flatRates)) ? center.flatRates : [];
+  // Show flat rate table, hide hourly fields
+  var flatDisplay = document.getElementById('inv-flat-rate-display');
+  var hourlyFields = document.getElementById('inv-hourly-rate-fields');
+  var cardTitle = document.getElementById('inv-rate-card-title');
+  if(flatDisplay) flatDisplay.style.display = '';
+  if(hourlyFields) hourlyFields.style.display = 'none';
+
+  var sel = document.getElementById('inv-location-select');
+  var center = (window.surgeryCenters||surgeryCenters||[]).find(function(c){ return c.id === (sel ? sel.value : ''); });
+  var frs = (center && Array.isArray(center.flatRates)) ? center.flatRates : [];
+
+  if(cardTitle) cardTitle.textContent = center ? 'Flat Rates — ' + center.name : 'Flat Rates';
+
+  var rowsEl = document.getElementById('inv-flat-rate-rows');
+  if(!rowsEl) return;
 
   if(!center) {
-    card.innerHTML = '<div class="card-title">Flat Rates</div>'
-      + '<div style="font-size:13px;color:var(--text-faint);font-style:italic">Select a surgery center to see flat rates.</div>';
+    rowsEl.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-faint);font-style:italic">Select a surgery center to see flat rates.</div>';
     return;
   }
   if(!frs.length) {
-    card.innerHTML = '<div class="card-title">Flat Rates &mdash; ' + center.name + '</div>'
-      + '<div style="font-size:13px;color:var(--text-faint);font-style:italic;margin-bottom:8px">No flat rates set for this center.</div>'
-      + '<div style="font-size:12px;color:var(--text-faint)">Go to Analytics, edit this center, and add flat rates.</div>';
+    rowsEl.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-faint);font-style:italic">No flat rates for this center. Edit in Analytics to add.</div>';
     return;
   }
-  var rows = frs.map(function(fr, idx) {
+  rowsEl.innerHTML = frs.map(function(fr, idx) {
     var bg = idx % 2 === 0 ? 'var(--bg)' : 'var(--surface2)';
-    var border = idx < frs.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
-    return '<div style="padding:10px 12px;font-size:13px;background:' + bg + ';' + border + '">' + fr.procedure + '</div>'
-         + '<div style="padding:10px 12px;font-size:14px;font-weight:600;font-family:DM Mono,monospace;color:var(--accent);background:' + bg + ';' + border + 'text-align:right">$' + Number(fr.amount).toFixed(2) + '</div>';
+    var border = idx < frs.length - 1 ? 'border-bottom:1px solid var(--border)' : '';
+    return '<div style="display:grid;grid-template-columns:1fr auto">'
+      + '<div style="padding:10px 12px;font-size:13px;background:' + bg + ';' + border + '">' + fr.procedure + '</div>'
+      + '<div style="padding:10px 12px;font-size:14px;font-weight:600;color:var(--accent);background:' + bg + ';' + border + ';text-align:right">$' + Number(fr.amount).toFixed(2) + '</div>'
+      + '</div>';
   }).join('');
-  card.innerHTML = '<div class="card-title">Flat Rates &mdash; ' + center.name + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr auto;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:8px">'
-    + '<div style="padding:7px 12px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);background:var(--surface2);border-bottom:1px solid var(--border)">Procedure</div>'
-    + '<div style="padding:7px 12px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);background:var(--surface2);border-bottom:1px solid var(--border);text-align:right">Rate</div>'
-    + rows + '</div>'
-    + '<div style="font-size:11px;color:var(--text-faint)">Select a procedure above to auto-fill the total.</div>';
 }
 
 function _renderHourlyRateCard() {
-  const card = _getRateCard();
-  if(!card) return;
-  card.innerHTML = '<div class="card-title">Rate Information</div>'
-    + '<label>First Hour Rate ($)</label>'
-    + '<input type="number" id="inv-first-hour" placeholder="e.g. 300.00" min="0" step="0.01" oninput="calculateInvoice()">'
-    + '<label>Per 15-Minute Rate ($) <span style="font-size:11px;color:var(--text-faint);font-weight:400">after first hour</span></label>'
-    + '<input type="number" id="inv-per-15" placeholder="e.g. 75.00" min="0" step="0.01" oninput="calculateInvoice()">'
-    + '<div style="margin-top:20px;padding:16px;background:var(--info-light);border-radius:var(--radius-sm);border:1px solid #b8cfe8">'
-    + '<div style="font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px">Calculated Summary</div>'
-    + '<div id="inv-summary" style="font-size:13px;color:var(--text-muted)">Enter times and rates to see summary</div>'
-    + '<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #b8cfe8;padding-top:10px">'
-    + '<span style="font-size:13px;font-weight:600;color:var(--info)">TOTAL DUE</span>'
-    + '<span id="inv-total" style="font-size:24px;font-weight:500;font-family:DM Mono,monospace;color:var(--info)">$0.00</span>'
-    + '</div></div>';
-  const sel = document.getElementById('inv-location-select');
-  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === (sel ? sel.value : ''));
-  if(center) {
-    var fh = document.getElementById('inv-first-hour');
-    var p15 = document.getElementById('inv-per-15');
-    if(fh) fh.value = center.firstHour.toFixed(2);
-    if(p15) p15.value = center.per15.toFixed(2);
-  }
+  // Show hourly fields, hide flat rate table
+  var flatDisplay = document.getElementById('inv-flat-rate-display');
+  var hourlyFields = document.getElementById('inv-hourly-rate-fields');
+  var cardTitle = document.getElementById('inv-rate-card-title');
+  if(flatDisplay) flatDisplay.style.display = 'none';
+  if(hourlyFields) hourlyFields.style.display = '';
+  if(cardTitle) cardTitle.textContent = 'Rate Information';
   calculateInvoice();
 }
 
