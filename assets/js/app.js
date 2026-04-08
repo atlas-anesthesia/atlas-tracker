@@ -632,7 +632,7 @@ document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
 document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
 document.querySelectorAll('.nav-dropdown-btn').forEach(b=>b.classList.remove('active'));
 document.querySelectorAll('.nav-dropdown-menu button').forEach(b=>b.classList.remove('active'));
-document.getElementById('tab-'+tab).classList.add('active');
+const tabEl = document.getElementById('tab-'+tab); if(tabEl) tabEl.classList.add('active'); else return;
 // Highlight correct nav item
 const directBtn = document.querySelector(`.nav > button[onclick="showTab('${tab}')"]`);
 if(directBtn) directBtn.classList.add('active');
