@@ -4088,7 +4088,6 @@ if(firstHourInput) firstHourInput.value = '';
 if(per15Input) per15Input.value = '';
 calculateInvoice();
 }
-  if(typeof populateFlatRateDropdown ==='function') populateFlatRateDropdown();
 };
 window.onSurgeryCenterChange = function() {
 updateDraftInvoicePreview();
@@ -4176,33 +4175,7 @@ ${surgeryCenters.map(c => `
 <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center"><div><div style="font-size:14px;font-weight:500">${c.name}</div>
 ${c.provider?`<div style="font-size:11px;color:var(--text-faint)">👤 ${c.provider}</div>`:''}
 ${c.invoiceEmail?`<div style="font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace">📧 ${c.invoiceEmail}</div>`:''}
-</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.firstHour.toFixed(2)}</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.per15.toFixed(2)}</div><div style="display:flex;gap:6px"><button onclick="editCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏</button><button onclick="deleteCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑</button></div></div>
-      <div style="margin-top:10px;padding:12px 16px;background:var(--surface2);border-radius:var(--radius-sm)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">Flat Rates</div>
-          <button onclick="showAddFlatRate('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">+ Add Flat Rate</button>
-        </div>
-        <div id="flat-rate-add-form-${c.id}" style="display:none;margin-bottom:10px">
-          <div style="display:grid;grid-template-columns:1fr 120px 80px;gap:8px;align-items:flex-end">
-            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:3px">Procedure Type</label>
-              <input type="text" id="fr-proc-${c.id}" placeholder="e.g. Dual Arch" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
-            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:3px">Flat Rate ($)</label>
-              <input type="number" id="fr-amt-${c.id}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
-            <div style="display:flex;gap:6px">
-              <button onclick="saveFlatRate('${c.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Save</button>
-              <button onclick="cancelFlatRate('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✕</button>
-            </div>
-          </div>
-        </div>
-        ${(c.flatRates&&c.flatRates.length) ? \`
-        <div style="display:grid;grid-template-columns:2fr 120px 50px;gap:6px;padding-bottom:6px;border-bottom:1px solid var(--border);font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint)"><span>Procedure</span><span>Rate</span><span></span></div>
-        \${c.flatRates.map(fr=>\`
-        <div style="display:grid;grid-template-columns:2fr 120px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--border);align-items:center">
-          <div style="font-size:13px">\${fr.procedure}</div>
-          <div style="font-size:13px;font-weight:600;font-family:'DM Mono',monospace;color:var(--accent)">$\${Number(fr.amount).toFixed(2)}</div>
-          <button onclick="deleteFlatRate('\${c.id}','\${fr.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);padding:2px 6px">🗑</button>
-        </div>\`).join('')}\` : '<div style="font-size:12px;color:var(--text-faint);font-style:italic">No flat rates yet</div>'}
-      </div>`).join('')}`;
+</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.firstHour.toFixed(2)}</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.per15.toFixed(2)}</div><div style="display:flex;gap:6px"><button onclick="editCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏</button><button onclick="deleteCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑</button></div></div>`).join('')}`;
 }
 // ── ANALYTICS ──
 let analyticsFilter = 'all';
@@ -4789,25 +4762,24 @@ window.deleteFlatRate = async function(centerId, flatRateId) {
 // ── INVOICE BILLING TYPE TOGGLE ──
 window.onBillingTypeChange = function() {
   const type = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
-  const hourlyLabel = document.getElementById('inv-billing-hourly-label');
-  const flatLabel   = document.getElementById('inv-billing-flat-label');
+  const hourlyLabel  = document.getElementById('inv-billing-hourly-label');
+  const flatLabel    = document.getElementById('inv-billing-flat-label');
   const hourlyFields = document.getElementById('inv-hourly-fields');
   const flatFields   = document.getElementById('inv-flat-fields');
-  
   if(type === 'flat') {
     if(hourlyFields) hourlyFields.style.display = 'none';
     if(flatFields)   flatFields.style.display   = '';
-    if(flatLabel)   { flatLabel.style.borderColor='var(--info)'; flatLabel.style.background='var(--info-light)'; flatLabel.style.color='var(--info)'; }
-    if(hourlyLabel) { hourlyLabel.style.borderColor='var(--border)'; hourlyLabel.style.background='var(--surface)'; hourlyLabel.style.color='var(--text-muted)'; }
-    populateFlatRateDropdown();
+    if(flatLabel)   { flatLabel.style.cssText   += ';border-color:var(--info);background:var(--info-light);color:var(--info)'; }
+    if(hourlyLabel) { hourlyLabel.style.cssText += ';border-color:var(--border);background:var(--surface);color:var(--text-muted)'; }
+    if(typeof populateFlatRateDropdown === 'function') populateFlatRateDropdown();
   } else {
     if(hourlyFields) hourlyFields.style.display = '';
     if(flatFields)   flatFields.style.display   = 'none';
-    if(hourlyLabel) { hourlyLabel.style.borderColor='var(--info)'; hourlyLabel.style.background='var(--info-light)'; hourlyLabel.style.color='var(--info)'; }
-    if(flatLabel)   { flatLabel.style.borderColor='var(--border)'; flatLabel.style.background='var(--surface)'; flatLabel.style.color='var(--text-muted)'; }
-    calculateInvoice();
+    if(hourlyLabel) { hourlyLabel.style.cssText += ';border-color:var(--info);background:var(--info-light);color:var(--info)'; }
+    if(flatLabel)   { flatLabel.style.cssText   += ';border-color:var(--border);background:var(--surface);color:var(--text-muted)'; }
+    if(typeof calculateInvoice === 'function') calculateInvoice();
   }
-};
+};;
 
 window.populateFlatRateDropdown = function() {
   const sel = document.getElementById('inv-flat-rate-select');
@@ -5027,7 +4999,7 @@ window.updateInvoiceTotalDisplay = function() {
 
 // ── FLAT RATE INVOICE PDF ──
 
-function injectBillingToggle() { /* billing toggle now embedded in HTML */ }
+function injectBillingToggle() { return; /* billing type now embedded in HTML */ }
 
 // ── BROWSER BACK BUTTON ──
 window.addEventListener('popstate', (event) => {
