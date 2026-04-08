@@ -4721,6 +4721,185 @@ await saveCases();
 setSyncing(false);
 renderHistory();
 };
+
+// ── FLAT RATE MANAGEMENT ──
+window.showAddFlatRate = function(centerId) {
+  const form = document.getElementById('flat-rate-add-form-'+centerId);
+  if(form) { form.style.display = form.style.display==='none'?'':'none'; }
+};
+window.cancelFlatRate = function(centerId) {
+  const form = document.getElementById('flat-rate-add-form-'+centerId);
+  if(form) form.style.display='none';
+};
+window.saveFlatRate = async function(centerId) {
+  const procEl = document.getElementById('fr-proc-'+centerId);
+  const amtEl  = document.getElementById('fr-amt-'+centerId);
+  const proc   = procEl ? procEl.value.trim() : '';
+  const amount = amtEl  ? parseFloat(amtEl.value)||0 : 0;
+  if(!proc || !amount) { alert('Please enter a procedure name and amount.'); return; }
+  const center = surgeryCenters.find(c => c.id === centerId);
+  if(!center) return;
+  if(!center.flatRates) center.flatRates = [];
+  center.flatRates.push({ id: uid(), procedure: proc, amount });
+  setSyncing(true);
+  await saveSurgeryCenters();
+  setSyncing(false);
+  renderSurgeryCenters();
+  populateCenterDropdowns();
+};
+window.deleteFlatRate = async function(centerId, flatRateId) {
+  if(!confirm('Delete this flat rate?')) return;
+  const center = surgeryCenters.find(c => c.id === centerId);
+  if(!center) return;
+  center.flatRates = (center.flatRates||[]).filter(fr => fr.id !== flatRateId);
+  setSyncing(true);
+  await saveSurgeryCenters();
+  setSyncing(false);
+  renderSurgeryCenters();
+  populateCenterDropdowns();
+};
+
+// ── INVOICE BILLING TYPE TOGGLE ──
+window.onBillingTypeChange = function() {
+  const type = document.getElementById('inv-billing-type')?.value;
+  const hourlyFields = document.getElementById('inv-hourly-fields');
+  const flatFields   = document.getElementById('inv-flat-fields');
+  if(!hourlyFields || !flatFields) return;
+  if(type === 'flat') {
+    hourlyFields.style.display = 'none';
+    flatFields.style.display   = '';
+    populateFlatRateDropdown();
+  } else {
+    hourlyFields.style.display = '';
+    flatFields.style.display   = 'none';
+  }
+  updateInvoiceTotalDisplay();
+};
+
+window.populateFlatRateDropdown = function() {
+  const sel = document.getElementById('inv-flat-rate-select');
+  const centerSel = document.getElementById('inv-location-select');
+  if(!sel) return;
+  const centerId = centerSel ? centerSel.value : '';
+  const center = surgeryCenters.find(c => c.id === centerId);
+  const frs = center ? (center.flatRates||[]) : [];
+  sel.innerHTML = '<option value="">— Select procedure —</option>'
+    + frs.map(fr => '<option value="'+fr.id+'" data-amount="'+fr.amount+'">'+fr.procedure+' — $'+Number(fr.amount).toFixed(2)+'</option>').join('');
+  updateInvoiceTotalDisplay();
+};
+
+window.onFlatRateSelect = function() {
+  updateInvoiceTotalDisplay();
+};
+
+window.updateInvoiceTotalDisplay = function() {
+  const type = document.getElementById('inv-billing-type')?.value || 'hourly';
+  const totalEl = document.getElementById('inv-total');
+  const summaryEl = document.getElementById('inv-summary');
+  if(type === 'flat') {
+    const sel = document.getElementById('inv-flat-rate-select');
+    const opt = sel ? sel.options[sel.selectedIndex] : null;
+    const amount = opt ? parseFloat(opt.getAttribute('data-amount'))||0 : 0;
+    if(totalEl) totalEl.textContent = amount > 0 ? '$'+amount.toFixed(2) : '$0.00';
+    if(summaryEl && amount > 0) {
+      const proc = opt ? opt.text.split(' — ')[0] : '';
+      summaryEl.innerHTML = '<div style="font-size:12px;color:var(--text-faint)">Flat rate billing</div><div style="font-size:13px;font-weight:500;margin-top:4px">'+proc+'</div>';
+    } else if(summaryEl) {
+      summaryEl.innerHTML = 'Select a procedure above';
+    }
+  } else {
+    if(typeof calculateInvoice === 'function') calculateInvoice();
+  }
+};
+
+
+// ── FLAT RATE INVOICE PDF ──
+function _generateFlatRateInvoicePDF(location, date, provider, procedure, total) {
+  const invoiceNum = (function() {
+    const now = new Date();
+    const d = now.toISOString().split('T')[0].replace(/-/g,'');
+    return 'ATL-INV-'+d+'-'+String(Math.floor(Math.random()*900)+100);
+  })();
+  const formattedDate = new Date(date+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'letter' });
+  const W = 215.9;
+  const navy=[29,53,87], white=[255,255,255], gray=[107,104,96], lightGray=[240,239,233], black=[26,25,22], lightBlue=[232,238,245];
+
+  // Header
+  doc.setFillColor(...navy); doc.rect(0,0,W,42,'F');
+  doc.setFillColor(255,255,255); doc.circle(20,20,12,'F');
+  const logoEl = document.querySelector('img[style*="border-radius:50%"]');
+  if(logoEl){try{doc.addImage(logoEl.src,'PNG',10,10,20,20);}catch(e){}}
+  doc.setTextColor(...white);
+  doc.setFontSize(20); doc.setFont('helvetica','bold'); doc.text('ATLAS ANESTHESIA',36,20);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.text('Mobile Anesthesia Services',36,28);
+  doc.setFontSize(26); doc.setFont('helvetica','bold'); doc.text('INVOICE',W-15,20,{align:'right'});
+  doc.setFontSize(9); doc.setFont('helvetica','normal');
+  doc.text('# '+invoiceNum,W-15,28,{align:'right'});
+  doc.text('Date: '+formattedDate,W-15,34,{align:'right'});
+
+  let y = 55;
+
+  // Billed To / From
+  doc.setFillColor(...lightGray);
+  doc.roundedRect(14,y,85,38,2,2,'F'); doc.roundedRect(116,y,85,38,2,2,'F');
+  doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(...gray);
+  doc.text('BILLED TO',20,y+8); doc.text('FROM',122,y+8);
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(...black);
+  doc.text(location,20,y+17);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+  doc.text('Anesthesia Services',20,y+25); doc.text(formattedDate,20,y+32);
+  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(...black);
+  doc.text('Atlas Anesthesia',122,y+17);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+  doc.text('Provider: '+provider,122,y+25); doc.text('Mobile Anesthesia Services',122,y+32);
+  y += 50;
+
+  // Flat Rate badge
+  doc.setFillColor(...lightBlue);
+  doc.roundedRect(14,y,W-28,10,2,2,'F');
+  doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(...navy);
+  doc.text('FLAT RATE BILLING',W/2,y+7,{align:'center'});
+  y += 16;
+
+  // Table
+  doc.setFillColor(...navy); doc.roundedRect(14,y,W-28,10,1,1,'F');
+  doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(...white);
+  doc.text('DESCRIPTION',20,y+7); doc.text('BILLING TYPE',110,y+7,{align:'center'}); doc.text('AMOUNT',W-20,y+7,{align:'right'});
+  y += 12;
+
+  doc.setFillColor(...lightGray); doc.rect(14,y,W-28,10,'F');
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...black);
+  doc.text('Anesthesia Services — '+procedure,20,y+7);
+  doc.text('Flat Rate',110,y+7,{align:'center'});
+  doc.text('$'+total.toFixed(2),W-20,y+7,{align:'right'});
+  y += 20;
+
+  // Total
+  doc.setFillColor(...navy); doc.roundedRect(120,y,W-134,18,2,2,'F');
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...white);
+  doc.text('TOTAL DUE',128,y+7);
+  doc.setFontSize(16); doc.text('$'+total.toFixed(2),W-20,y+12,{align:'right'});
+  y += 28;
+
+  // Footer
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...gray);
+  doc.text('Thank you for choosing Atlas Anesthesia — Mobile Anesthesia Services',W/2,y,{align:'center'});
+  doc.text('Invoice '+invoiceNum+' · Generated '+new Date().toLocaleDateString(),W/2,y+6,{align:'center'});
+  doc.setDrawColor(...navy); doc.setLineWidth(1.5); doc.line(14,y+12,W-14,y+12);
+
+  doc.save('Atlas-Invoice-'+invoiceNum+'.pdf');
+
+  // Save record
+  const invoiceRecord = {
+    id: uid(), invoiceNum, location, date: formattedDate, rawDate: date,
+    provider, billingType:'flat', procedure, total,
+    savedAt: new Date().toISOString(), worker: currentWorker, linkedCaseId: ''
+  };
+  saveInvoiceRecord(invoiceRecord);
+}
+
 // ── BROWSER BACK BUTTON ──
 window.addEventListener('popstate', (event) => {
 const tab = event.state?.tab || 'preop';
