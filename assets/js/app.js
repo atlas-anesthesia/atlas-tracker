@@ -670,237 +670,211 @@ if(tab==='caselog') renderCaseLog();
 if(tab==='payout') renderPayoutTab();
 };
 
-// ── PAYOUT CALCULATOR (Josh only) ──
+
+// ── PAYOUT CALCULATOR ──
 (function() {
-  const PAYOUT_KEY = 'atlas_payout_entries';
-  const DIST_KEY   = 'atlas_payout_distributions';
-
-  function loadPayoutEntries() {
-    try { return JSON.parse(localStorage.getItem(PAYOUT_KEY)||'[]'); } catch(e) { return []; }
+  async function _load() {
+    try {
+      const { getDoc, doc, setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      const snap = await getDoc(doc(db, 'atlas', 'payouts'));
+      return snap.exists() ? snap.data() : { entries: [], distributions: [] };
+    } catch(e) { return { entries: [], distributions: [] }; }
   }
-  function savePayoutEntries(arr) {
-    try { localStorage.setItem(PAYOUT_KEY, JSON.stringify(arr)); } catch(e) {}
+  async function _save(data) {
+    setSyncing(true);
+    await setDoc(doc(db, 'atlas', 'payouts'), data);
+    setSyncing(false);
   }
-  function loadDistributions() {
-    try { return JSON.parse(localStorage.getItem(DIST_KEY)||'[]'); } catch(e) { return []; }
-  }
-  function saveDistributions(arr) {
-    try { localStorage.setItem(DIST_KEY, JSON.stringify(arr)); } catch(e) {}
-  }
-  function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-  function fmt$(n) { return '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-  function fmtDate(d) { if(!d) return '—'; const p=d.split('-'); return `${p[1]}/${p[2]}/${p[0]}`; }
+  function _uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  function _fmt(n) { return '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function _fmtD(d) { if(!d) return '-'; const p=d.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; }
+  function _isExp(cat) { return cat==='meds'||cat==='other-expense'; }
+  const CATS = { meds:'Medications / Supplies', labor:'Hours Worked', 'other-income':'Other Income', 'other-expense':'Other Expense' };
 
-  const CAT_LABEL = {
-    meds: '💊 Medications / Supplies',
-    labor: '⏱ Hours Worked',
-    'other-income': '➕ Other Income',
-    'other-expense': '➖ Other Expense'
-  };
-
-  function isExpense(cat) { return cat==='meds'||cat==='other-expense'; }
-
-  window.renderPayoutTab = function() {
-    const entries = loadPayoutEntries();
-    const dists   = loadDistributions();
-
-    // Totals
-    const totalIn   = entries.filter(e=>!isExpense(e.cat)).reduce((s,e)=>s+e.amount,0);
-    const totalOut  = entries.filter(e=>isExpense(e.cat)).reduce((s,e)=>s+e.amount,0);
+  function _totals(worker, data) {
+    const entries = (data.entries||[]).filter(e=>e.worker===worker);
+    const dists   = (data.distributions||[]).filter(d=>d.worker===worker);
+    const totalIn  = entries.filter(e=>!_isExp(e.cat)).reduce((s,e)=>s+e.amount,0);
+    const totalOut = entries.filter(e=> _isExp(e.cat)).reduce((s,e)=>s+e.amount,0);
     const totalDist = dists.reduce((s,d)=>s+d.amount,0);
-    const netContrib = totalOut - totalIn;  // net cash Josh put in (expenses minus income credited)
-    const joshCases = (window.cases||[]).filter(c=>c.worker==='josh'&&!c.draft);
-    const joshRevenue = joshCases.reduce((s,c)=>{
-      const sup=(c.items||[]).reduce((a,i)=>a+(parseFloat(i.lineTotal)||0),0);
-      const cs=(c.savedCsEntries||[]).reduce((a,e)=>{
-        const cpm=typeof getCostPerMG==='function'?getCostPerMG(e.drug):0;
-        const mg=(parseFloat(e.amountGiven)||0)+(parseFloat(e.wastedAmt)||0);
-        return a+cpm*mg;
-      },0);
-      return s+sup+cs;
-    },0);
-    const recommended = Math.max(0, joshRevenue - totalDist - netContrib);
-
-    // Summary cards
-    document.getElementById('payout-summary-cards').innerHTML = `
-      <div class="metric-card"><div class="metric-label">Josh Revenue (Cases)</div><div class="metric-value" style="color:var(--accent)">${fmt$(joshRevenue)}</div></div>
-      <div class="metric-card"><div class="metric-label">Your Expenses Paid</div><div class="metric-value" style="color:var(--warn)">${fmt$(totalOut)}</div></div>
-      <div class="metric-card"><div class="metric-label">Total Distributed</div><div class="metric-value" style="color:#2d6a4f">${fmt$(totalDist)}</div></div>
-      <div class="metric-card" style="border-left:3px solid var(--info)"><div class="metric-label">Suggested Payout</div><div class="metric-value" style="color:var(--info)">${fmt$(recommended)}</div></div>
-    `;
-
-    // Update recommended in dist form if visible
-    const rec = document.getElementById('dist-recommended');
-    if(rec) rec.innerHTML = `
-      <div style="margin-bottom:8px"><span style="color:var(--accent);font-weight:600">Case Revenue:</span> ${fmt$(joshRevenue)}</div>
-      <div style="margin-bottom:8px"><span style="color:var(--warn);font-weight:600">Your Expenses:</span> − ${fmt$(totalOut)}</div>
-      <div style="margin-bottom:8px"><span style="color:var(--info);font-weight:600">Credits/Income:</span> − ${fmt$(totalIn)}</div>
-      <div style="margin-bottom:8px"><span style="color:#2d6a4f;font-weight:600">Already Distributed:</span> − ${fmt$(totalDist)}</div>
-      <div style="border-top:1px solid #b8cfe8;padding-top:10px;margin-top:4px"><span style="font-weight:700;color:var(--info)">Suggested: ${fmt$(recommended)}</span></div>
-    `;
-
-    // Entries list
-    const el = document.getElementById('payout-entries-list');
-    if(!entries.length) {
-      el.innerHTML = '<div class="empty-state">No entries yet — add expenses or income</div>';
-    } else {
-      const sorted = [...entries].sort((a,b)=>b.date.localeCompare(a.date));
-      el.innerHTML = sorted.map(e=>`
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)">
-          <div>
-            <div style="font-size:13px;font-weight:500">${CAT_LABEL[e.cat]||e.cat}</div>
-            <div style="font-size:12px;color:var(--text-muted)">${e.desc||'—'}</div>
-            ${e.notes?`<div style="font-size:11px;color:var(--text-faint);font-style:italic">${e.notes}</div>`:''}
-            <div style="font-size:11px;color:var(--text-faint)">${fmtDate(e.date)}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0;margin-left:12px">
-            <div style="font-size:14px;font-weight:600;color:${isExpense(e.cat)?'var(--warn)':'var(--accent)'}">${isExpense(e.cat)?'−':'+'} ${fmt$(e.amount)}</div>
-            <button onclick="deletePayoutEntry('${e.id}')" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:2px 0">Delete</button>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    // Distributions list
-    const dl = document.getElementById('payout-dist-list');
-    if(!dists.length) {
-      dl.innerHTML = '<div class="empty-state">No distributions recorded yet</div>';
-    } else {
-      const sorted2 = [...dists].sort((a,b)=>b.date.localeCompare(a.date));
-      let running = 0;
-      const rows = sorted2.map(d=>{
-        running += d.amount;
-        return `
-          <div style="padding:10px 0;border-bottom:1px solid var(--border)">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start">
-              <div>
-                <div style="font-size:14px;font-weight:600;color:#2d6a4f">💸 ${fmt$(d.amount)}</div>
-                <div style="font-size:11px;color:var(--text-faint)">${fmtDate(d.date)}</div>
-                ${d.notes?`<div style="font-size:12px;color:var(--text-muted);margin-top:3px;font-style:italic">${d.notes}</div>`:''}
-              </div>
-              <button onclick="deleteDistribution('${d.id}')" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:2px 0">Delete</button>
-            </div>
-          </div>
-        `;
-      });
-      dl.innerHTML = rows.join('')+`<div style="padding:12px 0;font-size:13px;font-weight:600;color:#2d6a4f;border-top:2px solid var(--border-strong)">Total Distributed: ${fmt$(dists.reduce((s,d)=>s+d.amount,0))}</div>`;
-    }
-  };
-
-  window.showAddPayoutExpense = function() {
-    document.getElementById('payout-add-form').style.display='';
-    document.getElementById('payout-dist-form').style.display='none';
-    document.getElementById('payout-date').value = new Date().toISOString().split('T')[0];
-    document.getElementById('payout-amount').value='';
-    document.getElementById('payout-desc').value='';
-    document.getElementById('payout-notes').value='';
-  };
-  window.cancelPayoutEntry = function() { document.getElementById('payout-add-form').style.display='none'; };
-
-  window.savePayoutEntry = function() {
-    const cat = document.getElementById('payout-cat').value;
-    const desc = document.getElementById('payout-desc').value.trim();
-    const date = document.getElementById('payout-date').value;
-    const amount = parseFloat(document.getElementById('payout-amount').value)||0;
-    const notes = document.getElementById('payout-notes').value.trim();
-    if(!date||!amount) { alert('Please enter a date and amount.'); return; }
-    const entries = loadPayoutEntries();
-    entries.push({ id:uid(), cat, desc, date, amount, notes, createdAt: new Date().toISOString() });
-    savePayoutEntries(entries);
-    document.getElementById('payout-add-form').style.display='none';
-    renderPayoutTab();
-  };
-
-  window.deletePayoutEntry = function(id) {
-    if(!confirm('Delete this entry?')) return;
-    savePayoutEntries(loadPayoutEntries().filter(e=>e.id!==id));
-    renderPayoutTab();
-  };
-
-  window.showRecordDistribution = function() {
-    document.getElementById('payout-dist-form').style.display='';
-    document.getElementById('payout-add-form').style.display='none';
-    document.getElementById('dist-date').value = new Date().toISOString().split('T')[0];
-    document.getElementById('dist-amount').value='';
-    document.getElementById('dist-notes').value='';
-    renderPayoutTab(); // update recommended
-  };
-  window.cancelDistribution = function() { document.getElementById('payout-dist-form').style.display='none'; };
-
-  window.saveDistribution = function() {
-    const amount = parseFloat(document.getElementById('dist-amount').value)||0;
-    const date   = document.getElementById('dist-date').value;
-    const notes  = document.getElementById('dist-notes').value.trim();
-    if(!date||!amount) { alert('Please enter a date and amount.'); return; }
-    const dists = loadDistributions();
-    dists.push({ id:uid(), amount, date, notes, createdAt: new Date().toISOString() });
-    saveDistributions(dists);
-    document.getElementById('payout-dist-form').style.display='none';
-    renderPayoutTab();
-    alert(`✓ Distribution of ${fmt$(amount)} recorded!`);
-  };
-
-  window.deleteDistribution = function(id) {
-    if(!confirm('Delete this distribution record?')) return;
-    saveDistributions(loadDistributions().filter(d=>d.id!==id));
-    renderPayoutTab();
-  };
-
-  window.downloadPayoutReport = function() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const entries = loadPayoutEntries();
-    const dists   = loadDistributions();
-    const joshCases = (window.cases||[]).filter(c=>c.worker==='josh'&&!c.draft);
-    const joshRevenue = joshCases.reduce((s,c)=>{
+    const rev = (cases||[]).filter(c=>c.worker===worker&&!c.draft).reduce((s,c)=>{
       return s+(c.total||0);
     },0);
-    const totalOut = entries.filter(e=>isExpense(e.cat)).reduce((s,e)=>s+e.amount,0);
-    const totalIn  = entries.filter(e=>!isExpense(e.cat)).reduce((s,e)=>s+e.amount,0);
-    const totalDist= dists.reduce((s,d)=>s+d.amount,0);
-    const recommended = Math.max(0, joshRevenue - totalDist - (totalOut-totalIn));
+    const suggested = Math.max(0, rev - totalDist - (totalOut - totalIn));
+    return { entries, dists, totalIn, totalOut, totalDist, rev, suggested };
+  }
 
-    doc.setFontSize(16); doc.setFont(undefined,'bold');
-    doc.text('Atlas Anesthesia — Josh Payout Report', 20, 20);
-    doc.setFontSize(10); doc.setFont(undefined,'normal');
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 28);
+  function _section(worker, canEdit, data) {
+    const wname  = worker==='dev'?'Devarsh':'Josh';
+    const wcolor = worker==='dev'?'var(--dev)':'var(--josh)';
+    const { entries, dists, totalIn, totalOut, totalDist, rev, suggested } = _totals(worker, data);
+    const sorted  = [...entries].sort((a,b)=>b.date.localeCompare(a.date));
+    const sortedD = [...dists].sort((a,b)=>b.date.localeCompare(a.date));
 
-    let y = 40;
-    doc.setFontSize(12); doc.setFont(undefined,'bold');
-    doc.text('SUMMARY', 20, y); y+=8;
-    doc.setFont(undefined,'normal'); doc.setFontSize(10);
-    doc.text(`Case Revenue (Josh): ${fmt$(joshRevenue)}`, 20, y); y+=6;
-    doc.text(`Total Expenses Paid: ${fmt$(totalOut)}`, 20, y); y+=6;
-    doc.text(`Credits / Income:    ${fmt$(totalIn)}`, 20, y); y+=6;
-    doc.text(`Total Distributed:   ${fmt$(totalDist)}`, 20, y); y+=6;
-    doc.setFont(undefined,'bold');
-    doc.text(`Suggested Payout:    ${fmt$(recommended)}`, 20, y); y+=14;
+    const btns = canEdit ? `
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <button onclick="showAddPayoutExpense('${worker}')" class="btn btn-ghost btn-sm">+ Add Entry</button>
+        <button onclick="showRecordDistribution('${worker}')" class="btn btn-ghost btn-sm" style="color:var(--accent)">Record Distribution</button>
+        <button onclick="downloadPayoutReport('${worker}')" class="btn btn-ghost btn-sm">Download PDF</button>
+      </div>` : `<div style="font-size:12px;color:var(--text-faint);margin-bottom:12px;font-style:italic">View only — log in as ${wname} to edit</div>`;
 
-    doc.setFont(undefined,'bold'); doc.setFontSize(12);
-    doc.text('EXPENSE & INCOME LOG', 20, y); y+=8;
-    doc.setFont(undefined,'normal'); doc.setFontSize(9);
-    const sorted = [...entries].sort((a,b)=>a.date.localeCompare(b.date));
-    sorted.forEach(e=>{
-      if(y>270){doc.addPage();y=20;}
-      const sign = isExpense(e.cat)?'−':'+';
-      const line = `${fmtDate(e.date)}  ${sign}${fmt$(e.amount).padStart(10)}  [${(CAT_LABEL[e.cat]||e.cat).replace(/[^ -~]/g,'').trim()}]  ${e.desc||''}`;
-      doc.text(line.substring(0,100), 20, y); y+=5;
-      if(e.notes){ doc.setTextColor(120); doc.text('  '+e.notes.substring(0,90), 20, y); doc.setTextColor(0); y+=5; }
-    });
-    y+=4;
-    doc.setFont(undefined,'bold'); doc.setFontSize(12);
-    if(y>265){doc.addPage();y=20;}
-    doc.text('DISTRIBUTION HISTORY', 20, y); y+=8;
-    doc.setFont(undefined,'normal'); doc.setFontSize(9);
-    const sortedD = [...dists].sort((a,b)=>a.date.localeCompare(b.date));
-    sortedD.forEach(d=>{
-      if(y>270){doc.addPage();y=20;}
-      doc.text(`${fmtDate(d.date)}  ${fmt$(d.amount).padStart(10)}  ${d.notes||''}`.substring(0,100), 20, y); y+=5;
-    });
+    const eRows = sorted.length ? sorted.map(e=>`
+      <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-size:13px;font-weight:500">${CATS[e.cat]||e.cat}</div>
+          <div style="font-size:12px;color:var(--text-muted)">${e.desc||'-'}</div>
+          ${e.notes?'<div style="font-size:11px;color:var(--text-faint);font-style:italic">'+e.notes+'</div>':''}
+          <div style="font-size:11px;color:var(--text-faint)">${_fmtD(e.date)}</div>
+        </div>
+        <div style="text-align:right;margin-left:12px">
+          <div style="font-size:14px;font-weight:600;color:${_isExp(e.cat)?'var(--warn)':'var(--accent)'}">
+            ${_isExp(e.cat)?'-':'+'}${_fmt(e.amount)}
+          </div>
+          ${canEdit?'<button onclick="deletePayoutEntry(''+e.id+'',''+worker+'')" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint)">Delete</button>':''}
+        </div>
+      </div>`).join('') : '<div class="empty-state" style="font-size:12px">No entries yet</div>';
 
-    doc.save(`Atlas-Josh-Payout-Report-${new Date().toISOString().split('T')[0]}.pdf`);
+    const dRows = sortedD.length ? sortedD.map(d=>`
+      <div style="padding:9px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between">
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#2d6a4f">${_fmt(d.amount)}</div>
+            <div style="font-size:11px;color:var(--text-faint)">${_fmtD(d.date)}</div>
+            ${d.notes?'<div style="font-size:12px;color:var(--text-muted);font-style:italic">'+d.notes+'</div>':''}
+          </div>
+          ${canEdit?'<button onclick="deleteDistribution(''+d.id+'',''+worker+'')" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint)">Delete</button>':''}
+        </div>
+      </div>`).join('') : '<div class="empty-state" style="font-size:12px">No distributions yet</div>';
+
+    return `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
+        <div style="font-size:15px;font-weight:700;color:${wcolor};margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid ${wcolor}22">${wname}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+          <div class="metric-card"><div class="metric-label">Case Revenue</div><div class="metric-value" style="color:var(--accent)">${_fmt(rev)}</div></div>
+          <div class="metric-card"><div class="metric-label">Expenses Paid</div><div class="metric-value" style="color:var(--warn)">${_fmt(totalOut)}</div></div>
+          <div class="metric-card"><div class="metric-label">Distributed</div><div class="metric-value" style="color:#2d6a4f">${_fmt(totalDist)}</div></div>
+          <div class="metric-card" style="border-left:3px solid var(--info)"><div class="metric-label">Suggested Payout</div><div class="metric-value" style="color:var(--info)">${_fmt(suggested)}</div></div>
+        </div>
+        ${btns}
+        <div id="payout-add-form-${worker}" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:10px">Add Entry</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Category</label>
+              <select id="payout-cat-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">
+                <option value="meds">Medications / Supplies</option>
+                <option value="other-expense">Other Expense</option>
+                <option value="other-income">Other Income</option>
+                <option value="labor">Hours Worked</option>
+              </select></div>
+            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Date</label>
+              <input type="date" id="payout-date-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
+            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Amount</label>
+              <input type="number" id="payout-amount-${worker}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
+            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Description</label>
+              <input type="text" id="payout-desc-${worker}" placeholder="e.g. Propofol restock" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
+          </div>
+          <div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Notes (optional)</label>
+            <input type="text" id="payout-notes-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
+          <div style="display:flex;gap:8px">
+            <button onclick="savePayoutEntry('${worker}')" class="btn btn-primary btn-sm">Save</button>
+            <button onclick="cancelPayoutEntry('${worker}')" class="btn btn-ghost btn-sm">Cancel</button>
+          </div>
+        </div>
+        <div id="payout-dist-form-${worker}" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:10px">Record Distribution</div>
+          <div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">
+            <div>Revenue: <strong>${_fmt(rev)}</strong></div>
+            <div>Expenses: <strong style="color:var(--warn)">- ${_fmt(totalOut)}</strong></div>
+            <div>Already Distributed: <strong style="color:#2d6a4f">- ${_fmt(totalDist)}</strong></div>
+            <div style="border-top:1px solid #b8cfe8;padding-top:8px;margin-top:6px;font-weight:700;color:var(--info)">Suggested: ${_fmt(suggested)}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Amount</label>
+              <input type="number" id="dist-amount-${worker}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
+            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Date</label>
+              <input type="date" id="dist-date-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
+          </div>
+          <div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Notes</label>
+            <input type="text" id="dist-notes-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
+          <div style="display:flex;gap:8px">
+            <button onclick="saveDistribution('${worker}')" class="btn btn-primary btn-sm">Save</button>
+            <button onclick="cancelDistribution('${worker}')" class="btn btn-ghost btn-sm">Cancel</button>
+          </div>
+        </div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px">Expense & Income Log</div>
+        ${eRows}
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin:14px 0 8px">Distribution History</div>
+        ${dRows}
+      </div>`;
+  }
+
+  window.renderPayoutTab = async function() {
+    const data = await _load();
+    const me = currentUser ? (EMAIL_WORKER_MAP[currentUser.email.toLowerCase()]||'dev') : 'dev';
+    const el = document.getElementById('payout-sections');
+    if(!el) return;
+    el.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">' +
+      _section('dev',  me==='dev',  data) +
+      _section('josh', me==='josh', data) +
+      '</div>';
   };
+
+  window.showAddPayoutExpense = function(w) {
+    document.getElementById('payout-add-form-'+w).style.display='';
+    document.getElementById('payout-dist-form-'+w).style.display='none';
+    document.getElementById('payout-date-'+w).value=new Date().toISOString().split('T')[0];
+    ['payout-amount-','payout-desc-','payout-notes-'].forEach(p=>{const el=document.getElementById(p+w);if(el)el.value='';});
+  };
+  window.cancelPayoutEntry = function(w) { document.getElementById('payout-add-form-'+w).style.display='none'; };
+  window.savePayoutEntry = async function(w) {
+    const cat=document.getElementById('payout-cat-'+w).value;
+    const desc=document.getElementById('payout-desc-'+w).value.trim();
+    const date=document.getElementById('payout-date-'+w).value;
+    const amount=parseFloat(document.getElementById('payout-amount-'+w).value)||0;
+    const notes=document.getElementById('payout-notes-'+w).value.trim();
+    if(!date||!amount){alert('Please enter a date and amount.');return;}
+    const data=await _load();
+    if(!data.entries)data.entries=[];
+    data.entries.push({id:_uid(),worker:w,cat,desc,date,amount,notes,createdAt:new Date().toISOString()});
+    await _save(data);
+    renderPayoutTab();
+  };
+  window.deletePayoutEntry = async function(id, w) {
+    if(!confirm('Delete this entry?'))return;
+    const data=await _load();
+    data.entries=(data.entries||[]).filter(e=>e.id!==id);
+    await _save(data);
+    renderPayoutTab();
+  };
+  window.showRecordDistribution = function(w) {
+    document.getElementById('payout-dist-form-'+w).style.display='';
+    document.getElementById('payout-add-form-'+w).style.display='none';
+    document.getElementById('dist-date-'+w).value=new Date().toISOString().split('T')[0];
+    ['dist-amount-','dist-notes-'].forEach(p=>{const el=document.getElementById(p+w);if(el)el.value='';});
+  };
+  window.cancelDistribution = function(w) { document.getElementById('payout-dist-form-'+w).style.display='none'; };
+  window.saveDistribution = async function(w) {
+    const amount=parseFloat(document.getElementById('dist-amount-'+w).value)||0;
+    const date=document.getElementById('dist-date-'+w).value;
+    const notes=document.getElementById('dist-notes-'+w).value.trim();
+    if(!date||!amount){alert('Please enter a date and amount.');return;}
+    const data=await _load();
+    if(!data.distributions)data.distributions=[];
+    data.distributions.push({id:_uid(),worker:w,amount,date,notes,createdAt:new Date().toISOString()});
+    await _save(data);
+    renderPayoutTab();
+    alert('Distribution recorded!');
+  };
+  window.deleteDistribution = async function(id, w) {
+    if(!confirm('Delete this distribution?'))return;
+    const data=await _load();
+    data.distributions=(data.distributions||[]).filter(d=>d.id!==id);
+    await _save(data);
+    renderPayoutTab();
+  };
+  window.downloadPayoutReport = function(w) { alert('PDF download coming soon for ' + (w==='dev'?'Devarsh':'Josh')); };
 })();
+
 // ── ITEM SELECT ──
 function refreshItemSelect() {
 const sel=document.getElementById('addItemSelect');if(!sel)return;
@@ -4900,4 +4874,8 @@ function buildFaxHTML(r) {
     Atlas Anesthesia · Pre-Operative Anesthesia Assessment · ${today} · CONFIDENTIAL
   </div>
 </div>`;
+}
+
+function checkHistoryDeposits(cases) {
+  // stub — Stripe auto-check disabled
 }
