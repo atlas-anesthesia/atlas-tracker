@@ -3000,6 +3000,7 @@ worker: currentWorker,
 linkedCaseId
 };
 saveInvoiceRecord(invoiceRecord);
+  if(typeof renderAnalytics === 'function') setTimeout(renderAnalytics, 500);
 };
 async function saveInvoiceRecord(record) {
 try {
@@ -3009,10 +3010,13 @@ existing.unshift(record);
 setSyncing(true);
 await setDoc(doc(db,'atlas','invoices'), { invoices: existing });
 setSyncing(false);
+window._savedInvoices = existing;
 renderSavedInvoices(existing);
+if(typeof renderAnalytics === 'function') setTimeout(renderAnalytics, 300);
 } catch(e) {
 console.error('Error saving invoice:', e);
 }
+return record;
 }
 async function loadSavedInvoices() {
 try {
@@ -4098,21 +4102,37 @@ window.onInvoiceCenterChange = function() {
   if(!sel) return;
   var val=sel.value;
   var center=(window.surgeryCenters||surgeryCenters||[]).find(function(c){return c.id===val;});
+
   if(val==='__custom__'){
-    if(locInput){locInput.style.display='';locInput.value='';locInput.focus();}
+    // Custom: show location name input for BOTH billing types
+    if(locInput){locInput.style.display='';locInput.value='';setTimeout(function(){locInput.focus();},50);}
     if(fhInput) fhInput.value='';
     if(p15Input) p15Input.value='';
+    // Show custom procedure/amount fields if flat rate is active
+    var bt=window._billingType||'hourly';
+    if(bt==='flat'){
+      var knownDiv=document.getElementById('inv-flat-known');
+      var customDiv=document.getElementById('inv-flat-custom');
+      if(knownDiv) knownDiv.style.display='none';
+      if(customDiv) customDiv.style.display='';
+      var tt=document.getElementById('inv-rate-card-title');
+      if(tt) tt.textContent='Custom Flat Rate';
+      var rowsEl=document.getElementById('inv-flat-rate-rows');
+      if(rowsEl) rowsEl.innerHTML='<div style="padding:16px;font-size:13px;color:var(--text-faint);text-align:center;font-style:italic">Enter procedure and rate on the left → summary updates automatically</div>';
+    }
   } else if(center){
     if(locInput){locInput.value=center.name;locInput.style.display='none';}
     if(fhInput) fhInput.value=center.firstHour.toFixed(2);
     if(p15Input) p15Input.value=center.per15.toFixed(2);
+    if(window._billingType==='flat'){_refreshFlatRatePanel();populateFlatRateDropdown();}
+    else{calculateInvoice();}
   } else {
     if(locInput){locInput.value='';locInput.style.display='none';}
     if(fhInput) fhInput.value='';
     if(p15Input) p15Input.value='';
+    var tt2=document.getElementById('inv-rate-card-title');
+    if(tt2) tt2.textContent=window._billingType==='flat'?'Flat Rates':'Rate Information';
   }
-  if(window._billingType==='flat'){_refreshFlatRatePanel();populateFlatRateDropdown();}
-  else{calculateInvoice();}
 };;
 window.onSurgeryCenterChange = function() {
 updateDraftInvoicePreview();
@@ -4823,15 +4843,19 @@ window.populateFlatRateDropdown = function() {
     sel.innerHTML='<option value="">-- No flat rates for this center --</option>';
   } else {
     sel.innerHTML='<option value="">-- Select procedure --</option>'
-      +frs.map(function(fr){return '<option value="'+fr.id+'" data-amount="'+fr.amount+'">'+fr.procedure+' — $'+Number(fr.amount).toFixed(2)+'</option>';}).join('');
+      +frs.map(function(fr){return '<option value="'+fr.id+'" data-amount="'+Number(fr.amount).toFixed(2)+'">'+fr.procedure+'</option>';}).join('');
   }
 };;
 
 window.onFlatRateSelect = function() {
   var sel=document.getElementById('inv-flat-rate-select');
-  var opt=sel?sel.options[sel.selectedIndex]:null;
-  var amount=(opt&&opt.value)?parseFloat(opt.getAttribute('data-amount'))||0:0;
-  var proc=(opt&&opt.value)?opt.text.split('—')[0].split('--')[0].trim():'';
+  var opt=sel&&sel.selectedIndex>=0?sel.options[sel.selectedIndex]:null;
+  if(!opt||!opt.value){ _updateFlatSummary('',0); return; }
+  // Get amount from data-amount attribute (most reliable)
+  var amount=parseFloat(opt.getAttribute('data-amount'))||0;
+  // Get procedure name — everything before the dash separator
+  var text=opt.textContent||opt.innerText||opt.text||'';
+  var proc=text.split('—')[0].split('--')[0].split('$')[0].trim();
   _updateFlatSummary(proc,amount);
 };
 
@@ -4912,20 +4936,13 @@ function _generateFlatRateInvoicePDF(location, date, provider, procedure, total)
   doc.text('DESCRIPTION',20,y+7); doc.text('BILLING TYPE',110,y+7,{align:'center'}); doc.text('AMOUNT',W-20,y+7,{align:'right'});
   y += 12;
 
-  // Row 1: procedure name
+  // Single row: procedure name + flat rate + amount
   doc.setFillColor(...lightGray); doc.rect(14,y,W-28,12,'F');
   doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(...black);
-  doc.text('Anesthesia Services',20,y+8);
+  doc.text(procedure,20,y+8);
   doc.text('Flat Rate',110,y+8,{align:'center'});
   doc.text('$'+total.toFixed(2),W-20,y+8,{align:'right'});
-  y += 14;
-  // Row 2: procedure detail
-  doc.setFillColor(248,247,243); doc.rect(14,y,W-28,10,'F');
-  doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(...gray);
-  doc.text('Procedure: '+procedure,22,y+7);
-  doc.setFont('helvetica','bold'); doc.setTextColor(...navy);
-  doc.text('$'+total.toFixed(2),W-20,y+7,{align:'right'});
-  y += 16;
+  y += 18;
 
   // Total
   doc.setFillColor(...navy); doc.roundedRect(120,y,W-134,18,2,2,'F');
@@ -4941,6 +4958,24 @@ function _generateFlatRateInvoicePDF(location, date, provider, procedure, total)
   doc.setDrawColor(...navy); doc.setLineWidth(1.5); doc.line(14,y+12,W-14,y+12);
 
   doc.save('Atlas-Invoice-'+invoiceNum+'.pdf');
+  // Save to Firestore + update Saved Invoices list + refresh analytics
+  const flatRecord = {
+    id: uid(),
+    invoiceNum,
+    location,
+    date: formattedDate,
+    rawDate: date,
+    provider,
+    billingType: 'flat',
+    procedure,
+    total,
+    savedAt: new Date().toISOString(),
+    worker: currentWorker,
+    linkedCaseId: ''
+  };
+  saveInvoiceRecord(flatRecord).then(function() {
+    if(typeof renderAnalytics === 'function') renderAnalytics();
+  });
 
   // Save record
   const invoiceRecord = {
@@ -5117,6 +5152,10 @@ window.setBillingType = function(type) {
     if(tt) tt.textContent='Flat Rates';
     _refreshFlatRatePanel();
     populateFlatRateDropdown();
+    // If custom location selected, make sure location name input stays visible
+    var cSel=document.getElementById('inv-location-select');
+    var locInput=document.getElementById('inv-location');
+    if(cSel&&cSel.value==='__custom__'&&locInput) locInput.style.display='';
   } else {
     if(btnH){btnH.style.border=ACTIVE;btnH.style.background='var(--info-light)';btnH.style.color='var(--info)';btnH.style.fontWeight='600';}
     if(hF) hF.style.display='';
@@ -5125,6 +5164,13 @@ window.setBillingType = function(type) {
     if(fR) fR.style.display='none';
     if(tt) tt.textContent='Rate Information';
     calculateInvoice();
+    // If custom location selected, keep location name input visible
+    var cSel2=document.getElementById('inv-location-select');
+    var locInput2=document.getElementById('inv-location');
+    if(cSel2&&cSel2.value==='__custom__'&&locInput2) locInput2.style.display='';
+    // Hide custom procedure/amount when switching to hourly
+    var customDiv2=document.getElementById('inv-flat-custom');
+    if(customDiv2) customDiv2.style.display='none';
   }
 };
 function _refreshFlatRatePanel() {
@@ -5136,11 +5182,13 @@ function _refreshFlatRatePanel() {
   var customDiv=document.getElementById('inv-flat-custom');
   var tt=document.getElementById('inv-rate-card-title');
   var rowsEl=document.getElementById('inv-flat-rate-rows');
-  if(val==='__custom__'||(!center&&val!=='')){
+
+  if(val==='__custom__'||(!val)){
+    // Custom or nothing selected: show manual entry fields
     if(knownDiv) knownDiv.style.display='none';
-    if(customDiv) customDiv.style.display='';
-    if(tt) tt.textContent='Custom Flat Rate';
-    if(rowsEl) rowsEl.innerHTML='<div style="padding:16px;font-size:13px;color:var(--text-faint);text-align:center;font-style:italic">Enter procedure and rate on the left</div>';
+    if(customDiv) customDiv.style.display= val==='__custom__' ? '' : 'none';
+    if(tt) tt.textContent= val==='__custom__' ? 'Custom Flat Rate' : 'Flat Rates';
+    if(rowsEl) rowsEl.innerHTML='<div style="padding:16px;font-size:13px;color:var(--text-faint);text-align:center;font-style:italic">'+(val==='__custom__'?'Enter procedure and rate on the left':'Select a surgery center to see flat rates')+'</div>';
   } else if(center){
     if(knownDiv) knownDiv.style.display='';
     if(customDiv) customDiv.style.display='none';
@@ -5157,11 +5205,6 @@ function _refreshFlatRatePanel() {
           +'</div>';
       }).join('');
     }
-  } else {
-    if(knownDiv) knownDiv.style.display='none';
-    if(customDiv) customDiv.style.display='none';
-    if(tt) tt.textContent='Flat Rates';
-    if(rowsEl) rowsEl.innerHTML='<div style="padding:16px;font-size:13px;color:var(--text-faint);text-align:center;font-style:italic">Select a surgery center to see flat rates</div>';
   }
 }
 function _updateFlatSummary(procedure,amount) {
