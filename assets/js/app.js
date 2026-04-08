@@ -671,6 +671,7 @@ if(tab==='payout') renderPayoutTab();
 };
 
 
+
 // ── PAYOUT CALCULATOR ──
 (function() {
   async function _load() {
