@@ -2804,10 +2804,12 @@ return { total, roundedMins, timeStr, actualStr, breakdown };
 window.generateInvoicePDF = function() {
   const billingType = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
 
-  // Get location — either from dropdown (center name) or manual text
+  // Get location — from center, custom text input, or nothing
   const centerSel = document.getElementById('inv-location-select');
-  const center = (window.surgeryCenters||[]).find(c => c.id === (centerSel?.value||''));
-  const location = center ? center.name : (document.getElementById('inv-location')?.value.trim()||'');
+  const centerVal = centerSel ? centerSel.value : '';
+  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === centerVal);
+  const customInput = document.getElementById('inv-location');
+  const location = center ? center.name : (customInput ? customInput.value.trim() : '');
   const date = document.getElementById('inv-date').value;
   const provider = document.getElementById('inv-provider').value;
 
@@ -4104,22 +4106,42 @@ window.onInvoiceCenterChange = function() {
   const firstHourInput = document.getElementById('inv-first-hour');
   const per15Input = document.getElementById('inv-per-15');
   if(!sel) return;
-  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === sel.value);
+
+  const val = sel.value;
+
+  if(val === '__custom__') {
+    // Custom location — show text input, clear rates
+    if(locationInput) { locationInput.value = ''; locationInput.style.display = ''; locationInput.focus(); }
+    if(firstHourInput) firstHourInput.value = '';
+    if(per15Input) per15Input.value = '';
+    // Reset flat rate dropdown
+    const frSel = document.getElementById('inv-flat-rate-select');
+    if(frSel) frSel.innerHTML = '<option value="">-- No flat rates for custom location --</option>';
+    // Show hourly card since no flat rates for custom
+    _renderHourlyRateCard();
+    return;
+  }
+
+  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === val);
   if(center) {
+    // Known center — hide text input, fill rates
     if(locationInput) { locationInput.value = center.name; locationInput.style.display = 'none'; }
     if(firstHourInput) firstHourInput.value = center.firstHour.toFixed(2);
     if(per15Input) per15Input.value = center.per15.toFixed(2);
   } else {
-    if(locationInput) { locationInput.value = ''; locationInput.style.display = ''; }
+    // Nothing selected
+    if(locationInput) { locationInput.value = ''; locationInput.style.display = 'none'; }
     if(firstHourInput) firstHourInput.value = '';
     if(per15Input) per15Input.value = '';
   }
+
   // Refresh whichever card is active
   const type = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
   if(type === 'flat') {
     _renderFlatRateInfoCard();
     populateFlatRateDropdown();
   } else {
+    _renderHourlyRateCard();
     calculateInvoice();
   }
 };;
@@ -4866,7 +4888,22 @@ window.populateFlatRateDropdown = function() {
 };;
 
 window.onFlatRateSelect = function() {
-  updateInvoiceTotalDisplay();
+  const sel = document.getElementById('inv-flat-rate-select');
+  const opt = sel ? sel.options[sel.selectedIndex] : null;
+  const amount = opt && opt.value ? parseFloat(opt.getAttribute('data-amount')) || 0 : 0;
+  const procedure = opt && opt.value ? opt.text.split(' — ')[0] : '';
+
+  // Update the total display in the summary card
+  const totalEl = document.getElementById('inv-total');
+  const summaryEl = document.getElementById('inv-summary');
+  if(totalEl) totalEl.textContent = amount > 0 ? '$' + amount.toFixed(2) : '$0.00';
+  if(summaryEl) {
+    if(amount > 0) {
+      summaryEl.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">Flat rate: <strong>' + procedure + '</strong></span>';
+    } else {
+      summaryEl.textContent = 'Select a procedure to see total';
+    }
+  }
 };
 
 window.updateInvoiceTotalDisplay = function() {
