@@ -4046,6 +4046,7 @@ async function saveSurgeryCenters() {
 await setDoc(doc(db,'atlas','surgerycenters'), { centers: surgeryCenters });
 }
 function populateCenterDropdowns() {
+window.surgeryCenters = surgeryCenters;
 // Pre-Op dropdown
 const sel = document.getElementById('po-surgery-center');
 if(sel) {
@@ -4109,7 +4110,17 @@ if(emailEl && !emailEl.value) emailEl.value = center.invoiceEmail;
 }
 };
 window.showAddCenterForm = function() {
-document.getElementById('add-center-form').style.display = 'block';
+  window._editingCenterId = null;
+  window._editingFlatRates = [];
+  if(document.getElementById('sc-name')) document.getElementById('sc-name').value = '';
+  if(document.getElementById('sc-first-hour')) document.getElementById('sc-first-hour').value = '';
+  if(document.getElementById('sc-per-15')) document.getElementById('sc-per-15').value = '';
+  if(document.getElementById('sc-provider')) document.getElementById('sc-provider').value = '';
+  if(document.getElementById('sc-invoice-email')) document.getElementById('sc-invoice-email').value = '';
+  if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
+  if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
+  document.getElementById('add-center-form').style.display = 'block';
+  renderFlatRatesInForm();
 };
 window.hideAddCenterForm = function() {
 document.getElementById('add-center-form').style.display = 'none';
@@ -4120,37 +4131,46 @@ if(el) el.value = '';
 window._editingCenterId = null;
 };
 window.saveCenter = async function() {
-const name = document.getElementById('sc-name')?.value.trim();
-const firstHour = parseFloat(document.getElementById('sc-first-hour')?.value) || 0;
-const per15 = parseFloat(document.getElementById('sc-per-15')?.value) || 0;
-if(!name) { alert('Please enter a surgery center name.'); return; }
-const provider = document.getElementById('sc-provider')?.value.trim() || '';
-const invoiceEmail = document.getElementById('sc-invoice-email')?.value.trim() || '';
-if(window._editingCenterId) {
-const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
-if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail };
-} else {
-surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail });
-}
-setSyncing(true);
-await saveSurgeryCenters();
-setSyncing(false);
-hideAddCenterForm();
-renderSurgeryCenters();
-populateCenterDropdowns();
-renderAnalytics();
+  const name = document.getElementById('sc-name')?.value.trim();
+  const firstHour = parseFloat(document.getElementById('sc-first-hour')?.value) || 0;
+  const per15 = parseFloat(document.getElementById('sc-per-15')?.value) || 0;
+  if(!name) { alert('Please enter a surgery center name.'); return; }
+  const provider = document.getElementById('sc-provider')?.value.trim() || '';
+  const invoiceEmail = document.getElementById('sc-invoice-email')?.value.trim() || '';
+  // Grab flat rates from the in-memory editing array
+  const flatRates = window._editingFlatRates || [];
+  if(window._editingCenterId) {
+    const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
+    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, flatRates };
+  } else {
+    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, flatRates });
+  }
+  setSyncing(true);
+  await saveSurgeryCenters();
+  setSyncing(false);
+  window._editingFlatRates = [];
+  window._editingCenterId = null;
+  hideAddCenterForm();
+  renderSurgeryCenters();
+  populateCenterDropdowns();
+  renderAnalytics();
 };
 window.editCenter = function(id) {
-const c = surgeryCenters.find(x => x.id === id);
-if(!c) return;
-window._editingCenterId = id;
-document.getElementById('sc-name').value = c.name;
-document.getElementById('sc-first-hour').value = c.firstHour;
-document.getElementById('sc-per-15').value = c.per15;
-document.getElementById('sc-provider').value = c.provider || '';
-document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
-document.getElementById('add-center-form').style.display = 'block';
-document.getElementById('add-center-form').scrollIntoView({ behavior:'smooth' });
+  const c = surgeryCenters.find(x => x.id === id);
+  if(!c) return;
+  window._editingCenterId = id;
+  // Deep copy flat rates so edits don't mutate live data until saved
+  window._editingFlatRates = JSON.parse(JSON.stringify(c.flatRates || []));
+  document.getElementById('sc-name').value = c.name;
+  document.getElementById('sc-first-hour').value = c.firstHour;
+  document.getElementById('sc-per-15').value = c.per15;
+  document.getElementById('sc-provider').value = c.provider || '';
+  document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
+  if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
+  if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
+  document.getElementById('add-center-form').style.display = 'block';
+  document.getElementById('add-center-form').scrollIntoView({ behavior:'smooth' });
+  renderFlatRatesInForm();
 };
 window.deleteCenter = async function(id) {
 const c = surgeryCenters.find(x => x.id === id);
@@ -4795,13 +4815,18 @@ window.populateFlatRateDropdown = function() {
     if(typeof updateInvoiceTotalDisplay==='function') updateInvoiceTotalDisplay();
     return;
   }
-  const center = surgeryCenters.find(c => c.id === centerId);
-  const frs = (center && center.flatRates) ? center.flatRates : [];
+  // Look up center — surgeryCenters is global array loaded from Firestore
+  const center = (window.surgeryCenters || surgeryCenters || []).find(c => c.id === centerId);
+  const frs = (center && Array.isArray(center.flatRates) && center.flatRates.length) ? center.flatRates : [];
   if(!frs.length) {
-    sel.innerHTML = '<option value="">-- No flat rates set for this center --</option>';
+    sel.innerHTML = '<option value="">-- No flat rates for this center. Edit center in Analytics to add. --</option>';
   } else {
     sel.innerHTML = '<option value="">-- Select procedure --</option>'
-      + frs.map(fr => '<option value="'+fr.id+'" data-amount="'+fr.amount+'">'+fr.procedure+' -- $'+Number(fr.amount).toFixed(2)+'</option>').join('');
+      + frs.map(fr =>
+          '<option value="'+fr.id+'" data-amount="'+fr.amount+'">'
+          + fr.procedure + ' — $' + Number(fr.amount).toFixed(2)
+          + '</option>'
+        ).join('');
   }
   if(typeof updateInvoiceTotalDisplay==='function') updateInvoiceTotalDisplay();
 };;
