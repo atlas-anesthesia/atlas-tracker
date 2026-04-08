@@ -649,7 +649,7 @@ if(tab==='history') { loadSavedInvoices().then(() => renderHistory()); }
 if(tab==='reports') renderReports();
 if(tab==='preop-history') renderPreopHistory();
 if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
-if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); renderDraftInvoices(); setTimeout(injectBillingToggle, 100); }
+if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); renderDraftInvoices(); setTimeout(populateCenterDropdowns,100); setTimeout(injectBillingToggle, 100); }
 if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
 if(tab==='analytics') {
 // Ensure preop records are loaded for projections
@@ -4072,23 +4072,24 @@ if(providerEl && !providerEl.value && center.provider) providerEl.value = center
 if(emailEl && !emailEl.value && center.invoiceEmail) emailEl.value = center.invoiceEmail;
 };
 window.onInvoiceCenterChange = function() {
-const sel = document.getElementById('inv-location-select');
-const locationInput = document.getElementById('inv-location');
-const firstHourInput = document.getElementById('inv-first-hour');
-const per15Input = document.getElementById('inv-per-15');
-if(!sel) return;
-const center = surgeryCenters.find(c => c.id === sel.value);
-if(center) {
-if(locationInput) locationInput.value = center.name;
-if(firstHourInput) firstHourInput.value = center.firstHour.toFixed(2);
-if(per15Input) per15Input.value = center.per15.toFixed(2);
-calculateInvoice();
-} else {
-if(firstHourInput) firstHourInput.value = '';
-if(per15Input) per15Input.value = '';
-calculateInvoice();
-}
-};
+  const sel = document.getElementById('inv-location-select');
+  const locationInput = document.getElementById('inv-location');
+  const firstHourInput = document.getElementById('inv-first-hour');
+  const per15Input = document.getElementById('inv-per-15');
+  if(!sel) return;
+  const center = surgeryCenters.find(c => c.id === sel.value);
+  if(center) {
+    if(locationInput) locationInput.value = center.name;
+    if(firstHourInput) firstHourInput.value = center.firstHour.toFixed(2);
+    if(per15Input) per15Input.value = center.per15.toFixed(2);
+  } else {
+    if(locationInput) locationInput.value = '';
+    if(firstHourInput) firstHourInput.value = '';
+    if(per15Input) per15Input.value = '';
+  }
+  populateFlatRateDropdown();
+  calculateInvoice();
+};;
 window.onSurgeryCenterChange = function() {
 updateDraftInvoicePreview();
 const sel = document.getElementById('po-surgery-center');
@@ -4789,12 +4790,21 @@ window.populateFlatRateDropdown = function() {
   const centerSel = document.getElementById('inv-location-select');
   if(!sel) return;
   const centerId = centerSel ? centerSel.value : '';
+  if(!centerId) {
+    sel.innerHTML = '<option value="">-- Select a surgery center first --</option>';
+    if(typeof updateInvoiceTotalDisplay==='function') updateInvoiceTotalDisplay();
+    return;
+  }
   const center = surgeryCenters.find(c => c.id === centerId);
-  const frs = center ? (center.flatRates||[]) : [];
-  sel.innerHTML = '<option value="">— Select procedure —</option>'
-    + frs.map(fr => '<option value="'+fr.id+'" data-amount="'+fr.amount+'">'+fr.procedure+' — $'+Number(fr.amount).toFixed(2)+'</option>').join('');
-  updateInvoiceTotalDisplay();
-};
+  const frs = (center && center.flatRates) ? center.flatRates : [];
+  if(!frs.length) {
+    sel.innerHTML = '<option value="">-- No flat rates set for this center --</option>';
+  } else {
+    sel.innerHTML = '<option value="">-- Select procedure --</option>'
+      + frs.map(fr => '<option value="'+fr.id+'" data-amount="'+fr.amount+'">'+fr.procedure+' -- $'+Number(fr.amount).toFixed(2)+'</option>').join('');
+  }
+  if(typeof updateInvoiceTotalDisplay==='function') updateInvoiceTotalDisplay();
+};;
 
 window.onFlatRateSelect = function() {
   updateInvoiceTotalDisplay();
