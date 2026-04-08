@@ -4088,6 +4088,7 @@ if(firstHourInput) firstHourInput.value = '';
 if(per15Input) per15Input.value = '';
 calculateInvoice();
 }
+  if(typeof populateFlatRateDropdown ==='function') populateFlatRateDropdown();
 };
 window.onSurgeryCenterChange = function() {
 updateDraftInvoicePreview();
