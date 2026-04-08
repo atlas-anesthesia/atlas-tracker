@@ -181,7 +181,7 @@ ind.textContent = (mappedWorker==='dev' ? 'Devarsh' : 'Josh') + "'s inventory wi
 document.getElementById('userLabel').textContent = mappedWorker === 'dev' ? 'Devarsh' : 'Josh';
 // Show payout tab only for Josh
 const payoutNavBtn = document.getElementById('nav-payout-btn');
-if(payoutNavBtn) payoutNavBtn.style.display = mappedWorker === 'josh' ? '' : 'none';
+if(payoutNavBtn) payoutNavBtn.style.display = '';
 // Default Case Log, CS Log, and Case History to logged-in user's perspective
 currentCaseLogTab = mappedWorker;
 ['dev','josh'].forEach(x => { const el=document.getElementById('cltab-'+x); if(el) el.classList.toggle('active', x===mappedWorker); });
