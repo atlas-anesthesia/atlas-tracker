@@ -672,11 +672,11 @@ if(tab==='payout') renderPayoutTab();
 
 
 
+
 // ── PAYOUT CALCULATOR ──
 (function() {
   async function _load() {
     try {
-      const { getDoc, doc, setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
       const snap = await getDoc(doc(db, 'atlas', 'payouts'));
       return snap.exists() ? snap.data() : { entries: [], distributions: [] };
     } catch(e) { return { entries: [], distributions: [] }; }
@@ -690,7 +690,12 @@ if(tab==='payout') renderPayoutTab();
   function _fmt(n) { return '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function _fmtD(d) { if(!d) return '-'; const p=d.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; }
   function _isExp(cat) { return cat==='meds'||cat==='other-expense'; }
-  const CATS = { meds:'Medications / Supplies', labor:'Hours Worked', 'other-income':'Other Income', 'other-expense':'Other Expense' };
+  const CATS = {
+    meds:'Medications / Supplies',
+    labor:'Hours Worked',
+    'other-income':'Other Income',
+    'other-expense':'Other Expense'
+  };
 
   function _totals(worker, data) {
     const entries = (data.entries||[]).filter(e=>e.worker===worker);
@@ -698,115 +703,234 @@ if(tab==='payout') renderPayoutTab();
     const totalIn  = entries.filter(e=>!_isExp(e.cat)).reduce((s,e)=>s+e.amount,0);
     const totalOut = entries.filter(e=> _isExp(e.cat)).reduce((s,e)=>s+e.amount,0);
     const totalDist = dists.reduce((s,d)=>s+d.amount,0);
-    const rev = (cases||[]).filter(c=>c.worker===worker&&!c.draft).reduce((s,c)=>{
-      return s+(c.total||0);
-    },0);
+    const rev = (cases||[]).filter(c=>c.worker===worker&&!c.draft).reduce((s,c)=>s+(c.total||0),0);
     const suggested = Math.max(0, rev - totalDist - (totalOut - totalIn));
     return { entries, dists, totalIn, totalOut, totalDist, rev, suggested };
   }
 
-  function _section(worker, canEdit, data) {
+  function _delEntryBtn(id, worker, canEdit) {
+    if(!canEdit) return '';
+    var btn = document.createElement('button');
+    btn.textContent = 'Delete';
+    btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:2px 0;display:block';
+    btn.addEventListener('click', function() { window.deletePayoutEntry(id, worker); });
+    return btn;
+  }
+
+  function _delDistBtn(id, worker, canEdit) {
+    if(!canEdit) return '';
+    var btn = document.createElement('button');
+    btn.textContent = 'Delete';
+    btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:2px 0';
+    btn.addEventListener('click', function() { window.deleteDistribution(id, worker); });
+    return btn;
+  }
+
+  function _buildSection(worker, canEdit, data, container) {
     const wname  = worker==='dev'?'Devarsh':'Josh';
     const wcolor = worker==='dev'?'var(--dev)':'var(--josh)';
     const { entries, dists, totalIn, totalOut, totalDist, rev, suggested } = _totals(worker, data);
     const sorted  = [...entries].sort((a,b)=>b.date.localeCompare(a.date));
     const sortedD = [...dists].sort((a,b)=>b.date.localeCompare(a.date));
 
-    const btns = canEdit ? `
-      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-        <button onclick="showAddPayoutExpense('${worker}')" class="btn btn-ghost btn-sm">+ Add Entry</button>
-        <button onclick="showRecordDistribution('${worker}')" class="btn btn-ghost btn-sm" style="color:var(--accent)">Record Distribution</button>
-        <button onclick="downloadPayoutReport('${worker}')" class="btn btn-ghost btn-sm">Download PDF</button>
-      </div>` : `<div style="font-size:12px;color:var(--text-faint);margin-bottom:12px;font-style:italic">View only — log in as ${wname} to edit</div>`;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px';
 
-    const eRows = sorted.length ? sorted.map(e=>`
-      <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)">
-        <div>
-          <div style="font-size:13px;font-weight:500">${CATS[e.cat]||e.cat}</div>
-          <div style="font-size:12px;color:var(--text-muted)">${e.desc||'-'}</div>
-          ${e.notes?'<div style="font-size:11px;color:var(--text-faint);font-style:italic">'+e.notes+'</div>':''}
-          <div style="font-size:11px;color:var(--text-faint)">${_fmtD(e.date)}</div>
-        </div>
-        <div style="text-align:right;margin-left:12px">
-          <div style="font-size:14px;font-weight:600;color:${_isExp(e.cat)?'var(--warn)':'var(--accent)'}">
-            ${_isExp(e.cat)?'-':'+'}${_fmt(e.amount)}
-          </div>
-          ${canEdit?'<button onclick="deletePayoutEntry(''+e.id+'',''+worker+'')" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint)">Delete</button>':''}
-        </div>
-      </div>`).join('') : '<div class="empty-state" style="font-size:12px">No entries yet</div>';
+    // Header
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-size:15px;font-weight:700;color:'+wcolor+';margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid '+wcolor+'22';
+    hdr.textContent = wname;
+    wrap.appendChild(hdr);
 
-    const dRows = sortedD.length ? sortedD.map(d=>`
-      <div style="padding:9px 0;border-bottom:1px solid var(--border)">
-        <div style="display:flex;justify-content:space-between">
-          <div>
-            <div style="font-size:14px;font-weight:600;color:#2d6a4f">${_fmt(d.amount)}</div>
-            <div style="font-size:11px;color:var(--text-faint)">${_fmtD(d.date)}</div>
-            ${d.notes?'<div style="font-size:12px;color:var(--text-muted);font-style:italic">'+d.notes+'</div>':''}
-          </div>
-          ${canEdit?'<button onclick="deleteDistribution(''+d.id+'',''+worker+'')" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint)">Delete</button>':''}
-        </div>
-      </div>`).join('') : '<div class="empty-state" style="font-size:12px">No distributions yet</div>';
+    // Metric cards
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px';
+    [
+      ['Case Revenue', _fmt(rev), 'var(--accent)'],
+      ['Expenses Paid', _fmt(totalOut), 'var(--warn)'],
+      ['Distributed', _fmt(totalDist), '#2d6a4f'],
+      ['Suggested Payout', _fmt(suggested), 'var(--info)']
+    ].forEach(function(item, i) {
+      const card = document.createElement('div');
+      card.className = 'metric-card';
+      if(i===3) card.style.borderLeft = '3px solid var(--info)';
+      card.innerHTML = '<div class="metric-label">'+item[0]+'</div><div class="metric-value" style="color:'+item[2]+'">'+item[1]+'</div>';
+      grid.appendChild(card);
+    });
+    wrap.appendChild(grid);
 
-    return `
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
-        <div style="font-size:15px;font-weight:700;color:${wcolor};margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid ${wcolor}22">${wname}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-          <div class="metric-card"><div class="metric-label">Case Revenue</div><div class="metric-value" style="color:var(--accent)">${_fmt(rev)}</div></div>
-          <div class="metric-card"><div class="metric-label">Expenses Paid</div><div class="metric-value" style="color:var(--warn)">${_fmt(totalOut)}</div></div>
-          <div class="metric-card"><div class="metric-label">Distributed</div><div class="metric-value" style="color:#2d6a4f">${_fmt(totalDist)}</div></div>
-          <div class="metric-card" style="border-left:3px solid var(--info)"><div class="metric-label">Suggested Payout</div><div class="metric-value" style="color:var(--info)">${_fmt(suggested)}</div></div>
-        </div>
-        ${btns}
-        <div id="payout-add-form-${worker}" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px">
-          <div style="font-size:13px;font-weight:600;margin-bottom:10px">Add Entry</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Category</label>
-              <select id="payout-cat-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">
-                <option value="meds">Medications / Supplies</option>
-                <option value="other-expense">Other Expense</option>
-                <option value="other-income">Other Income</option>
-                <option value="labor">Hours Worked</option>
-              </select></div>
-            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Date</label>
-              <input type="date" id="payout-date-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
-            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Amount</label>
-              <input type="number" id="payout-amount-${worker}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
-            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Description</label>
-              <input type="text" id="payout-desc-${worker}" placeholder="e.g. Propofol restock" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
-          </div>
-          <div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Notes (optional)</label>
-            <input type="text" id="payout-notes-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
-          <div style="display:flex;gap:8px">
-            <button onclick="savePayoutEntry('${worker}')" class="btn btn-primary btn-sm">Save</button>
-            <button onclick="cancelPayoutEntry('${worker}')" class="btn btn-ghost btn-sm">Cancel</button>
-          </div>
-        </div>
-        <div id="payout-dist-form-${worker}" style="display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px">
-          <div style="font-size:13px;font-weight:600;margin-bottom:10px">Record Distribution</div>
-          <div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">
-            <div>Revenue: <strong>${_fmt(rev)}</strong></div>
-            <div>Expenses: <strong style="color:var(--warn)">- ${_fmt(totalOut)}</strong></div>
-            <div>Already Distributed: <strong style="color:#2d6a4f">- ${_fmt(totalDist)}</strong></div>
-            <div style="border-top:1px solid #b8cfe8;padding-top:8px;margin-top:6px;font-weight:700;color:var(--info)">Suggested: ${_fmt(suggested)}</div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Amount</label>
-              <input type="number" id="dist-amount-${worker}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
-            <div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Date</label>
-              <input type="date" id="dist-date-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
-          </div>
-          <div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Notes</label>
-            <input type="text" id="dist-notes-${worker}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>
-          <div style="display:flex;gap:8px">
-            <button onclick="saveDistribution('${worker}')" class="btn btn-primary btn-sm">Save</button>
-            <button onclick="cancelDistribution('${worker}')" class="btn btn-ghost btn-sm">Cancel</button>
-          </div>
-        </div>
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px">Expense & Income Log</div>
-        ${eRows}
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin:14px 0 8px">Distribution History</div>
-        ${dRows}
-      </div>`;
+    // Action buttons
+    if(canEdit) {
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap';
+      const b1 = document.createElement('button');
+      b1.className = 'btn btn-ghost btn-sm';
+      b1.textContent = '+ Add Entry';
+      b1.addEventListener('click', function() { window.showAddPayoutExpense(worker); });
+      const b2 = document.createElement('button');
+      b2.className = 'btn btn-ghost btn-sm';
+      b2.style.color = 'var(--accent)';
+      b2.textContent = 'Record Distribution';
+      b2.addEventListener('click', function() { window.showRecordDistribution(worker); });
+      const b3 = document.createElement('button');
+      b3.className = 'btn btn-ghost btn-sm';
+      b3.textContent = 'Download PDF';
+      b3.addEventListener('click', function() { window.downloadPayoutReport(worker); });
+      btnRow.appendChild(b1); btnRow.appendChild(b2); btnRow.appendChild(b3);
+      wrap.appendChild(btnRow);
+    } else {
+      const note = document.createElement('div');
+      note.style.cssText = 'font-size:12px;color:var(--text-faint);margin-bottom:12px;font-style:italic';
+      note.textContent = 'View only — log in as '+wname+' to edit';
+      wrap.appendChild(note);
+    }
+
+    // Add entry form
+    const addForm = document.createElement('div');
+    addForm.id = 'payout-add-form-'+worker;
+    addForm.style.display = 'none';
+    addForm.style.cssText = 'display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px';
+    addForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Add Entry</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Category</label>'
+      +'<select id="payout-cat-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+      +'<option value="meds">Medications / Supplies</option>'
+      +'<option value="other-expense">Other Expense</option>'
+      +'<option value="other-income">Other Income</option>'
+      +'<option value="labor">Hours Worked</option>'
+      +'</select></div>'
+      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Date</label>'
+      +'<input type="date" id="payout-date-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Amount</label>'
+      +'<input type="number" id="payout-amount-'+worker+'" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Description</label>'
+      +'<input type="text" id="payout-desc-'+worker+'" placeholder="e.g. Propofol restock" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +'</div>'
+      +'<div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Notes (optional)</label>'
+      +'<input type="text" id="payout-notes-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +'<div style="display:flex;gap:8px">'
+      +'<button class="btn btn-primary btn-sm" id="payout-save-'+worker+'">Save</button>'
+      +'<button class="btn btn-ghost btn-sm" id="payout-cancel-'+worker+'">Cancel</button>'
+      +'</div>';
+    wrap.appendChild(addForm);
+
+    // Distribution form
+    const distForm = document.createElement('div');
+    distForm.id = 'payout-dist-form-'+worker;
+    distForm.style.cssText = 'display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px';
+    distForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Record Distribution</div>'
+      +'<div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">'
+      +'<div>Revenue: <strong>'+_fmt(rev)+'</strong></div>'
+      +'<div>Expenses: <strong style='color:var(--warn)'>- '+_fmt(totalOut)+'</strong></div>'
+      +'<div>Already Distributed: <strong style='color:#2d6a4f'>- '+_fmt(totalDist)+'</strong></div>'
+      +'<div style='border-top:1px solid #b8cfe8;padding-top:8px;margin-top:6px;font-weight:700;color:var(--info)'>Suggested: '+_fmt(suggested)+'</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Amount</label>'
+      +'<input type="number" id="dist-amount-'+worker+'" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Date</label>'
+      +'<input type="date" id="dist-date-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +'</div>'
+      +'<div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Notes</label>'
+      +'<input type="text" id="dist-notes-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +'<div style="display:flex;gap:8px">'
+      +'<button class="btn btn-primary btn-sm" id="dist-save-'+worker+'">Save</button>'
+      +'<button class="btn btn-ghost btn-sm" id="dist-cancel-'+worker+'">Cancel</button>'
+      +'</div>';
+    wrap.appendChild(distForm);
+
+    // Entries list
+    const eLabel = document.createElement('div');
+    eLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px';
+    eLabel.textContent = 'Expense & Income Log';
+    wrap.appendChild(eLabel);
+
+    if(!sorted.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.style.fontSize = '12px';
+      empty.textContent = 'No entries yet';
+      wrap.appendChild(empty);
+    } else {
+      sorted.forEach(function(e) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)';
+        const left = document.createElement('div');
+        left.innerHTML = '<div style="font-size:13px;font-weight:500">'+(CATS[e.cat]||e.cat)+'</div>'
+          +'<div style="font-size:12px;color:var(--text-muted)">'+(e.desc||'-')+'</div>'
+          +(e.notes?'<div style="font-size:11px;color:var(--text-faint);font-style:italic">'+e.notes+'</div>':'')
+          +'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(e.date)+'</div>';
+        const right = document.createElement('div');
+        right.style.cssText = 'text-align:right;margin-left:12px;flex-shrink:0';
+        const amt = document.createElement('div');
+        amt.style.cssText = 'font-size:14px;font-weight:600;color:'+(_isExp(e.cat)?'var(--warn)':'var(--accent)');
+        amt.textContent = (_isExp(e.cat)?'-':'+') + _fmt(e.amount);
+        right.appendChild(amt);
+        if(canEdit) {
+          var delBtn = document.createElement('button');
+          delBtn.textContent = 'Delete';
+          delBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:2px 0;display:block';
+          (function(eid, ew) {
+            delBtn.addEventListener('click', function() { window.deletePayoutEntry(eid, ew); });
+          })(e.id, worker);
+          right.appendChild(delBtn);
+        }
+        row.appendChild(left);
+        row.appendChild(right);
+        wrap.appendChild(row);
+      });
+    }
+
+    // Distributions list
+    const dLabel = document.createElement('div');
+    dLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin:14px 0 8px';
+    dLabel.textContent = 'Distribution History';
+    wrap.appendChild(dLabel);
+
+    if(!sortedD.length) {
+      const empty2 = document.createElement('div');
+      empty2.className = 'empty-state';
+      empty2.style.fontSize = '12px';
+      empty2.textContent = 'No distributions yet';
+      wrap.appendChild(empty2);
+    } else {
+      sortedD.forEach(function(d) {
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:9px 0;border-bottom:1px solid var(--border)';
+        const inner = document.createElement('div');
+        inner.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start';
+        const left = document.createElement('div');
+        left.innerHTML = '<div style="font-size:14px;font-weight:600;color:#2d6a4f">'+_fmt(d.amount)+'</div>'
+          +'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(d.date)+'</div>'
+          +(d.notes?'<div style="font-size:12px;color:var(--text-muted);font-style:italic">'+d.notes+'</div>':'');
+        inner.appendChild(left);
+        if(canEdit) {
+          var dBtn = document.createElement('button');
+          dBtn.textContent = 'Delete';
+          dBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint)';
+          (function(did, dw) {
+            dBtn.addEventListener('click', function() { window.deleteDistribution(did, dw); });
+          })(d.id, worker);
+          inner.appendChild(dBtn);
+        }
+        row.appendChild(inner);
+        wrap.appendChild(row);
+      });
+    }
+
+    container.appendChild(wrap);
+
+    // Wire up form buttons after DOM insert
+    setTimeout(function() {
+      var saveBtn = document.getElementById('payout-save-'+worker);
+      var cancelBtn = document.getElementById('payout-cancel-'+worker);
+      var dSaveBtn = document.getElementById('dist-save-'+worker);
+      var dCancelBtn = document.getElementById('dist-cancel-'+worker);
+      if(saveBtn) saveBtn.addEventListener('click', function() { window.savePayoutEntry(worker); });
+      if(cancelBtn) cancelBtn.addEventListener('click', function() { window.cancelPayoutEntry(worker); });
+      if(dSaveBtn) dSaveBtn.addEventListener('click', function() { window.saveDistribution(worker); });
+      if(dCancelBtn) dCancelBtn.addEventListener('click', function() { window.cancelDistribution(worker); });
+    }, 0);
   }
 
   window.renderPayoutTab = async function() {
@@ -814,66 +938,84 @@ if(tab==='payout') renderPayoutTab();
     const me = currentUser ? (EMAIL_WORKER_MAP[currentUser.email.toLowerCase()]||'dev') : 'dev';
     const el = document.getElementById('payout-sections');
     if(!el) return;
-    el.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">' +
-      _section('dev',  me==='dev',  data) +
-      _section('josh', me==='josh', data) +
-      '</div>';
+    el.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:18px';
+    el.appendChild(grid);
+    _buildSection('dev',  me==='dev',  data, grid);
+    _buildSection('josh', me==='josh', data, grid);
   };
 
   window.showAddPayoutExpense = function(w) {
-    document.getElementById('payout-add-form-'+w).style.display='';
-    document.getElementById('payout-dist-form-'+w).style.display='none';
-    document.getElementById('payout-date-'+w).value=new Date().toISOString().split('T')[0];
-    ['payout-amount-','payout-desc-','payout-notes-'].forEach(p=>{const el=document.getElementById(p+w);if(el)el.value='';});
+    var f = document.getElementById('payout-add-form-'+w);
+    var d = document.getElementById('payout-dist-form-'+w);
+    if(f) f.style.display='';
+    if(d) d.style.display='none';
+    var dt = document.getElementById('payout-date-'+w);
+    if(dt) dt.value = new Date().toISOString().split('T')[0];
+    ['payout-amount-','payout-desc-','payout-notes-'].forEach(function(p) {
+      var el = document.getElementById(p+w); if(el) el.value='';
+    });
   };
-  window.cancelPayoutEntry = function(w) { document.getElementById('payout-add-form-'+w).style.display='none'; };
+  window.cancelPayoutEntry = function(w) {
+    var f = document.getElementById('payout-add-form-'+w); if(f) f.style.display='none';
+  };
   window.savePayoutEntry = async function(w) {
-    const cat=document.getElementById('payout-cat-'+w).value;
-    const desc=document.getElementById('payout-desc-'+w).value.trim();
-    const date=document.getElementById('payout-date-'+w).value;
-    const amount=parseFloat(document.getElementById('payout-amount-'+w).value)||0;
-    const notes=document.getElementById('payout-notes-'+w).value.trim();
+    var cat    = document.getElementById('payout-cat-'+w).value;
+    var desc   = document.getElementById('payout-desc-'+w).value.trim();
+    var date   = document.getElementById('payout-date-'+w).value;
+    var amount = parseFloat(document.getElementById('payout-amount-'+w).value)||0;
+    var notes  = document.getElementById('payout-notes-'+w).value.trim();
     if(!date||!amount){alert('Please enter a date and amount.');return;}
-    const data=await _load();
-    if(!data.entries)data.entries=[];
-    data.entries.push({id:_uid(),worker:w,cat,desc,date,amount,notes,createdAt:new Date().toISOString()});
+    var data = await _load();
+    if(!data.entries) data.entries=[];
+    data.entries.push({id:_uid(),worker:w,cat:cat,desc:desc,date:date,amount:amount,notes:notes,createdAt:new Date().toISOString()});
     await _save(data);
     renderPayoutTab();
   };
   window.deletePayoutEntry = async function(id, w) {
-    if(!confirm('Delete this entry?'))return;
-    const data=await _load();
-    data.entries=(data.entries||[]).filter(e=>e.id!==id);
+    if(!confirm('Delete this entry?')) return;
+    var data = await _load();
+    data.entries = (data.entries||[]).filter(function(e){return e.id!==id;});
     await _save(data);
     renderPayoutTab();
   };
   window.showRecordDistribution = function(w) {
-    document.getElementById('payout-dist-form-'+w).style.display='';
-    document.getElementById('payout-add-form-'+w).style.display='none';
-    document.getElementById('dist-date-'+w).value=new Date().toISOString().split('T')[0];
-    ['dist-amount-','dist-notes-'].forEach(p=>{const el=document.getElementById(p+w);if(el)el.value='';});
+    var f = document.getElementById('payout-add-form-'+w);
+    var d = document.getElementById('payout-dist-form-'+w);
+    if(f) f.style.display='none';
+    if(d) d.style.display='';
+    var dt = document.getElementById('dist-date-'+w);
+    if(dt) dt.value = new Date().toISOString().split('T')[0];
+    ['dist-amount-','dist-notes-'].forEach(function(p) {
+      var el = document.getElementById(p+w); if(el) el.value='';
+    });
   };
-  window.cancelDistribution = function(w) { document.getElementById('payout-dist-form-'+w).style.display='none'; };
+  window.cancelDistribution = function(w) {
+    var f = document.getElementById('payout-dist-form-'+w); if(f) f.style.display='none';
+  };
   window.saveDistribution = async function(w) {
-    const amount=parseFloat(document.getElementById('dist-amount-'+w).value)||0;
-    const date=document.getElementById('dist-date-'+w).value;
-    const notes=document.getElementById('dist-notes-'+w).value.trim();
+    var amount = parseFloat(document.getElementById('dist-amount-'+w).value)||0;
+    var date   = document.getElementById('dist-date-'+w).value;
+    var notes  = document.getElementById('dist-notes-'+w).value.trim();
     if(!date||!amount){alert('Please enter a date and amount.');return;}
-    const data=await _load();
-    if(!data.distributions)data.distributions=[];
-    data.distributions.push({id:_uid(),worker:w,amount,date,notes,createdAt:new Date().toISOString()});
+    var data = await _load();
+    if(!data.distributions) data.distributions=[];
+    data.distributions.push({id:_uid(),worker:w,amount:amount,date:date,notes:notes,createdAt:new Date().toISOString()});
     await _save(data);
     renderPayoutTab();
     alert('Distribution recorded!');
   };
   window.deleteDistribution = async function(id, w) {
-    if(!confirm('Delete this distribution?'))return;
-    const data=await _load();
-    data.distributions=(data.distributions||[]).filter(d=>d.id!==id);
+    if(!confirm('Delete this distribution?')) return;
+    var data = await _load();
+    data.distributions = (data.distributions||[]).filter(function(d){return d.id!==id;});
     await _save(data);
     renderPayoutTab();
   };
-  window.downloadPayoutReport = function(w) { alert('PDF download coming soon for ' + (w==='dev'?'Devarsh':'Josh')); };
+  window.downloadPayoutReport = function(w) {
+    alert('PDF report for ' + (w==='dev'?'Devarsh':'Josh') + ' - coming soon!');
+  };
 })();
 
 // ── ITEM SELECT ──
