@@ -4104,18 +4104,24 @@ window.onInvoiceCenterChange = function() {
   const firstHourInput = document.getElementById('inv-first-hour');
   const per15Input = document.getElementById('inv-per-15');
   if(!sel) return;
-  const center = surgeryCenters.find(c => c.id === sel.value);
+  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === sel.value);
   if(center) {
-    if(locationInput) locationInput.value = center.name;
+    if(locationInput) { locationInput.value = center.name; locationInput.style.display = 'none'; }
     if(firstHourInput) firstHourInput.value = center.firstHour.toFixed(2);
     if(per15Input) per15Input.value = center.per15.toFixed(2);
   } else {
-    if(locationInput) locationInput.value = '';
+    if(locationInput) { locationInput.value = ''; locationInput.style.display = ''; }
     if(firstHourInput) firstHourInput.value = '';
     if(per15Input) per15Input.value = '';
   }
-  populateFlatRateDropdown();
-  calculateInvoice();
+  // Refresh whichever card is active
+  const type = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
+  if(type === 'flat') {
+    _renderFlatRateInfoCard();
+    populateFlatRateDropdown();
+  } else {
+    calculateInvoice();
+  }
 };;
 window.onSurgeryCenterChange = function() {
 updateDraftInvoicePreview();
@@ -4812,22 +4818,24 @@ window.deleteFlatRate = async function(centerId, flatRateId) {
 // ── INVOICE BILLING TYPE TOGGLE ──
 window.onBillingTypeChange = function() {
   const type = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
-  const hLabel=document.getElementById('inv-billing-hourly-label');
-  const fLabel=document.getElementById('inv-billing-flat-label');
-  const hFields=document.getElementById('inv-hourly-fields');
-  const fFields=document.getElementById('inv-flat-fields');
-  if(type==='flat') {
-    if(hFields) hFields.style.display='none';
-    if(fFields) fFields.style.display='';
+  const hLabel  = document.getElementById('inv-billing-hourly-label');
+  const fLabel  = document.getElementById('inv-billing-flat-label');
+  const hFields = document.getElementById('inv-hourly-fields');
+  const fFields = document.getElementById('inv-flat-fields');
+
+  if(type === 'flat') {
+    if(hFields) hFields.style.display = 'none';
+    if(fFields) fFields.style.display = '';
     if(fLabel)  { fLabel.style.borderColor='var(--info)'; fLabel.style.background='var(--info-light)'; fLabel.style.color='var(--info)'; }
     if(hLabel)  { hLabel.style.borderColor='var(--border)'; hLabel.style.background='var(--surface)'; hLabel.style.color='var(--text-muted)'; }
-    if(typeof populateFlatRateDropdown==='function') populateFlatRateDropdown();
+    _renderFlatRateInfoCard();
   } else {
-    if(hFields) hFields.style.display='';
-    if(fFields) fFields.style.display='none';
+    if(hFields) hFields.style.display = '';
+    if(fFields) fFields.style.display = 'none';
     if(hLabel)  { hLabel.style.borderColor='var(--info)'; hLabel.style.background='var(--info-light)'; hLabel.style.color='var(--info)'; }
     if(fLabel)  { fLabel.style.borderColor='var(--border)'; fLabel.style.background='var(--surface)'; fLabel.style.color='var(--text-muted)'; }
-    if(typeof calculateInvoice==='function') calculateInvoice();
+    _renderHourlyRateCard();
+    calculateInvoice();
   }
 };;
 
@@ -5103,6 +5111,77 @@ window.removeFlatRateFromForm = function(idx) {
   window._editingFlatRates.splice(idx, 1);
   renderFlatRatesInForm();
 };
+
+
+// ── INVOICE RATE CARD RENDERERS ──────────────────────────────────────────────
+function _getRateCard() {
+  // The Rate Information card is the second .card inside the invoice grid-2
+  const grid = document.querySelector('#tab-invoice .grid-2');
+  if(!grid) return null;
+  return grid.querySelectorAll('.card')[1] || null;
+}
+
+function _renderFlatRateInfoCard() {
+  const card = _getRateCard();
+  if(!card) return;
+  const sel = document.getElementById('inv-location-select');
+  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === (sel?.value||''));
+  const frs = (center && Array.isArray(center.flatRates)) ? center.flatRates : [];
+
+  if(!center) {
+    card.innerHTML = '<div class="card-title">Flat Rates</div>'
+      + '<div style="font-size:13px;color:var(--text-faint);font-style:italic">Select a surgery center to see flat rates</div>';
+    return;
+  }
+
+  if(!frs.length) {
+    card.innerHTML = '<div class="card-title">Flat Rates — '+center.name+'</div>'
+      + '<div style="font-size:13px;color:var(--text-faint);font-style:italic;margin-bottom:12px">No flat rates set for this center.</div>'
+      + '<div style="font-size:12px;color:var(--text-faint)">Go to Analytics → edit this center → add flat rates.</div>';
+    return;
+  }
+
+  card.innerHTML = '<div class="card-title">Flat Rates — '+center.name+'</div>'
+    + '<div style="display:grid;grid-template-columns:1fr auto;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:8px">'
+    + '<div style="padding:7px 12px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);background:var(--surface2);border-bottom:1px solid var(--border)">Procedure</div>'
+    + '<div style="padding:7px 12px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);background:var(--surface2);border-bottom:1px solid var(--border);text-align:right">Rate</div>'
+    + frs.map((fr,idx) => {
+        const isLast = idx === frs.length-1;
+        const bg = idx%2===0 ? 'var(--bg)' : 'var(--surface2)';
+        const border = isLast ? '' : 'border-bottom:1px solid var(--border);';
+        return '<div style="padding:10px 12px;font-size:13px;background:'+bg+';'+border+'">'+fr.procedure+'</div>'
+             + '<div style="padding:10px 12px;font-size:14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--accent);background:'+bg+';'+border+'text-align:right">$'+Number(fr.amount).toFixed(2)+'</div>';
+      }).join('')
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--text-faint)">Select a procedure above to auto-fill the total</div>';
+}
+
+function _renderHourlyRateCard() {
+  const card = _getRateCard();
+  if(!card) return;
+  card.innerHTML = '<div class="card-title">Rate Information</div>'
+    + '<label>First Hour Rate ($)</label>'
+    + '<input type="number" id="inv-first-hour" placeholder="e.g. 300.00" min="0" step="0.01" oninput="calculateInvoice()">'
+    + '<label>Per 15-Minute Rate ($) <span style="font-size:11px;color:var(--text-faint);font-weight:400">after first hour</span></label>'
+    + '<input type="number" id="inv-per-15" placeholder="e.g. 75.00" min="0" step="0.01" oninput="calculateInvoice()">'
+    + '<div style="margin-top:20px;padding:16px;background:var(--info-light);border-radius:var(--radius-sm);border:1px solid #b8cfe8">'
+    + '<div style="font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px">Calculated Summary</div>'
+    + '<div id="inv-summary" style="font-size:13px;color:var(--text-muted)">Enter times and rates to see summary</div>'
+    + '<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #b8cfe8;padding-top:10px">'
+    + '<span style="font-size:13px;font-weight:600;color:var(--info)">TOTAL DUE</span>'
+    + '<span id="inv-total" style="font-size:24px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info)">$0.00</span>'
+    + '</div></div>';
+  // Re-wire rates from selected center
+  const sel = document.getElementById('inv-location-select');
+  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === (sel?.value||''));
+  if(center) {
+    const fh = document.getElementById('inv-first-hour');
+    const p15 = document.getElementById('inv-per-15');
+    if(fh) fh.value = center.firstHour.toFixed(2);
+    if(p15) p15.value = center.per15.toFixed(2);
+  }
+  calculateInvoice();
+}
 
 // ── BROWSER BACK BUTTON ──
 window.addEventListener('popstate', (event) => {
