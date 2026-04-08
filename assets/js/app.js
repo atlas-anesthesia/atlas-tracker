@@ -5125,35 +5125,32 @@ function _renderFlatRateInfoCard() {
   const card = _getRateCard();
   if(!card) return;
   const sel = document.getElementById('inv-location-select');
-  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === (sel?.value||''));
+  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === (sel ? sel.value : ''));
   const frs = (center && Array.isArray(center.flatRates)) ? center.flatRates : [];
 
   if(!center) {
     card.innerHTML = '<div class="card-title">Flat Rates</div>'
-      + '<div style="font-size:13px;color:var(--text-faint);font-style:italic">Select a surgery center to see flat rates</div>';
+      + '<div style="font-size:13px;color:var(--text-faint);font-style:italic">Select a surgery center to see flat rates.</div>';
     return;
   }
-
   if(!frs.length) {
-    card.innerHTML = '<div class="card-title">Flat Rates — '+center.name+'</div>'
-      + '<div style="font-size:13px;color:var(--text-faint);font-style:italic;margin-bottom:12px">No flat rates set for this center.</div>'
-      + '<div style="font-size:12px;color:var(--text-faint)">Go to Analytics → edit this center → add flat rates.</div>';
+    card.innerHTML = '<div class="card-title">Flat Rates &mdash; ' + center.name + '</div>'
+      + '<div style="font-size:13px;color:var(--text-faint);font-style:italic;margin-bottom:8px">No flat rates set for this center.</div>'
+      + '<div style="font-size:12px;color:var(--text-faint)">Go to Analytics, edit this center, and add flat rates.</div>';
     return;
   }
-
-  card.innerHTML = '<div class="card-title">Flat Rates — '+center.name+'</div>'
-    + '<div style="display:grid;grid-template-columns:1fr auto;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:8px">'
+  var rows = frs.map(function(fr, idx) {
+    var bg = idx % 2 === 0 ? 'var(--bg)' : 'var(--surface2)';
+    var border = idx < frs.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
+    return '<div style="padding:10px 12px;font-size:13px;background:' + bg + ';' + border + '">' + fr.procedure + '</div>'
+         + '<div style="padding:10px 12px;font-size:14px;font-weight:600;font-family:DM Mono,monospace;color:var(--accent);background:' + bg + ';' + border + 'text-align:right">$' + Number(fr.amount).toFixed(2) + '</div>';
+  }).join('');
+  card.innerHTML = '<div class="card-title">Flat Rates &mdash; ' + center.name + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr auto;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:8px">'
     + '<div style="padding:7px 12px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);background:var(--surface2);border-bottom:1px solid var(--border)">Procedure</div>'
     + '<div style="padding:7px 12px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);background:var(--surface2);border-bottom:1px solid var(--border);text-align:right">Rate</div>'
-    + frs.map((fr,idx) => {
-        const isLast = idx === frs.length-1;
-        const bg = idx%2===0 ? 'var(--bg)' : 'var(--surface2)';
-        const border = isLast ? '' : 'border-bottom:1px solid var(--border);';
-        return '<div style="padding:10px 12px;font-size:13px;background:'+bg+';'+border+'">'+fr.procedure+'</div>'
-             + '<div style="padding:10px 12px;font-size:14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--accent);background:'+bg+';'+border+'text-align:right">$'+Number(fr.amount).toFixed(2)+'</div>';
-      }).join('')
-    + '</div>'
-    + '<div style="font-size:11px;color:var(--text-faint)">Select a procedure above to auto-fill the total</div>';
+    + rows + '</div>'
+    + '<div style="font-size:11px;color:var(--text-faint)">Select a procedure above to auto-fill the total.</div>';
 }
 
 function _renderHourlyRateCard() {
@@ -5169,14 +5166,13 @@ function _renderHourlyRateCard() {
     + '<div id="inv-summary" style="font-size:13px;color:var(--text-muted)">Enter times and rates to see summary</div>'
     + '<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #b8cfe8;padding-top:10px">'
     + '<span style="font-size:13px;font-weight:600;color:var(--info)">TOTAL DUE</span>'
-    + '<span id="inv-total" style="font-size:24px;font-weight:500;font-family:'DM Mono',monospace;color:var(--info)">$0.00</span>'
+    + '<span id="inv-total" style="font-size:24px;font-weight:500;font-family:DM Mono,monospace;color:var(--info)">$0.00</span>'
     + '</div></div>';
-  // Re-wire rates from selected center
   const sel = document.getElementById('inv-location-select');
-  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === (sel?.value||''));
+  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === (sel ? sel.value : ''));
   if(center) {
-    const fh = document.getElementById('inv-first-hour');
-    const p15 = document.getElementById('inv-per-15');
+    var fh = document.getElementById('inv-first-hour');
+    var p15 = document.getElementById('inv-per-15');
     if(fh) fh.value = center.firstHour.toFixed(2);
     if(p15) p15.value = center.per15.toFixed(2);
   }
