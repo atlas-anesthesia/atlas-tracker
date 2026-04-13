@@ -5380,8 +5380,8 @@ function buildFaxHTML(r) {
 
   // Worker-specific info
   const worker = (typeof currentWorker !== 'undefined' ? currentWorker : null) || r.worker || 'dev';
-  const providerName = worker === 'josh' ? 'Dr. Josh Condado' : 'Dr. Dev Murthy';
-  const providerCreds = worker === 'josh' ? 'CRNA, Anesthesiology' : 'CRNA, Anesthesiology';
+  const providerName = worker === 'josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
+  const providerCreds = 'CRNA, Anesthesiology';
   const phone = '2625739095';
 
   // Pre-op fields
