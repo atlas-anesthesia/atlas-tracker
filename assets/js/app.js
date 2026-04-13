@@ -982,7 +982,7 @@ if(tab==='payout') renderPayoutTab();
     renderPayoutTab();
   };
   window.deletePayoutEntry = async function(id, w) {
-    if(!confirm('Delete this entry?')) return;
+    if(!confirm('⚠️ Delete this CS log entry?\n\nThis cannot be undone.')) return;
     var data = await _load();
     data.entries = (data.entries||[]).filter(function(e){return e.id!==id;});
     await _save(data);
@@ -1015,7 +1015,7 @@ if(tab==='payout') renderPayoutTab();
     alert('Distribution recorded!');
   };
   window.deleteDistribution = async function(id, w) {
-    if(!confirm('Delete this distribution?')) return;
+    if(!confirm('⚠️ Delete this distribution record?\n\nThis cannot be undone.')) return;
     var data = await _load();
     data.distributions = (data.distributions||[]).filter(function(d){return d.id!==id;});
     await _save(data);
@@ -1380,7 +1380,7 @@ if(!isNaN(nA)&&nA>=0) item.alert=nA;
 await saveInventory();
 };
 window.deleteItem = async function(id) {
-if(!confirm('Delete this item?'))return;
+if(!confirm('⚠️ Delete this inventory item?\n\nThis will permanently remove it from inventory. This cannot be undone.'))return;
 items=items.filter(i=>i.id!==id);
 await saveInventory();refreshItemSelect();
 };
@@ -1720,7 +1720,7 @@ return;
 }
 const c = cases.find(x => x.id === id);
 const label = c ? c.caseId : 'this draft';
-if(!confirm(`Delete draft "${label}"? This cannot be undone.`)) return;
+if(!confirm(`⚠️ Delete draft "${label}"?\n\nThis will remove this draft case. This cannot be undone.`)) return;
 cases = cases.filter(x => x.id !== id);
 if(window._activeDraftId === id) {
 window._activeDraftId = null;
@@ -2086,7 +2086,7 @@ console.error(e);
 }
 }
 window.deletePreopRecord = async function(id) {
-if(!confirm('Delete this pre-op record? This cannot be undone.')) return;
+if(!confirm('⚠️ Delete this pre-op record?\n\nThis will permanently remove the pre-op assessment. This cannot be undone.')) return;
 try {
 const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records || []) : [];
@@ -3073,7 +3073,7 @@ window.toggleInvoice = function(id) {
 document.getElementById('inv-detail-'+id).classList.toggle('open');
 };
 window.deleteInvoice = async function(id) {
-if(!confirm('Delete this invoice record?')) return;
+if(!confirm('⚠️ Delete this invoice record?\n\nThis cannot be undone.')) return;
 try {
 const snap = await getDoc(doc(db,'atlas','invoices'));
 const existing = snap.exists() ? (snap.data().invoices || []) : [];
@@ -4239,7 +4239,7 @@ window.editCenter = function(id) {
 };
 window.deleteCenter = async function(id) {
 const c = surgeryCenters.find(x => x.id === id);
-if(!confirm(`Delete "${c?.name}"?`)) return;
+if(!confirm(`⚠️ Delete surgery center "${c?.name}"?\n\nThis will remove the center and all its rates. This cannot be undone.`)) return;
 surgeryCenters = surgeryCenters.filter(x => x.id !== id);
 setSyncing(true);
 await saveSurgeryCenters();
@@ -4545,7 +4545,7 @@ console.error(e);
 }
 };
 window.deleteTransfer = async function(id) {
-if(!confirm('Delete this transfer record?')) return;
+if(!confirm('⚠️ Delete this drug transfer record?\n\nThis cannot be undone.')) return;
 try {
 const snap = await getDoc(doc(db,'atlas','cstransfers'));
 const existing = snap.exists() ? (snap.data().transfers || []) : [];
@@ -4837,7 +4837,7 @@ window.saveFlatRate = async function(centerId) {
   populateCenterDropdowns();
 };
 window.deleteFlatRate = async function(centerId, flatRateId) {
-  if(!confirm('Delete this flat rate?')) return;
+  if(!confirm('⚠️ Delete this flat rate?\n\nThis cannot be undone.')) return;
   const center = surgeryCenters.find(c => c.id === centerId);
   if(!center) return;
   center.flatRates = (center.flatRates||[]).filter(fr => fr.id !== flatRateId);
@@ -5035,7 +5035,7 @@ window.saveFlatRate = async function(centerId) {
   populateCenterDropdowns();
 };
 window.deleteFlatRate = async function(centerId, flatRateId) {
-  if(!confirm('Delete this flat rate?')) return;
+  if(!confirm('⚠️ Delete this flat rate?\n\nThis cannot be undone.')) return;
   const center = surgeryCenters.find(c => c.id === centerId);
   if(!center) return;
   center.flatRates = (center.flatRates||[]).filter(fr => fr.id !== flatRateId);
