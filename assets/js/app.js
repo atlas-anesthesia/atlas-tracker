@@ -5378,103 +5378,110 @@ function buildFaxHTML(r) {
   const today = now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
 
-  // Worker-specific info
   const worker = (typeof currentWorker !== 'undefined' ? currentWorker : null) || r.worker || 'dev';
   const providerName = worker === 'josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
   const providerCreds = 'CRNA, Anesthesiology';
   const phone = '2625739095';
 
-  // Pre-op fields
   const patientName = [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ') || r['po-patient']||'';
   const dob = r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '';
   const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '';
   const centerName = (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center'])?.name || r['po-surgery-center']||'';
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<style>
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 0; padding: 24px; max-width: 720px; margin: 0 auto; }
-  .header-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-  .header-logo-cell { width: 50%; vertical-align: top; padding: 12px 16px; }
-  .header-title-cell { width: 50%; vertical-align: middle; text-align: right; padding: 12px 16px; }
-  .logo-name { font-size: 20px; font-weight: bold; color: #1d3557; }
-  .logo-sub { font-size: 11px; color: #444; margin-top: 2px; }
-  .fax-title { font-size: 16px; font-weight: bold; color: #1d3557; }
-  .divider { border: none; border-top: 2px solid #1d3557; margin: 0 0 12px 0; }
-  .confidential { background: #f8f8f8; border: 1px solid #ccc; padding: 10px 14px; font-size: 10px; color: #555; margin-bottom: 14px; line-height: 1.5; }
-  .fields-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-  .fields-table td { padding: 5px 8px; border: 1px solid #bbb; font-size: 12px; vertical-align: top; }
-  .fields-table td.label { font-weight: bold; background: #f0f0f0; width: 130px; white-space: nowrap; }
-  .fields-table td.value { }
-  .body-text { font-size: 12px; line-height: 1.6; margin-bottom: 10px; }
-  .body-text strong { }
-  .checklist { margin: 8px 0 8px 20px; }
-  .checklist li { margin-bottom: 4px; }
-  .signature-line { border-top: 1px solid #000; width: 260px; margin-top: 32px; padding-top: 4px; font-size: 11px; }
-  .footer-text { font-size: 9px; color: #666; margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; line-height: 1.4; }
-  .urgent { color: #b91c1c; font-weight: bold; font-size: 13px; margin-bottom: 12px; }
-</style>
-</head><body>
+  // Return only the inner content — no <html>/<head>/<body> tags
+  // Styles are scoped to avoid affecting the page
+  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.4">
 
-<table class="header-table">
-  <tr>
-    <td class="header-logo-cell">
-      <div class="logo-name">Atlas Anesthesia</div>
-      <div class="logo-sub">${providerName} | ${providerCreds}</div>
-    </td>
-    <td class="header-title-cell">
-      <div class="fax-title">Facsimile Transmission Cover Sheet</div>
-    </td>
-  </tr>
-</table>
-<hr class="divider">
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+    <tr>
+      <td style="width:50%;vertical-align:top;padding:8px 0">
+        <div style="font-size:18px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div>
+        <div style="font-size:11px;color:#444;margin-top:2px">${providerName} | ${providerCreds}</div>
+      </td>
+      <td style="width:50%;vertical-align:middle;text-align:right;padding:8px 0">
+        <div style="font-size:14px;font-weight:bold;color:#1d3557">Facsimile Transmission Cover Sheet</div>
+      </td>
+    </tr>
+  </table>
+  <hr style="border:none;border-top:2px solid #1d3557;margin:0 0 10px 0">
 
-<div class="confidential">
-  <strong>Confidentiality Notice:</strong> This facsimile transmission contains confidential information, which may be legally privileged and is intended only for the use of the individual(s) named below. If you are not the intended recipient, you are hereby notified that any disclosure, copying, distribution, or action taken in reliance upon the contents of this transmission is strictly prohibited. If you have received this fax in error, please notify the sender immediately and destroy all copies.
-</div>
+  <div style="background:#f8f8f8;border:1px solid #ccc;padding:8px 12px;font-size:10px;color:#555;margin-bottom:12px;line-height:1.5">
+    <strong>Confidentiality Notice:</strong> This facsimile transmission contains confidential information, which may be legally privileged and is intended only for the use of the individual(s) named below. If you are not the intended recipient, you are hereby notified that any disclosure, copying, distribution, or action taken in reliance upon the contents of this transmission is strictly prohibited. If you have received this fax in error, please notify the sender immediately and destroy all copies.
+  </div>
 
-<table class="fields-table">
-  <tr><td class="label">DATE:</td><td class="value">${today}</td><td class="label">TIME:</td><td class="value">${timeStr}</td></tr>
-  <tr><td class="label">TO:</td><td class="value" colspan="3">${centerName}</td></tr>
-  <tr><td class="label">FAX TO:</td><td class="value" colspan="3"></td></tr>
-  <tr><td class="label">ATTN:</td><td class="value" colspan="3"></td></tr>
-  <tr><td class="label">FROM:</td><td class="value" colspan="3">${providerName} — Atlas Anesthesia</td></tr>
-  <tr><td class="label">FAX FROM:</td><td class="value" colspan="3">Atlas Anesthesia</td></tr>
-  <tr><td class="label">PHONE:</td><td class="value" colspan="3">${phone}</td></tr>
-  <tr><td class="label">PAGES:</td><td class="value"></td><td class="label">RE:</td><td class="value">Patient Medical Records Request</td></tr>
-  <tr><td class="label">PATIENT NAME:</td><td class="value" colspan="3">${patientName}</td></tr>
-  <tr><td class="label">DATE OF BIRTH:</td><td class="value" colspan="3">${dob}</td></tr>
-  ${surgDate ? `<tr><td class="label">SURGERY DATE:</td><td class="value" colspan="3">${surgDate}</td></tr>` : ''}
-</table>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:130px;white-space:nowrap">DATE:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb">${today}</td>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:80px">TIME:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb">${timeStr}</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TO:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${centerName}</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX TO:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3"></td>
+    </tr>
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">ATTN:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3"></td>
+    </tr>
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${providerName} — Atlas Anesthesia</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX FROM:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">Atlas Anesthesia</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PHONE:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${phone}</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb"></td>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb">Patient Medical Records Request</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PATIENT NAME:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${patientName}</td>
+    </tr>
+    <tr>
+      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">DATE OF BIRTH:</td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${dob}</td>
+    </tr>
+    ${surgDate ? `<tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">SURGERY DATE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${surgDate}</td></tr>` : ''}
+  </table>
 
-<p class="urgent">⚠ Urgent — Please Respond ASAP</p>
+  <p style="color:#b91c1c;font-weight:bold;font-size:13px;margin:0 0 10px 0">⚠ Urgent — Please Respond ASAP</p>
 
-<p class="body-text">Dear,</p>
+  <p style="margin:0 0 8px 0">Dear,</p>
 
-<p class="body-text">We are writing on behalf of <strong>${providerName}</strong> at <strong>Atlas Anesthesia</strong> regarding the above-named patient who is scheduled for an upcoming anesthesia procedure at our facility. In order to ensure the safest and most comprehensive anesthesia care plan, we are respectfully requesting the following records be transmitted to our office at your earliest convenience — <strong>preferably as soon as possible</strong>.</p>
+  <p style="margin:0 0 8px 0">We are writing on behalf of <strong>${providerName}</strong> at <strong>Atlas Anesthesia</strong> regarding the above-named patient who is scheduled for an upcoming anesthesia procedure at our facility. In order to ensure the safest and most comprehensive anesthesia care plan, we are respectfully requesting the following records be transmitted to our office at your earliest convenience — <strong>preferably as soon as possible</strong>.</p>
 
-<p class="body-text">Please fax the following documents for the patient listed above:</p>
+  <p style="margin:0 0 6px 0">Please fax the following documents for the patient listed above:</p>
+  <ul style="margin:0 0 10px 20px;padding:0">
+    <li style="margin-bottom:4px">Most recent <strong>History &amp; Physical (H&amp;P)</strong></li>
+    <li style="margin-bottom:4px">Any and all applicable <strong>Laboratory Work / Lab Results</strong> (e.g., CBC, CMP, BMP, coagulation studies, or other relevant panels)</li>
+    <li style="margin-bottom:4px">Any additional pertinent medical records relevant to anesthesia clearance</li>
+  </ul>
 
-<ul class="checklist">
-  <li>Most recent <strong>History &amp; Physical (H&amp;P)</strong></li>
-  <li>Any and all applicable <strong>Laboratory Work / Lab Results</strong> (e.g., CBC, CMP, BMP, coagulation studies, or other relevant panels)</li>
-  <li>Any additional pertinent medical records relevant to anesthesia clearance</li>
-</ul>
+  <p style="margin:0 0 8px 0">Timely receipt of these records is critical to our pre-operative assessment and scheduling process. If you have any questions or require a signed release of information form, please do not hesitate to contact our office directly.</p>
 
-<p class="body-text">Timely receipt of these records is critical to our pre-operative assessment and scheduling process. If you have any questions or require a signed release of information form, please do not hesitate to contact our office directly.</p>
+  <p style="margin:0 0 8px 0">We sincerely appreciate your prompt attention to this matter. Thank you for your cooperation.</p>
 
-<p class="body-text">We sincerely appreciate your prompt attention to this matter. Thank you for your cooperation.</p>
+  <p style="margin:0 0 24px 0">Warm regards,</p>
 
-<p class="body-text">Warm regards,</p>
+  <div style="border-top:1px solid #000;width:220px;padding-top:4px;font-size:11px">
+    ${providerName}<br>Atlas Anesthesia<br>Phone: ${phone}
+  </div>
 
-<div class="signature-line">
-  ${providerName}<br>
-  Atlas Anesthesia<br>
-  Phone: ${phone}
-</div>
-
-<p class="footer-text">This fax is intended solely for the use of the individual or entity to which it is addressed and may contain information that is privileged, confidential, and/or exempt from disclosure under applicable law.</p>
-
-</body></html>`;
+  <p style="font-size:9px;color:#666;margin-top:16px;border-top:1px solid #ccc;padding-top:6px">This fax is intended solely for the use of the individual or entity to which it is addressed and may contain information that is privileged, confidential, and/or exempt from disclosure under applicable law.</p>
+</div>`;
 }
 
 function checkHistoryDeposits(cases) {
