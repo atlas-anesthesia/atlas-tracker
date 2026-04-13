@@ -259,14 +259,6 @@ await setDoc(doc(db,'atlas','inventory'),{items});
 setSyncing(false);
 }
 async function saveCases() {
-// Deduplicate by caseId — keep the most recent version of each case
-const seen = new Set();
-const deduped = [];
-for(const c of cases) {
-  const key = c.caseId || c.id;
-  if(!seen.has(key)) { seen.add(key); deduped.push(c); }
-}
-cases = deduped;
 setSyncing(true);
 await setDoc(doc(db,'atlas','cases'),{cases});
 setSyncing(false);
@@ -1233,21 +1225,6 @@ const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
 return sum+cpm*mg;
 },0);
 const total=suppliesTotal2+csTotal2;
-// Prevent duplicates — if a finalized case with this caseId already exists, update it
-const existingFinalIdx = cases.findIndex(x => x.caseId === caseId && !x.draft);
-if(existingFinalIdx !== -1) {
-  // Update in place instead of adding a new one
-  cases[existingFinalIdx] = {
-    ...cases[existingFinalIdx],
-    procedure:proc, provider, date, notes, worker:currentWorker,
-    startTime: document.getElementById('caseStartTime')?.value || '',
-    endTime: document.getElementById('caseEndTime')?.value || '',
-    caseComments:comments,
-    items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
-    savedCsEntries:csEntries.map(e=>({...e})),
-    csTotal:csTotal2, total, imageData:pendingImageData||null
-  };
-} else {
 cases.unshift({
 id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
 startTime: document.getElementById('caseStartTime')?.value || '',
@@ -1260,7 +1237,6 @@ savedCsEntries:csEntries.map(e=>({...e})),
 csTotal:csTotal2,
 total,imageData:pendingImageData||null
 });
-}
 caseItems.forEach(item=>{
 const inv=items.find(i=>i.id===item.id);
 if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
@@ -1994,10 +1970,7 @@ preopId: record['po-caseId'],
 surgeryCenter: record['po-surgery-center'] || '',
 savedAt: new Date().toISOString()
 };
-// Prevent duplicate drafts — update existing draft if same preopId
-const existingDraftIdx1 = cases.findIndex(x => x.draft && x.preopId === draftCase.preopId && x.worker === draftCase.worker);
-if(existingDraftIdx1 !== -1) { cases[existingDraftIdx1] = {...cases[existingDraftIdx1], ...draftCase}; }
-else { cases.unshift(draftCase); }
+cases.unshift(draftCase);
 await saveCases();
 }
 // Pre-fill the New Case form with pre-op info
@@ -3714,10 +3687,7 @@ total: 0,
 draft: true,
 imageData: null
 };
-// Prevent duplicate drafts — update if same caseId already exists as draft
-const existingDraftIdx2 = cases.findIndex(x => x.draft && x.caseId === newDraft.caseId);
-if(existingDraftIdx2 !== -1) { cases[existingDraftIdx2] = {...cases[existingDraftIdx2], ...newDraft}; }
-else { cases.unshift(newDraft); }
+cases.unshift(newDraft);
 await saveCases();
 // Now resume it so it loads into Finalize Case
 resumeCase(newDraft.id);
@@ -4190,6 +4160,7 @@ window.showAddCenterForm = function() {
   if(document.getElementById('sc-per-15')) document.getElementById('sc-per-15').value = '';
   if(document.getElementById('sc-provider')) document.getElementById('sc-provider').value = '';
   if(document.getElementById('sc-invoice-email')) document.getElementById('sc-invoice-email').value = '';
+  if(document.getElementById('sc-fax-number')) document.getElementById('sc-fax-number').value = '';
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
   document.getElementById('add-center-form').style.display = 'block';
@@ -4210,13 +4181,14 @@ window.saveCenter = async function() {
   if(!name) { alert('Please enter a surgery center name.'); return; }
   const provider = document.getElementById('sc-provider')?.value.trim() || '';
   const invoiceEmail = document.getElementById('sc-invoice-email')?.value.trim() || '';
+  const faxNumber = document.getElementById('sc-fax-number')?.value.trim() || '';
   // Grab flat rates from the in-memory editing array
   const flatRates = window._editingFlatRates || [];
   if(window._editingCenterId) {
     const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
-    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, flatRates };
+    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, faxNumber, flatRates };
   } else {
-    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, flatRates });
+    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, faxNumber, flatRates });
   }
   setSyncing(true);
   await saveSurgeryCenters();
@@ -4239,6 +4211,7 @@ window.editCenter = function(id) {
   document.getElementById('sc-per-15').value = c.per15;
   document.getElementById('sc-provider').value = c.provider || '';
   document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
+  if(document.getElementById('sc-fax-number')) document.getElementById('sc-fax-number').value = c.faxNumber || '';
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
   document.getElementById('add-center-form').style.display = 'block';
