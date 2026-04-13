@@ -3536,35 +3536,31 @@ window.toggleMidCase = function(id) {
 document.getElementById('midcase-detail-'+id).classList.toggle('open');
 };
 window.deleteMidCase = async function(type, id, caseId) {
-const label = caseId || id;
-const confirmed = confirm(`Are you sure you want to delete "${label}"?\n\nThis will remove the ${type === 'preop' ? 'pre-op record' : 'draft case'}. This cannot be undone.`);
-if(!confirmed) return;
-try {
-if(type === 'preop') {
-// Delete the pre-op record
-const snap = await getDoc(doc(db,'atlas','preop'));
-const records = snap.exists() ? (snap.data().records || []) : [];
-const updated = records.filter(r => r.id !== id);
-setSyncing(true);
-await setDoc(doc(db,'atlas','preop'), { records: updated });
-setSyncing(false);
-// Also delete any matching draft case
-const matchingDraft = cases.find(c => c.draft && c.caseId === caseId);
-if(matchingDraft) {
-cases = cases.filter(c => c.id !== matchingDraft.id);
-await saveCases();
-}
-} else if(type === 'draft') {
-// Delete just the draft case
-cases = cases.filter(c => c.id !== id);
-await saveCases();
-}
-renderMidCase();
-refreshDraftPicker();
-} catch(e) {
-alert('Error deleting record. Please try again.');
-console.error(e);
-}
+  const label = caseId || id;
+  const confirmed = confirm(`Are you sure you want to delete "${label}"?\n\nThis will remove ALL records associated with this case (draft, finalized, and pre-op). This cannot be undone.`);
+  if(!confirmed) return;
+  try {
+    if(type === 'preop') {
+      // Delete the pre-op record
+      const snap = await getDoc(doc(db,'atlas','preop'));
+      const records = snap.exists() ? (snap.data().records || []) : [];
+      const updated = records.filter(r => r.id !== id);
+      setSyncing(true);
+      await setDoc(doc(db,'atlas','preop'), { records: updated });
+      setSyncing(false);
+    }
+    // Delete ALL cases (draft or finalized) with this caseId
+    cases = cases.filter(c => c.caseId !== caseId && c.id !== id);
+    await saveCases();
+    renderMidCase();
+    renderHistory();
+    renderReports();
+    renderCaseLog();
+    refreshDraftPicker();
+  } catch(e) {
+    alert('Error deleting record. Please try again.');
+    console.error(e);
+  }
 };
 async function autoCheckDeposit(recordId, email) {
 const badge = document.getElementById('deposit-badge-' + recordId);
