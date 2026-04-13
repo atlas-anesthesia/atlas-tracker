@@ -5286,8 +5286,13 @@ window.openFaxModalFromForm = function() {
   if(faxInput) faxInput.value = center?.faxNumber || '';
 
   // Build preview and show modal
-  document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
-  document.getElementById('faxModal').style.display = 'flex';
+  try {
+    document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
+    document.getElementById('faxModal').style.display = 'flex';
+  } catch(e) {
+    console.error('Fax modal error:', e);
+    alert('Error opening fax: ' + e.message);
+  }
 };
 
 // Called from the 📠 Fax button on a saved pre-op record in the history list
