@@ -5283,7 +5283,7 @@ window.openFaxModalFromForm = function() {
   const centerId = document.getElementById('po-surgery-center')?.value;
   const center = surgeryCenters.find(c => c.id === centerId);
   const faxInput = document.getElementById('fax-destination');
-  if(faxInput) faxInput.value = center?.faxNumber || '';
+  if(faxInput) faxInput.value = center?.faxNumber || '+1';
 
   // Build preview and show modal
   try {
@@ -5313,7 +5313,7 @@ window.openFaxModal = async function(id) {
 
     const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
     const faxInput = document.getElementById('fax-destination');
-    if(faxInput) faxInput.value = center?.faxNumber || '';
+    if(faxInput) faxInput.value = center?.faxNumber || '+1';
 
     const modal = document.getElementById('faxModal');
     if(!modal) { alert('Fax modal not found in DOM.'); return; }
@@ -5381,7 +5381,7 @@ function buildFaxHTML(r) {
   const worker = (typeof currentWorker !== 'undefined' ? currentWorker : null) || r.worker || 'dev';
   const providerName = worker === 'josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
   const providerCreds = 'CRNA, Anesthesiology';
-  const phone = '2625739095';
+  const phone = worker === 'josh' ? '7154996858' : '2625739095';
 
   const patientName = [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ') || r['po-patient']||'';
   const dob = r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '';
