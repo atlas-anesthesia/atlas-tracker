@@ -201,14 +201,10 @@ loadSavedInvoices();
 setInvoiceProvider();
 setTimeout(wireEKGDetection, 600);
 loadSurgeryCenters();
-// Restore last active tab — after data loads
+// Restore last active tab
 try {
 const lastTab = localStorage.getItem('atlas_active_tab');
-if(lastTab && lastTab !== 'preop') {
-  // Hide all sections immediately to avoid flash of preop
-  document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
-  setTimeout(function() { showTab(lastTab); }, 200);
-}
+if(lastTab && lastTab !== 'preop') showTab(lastTab);
 } catch(e) {}
 // Pre-warm calendar data
 setTimeout(() => {
