@@ -259,9 +259,17 @@ await setDoc(doc(db,'atlas','inventory'),{items});
 setSyncing(false);
 }
 async function saveCases() {
-setSyncing(true);
-await setDoc(doc(db,'atlas','cases'),{cases});
-setSyncing(false);
+  // Deduplicate by caseId — keep most recent version of each
+  const seen = new Set();
+  const deduped = [];
+  for(const c of cases) {
+    const key = c.caseId || c.id;
+    if(!seen.has(key)) { seen.add(key); deduped.push(c); }
+  }
+  cases = deduped;
+  setSyncing(true);
+  await setDoc(doc(db,'atlas','cases'),{cases});
+  setSyncing(false);
 }
 // ── HELPERS ──
 function getStock(item,w){return w==='dev'?item.stockDev:item.stockJosh;}
@@ -1225,6 +1233,20 @@ const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
 return sum+cpm*mg;
 },0);
 const total=suppliesTotal2+csTotal2;
+// Prevent duplicates — update existing finalized case if same caseId
+const existingFinalIdx = cases.findIndex(x => x.caseId === caseId && !x.draft);
+if(existingFinalIdx !== -1) {
+  cases[existingFinalIdx] = {
+    ...cases[existingFinalIdx],
+    procedure:proc, provider, date, notes, worker:currentWorker,
+    startTime: document.getElementById('caseStartTime')?.value || '',
+    endTime: document.getElementById('caseEndTime')?.value || '',
+    caseComments:comments,
+    items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
+    savedCsEntries:csEntries.map(e=>({...e})),
+    csTotal:csTotal2, total, imageData:pendingImageData||null
+  };
+} else {
 cases.unshift({
 id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
 startTime: document.getElementById('caseStartTime')?.value || '',
@@ -1237,6 +1259,7 @@ savedCsEntries:csEntries.map(e=>({...e})),
 csTotal:csTotal2,
 total,imageData:pendingImageData||null
 });
+}
 caseItems.forEach(item=>{
 const inv=items.find(i=>i.id===item.id);
 if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
