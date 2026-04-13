@@ -1994,7 +1994,10 @@ preopId: record['po-caseId'],
 surgeryCenter: record['po-surgery-center'] || '',
 savedAt: new Date().toISOString()
 };
-cases.unshift(draftCase);
+// Prevent duplicate drafts — update existing draft if same preopId
+const existingDraftIdx1 = cases.findIndex(x => x.draft && x.preopId === draftCase.preopId && x.worker === draftCase.worker);
+if(existingDraftIdx1 !== -1) { cases[existingDraftIdx1] = {...cases[existingDraftIdx1], ...draftCase}; }
+else { cases.unshift(draftCase); }
 await saveCases();
 }
 // Pre-fill the New Case form with pre-op info
@@ -3711,7 +3714,10 @@ total: 0,
 draft: true,
 imageData: null
 };
-cases.unshift(newDraft);
+// Prevent duplicate drafts — update if same caseId already exists as draft
+const existingDraftIdx2 = cases.findIndex(x => x.draft && x.caseId === newDraft.caseId);
+if(existingDraftIdx2 !== -1) { cases[existingDraftIdx2] = {...cases[existingDraftIdx2], ...newDraft}; }
+else { cases.unshift(newDraft); }
 await saveCases();
 // Now resume it so it loads into Finalize Case
 resumeCase(newDraft.id);
