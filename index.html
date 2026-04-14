@@ -266,7 +266,7 @@ Connect Google Calendar
         <button id="inv-modal-btn-flat" onclick="setInvModalBilling('flat')" style="flex:1;padding:9px;border:2px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-muted);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">💲 Flat Rate</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Associated Case</label><select id="inv-modal-case" onchange="onInvModalCaseChange()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:2px solid var(--info);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none"><option value="">— Select a case (required) —</option></select></div>
+  <input type="hidden" id="inv-modal-case">
       <div>
   <label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Surgery Center / Billed To</label>
   <select id="inv-modal-sc-select" onchange="onInvModalCenterChange()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-bottom:4px">
@@ -286,8 +286,18 @@ Connect Google Calendar
           <div><label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Per 15-min Rate ($)</label><input type="number" id="inv-modal-p15" placeholder="e.g. 160" oninput="calcInvModal()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none"></div>
         </div>
         <!-- Flat rate fields -->
-        <div id="inv-modal-flat-fields" style="display:none"><label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Procedure Name</label><input type="text" id="inv-modal-flat-proc" placeholder="e.g. Dual Arch" oninput="calcInvModalFlat()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none"></div>
-        <div id="inv-modal-flat-amt-wrap" style="display:none"><label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Flat Rate Amount ($)</label><input type="number" id="inv-modal-flat-amt" placeholder="e.g. 4000" min="0" step="0.01" oninput="calcInvModalFlat()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none"></div>
+        <div id="inv-modal-flat-fields" style="display:none">
+          <label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Procedure</label>
+          <select id="inv-modal-flat-proc-select" onchange="onInvModalFlatProcSelect()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-bottom:6px">
+            <option value="">— Select procedure —</option>
+            <option value="__custom__">✏ Custom procedure...</option>
+          </select>
+          <input type="text" id="inv-modal-flat-proc" placeholder="e.g. Dual Arch" oninput="calcInvModalFlat()" style="display:none;width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        </div>
+        <div id="inv-modal-flat-amt-wrap" style="display:none">
+          <label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Flat Rate Amount ($)</label>
+          <input type="number" id="inv-modal-flat-amt" placeholder="e.g. 4000" min="0" step="0.01" oninput="calcInvModalFlat()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        </div>
       </div>
         <div style="margin-top:14px;padding:12px 16px;background:var(--info-light);border-radius:var(--radius-sm);border:1px solid #b8cfe8;display:flex;justify-content:space-between;align-items:center">
           <span id="inv-modal-summary" style="font-size:13px;color:var(--text-muted)">Fill in times and rates to calculate</span>
