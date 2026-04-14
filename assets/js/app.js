@@ -5302,6 +5302,19 @@ window.openFaxModalFromForm = function() {
   const faxInput = document.getElementById('fax-destination');
   if(faxInput) faxInput.value = center?.faxNumber || '+1';
 
+  // Pre-populate editable fields from pre-op record
+  const _center = (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center']);
+  const _toEl = document.getElementById('fax-to');
+  const _attnEl = document.getElementById('fax-attn');
+  const _nameEl = document.getElementById('fax-patient-name');
+  const _dobEl = document.getElementById('fax-dob');
+  const _pagesEl = document.getElementById('fax-pages');
+  if(_toEl) _toEl.value = _center?.name || r['po-surgery-center'] || '';
+  if(_attnEl) _attnEl.value = '';
+  if(_nameEl) _nameEl.value = [r['po-firstName']||'',r['po-lastName']||''].filter(Boolean).join(' ') || r['po-patient']||'';
+  if(_dobEl) _dobEl.value = r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '';
+  if(_pagesEl) _pagesEl.value = '';
+
   // Build preview and show modal
   try {
     document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
@@ -5350,6 +5363,8 @@ window.closeFaxModal = function() {
 };
 
 window.confirmAndSendFax = async function() {
+  // Rebuild preview with latest field values before sending
+  if(_faxRecord) document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(_faxRecord);
   const faxNumber = document.getElementById('fax-destination').value.trim();
   if(!faxNumber) { alert('Please enter a destination fax number.'); return; }
   if(!faxNumber.startsWith('+')) { alert('Please include the country code, e.g. +12345678901'); return; }
@@ -5400,10 +5415,18 @@ function buildFaxHTML(r) {
   const providerCreds = 'CRNA, Anesthesiology';
   const phone = worker === 'josh' ? '7154996858' : '2625739095';
 
-  const patientName = [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ') || r['po-patient']||'';
-  const dob = r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '';
+  // Read from editable modal fields (fall back to pre-op record data)
+  const patientName = document.getElementById('fax-patient-name')?.value.trim()
+    || [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ')
+    || r['po-patient']||'';
+  const dob = document.getElementById('fax-dob')?.value.trim()
+    || (r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '');
   const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '';
-  const centerName = (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center'])?.name || r['po-surgery-center']||'';
+  const centerName = document.getElementById('fax-to')?.value.trim()
+    || (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center'])?.name
+    || r['po-surgery-center']||'';
+  const attn = document.getElementById('fax-attn')?.value.trim() || '';
+  const pages = document.getElementById('fax-pages')?.value.trim() || '';
 
   // Return only the inner content — no <html>/<head>/<body> tags
   // Styles are scoped to avoid affecting the page
@@ -5439,11 +5462,11 @@ function buildFaxHTML(r) {
     </tr>
     <tr>
       <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX TO:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3"></td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${document.getElementById('fax-destination')?.value||''}</td>
     </tr>
     <tr>
       <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">ATTN:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3"></td>
+      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${attn}</td>
     </tr>
     <tr>
       <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td>
@@ -5459,7 +5482,7 @@ function buildFaxHTML(r) {
     </tr>
     <tr>
       <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb"></td>
+      <td style="padding:5px 8px;border:1px solid #bbb">${pages}</td>
       <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td>
       <td style="padding:5px 8px;border:1px solid #bbb">Patient Medical Records Request</td>
     </tr>
