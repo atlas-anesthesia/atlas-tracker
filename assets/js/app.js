@@ -259,7 +259,6 @@ await setDoc(doc(db,'atlas','inventory'),{items});
 setSyncing(false);
 }
 async function saveCases() {
-  // Deduplicate by caseId — keep most recent version of each
   const seen = new Set();
   const deduped = [];
   for(const c of cases) {
@@ -982,7 +981,7 @@ if(tab==='payout') renderPayoutTab();
     renderPayoutTab();
   };
   window.deletePayoutEntry = async function(id, w) {
-    if(!confirm('⚠️ Delete this CS log entry?\n\nThis cannot be undone.')) return;
+    if(!confirm('Delete this entry?')) return;
     var data = await _load();
     data.entries = (data.entries||[]).filter(function(e){return e.id!==id;});
     await _save(data);
@@ -1015,7 +1014,7 @@ if(tab==='payout') renderPayoutTab();
     alert('Distribution recorded!');
   };
   window.deleteDistribution = async function(id, w) {
-    if(!confirm('⚠️ Delete this distribution record?\n\nThis cannot be undone.')) return;
+    if(!confirm('Delete this distribution?')) return;
     var data = await _load();
     data.distributions = (data.distributions||[]).filter(function(d){return d.id!==id;});
     await _save(data);
@@ -1233,7 +1232,6 @@ const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
 return sum+cpm*mg;
 },0);
 const total=suppliesTotal2+csTotal2;
-// Prevent duplicates — update existing finalized case if same caseId
 const existingFinalIdx = cases.findIndex(x => x.caseId === caseId && !x.draft);
 if(existingFinalIdx !== -1) {
   cases[existingFinalIdx] = {
@@ -1380,7 +1378,7 @@ if(!isNaN(nA)&&nA>=0) item.alert=nA;
 await saveInventory();
 };
 window.deleteItem = async function(id) {
-if(!confirm('⚠️ Delete this inventory item?\n\nThis will permanently remove it from inventory. This cannot be undone.'))return;
+if(!confirm('Delete this item?'))return;
 items=items.filter(i=>i.id!==id);
 await saveInventory();refreshItemSelect();
 };
@@ -1720,7 +1718,7 @@ return;
 }
 const c = cases.find(x => x.id === id);
 const label = c ? c.caseId : 'this draft';
-if(!confirm(`⚠️ Delete draft "${label}"?\n\nThis will remove this draft case. This cannot be undone.`)) return;
+if(!confirm(`Delete draft "${label}"? This cannot be undone.`)) return;
 cases = cases.filter(x => x.id !== id);
 if(window._activeDraftId === id) {
 window._activeDraftId = null;
@@ -2086,7 +2084,7 @@ console.error(e);
 }
 }
 window.deletePreopRecord = async function(id) {
-if(!confirm('⚠️ Delete this pre-op record?\n\nThis will permanently remove the pre-op assessment. This cannot be undone.')) return;
+if(!confirm('Delete this pre-op record? This cannot be undone.')) return;
 try {
 const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records || []) : [];
@@ -3073,7 +3071,7 @@ window.toggleInvoice = function(id) {
 document.getElementById('inv-detail-'+id).classList.toggle('open');
 };
 window.deleteInvoice = async function(id) {
-if(!confirm('⚠️ Delete this invoice record?\n\nThis cannot be undone.')) return;
+if(!confirm('Delete this invoice record?')) return;
 try {
 const snap = await getDoc(doc(db,'atlas','invoices'));
 const existing = snap.exists() ? (snap.data().invoices || []) : [];
@@ -3537,11 +3535,10 @@ document.getElementById('midcase-detail-'+id).classList.toggle('open');
 };
 window.deleteMidCase = async function(type, id, caseId) {
   const label = caseId || id;
-  const confirmed = confirm(`Are you sure you want to delete "${label}"?\n\nThis will remove ALL records associated with this case (draft, finalized, and pre-op). This cannot be undone.`);
+  const confirmed = confirm(`⚠️ Delete "${label}"?\n\nThis will permanently remove ALL records for this case (draft, finalized, and pre-op).\n\nThis cannot be undone.`);
   if(!confirmed) return;
   try {
     if(type === 'preop') {
-      // Delete the pre-op record
       const snap = await getDoc(doc(db,'atlas','preop'));
       const records = snap.exists() ? (snap.data().records || []) : [];
       const updated = records.filter(r => r.id !== id);
@@ -3549,7 +3546,6 @@ window.deleteMidCase = async function(type, id, caseId) {
       await setDoc(doc(db,'atlas','preop'), { records: updated });
       setSyncing(false);
     }
-    // Delete ALL cases (draft or finalized) with this caseId
     cases = cases.filter(c => c.caseId !== caseId && c.id !== id);
     await saveCases();
     renderMidCase();
@@ -4179,7 +4175,6 @@ window.showAddCenterForm = function() {
   if(document.getElementById('sc-per-15')) document.getElementById('sc-per-15').value = '';
   if(document.getElementById('sc-provider')) document.getElementById('sc-provider').value = '';
   if(document.getElementById('sc-invoice-email')) document.getElementById('sc-invoice-email').value = '';
-  if(document.getElementById('sc-fax-number')) document.getElementById('sc-fax-number').value = '';
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
   document.getElementById('add-center-form').style.display = 'block';
@@ -4200,14 +4195,13 @@ window.saveCenter = async function() {
   if(!name) { alert('Please enter a surgery center name.'); return; }
   const provider = document.getElementById('sc-provider')?.value.trim() || '';
   const invoiceEmail = document.getElementById('sc-invoice-email')?.value.trim() || '';
-  const faxNumber = document.getElementById('sc-fax-number')?.value.trim() || '';
   // Grab flat rates from the in-memory editing array
   const flatRates = window._editingFlatRates || [];
   if(window._editingCenterId) {
     const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
-    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, faxNumber, flatRates };
+    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, flatRates };
   } else {
-    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, faxNumber, flatRates });
+    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, flatRates });
   }
   setSyncing(true);
   await saveSurgeryCenters();
@@ -4230,7 +4224,6 @@ window.editCenter = function(id) {
   document.getElementById('sc-per-15').value = c.per15;
   document.getElementById('sc-provider').value = c.provider || '';
   document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
-  if(document.getElementById('sc-fax-number')) document.getElementById('sc-fax-number').value = c.faxNumber || '';
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
   document.getElementById('add-center-form').style.display = 'block';
@@ -4239,7 +4232,7 @@ window.editCenter = function(id) {
 };
 window.deleteCenter = async function(id) {
 const c = surgeryCenters.find(x => x.id === id);
-if(!confirm(`⚠️ Delete surgery center "${c?.name}"?\n\nThis will remove the center and all its rates. This cannot be undone.`)) return;
+if(!confirm(`Delete "${c?.name}"?`)) return;
 surgeryCenters = surgeryCenters.filter(x => x.id !== id);
 setSyncing(true);
 await saveSurgeryCenters();
@@ -4545,7 +4538,7 @@ console.error(e);
 }
 };
 window.deleteTransfer = async function(id) {
-if(!confirm('⚠️ Delete this drug transfer record?\n\nThis cannot be undone.')) return;
+if(!confirm('Delete this transfer record?')) return;
 try {
 const snap = await getDoc(doc(db,'atlas','cstransfers'));
 const existing = snap.exists() ? (snap.data().transfers || []) : [];
@@ -4837,7 +4830,7 @@ window.saveFlatRate = async function(centerId) {
   populateCenterDropdowns();
 };
 window.deleteFlatRate = async function(centerId, flatRateId) {
-  if(!confirm('⚠️ Delete this flat rate?\n\nThis cannot be undone.')) return;
+  if(!confirm('Delete this flat rate?')) return;
   const center = surgeryCenters.find(c => c.id === centerId);
   if(!center) return;
   center.flatRates = (center.flatRates||[]).filter(fr => fr.id !== flatRateId);
@@ -5035,7 +5028,7 @@ window.saveFlatRate = async function(centerId) {
   populateCenterDropdowns();
 };
 window.deleteFlatRate = async function(centerId, flatRateId) {
-  if(!confirm('⚠️ Delete this flat rate?\n\nThis cannot be undone.')) return;
+  if(!confirm('Delete this flat rate?')) return;
   const center = surgeryCenters.find(c => c.id === centerId);
   if(!center) return;
   center.flatRates = (center.flatRates||[]).filter(fr => fr.id !== flatRateId);
@@ -5252,7 +5245,6 @@ window.previewFax = function() {
   const preview = document.getElementById('faxPreviewContent');
   if(preview) {
     preview.innerHTML = buildFaxHTML(_faxRecord);
-    // Scroll to preview
     preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 };
@@ -5311,29 +5303,23 @@ window.openFaxModalFromForm = function() {
   const centerId = document.getElementById('po-surgery-center')?.value;
   const center = surgeryCenters.find(c => c.id === centerId);
   const faxInput = document.getElementById('fax-destination');
-  if(faxInput) faxInput.value = center?.faxNumber || '+1';
+  if(faxInput) faxInput.value = center?.faxNumber || '';
 
-  // Pre-populate editable fields from pre-op record
-  const _center = (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center']);
+  // Pre-populate editable modal fields
+  const _center2 = (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center']);
   const _toEl = document.getElementById('fax-to');
   const _attnEl = document.getElementById('fax-attn');
   const _nameEl = document.getElementById('fax-patient-name');
   const _dobEl = document.getElementById('fax-dob');
   const _pagesEl = document.getElementById('fax-pages');
-  if(_toEl) _toEl.value = _center?.name || r['po-surgery-center'] || '';
+  if(_toEl) _toEl.value = _center2?.name || r['po-surgery-center'] || '';
   if(_attnEl) _attnEl.value = '';
   if(_nameEl) _nameEl.value = [r['po-firstName']||'',r['po-lastName']||''].filter(Boolean).join(' ') || r['po-patient']||'';
   if(_dobEl) _dobEl.value = r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '';
   if(_pagesEl) _pagesEl.value = '';
-
   // Build preview and show modal
-  try {
-    document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
-    document.getElementById('faxModal').style.display = 'flex';
-  } catch(e) {
-    console.error('Fax modal error:', e);
-    alert('Error opening fax: ' + e.message);
-  }
+  document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
+  document.getElementById('faxModal').style.display = 'flex';
 };
 
 // Called from the 📠 Fax button on a saved pre-op record in the history list
@@ -5354,7 +5340,7 @@ window.openFaxModal = async function(id) {
 
     const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
     const faxInput = document.getElementById('fax-destination');
-    if(faxInput) faxInput.value = center?.faxNumber || '+1';
+    if(faxInput) faxInput.value = center?.faxNumber || '';
 
     const modal = document.getElementById('faxModal');
     if(!modal) { alert('Fax modal not found in DOM.'); return; }
@@ -5374,7 +5360,6 @@ window.closeFaxModal = function() {
 };
 
 window.confirmAndSendFax = async function() {
-  // Rebuild preview with latest field values before sending
   if(_faxRecord) document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(_faxRecord);
   const faxNumber = document.getElementById('fax-destination').value.trim();
   if(!faxNumber) { alert('Please enter a destination fax number.'); return; }
@@ -5420,13 +5405,10 @@ function buildFaxHTML(r) {
   const now = new Date();
   const today = now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-
   const worker = (typeof currentWorker !== 'undefined' ? currentWorker : null) || r.worker || 'dev';
   const providerName = worker === 'josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
   const providerCreds = 'CRNA, Anesthesiology';
   const phone = worker === 'josh' ? '7154996858' : '2625739095';
-
-  // Read from editable modal fields (fall back to pre-op record data)
   const patientName = document.getElementById('fax-patient-name')?.value.trim()
     || [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ')
     || r['po-patient']||'';
@@ -5439,10 +5421,7 @@ function buildFaxHTML(r) {
   const attn = document.getElementById('fax-attn')?.value.trim() || '';
   const pages = document.getElementById('fax-pages')?.value.trim() || '';
 
-  // Return only the inner content — no <html>/<head>/<body> tags
-  // Styles are scoped to avoid affecting the page
   return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.4">
-
   <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
     <tr>
       <td style="width:50%;vertical-align:top;padding:8px 0">
@@ -5455,82 +5434,37 @@ function buildFaxHTML(r) {
     </tr>
   </table>
   <hr style="border:none;border-top:2px solid #1d3557;margin:0 0 10px 0">
-
   <div style="background:#f8f8f8;border:1px solid #ccc;padding:8px 12px;font-size:10px;color:#555;margin-bottom:12px;line-height:1.5">
     <strong>Confidentiality Notice:</strong> This facsimile transmission contains confidential information, which may be legally privileged and is intended only for the use of the individual(s) named below. If you are not the intended recipient, you are hereby notified that any disclosure, copying, distribution, or action taken in reliance upon the contents of this transmission is strictly prohibited. If you have received this fax in error, please notify the sender immediately and destroy all copies.
   </div>
-
   <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:130px;white-space:nowrap">DATE:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb">${today}</td>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:80px">TIME:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb">${timeStr}</td>
-    </tr>
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TO:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${centerName}</td>
-    </tr>
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX TO:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${document.getElementById('fax-destination')?.value||''}</td>
-    </tr>
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">ATTN:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${attn}</td>
-    </tr>
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${providerName} — Atlas Anesthesia</td>
-    </tr>
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX FROM:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">Atlas Anesthesia</td>
-    </tr>
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PHONE:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${phone}</td>
-    </tr>
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb">${pages}</td>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb">Patient Medical Records Request</td>
-    </tr>
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PATIENT NAME:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${patientName}</td>
-    </tr>
-    <tr>
-      <td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">DATE OF BIRTH:</td>
-      <td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${dob}</td>
-    </tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:130px">DATE:</td><td style="padding:5px 8px;border:1px solid #bbb">${today}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:80px">TIME:</td><td style="padding:5px 8px;border:1px solid #bbb">${timeStr}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TO:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${centerName}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX TO:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${document.getElementById('fax-destination')?.value||''}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">ATTN:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${attn}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${providerName} — Atlas Anesthesia</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">Atlas Anesthesia</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PHONE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${phone}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td><td style="padding:5px 8px;border:1px solid #bbb">${pages}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td><td style="padding:5px 8px;border:1px solid #bbb">Patient Medical Records Request</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PATIENT NAME:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${patientName}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">DATE OF BIRTH:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${dob}</td></tr>
     ${surgDate ? `<tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">SURGERY DATE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${surgDate}</td></tr>` : ''}
   </table>
-
   <p style="color:#b91c1c;font-weight:bold;font-size:13px;margin:0 0 10px 0">⚠ Urgent — Please Respond ASAP</p>
-
   <p style="margin:0 0 8px 0">Dear,</p>
-
   <p style="margin:0 0 8px 0">We are writing on behalf of <strong>${providerName}</strong> at <strong>Atlas Anesthesia</strong> regarding the above-named patient who is scheduled for an upcoming anesthesia procedure at our facility. In order to ensure the safest and most comprehensive anesthesia care plan, we are respectfully requesting the following records be transmitted to our office at your earliest convenience — <strong>preferably as soon as possible</strong>.</p>
-
   <p style="margin:0 0 6px 0">Please fax the following documents for the patient listed above:</p>
   <ul style="margin:0 0 10px 20px;padding:0">
     <li style="margin-bottom:4px">Most recent <strong>History &amp; Physical (H&amp;P)</strong></li>
     <li style="margin-bottom:4px">Any and all applicable <strong>Laboratory Work / Lab Results</strong> (e.g., CBC, CMP, BMP, coagulation studies, or other relevant panels)</li>
     <li style="margin-bottom:4px">Any additional pertinent medical records relevant to anesthesia clearance</li>
   </ul>
-
   <p style="margin:0 0 8px 0">Timely receipt of these records is critical to our pre-operative assessment and scheduling process. If you have any questions or require a signed release of information form, please do not hesitate to contact our office directly.</p>
-
   <p style="margin:0 0 8px 0">We sincerely appreciate your prompt attention to this matter. Thank you for your cooperation.</p>
-
   <p style="margin:0 0 24px 0">Warm regards,</p>
-
   <div style="border-top:1px solid #000;width:220px;padding-top:4px;font-size:11px">
     ${providerName}<br>Atlas Anesthesia<br>Phone: ${phone}
   </div>
-
   <p style="font-size:9px;color:#666;margin-top:16px;border-top:1px solid #ccc;padding-top:6px">This fax is intended solely for the use of the individual or entity to which it is addressed and may contain information that is privileged, confidential, and/or exempt from disclosure under applicable law.</p>
 </div>`;
 }
