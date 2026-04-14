@@ -201,7 +201,7 @@ Connect Google Calendar
       <div style="display:flex;gap:10px">
         <button class="btn btn-ghost btn-sm" onclick="addPaymentRow()">+ Add Case</button>
         <button class="btn btn-success btn-sm" onclick="savePaymentRows()">✓ Save Changes</button>
-        <button class="btn btn-ghost btn-sm" onclick="openInvoiceModal()">📄 Generate Invoice</button>
+        
       </div>
     </div>
 
@@ -247,16 +247,32 @@ Connect Google Calendar
       </div>
       <!-- Fields -->
       <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <div><label>Surgery Center / Billed To</label><input type="text" id="inv-modal-location" placeholder="e.g. Affordable Dentures"></div>
-          <div><label>Date of Service</label><input type="date" id="inv-modal-date"></div>
-          <div><label>Provider</label><input type="text" id="inv-modal-provider" placeholder="e.g. Josh Condado"></div>
-          <div><label>Invoice Email (send to)</label><input type="email" id="inv-modal-email" placeholder="e.g. billing@center.com"></div>
+        <!-- Billing type toggle -->
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button id="inv-modal-btn-hourly" onclick="setInvModalBilling('hourly')" style="flex:1;padding:8px;border:2px solid var(--info);border-radius:var(--radius-sm);background:var(--info-light);color:var(--info);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer">⏱ Hourly</button>
+        <button id="inv-modal-btn-flat" onclick="setInvModalBilling('flat')" style="flex:1;padding:8px;border:2px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-muted);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">💲 Flat Rate</button>
+      </div>
+      <input type="hidden" id="inv-modal-billing-type" value="hourly">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div><label>Surgery Center / Billed To</label><input type="text" id="inv-modal-location" placeholder="e.g. Affordable Dentures"></div>
+        <div><label>Date of Service</label><input type="date" id="inv-modal-date"></div>
+        <div><label>Provider</label><input type="text" id="inv-modal-provider" placeholder="e.g. Josh Condado"></div>
+        <div><label>Invoice Email (send to)</label><input type="email" id="inv-modal-email" placeholder="e.g. billing@center.com"></div>
+        <!-- Hourly fields -->
+        <div id="inv-modal-hourly-fields" style="display:contents">
           <div><label>Start Time</label><input type="time" id="inv-modal-start" oninput="calcInvModal()"></div>
           <div><label>End Time</label><input type="time" id="inv-modal-end" oninput="calcInvModal()"></div>
           <div><label>First Hour Rate ($)</label><input type="number" id="inv-modal-fhr" placeholder="e.g. 960" oninput="calcInvModal()"></div>
           <div><label>Per 15-min Rate ($)</label><input type="number" id="inv-modal-p15" placeholder="e.g. 160" oninput="calcInvModal()"></div>
         </div>
+        <!-- Flat rate fields -->
+        <div id="inv-modal-flat-fields" style="display:none">
+          <label>Procedure Name</label><input type="text" id="inv-modal-flat-proc" placeholder="e.g. Dual Arch" oninput="calcInvModalFlat()">
+        </div>
+        <div id="inv-modal-flat-amt-wrap" style="display:none">
+          <label>Flat Rate Amount ($)</label><input type="number" id="inv-modal-flat-amt" placeholder="e.g. 4000" min="0" step="0.01" oninput="calcInvModalFlat()">
+        </div>
+      </div>
         <div style="margin-top:14px;padding:12px 16px;background:var(--info-light);border-radius:var(--radius-sm);border:1px solid #b8cfe8;display:flex;justify-content:space-between;align-items:center">
           <span id="inv-modal-summary" style="font-size:13px;color:var(--text-muted)">Fill in times and rates to calculate</span>
           <span id="inv-modal-total" style="font-size:22px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$0.00</span>
