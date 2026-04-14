@@ -5503,10 +5503,10 @@ function renderPaymentRows() {
     const empty = !val;
     const bdr = empty ? '1px solid #fca5a5' : '1px solid var(--border)';
     const bgc = empty ? 'rgba(239,68,68,0.06)' : 'var(--bg)';
-    return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:3px 4px;font-size:11px;border:${bdr};border-radius:4px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
+    return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:5px 4px;font-size:11px;border:${bdr};border-radius:5px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
   };
 
-  const COLS = '180px 50px 105px 50px 62px 88px 88px 88px 88px 40px 68px 40px 52px 30px';
+  const COLS = '190px 52px 110px 52px 68px 92px 92px 92px 92px 42px 72px 42px 50px 32px';
   const wcolor = w => w==='dev'?'var(--dev)':'var(--josh)';
   const wname = w => w==='dev'?'Dev':'Josh';
 
@@ -5524,7 +5524,7 @@ function renderPaymentRows() {
     const center = (window.surgeryCenters||[]).find(c => c.id === r.surgeryCenter);
     const scName = center?.name || r.surgeryCenterName || '';
 
-    return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center;min-height:38px">
+    return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center;min-height:42px">
       <div style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||r.caseId||''}">${r.name||r.caseId||'—'}</div>
       <div style="padding:4px 4px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${wname(r.worker)}</div>
       <div style="padding:4px 4px">${ro(scName)}</div>
@@ -6044,6 +6044,12 @@ window.downloadInvoiceModal = async function() {
     const amt = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || calc.total;
     _generateFlatRateInvoicePDF(location, date, provider, proc, amt);
     await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total:amt, caseId, worker:currentWorker, emailed:false, savedAt:new Date().toISOString() });
+  // Set invoiced amount on row but NOT invoiceSent (only email does that)
+  if(_invoiceModalRowIdx !== null && _paymentRows[_invoiceModalRowIdx]) {
+    _paymentRows[_invoiceModalRowIdx].invoicedAmount = amt;
+    renderPaymentRows();
+    setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
+  }
   } else {
     if(!calc) { alert('Please fill in times and rates.'); return; }
     _generateFlatRateInvoicePDF(location, date, provider, 'Anesthesia Services', calc.total);
