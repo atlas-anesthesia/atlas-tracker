@@ -159,4 +159,4 @@ cursor: pointer; transition: background .12s; border-bottom: 1px solid var(--bor
 }
 .nav-dropdown-menu button:last-child { border-bottom: none; }
 .nav-dropdown-menu button:hover { background: var(--surface2); color: var(--text); }
-.nav-dropdown-menu button.active { color: var(--info); font-weight: 500; background: var(--info-light); }
+.nav-dropdown-menu button.active { color: var(--info); font-weight: 500; background: var(--info-light); 
