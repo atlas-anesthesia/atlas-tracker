@@ -5388,6 +5388,47 @@ window.sortPaymentRows = function() {
   renderPaymentRows();
 };
 
+
+window.editPaymentField = function(field, idx) {
+  const confirmed = confirm(
+    field === 'proj'
+      ? '✏ Edit Projected Income?\n\nThis overrides the auto-calculated amount.\n\nAre you sure?'
+      : '✏ Edit Invoiced Amount?\n\nThis overrides the amount set by the invoice modal.\n\nAre you sure?'
+  );
+  if(!confirmed) return;
+
+  const wrapId = field === 'proj' ? 'pr-proj-wrap'+idx : 'pr-invamt-wrap'+idx;
+  const displayId = field === 'proj' ? 'pr-proj-display'+idx : 'pr-invamt'+idx;
+  const currentVal = field === 'proj'
+    ? (_paymentRows[idx].projOverride != null ? _paymentRows[idx].projOverride : _paymentRows[idx].estHrs * 600)
+    : (_paymentRows[idx].invoicedAmount || 0);
+
+  const wrap = document.getElementById(wrapId);
+  if(!wrap) return;
+
+  // Replace with inline input
+  wrap.innerHTML = `<input type="number" id="pr-edit-${field}-${idx}" value="${currentVal.toFixed(2)}"
+    min="0" step="0.01" autofocus
+    style="width:100%;padding:3px 5px;font-size:11px;font-weight:600;font-family:DM Mono,monospace;border:2px solid var(--info);border-radius:4px;background:var(--bg);color:var(--text);text-align:right"
+    onblur="commitPaymentField('${field}',${idx},this.value)"
+    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape')renderPaymentRows();">`;
+  const inp = document.getElementById('pr-edit-'+field+'-'+idx);
+  if(inp) { inp.focus(); inp.select(); }
+};
+
+window.commitPaymentField = function(field, idx, rawVal) {
+  const val = parseFloat(rawVal) || 0;
+  if(field === 'proj') {
+    _paymentRows[idx].projOverride = val;
+  } else {
+    _paymentRows[idx].invoicedAmount = val;
+  }
+  // Save to Firestore
+  setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
+  renderPaymentRows();
+  renderPaymentSummary();
+};
+
 // ── PAYMENTS TAB ──────────────────────────────────────────────────────────────
 let _paymentRows = [];
 let _invoiceModalRowIdx = null;
@@ -5568,13 +5609,19 @@ function renderPaymentRows() {
       <div style="padding:4px 4px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${wname(r.worker)}</div>
       <div style="padding:4px 4px">${ro(scName)}</div>
       <div style="padding:4px 4px;font-size:11px;font-weight:600;color:var(--accent);text-align:right">${r.estHrs>0?r.estHrs+'h':'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
-      <div style="padding:4px 4px;font-size:11px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace;text-align:right">${r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
+      <div style="padding:4px 4px;display:flex;align-items:center;gap:3px" id="pr-proj-wrap${i}">
+        <span style="font-size:11px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace;flex:1;text-align:right" id="pr-proj-display${i}">${r.projOverride!=null?'$'+Number(r.projOverride).toFixed(0):r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'<span style="color:#fca5a5;font-size:10px">—</span>'}</span>
+        <button onclick="editPaymentField('proj',${i})" style="background:none;border:none;cursor:pointer;font-size:9px;color:var(--text-faint);padding:0;line-height:1" title="Edit projected amount">✏</button>
+      </div>
       <div style="padding:4px 4px">${ro(caseFmt)}</div>
       <div style="padding:4px 4px">${ro(callFmt)}</div>
       <div style="padding:4px 4px">${dateInp('pr-depositDate'+i, r.depositDate)}</div>
       <div style="padding:4px 4px">${dateInp('pr-paidDate'+i, r.paidDate)}</div>
       <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
-      <div style="padding:4px 4px;font-size:11px;font-weight:600;font-family:DM Mono,monospace;color:var(--info);text-align:right" id="pr-invamt${i}">${r.invoicedAmount>0?'$'+Number(r.invoicedAmount).toFixed(2):'<span style="color:var(--text-faint)">—</span>'}</div>
+      <div style="padding:4px 4px;display:flex;align-items:center;gap:3px" id="pr-invamt-wrap${i}">
+        <span style="font-size:11px;font-weight:600;color:var(--info);font-family:DM Mono,monospace;flex:1;text-align:right" id="pr-invamt${i}">${r.invoicedAmount>0?'$'+Number(r.invoicedAmount).toFixed(2):'<span style="color:var(--text-faint)">—</span>'}</span>
+        <button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:9px;color:var(--text-faint);padding:0;line-height:1" title="Edit invoiced amount">✏</button>
+      </div>
       <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
       <div style="padding:4px 3px">
         <button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button>
