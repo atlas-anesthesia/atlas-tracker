@@ -4176,6 +4176,9 @@ window.showAddCenterForm = function() {
   if(document.getElementById('sc-provider')) document.getElementById('sc-provider').value = '';
   if(document.getElementById('sc-invoice-email')) document.getElementById('sc-invoice-email').value = '';
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
+  if(document.getElementById('sc-fax-number')) document.getElementById('sc-fax-number').value = '';
+  if(document.getElementById('sc-worker-josh')) document.getElementById('sc-worker-josh').checked = false;
+  if(document.getElementById('sc-worker-dev')) document.getElementById('sc-worker-dev').checked = false;
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
   document.getElementById('add-center-form').style.display = 'block';
   renderFlatRatesInForm();
@@ -4195,13 +4198,17 @@ window.saveCenter = async function() {
   if(!name) { alert('Please enter a surgery center name.'); return; }
   const provider = document.getElementById('sc-provider')?.value.trim() || '';
   const invoiceEmail = document.getElementById('sc-invoice-email')?.value.trim() || '';
+  const faxNumber = document.getElementById('sc-fax-number')?.value.trim() || '';
+  const workers = [];
+  if(document.getElementById('sc-worker-josh')?.checked) workers.push('josh');
+  if(document.getElementById('sc-worker-dev')?.checked) workers.push('dev');
   // Grab flat rates from the in-memory editing array
   const flatRates = window._editingFlatRates || [];
   if(window._editingCenterId) {
     const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
-    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, flatRates };
+    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, faxNumber, workers, flatRates };
   } else {
-    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, flatRates });
+    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, faxNumber, workers, flatRates });
   }
   setSyncing(true);
   await saveSurgeryCenters();
@@ -4223,6 +4230,9 @@ window.editCenter = function(id) {
   document.getElementById('sc-first-hour').value = c.firstHour;
   document.getElementById('sc-per-15').value = c.per15;
   document.getElementById('sc-provider').value = c.provider || '';
+  if(document.getElementById('sc-fax-number')) document.getElementById('sc-fax-number').value = c.faxNumber || '';
+  if(document.getElementById('sc-worker-josh')) document.getElementById('sc-worker-josh').checked = (c.workers||[]).includes('josh');
+  if(document.getElementById('sc-worker-dev')) document.getElementById('sc-worker-dev').checked = (c.workers||[]).includes('dev');
   document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
@@ -4252,8 +4262,12 @@ el.innerHTML = `
 <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint)"><span>Center Name</span><span>1st Hour</span><span>Per 15-min</span><span></span></div>
 ${surgeryCenters.map(c => {
   const frs = c.flatRates||[];
-  const frBadge = frs.length ? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px">${frs.length} flat rate${frs.length>1?'s':''}</span>` : '';
-  return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center"><div><div style="font-size:14px;font-weight:500;display:flex;align-items:center">${c.name}${frBadge}</div>
+  const frBadge = frs.length ? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px">${frs.length} flat rate${frs.length>1?'s':''}</span>` : '';
+  // Worker tags
+  const workers = c.workers || [];
+  const joshTag = workers.includes('josh') ? `<span style="background:var(--josh-light);color:var(--josh);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px">Josh</span>` : '';
+  const devTag = workers.includes('dev') ? `<span style="background:var(--dev-light);color:var(--dev);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px">Dev</span>` : '';
+  return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center"><div><div style="font-size:14px;font-weight:500;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${c.name}${frBadge}${joshTag}${devTag}</div>
 ${c.provider?`<div style="font-size:11px;color:var(--text-faint)">👤 ${c.provider}</div>`:''}
 ${c.invoiceEmail?`<div style="font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace">📧 ${c.invoiceEmail}</div>`:''}
 </div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.firstHour.toFixed(2)}</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.per15.toFixed(2)}</div><div style="display:flex;gap:6px"><button onclick="editCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="deleteCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑</button></div></div>`;
