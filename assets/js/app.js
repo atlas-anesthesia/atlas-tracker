@@ -5669,6 +5669,11 @@ window.closeInvoiceModal = function() {
 };
 
 window.calcInvModal = function() {
+  // If flat rate mode, delegate to flat rate calculator
+  if(document.getElementById('inv-modal-billing-type')?.value === 'flat') {
+    calcInvModalFlat();
+    return window._invModalCalc || null;
+  }
   const start = document.getElementById('inv-modal-start')?.value;
   const end = document.getElementById('inv-modal-end')?.value;
   const fhr = parseFloat(document.getElementById('inv-modal-fhr')?.value) || 0;
@@ -5824,16 +5829,23 @@ window.onPaymentCenterChange = function(idx) {
 ;
 
 window.calcInvModalFlat = function() {
-  const proc = document.getElementById('inv-modal-flat-proc')?.value.trim();
+  // Get procedure from dropdown or custom input
+  const procSel = document.getElementById('inv-modal-flat-proc-select');
+  const procCustom = document.getElementById('inv-modal-flat-proc');
+  const proc = (procSel?.value === '__custom__' || !procSel?.value)
+    ? (procCustom?.value?.trim() || '')
+    : procSel.options[procSel.selectedIndex]?.text.split(' — ')[0] || '';
   const amt = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || 0;
   const summEl = document.getElementById('inv-modal-summary');
   const totEl = document.getElementById('inv-modal-total');
-  if(proc && amt > 0) {
-    if(summEl) summEl.textContent = proc + ' — Flat Rate';
+  if(amt > 0) {
+    if(summEl) summEl.textContent = proc ? proc + ' — Flat Rate' : 'Flat Rate';
     if(totEl) totEl.textContent = '$'+amt.toFixed(2);
-    window._invModalCalc = { total: amt, billedStr: 'Flat Rate', flat: true };
+    window._invModalCalc = { total: amt, billedStr: 'Flat Rate', flat: true, proc };
   } else {
+    if(summEl) summEl.textContent = 'Enter flat rate amount';
     if(totEl) totEl.textContent = '$0.00';
+    window._invModalCalc = null;
   }
 };
 
@@ -6179,6 +6191,8 @@ window.setInvModalBilling = function(type) {
     document.getElementById('inv-modal-flat-amt-wrap').style.display = '';
     // Populate procedures for currently selected center
     onInvModalCenterChange();
+    // Reset summary to flat rate display (clear any leftover hourly amount)
+    calcInvModalFlat();
   } else {
     if(btnH){btnH.style.border=ACTIVE;btnH.style.background='var(--info-light)';btnH.style.color='var(--info)';btnH.style.fontWeight='600';}
     if(btnF){btnF.style.border=IDLE;btnF.style.background='var(--surface)';btnF.style.color='var(--text-muted)';btnF.style.fontWeight='500';}
