@@ -269,6 +269,8 @@ async function saveCases() {
   setSyncing(true);
   await setDoc(doc(db,'atlas','cases'),{cases});
   setSyncing(false);
+  // Auto-sync payment rows if loaded
+  if(_paymentRows.length > 0) syncPaymentRowsFromCases();
 }
 // ── HELPERS ──
 function getStock(item,w){return w==='dev'?item.stockDev:item.stockJosh;}
@@ -5301,6 +5303,68 @@ function checkHistoryDeposits(cases) {
   // stub — Stripe auto-check disabled
 }
 
+
+// ── SYNC PAYMENT ROWS FROM CASE DATA ─────────────────────────────────────────
+function syncPaymentRowsFromCases() {
+  const finalized = (cases||[]).filter(c => !c.draft);
+  let changed = false;
+  finalized.forEach(c => {
+    const rowIdx = _paymentRows.findIndex(r => r.caseId === c.caseId);
+    if(rowIdx !== -1) {
+      // Update case date if it changed
+      if(_paymentRows[rowIdx].caseDate !== c.date) {
+        _paymentRows[rowIdx].caseDate = c.date || '';
+        changed = true;
+      }
+      // Update worker
+      if(_paymentRows[rowIdx].worker !== c.worker) {
+        _paymentRows[rowIdx].worker = c.worker;
+        changed = true;
+      }
+      // Update case cost from case total
+      if(c.total && _paymentRows[rowIdx].caseCost !== c.total) {
+        _paymentRows[rowIdx].caseCost = c.total;
+        changed = true;
+      }
+    } else {
+      // New finalized case — add to payments
+      const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
+      _paymentRows.push({
+        id: uid(), caseId: c.caseId,
+        name: c.caseId || c.procedure || 'Unnamed',
+        worker: c.worker || 'josh',
+        caseDate: c.date || '',
+        callDate: preop?.['po-callDateTime']?.split('T')[0] || '',
+        depositDate: '', paidDate: '',
+        invoiceSent: c.manuallyInvoiced || false,
+        paid: c.depositStatus === 'paid' || false,
+        invoicedAmount: 0, caseCost: c.total || 0,
+        estHrs: parseFloat(preop?.['po-est-hours']) || 0,
+        projected: (parseFloat(preop?.['po-est-hours']) || 0) * 600
+      });
+      changed = true;
+    }
+  });
+  // Also sync call dates from preop
+  (window._rawPreopRecords||[]).forEach(r => {
+    const rowIdx = _paymentRows.findIndex(pr => pr.caseId === r['po-caseId']);
+    if(rowIdx !== -1 && r['po-callDateTime']) {
+      const callDate = r['po-callDateTime'].split('T')[0];
+      if(_paymentRows[rowIdx].callDate !== callDate) {
+        _paymentRows[rowIdx].callDate = callDate;
+        changed = true;
+      }
+    }
+  });
+  if(changed) {
+    // Save and re-render if payments tab is visible
+    setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
+    if(document.getElementById('tab-payments')?.classList.contains('active')) {
+      renderPaymentRows();
+    }
+  }
+}
+
 // ── PAYMENTS TAB ──────────────────────────────────────────────────────────────
 let _paymentRows = [];
 let _invoiceModalRowIdx = null;
@@ -5420,8 +5484,12 @@ function renderPaymentRows() {
     renderPaymentSummary();
     return;
   }
-  const inp = (id, type, val, extra='') =>
-    `<input type="${type}" id="${id}" value="${val||''}" ${extra} style="width:100%;padding:5px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
+  const inp = (id, type, val, extra='') => {
+    const empty = !val;
+    const bdr = empty ? '1px solid #fca5a5' : '1px solid var(--border)';
+    const bgc = empty ? 'rgba(239,68,68,0.06)' : 'var(--bg)';
+    return `<input type="${type}" id="${id}" value="${val||''}" ${extra} style="width:100%;padding:4px 5px;font-size:11px;border:${bdr};border-radius:4px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
+  };
 
   // Build surgery center options
   const scOptions = '<option value="">-- Select or type --</option>'
