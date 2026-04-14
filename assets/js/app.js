@@ -5390,39 +5390,35 @@ window.sortPaymentRows = function() {
 
 
 window.editPaymentField = function(field, rowIdx) {
-  const wrapId = field === 'proj' ? 'pr-proj-wrap'+rowIdx : 'pr-invamt-wrap'+rowIdx;
-  const wrap = document.getElementById(wrapId);
-  if(!wrap) return;
-
-  // If already editing, do nothing
-  if(wrap.querySelector('input')) return;
+  const wrap = document.getElementById(field === 'proj' ? 'pr-proj-wrap'+rowIdx : 'pr-invamt-wrap'+rowIdx);
+  if(!wrap || wrap.querySelector('input')) return;
 
   const currentVal = field === 'proj'
-    ? (_paymentRows[rowIdx]?.projOverride != null
-        ? _paymentRows[rowIdx].projOverride
-        : (_paymentRows[rowIdx]?.estHrs || 0) * 600)
+    ? (_paymentRows[rowIdx]?.projOverride != null ? _paymentRows[rowIdx].projOverride : (_paymentRows[rowIdx]?.estHrs||0)*600)
     : (_paymentRows[rowIdx]?.invoicedAmount || 0);
 
-  const label = field === 'proj' ? 'Projected $' : 'Inv. Amount';
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.step = '0.01';
+  inp.min = '0';
+  inp.value = currentVal.toFixed(2);
+  inp.title = 'Enter to save · Esc to cancel';
+  inp.style.cssText = 'width:100%;padding:3px 5px;font-size:11px;font-weight:600;font-family:DM Mono,monospace;border:2px solid var(--info);border-radius:4px;background:var(--bg);color:var(--text);text-align:right;outline:none';
 
-  wrap.innerHTML =
-    '<input type="number" step="0.01" min="0"' +
-    ' value="' + currentVal.toFixed(2) + '"' +
-    ' style="width:100%;padding:3px 5px;font-size:11px;font-weight:600;' +
-    'font-family:DM Mono,monospace;border:2px solid var(--info);' +
-    'border-radius:4px;background:var(--bg);color:var(--text);text-align:right;outline:none"' +
-    ' title="Enter to save · Esc to cancel"' +
-    ' onblur="commitPaymentField('' + field + '',' + rowIdx + ',this.value)"' +
-    ' onkeydown="' +
-      'if(event.key==='Enter'){event.preventDefault();this.blur();}' +
-      'if(event.key==='Escape'){event.preventDefault();renderPaymentRows();}' +
-    '">' +
-    '<span style="font-size:9px;color:var(--text-faint);white-space:nowrap;display:block;text-align:right;margin-top:2px">↵ save · esc cancel</span>';
+  const hint = document.createElement('span');
+  hint.style.cssText = 'font-size:9px;color:var(--text-faint);white-space:nowrap;display:block;text-align:right;margin-top:2px';
+  hint.textContent = '↵ save · esc cancel';
 
-  requestAnimationFrame(() => {
-    const inp = wrap.querySelector('input');
-    if(inp) { inp.focus(); inp.select(); }
+  inp.addEventListener('blur', () => commitPaymentField(field, rowIdx, inp.value));
+  inp.addEventListener('keydown', e => {
+    if(e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    if(e.key === 'Escape') { e.preventDefault(); renderPaymentRows(); }
   });
+
+  wrap.innerHTML = '';
+  wrap.appendChild(inp);
+  wrap.appendChild(hint);
+  requestAnimationFrame(() => { inp.focus(); inp.select(); });
 };
 
 window.commitPaymentField = function(field, idx, rawVal) {
