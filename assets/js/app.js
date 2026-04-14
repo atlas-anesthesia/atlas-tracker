@@ -5586,7 +5586,7 @@ function renderPaymentRows() {
     return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:5px 4px;font-size:11px;border:${bdr};border-radius:5px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
   };
 
-  const COLS = '190px 52px 110px 52px 68px 92px 92px 92px 92px 42px 72px 42px 50px 32px';
+  const COLS = '175px 48px 135px 48px 65px 88px 88px 88px 88px 40px 68px 40px 48px 32px';
   const wcolor = w => w==='dev'?'var(--dev)':'var(--josh)';
   const wname = w => w==='dev'?'Dev':'Josh';
 
@@ -5983,13 +5983,25 @@ window.onInvModalCenterChange = function() {
 
   if(val === '__custom__') {
     if(locInput) { locInput.style.display = ''; locInput.value = ''; locInput.focus(); }
+    if(emailEl) { emailEl.readOnly = false; emailEl.style.background=''; emailEl.style.color=''; emailEl.title=''; }
   } else if(val) {
     const center = (window.surgeryCenters||[]).find(c => c.id === val);
     if(locInput) { locInput.style.display = 'none'; locInput.value = center?.name || ''; }
     if(fhr) fhr.value = center?.firstHour?.toFixed(2) || '';
     if(p15) p15.value = center?.per15?.toFixed(2) || '';
-    // Auto-fill invoice email from surgery center's saved email
-    if(emailEl && center?.invoiceEmail) emailEl.value = center.invoiceEmail;
+    // Auto-fill and lock email from surgery center
+    if(emailEl && center?.invoiceEmail) {
+      emailEl.value = center.invoiceEmail;
+      emailEl.style.background = 'var(--surface2)';
+      emailEl.style.color = 'var(--text-muted)';
+      emailEl.readOnly = true;
+      emailEl.title = 'Auto-filled from Surgery Centers tab';
+    } else if(emailEl) {
+      emailEl.readOnly = false;
+      emailEl.style.background = '';
+      emailEl.style.color = '';
+      emailEl.title = '';
+    }
     // Also populate flat rate dropdown if flat rate mode
     if(document.getElementById('inv-modal-billing-type')?.value === 'flat') {
       const frs = center?.flatRates || [];
@@ -6110,7 +6122,6 @@ const _origDownloadInvModal = window.downloadInvoiceModal;
 window.downloadInvoiceModal = async function() {
   const caseId = document.getElementById('inv-modal-case')?.value;
   if(!caseId) { alert('Please select an associated case before generating a PDF.'); return; }
-  const calc = calcInvModal();
 
   const scSel = document.getElementById('inv-modal-sc-select');
   const scVal = scSel?.value;
@@ -6125,21 +6136,34 @@ window.downloadInvoiceModal = async function() {
   if(!location || !date) { alert('Please fill in surgery center and date.'); return; }
 
   if(billingType === 'flat') {
-    if(!calc) { alert('Please enter procedure and amount.'); return; }
-    const proc = document.getElementById('inv-modal-flat-proc')?.value || 'Anesthesia Services';
-    const amt = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || calc.total;
+    // Flat rate — get procedure and amount directly (no time calc needed)
+    const procSel = document.getElementById('inv-modal-flat-proc-select');
+    const procCustom = document.getElementById('inv-modal-flat-proc');
+    const proc = (procSel?.value === '__custom__' || !procSel?.value)
+      ? (procCustom?.value || 'Anesthesia Services')
+      : procSel.options[procSel.selectedIndex]?.text.split(' — ')[0] || 'Anesthesia Services';
+    const amt = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || 0;
+    if(!proc || amt <= 0) { alert('Please select a procedure and enter a flat rate amount.'); return; }
+    window._invModalCalc = { total: amt, billedStr: 'Flat Rate', flat: true };
+    previewInvoiceModal();
     _generateFlatRateInvoicePDF(location, date, provider, proc, amt);
     await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total:amt, caseId, worker:currentWorker, emailed:false, savedAt:new Date().toISOString() });
-  // Set invoiced amount on row but NOT invoiceSent (only email does that)
-  if(_invoiceModalRowIdx !== null && _paymentRows[_invoiceModalRowIdx]) {
-    _paymentRows[_invoiceModalRowIdx].invoicedAmount = amt;
-    renderPaymentRows();
-    setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
-  }
+    if(_invoiceModalRowIdx !== null && _paymentRows[_invoiceModalRowIdx]) {
+      _paymentRows[_invoiceModalRowIdx].invoicedAmount = amt;
+      renderPaymentRows();
+      setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
+    }
   } else {
-    if(!calc) { alert('Please fill in times and rates.'); return; }
+    // Hourly billing
+    const calc = calcInvModal();
+    if(!calc) { alert('Please fill in start time, end time, and rates.'); return; }
     _generateFlatRateInvoicePDF(location, date, provider, 'Anesthesia Services', calc.total);
     await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total:calc.total, caseId, worker:currentWorker, emailed:false, savedAt:new Date().toISOString() });
+    if(_invoiceModalRowIdx !== null && _paymentRows[_invoiceModalRowIdx]) {
+      _paymentRows[_invoiceModalRowIdx].invoicedAmount = calc.total;
+      renderPaymentRows();
+      setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
+    }
   }
 };
 
@@ -6152,45 +6176,55 @@ window.sendInvoiceEmail = async function() {
   const locInput = document.getElementById('inv-modal-location');
   const location = (scSel?.value === '__custom__' || !center) ? (locInput?.value || '') : (center?.name || '');
   const date = document.getElementById('inv-modal-date')?.value || '';
+  const billingType = document.getElementById('inv-modal-billing-type')?.value || 'hourly';
+
   if(!email) { alert('Please enter a recipient email address.'); return; }
   if(!caseId) { alert('Please select an associated case.'); return; }
-  const calc = calcInvModal();
-  if(!calc) { alert('Please fill in times and rates.'); return; }
+  if(!location || !date) { alert('Please fill in surgery center and date.'); return; }
+
+  // Get amount depending on billing type
+  let total = 0;
+  if(billingType === 'flat') {
+    total = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || 0;
+    if(total <= 0) { alert('Please enter a flat rate amount.'); return; }
+    window._invModalCalc = { total, billedStr: 'Flat Rate', flat: true };
+  } else {
+    const calc = calcInvModal();
+    if(!calc) { alert('Please fill in times and rates.'); return; }
+    total = calc.total;
+  }
+
   const btn = document.getElementById('inv-modal-send-btn');
   btn.textContent = 'Sending...'; btn.disabled = true;
   previewInvoiceModal();
   const invoiceHTML = buildInvoiceModalHTML();
   const invoiceNum = window._currentInvoiceNum || 'ATL-INV';
   const provider = document.getElementById('inv-modal-provider')?.value || '';
+
   try {
     const res = await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/invoice', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ to:email, location, date, provider, total:calc.total, invoiceNum, worker:currentWorker||'josh', html:invoiceHTML })
+      body: JSON.stringify({ to:email, location, date, provider, total, invoiceNum, worker:currentWorker||'josh', html:invoiceHTML })
     });
     const data = await res.json().catch(()=>({}));
     if(res.ok && data.success) {
       alert('✅ Invoice emailed to ' + email + '!');
     } else {
-      const subj = encodeURIComponent(`Atlas Anesthesia Invoice ${invoiceNum}`);
-      window.open(`mailto:${email}?subject=${subj}`);
+      const subj = encodeURIComponent('Atlas Anesthesia Invoice ' + invoiceNum);
+      window.open('mailto:'+email+'?subject='+subj);
       alert('Email client opened — attach your PDF.');
     }
-    await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total:calc.total, caseId, worker:currentWorker, emailed:true, savedAt:new Date().toISOString() });
-    if(_invoiceModalRowIdx !== null) {
-      const cb = document.getElementById('pr-inv'+_invoiceModalRowIdx);
-      if(cb) cb.checked = true;
-      // Save invoiced amount to row data
-      if(_paymentRows[_invoiceModalRowIdx]) {
-        _paymentRows[_invoiceModalRowIdx].invoiceSent = true;
-        _paymentRows[_invoiceModalRowIdx].invoicedAmount = calc.total;
-      }
-      renderPaymentRows();
+    await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total, caseId, worker:currentWorker, emailed:true, savedAt:new Date().toISOString() });
+    if(_invoiceModalRowIdx !== null && _paymentRows[_invoiceModalRowIdx]) {
+      _paymentRows[_invoiceModalRowIdx].invoiceSent = true;
+      _paymentRows[_invoiceModalRowIdx].invoicedAmount = total;
     }
+    renderPaymentRows();
     closeInvoiceModal();
   } catch(e) {
     const subj = encodeURIComponent('Atlas Anesthesia Invoice');
-    window.open(`mailto:${email}?subject=${subj}`);
-    await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total:calc.total||0, caseId, worker:currentWorker, emailed:false, savedAt:new Date().toISOString() });
+    window.open('mailto:'+email+'?subject='+subj);
+    await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total, caseId, worker:currentWorker, emailed:false, savedAt:new Date().toISOString() }).catch(()=>{});
   } finally {
     btn.textContent = '📧 Send Invoice Email'; btn.disabled = false;
   }
