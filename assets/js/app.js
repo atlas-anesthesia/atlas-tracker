@@ -5944,8 +5944,7 @@ window.openInvoiceModal = function(rowIdx) {
   if(r?.caseId) {
     const preop = (window._rawPreopRecords||[]).find(p => p['po-caseId'] === r.caseId);
     if(preop) {
-      const email = document.getElementById('inv-modal-email');
-      if(email) email.value = preop['po-patientEmail'] || '';
+      // Email left blank for user to fill in billing contact
     }
   }
 
@@ -6090,4 +6089,94 @@ const _showTabOld3 = window.showTab;
 window.showTab = function(tab, pushState=true) {
   _showTabOld3(tab, pushState);
   if(tab === 'payments') { loadPaymentRows(); loadSavedPDFs(); }
+};
+
+// ── FLAT RATE PROCEDURE SELECTOR IN INVOICE MODAL ────────────────────────────
+window.onInvModalFlatProcSelect = function() {
+  const sel = document.getElementById('inv-modal-flat-proc-select');
+  const customInput = document.getElementById('inv-modal-flat-proc');
+  const amtInput = document.getElementById('inv-modal-flat-amt');
+  const val = sel?.value;
+
+  if(val === '__custom__') {
+    // Show custom text input
+    if(customInput) { customInput.style.display = ''; customInput.value = ''; customInput.focus(); }
+    if(amtInput) amtInput.value = '';
+  } else if(val) {
+    // Auto-fill amount from selected procedure's data-amount
+    const opt = sel.options[sel.selectedIndex];
+    const amount = parseFloat(opt?.getAttribute('data-amount')) || 0;
+    if(customInput) customInput.style.display = 'none';
+    if(amtInput && amount > 0) {
+      amtInput.value = amount.toFixed(2);
+      calcInvModalFlat();
+    }
+  } else {
+    if(customInput) customInput.style.display = 'none';
+    if(amtInput) amtInput.value = '';
+  }
+};
+
+// Populate flat rate procedures when surgery center changes
+const _origOnInvModalCenterChange = window.onInvModalCenterChange;
+window.onInvModalCenterChange = function() {
+  _origOnInvModalCenterChange();
+  // Populate flat rate dropdown for this center
+  const sel = document.getElementById('inv-modal-sc-select');
+  const center = (window.surgeryCenters||[]).find(c => c.id === sel?.value);
+  const frs = center?.flatRates || [];
+  const procSel = document.getElementById('inv-modal-flat-proc-select');
+  if(procSel) {
+    procSel.innerHTML = '<option value="">— Select procedure —</option>'
+      + frs.map(fr => `<option value="${fr.id}" data-amount="${fr.amount}">${fr.procedure} — $${Number(fr.amount).toFixed(2)}</option>`).join('')
+      + '<option value="__custom__">✏ Custom procedure...</option>';
+  }
+};
+
+// Override setInvModalBilling to also populate procedures when switching to flat
+const _origSetInvModalBilling = window.setInvModalBilling;
+window.setInvModalBilling = function(type) {
+  _origSetInvModalBilling(type);
+  if(type === 'flat') {
+    // Populate procedures from currently selected center
+    onInvModalCenterChange();
+  }
+};
+
+// Patch openInvoiceModal: set case hidden field from row, don't show dropdown
+const _openInvModal3 = window.openInvoiceModal;
+window.openInvoiceModal = function(rowIdx) {
+  _invoiceModalRowIdx = rowIdx !== undefined ? rowIdx : null;
+  const r = rowIdx !== undefined ? _paymentRows[rowIdx] : null;
+
+  // Set hidden case field
+  const caseEl = document.getElementById('inv-modal-case');
+  if(caseEl) caseEl.value = r?.caseId || '';
+
+  // Reset fields
+  ['inv-modal-provider','inv-modal-email','inv-modal-fhr','inv-modal-p15'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  ['inv-modal-date','inv-modal-start','inv-modal-end','inv-modal-location'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  const locInput = document.getElementById('inv-modal-location');
+  if(locInput) locInput.style.display = 'none';
+
+  if(typeof setInvModalBilling === 'function') setInvModalBilling('hourly');
+
+  // Populate surgery center dropdown
+  populateInvModalCenterDropdown(r?.surgeryCenter || '');
+
+  // Auto-fill date and provider from row
+  if(r?.caseDate) {
+    const dt = document.getElementById('inv-modal-date');
+    if(dt) dt.value = r.caseDate;
+  }
+  const w = currentWorker || 'josh';
+  const prov = document.getElementById('inv-modal-provider');
+  if(prov) prov.value = r?.worker === 'dev' ? 'Dr. Dev Murthy' : 'Josh Condado';
+
+  document.getElementById('invoiceModal').style.display = 'flex';
+  calcInvModal();
 };
