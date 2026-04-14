@@ -5348,6 +5348,8 @@ window.savePaymentRows = async function() {
       ...row,
       name: document.getElementById('pr-name'+i)?.value || row.name,
       worker: document.getElementById('pr-worker'+i)?.value || row.worker,
+      surgeryCenter: document.getElementById('pr-sc'+i)?.value || '',
+      surgeryCenterCustom: document.getElementById('pr-sc-custom'+i)?.value || '',
       caseDate: g('pr-caseDate'),
       callDate: g('pr-callDate'),
       depositDate: g('pr-depositDate'),
@@ -5418,16 +5420,30 @@ function renderPaymentRows() {
   const inp = (id, type, val, extra='') =>
     `<input type="${type}" id="${id}" value="${val||''}" ${extra} style="width:100%;padding:5px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
 
+  // Build surgery center options
+  const scOptions = '<option value="">-- Select or type --</option>'
+    + (window.surgeryCenters||[]).map(c => `<option value="${c.id}" data-fhr="${c.firstHour}" data-p15="${c.per15}">${c.name}</option>`).join('')
+    + '<option value="__custom__">✏ Custom...</option>';
+
   body.innerHTML = _paymentRows.map((r, i) => {
-    const bg = i%2===0?'var(--bg)':'var(--surface2)';
     const wcolor = r.worker==='dev'?'var(--dev)':'var(--josh)';
-    return `<div style="display:grid;grid-template-columns:160px 60px 95px 95px 95px 95px 55px 90px 75px 75px 80px 36px;gap:0;background:${bg};border-bottom:1px solid var(--border);align-items:center">
-      <div style="padding:5px 10px">${inp('pr-name'+i,'text',r.name,'placeholder="Case name"')}</div>
+    // Completion: all key date fields filled + invoice sent
+    const complete = r.caseDate && r.callDate && r.depositDate && r.paidDate && r.invoiceSent;
+    const bg = complete ? 'rgba(45,106,79,0.08)' : i%2===0?'var(--bg)':'var(--surface2)';
+    const borderLeft = complete ? '3px solid var(--accent)' : '3px solid transparent';
+    return `<div style="display:grid;grid-template-columns:140px 60px 130px 95px 95px 95px 95px 55px 90px 75px 75px 80px 36px;gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center">
+      <div style="padding:5px 8px">${inp('pr-name'+i,'text',r.name,'placeholder="Case ID"')}</div>
       <div style="padding:5px 6px">
         <select id="pr-worker${i}" style="width:100%;padding:4px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:${wcolor};font-weight:600;font-family:inherit" onchange="renderPaymentSummary()">
           <option value="josh" ${r.worker==='josh'?'selected':''}>Josh</option>
           <option value="dev" ${r.worker==='dev'?'selected':''}>Dev</option>
         </select>
+      </div>
+      <div style="padding:5px 6px">
+        <select id="pr-sc${i}" onchange="onPaymentCenterChange(${i})" style="width:100%;padding:4px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit">
+          ${scOptions.replace(`value="${r.surgeryCenter||''}"`,`value="${r.surgeryCenter||''}" selected`)}
+        </select>
+        <input type="text" id="pr-sc-custom${i}" placeholder="Center name..." value="${r.surgeryCenterCustom||''}" style="display:${r.surgeryCenter==='__custom__'?'':'none'};width:100%;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit;margin-top:3px">
       </div>
       <div style="padding:5px 6px">${inp('pr-caseDate'+i,'date',r.caseDate)}</div>
       <div style="padding:5px 6px">${inp('pr-callDate'+i,'date',r.callDate)}</div>
@@ -5622,6 +5638,24 @@ const _origShowTabPayments = window.showTab;
 window.showTab = function(tab, pushState=true) {
   _origShowTabPayments(tab, pushState);
   if(tab === 'payments') loadPaymentRows();
+};
+
+
+window.onPaymentCenterChange = function(idx) {
+  const sel = document.getElementById('pr-sc'+idx);
+  const customInput = document.getElementById('pr-sc-custom'+idx);
+  const val = sel?.value;
+  if(val === '__custom__') {
+    if(customInput) { customInput.style.display = ''; customInput.focus(); }
+    return;
+  }
+  if(customInput) customInput.style.display = 'none';
+  // Auto-fill rates in modal if open
+  const center = (window.surgeryCenters||[]).find(c => c.id === val);
+  const fhr = document.getElementById('inv-modal-fhr');
+  const p15 = document.getElementById('inv-modal-p15');
+  if(center && fhr && !fhr.value) fhr.value = center.firstHour;
+  if(center && p15 && !p15.value) p15.value = center.per15;
 };
 
 // ── INVOICE MODAL BILLING TOGGLE ──────────────────────────────────────────────
