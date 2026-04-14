@@ -5454,6 +5454,29 @@ window.commitPaymentField = function(field, idx, rawVal) {
   renderPaymentSummary();
 };
 
+
+// Auto-save payments after any field change (debounced 800ms)
+let _paymentSaveTimer = null;
+function autoSavePayments() {
+  clearTimeout(_paymentSaveTimer);
+  _paymentSaveTimer = setTimeout(async () => {
+    _paymentRows = _paymentRows.map((row, i) => ({
+      ...row,
+      depositDate: document.getElementById('pr-depositDate'+i)?.value || row.depositDate || '',
+      paidDate:    document.getElementById('pr-paidDate'+i)?.value    || row.paidDate    || '',
+      dep500Paid:  document.getElementById('pr-dep500'+i)?.checked    ?? row.dep500Paid  ?? false,
+      paid:        document.getElementById('pr-paid'+i)?.checked      ?? row.paid,
+      invoiceSent: document.getElementById('pr-inv'+i)?.checked       ?? row.invoiceSent,
+    }));
+    try {
+      await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows });
+      // Brief visual feedback on save button
+      const btn = document.querySelector('[onclick="savePaymentRows()"]');
+      if(btn) { const orig=btn.textContent; btn.textContent='✓ Saved'; setTimeout(()=>btn.textContent=orig, 1200); }
+    } catch(e) { console.error('Auto-save failed:', e); }
+  }, 800);
+}
+
 // ── PAYMENTS TAB ──────────────────────────────────────────────────────────────
 let _paymentRows = [];
 let _invoiceModalRowIdx = null;
@@ -5603,7 +5626,7 @@ function renderPaymentRows() {
     const empty = !val;
     const bdr = empty ? '1px solid #fca5a5' : '1px solid var(--border)';
     const bgc = empty ? 'rgba(239,68,68,0.06)' : 'var(--bg)';
-    return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:5px 4px;font-size:11px;border:${bdr};border-radius:5px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
+    return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:5px 4px;font-size:11px;border:${bdr};border-radius:5px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary();autoSavePayments()">`;
   };
 
   const COLS = '1.5fr 48px 1fr 44px 68px 1fr 1fr 1fr 34px 1fr 40px 76px 40px 44px 32px';
@@ -5636,14 +5659,14 @@ function renderPaymentRows() {
       <div style="padding:4px 4px">${ro(caseFmt)}</div>
       <div style="padding:4px 4px">${ro(callFmt)}</div>
       <div style="padding:4px 3px">${dateInp('pr-depositDate'+i, r.depositDate)}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
+      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
       <div style="padding:4px 3px">${dateInp('pr-paidDate'+i, r.paidDate)}</div>
-      <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
+      <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
       <div style="padding:4px 4px;display:flex;align-items:center;gap:3px" id="pr-invamt-wrap${i}">
         <span style="font-size:11px;font-weight:600;color:var(--info);font-family:DM Mono,monospace;flex:1;text-align:right" id="pr-invamt${i}">${r.invoicedAmount>0?'$'+Number(r.invoicedAmount).toFixed(2):'<span style="color:var(--text-faint)">—</span>'}</span>
         <button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px;line-height:1;transition:color .15s" onmouseover="this.style.color='var(--info)'" onmouseout="this.style.color='var(--text-faint)'" title="Click to edit invoiced amount">✏</button>
       </div>
-      <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
+      <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
       <div style="padding:4px 3px">
         <button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button>
       </div>
