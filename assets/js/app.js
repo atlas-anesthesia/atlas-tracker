@@ -5374,6 +5374,20 @@ function syncPaymentRowsFromCases() {
   }
 }
 
+
+window.sortPaymentRows = function() {
+  const mode = document.getElementById('pm-sort')?.value || 'date-asc';
+  _paymentRows.sort((a, b) => {
+    if(mode === 'date-asc')  return (a.caseDate||'9999').localeCompare(b.caseDate||'9999');
+    if(mode === 'date-desc') return (b.caseDate||'').localeCompare(a.caseDate||'');
+    if(mode === 'who')       return (a.worker||'').localeCompare(b.worker||'');
+    if(mode === 'center')    return (a.surgeryCenterName||'').localeCompare(b.surgeryCenterName||'');
+    if(mode === 'inv')       return (b.invoiceSent?1:0) - (a.invoiceSent?1:0);
+    return 0;
+  });
+  renderPaymentRows();
+};
+
 // ── PAYMENTS TAB ──────────────────────────────────────────────────────────────
 let _paymentRows = [];
 let _invoiceModalRowIdx = null;
@@ -5441,8 +5455,8 @@ async function loadPaymentRows() {
     }
   });
 
-  // Sort by case date descending
-  _paymentRows.sort((a,b) => (b.caseDate||'').localeCompare(a.caseDate||''));
+  // Sort by case date ascending (earliest first)
+  _paymentRows.sort((a,b) => (a.caseDate||'9999').localeCompare(b.caseDate||'9999'));
 
   renderPaymentRows();
 }
@@ -5565,7 +5579,7 @@ function renderPaymentRows() {
       <div style="padding:4px 3px">
         <button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button>
       </div>
-      <div style="padding:4px 3px"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--text-faint)">🗑</button></div>
+      <div style="padding:4px 3px;display:flex;justify-content:flex-end"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete row">🗑</button></div>
     </div>`;
   }).join('');
   renderPaymentSummary();
