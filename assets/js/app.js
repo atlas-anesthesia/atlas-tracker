@@ -5582,10 +5582,8 @@ function renderPaymentSummary() {
   });
   const fmt = n => '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
   const el = id => document.getElementById(id);
-  if(el('pm-earned')) el('pm-earned').textContent = fmt(earned);
   if(el('pm-projected')) el('pm-projected').textContent = fmt(projected);
-  if(el('pm-invoiced')) el('pm-invoiced').textContent = invAmt > 0 ? fmt(invAmt) : invoiced + ' sent';
-  if(el('pm-pending')) el('pm-pending').textContent = pending;
+  if(el('pm-invoiced')) el('pm-invoiced').textContent = fmt(invAmt);
 }
 
 function renderPaymentRows() {
