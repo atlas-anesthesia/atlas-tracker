@@ -5300,3 +5300,265 @@ function buildFaxHTML(r) {
 function checkHistoryDeposits(cases) {
   // stub — Stripe auto-check disabled
 }
+
+// ── PAYMENTS TAB ──────────────────────────────────────────────────────────────
+let _paymentRows = [];
+
+async function loadPaymentRows() {
+  try {
+    const snap = await getDoc(doc(db,'atlas','payments'));
+    _paymentRows = snap.exists() ? (snap.data().rows || []) : [];
+  } catch(e) { _paymentRows = []; }
+  renderPaymentRows();
+}
+
+window.savePaymentRows = async function() {
+  // Read all current row values from DOM
+  _paymentRows = _paymentRows.map((row, i) => {
+    const g = id => document.getElementById(id+i)?.value ?? row[id.replace('pr-','')]??'';
+    const chk = id => document.getElementById(id+i)?.checked ?? false;
+    const hrs = parseFloat(document.getElementById('pr-hrs'+i)?.value) || 0;
+    return {
+      ...row,
+      name: document.getElementById('pr-name'+i)?.value || row.name,
+      worker: document.getElementById('pr-worker'+i)?.value || row.worker,
+      caseDate: document.getElementById('pr-caseDate'+i)?.value || '',
+      callDate: document.getElementById('pr-callDate'+i)?.value || '',
+      depositDate: document.getElementById('pr-depositDate'+i)?.value || '',
+      paidDate: document.getElementById('pr-paidDate'+i)?.value || '',
+      invoiceSent: document.getElementById('pr-inv'+i)?.checked || false,
+      caseCost: parseFloat(document.getElementById('pr-cost'+i)?.value) || 0,
+      estHrs: hrs,
+      projected: hrs * 600
+    };
+  });
+  try {
+    setSyncing(true);
+    await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows });
+    setSyncing(false);
+    renderPaymentRows();
+    alert('✓ Payment records saved!');
+  } catch(e) { setSyncing(false); alert('Error saving: ' + e.message); }
+};
+
+window.addPaymentRow = function() {
+  _paymentRows.unshift({
+    id: uid(), name: '', worker: currentWorker || 'josh',
+    caseDate: '', callDate: '', depositDate: '', paidDate: '',
+    invoiceSent: false, caseCost: 0, estHrs: 0, projected: 0
+  });
+  renderPaymentRows();
+};
+
+window.deletePaymentRow = async function(idx) {
+  if(!confirm('⚠️ Delete this payment record?\n\nThis cannot be undone.')) return;
+  _paymentRows.splice(idx, 1);
+  setSyncing(true);
+  await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows });
+  setSyncing(false);
+  renderPaymentRows();
+};
+
+window.updatePaymentProjected = function(idx) {
+  const hrs = parseFloat(document.getElementById('pr-hrs'+idx)?.value) || 0;
+  const projEl = document.getElementById('pr-proj'+idx);
+  if(projEl) projEl.textContent = hrs > 0 ? '$'+(hrs*600).toFixed(0) : '—';
+  renderPaymentSummary();
+};
+
+function renderPaymentSummary() {
+  let earned=0, projected=0, invoiced=0, pending=0;
+  _paymentRows.forEach((r,i) => {
+    const cost = parseFloat(document.getElementById('pr-cost'+i)?.value) || r.caseCost || 0;
+    const hrs = parseFloat(document.getElementById('pr-hrs'+i)?.value) || r.estHrs || 0;
+    if(r.paidDate || document.getElementById('pr-paidDate'+i)?.value) earned += cost;
+    projected += hrs * 600;
+    if(r.invoiceSent || document.getElementById('pr-inv'+i)?.checked) invoiced++;
+    if(!r.depositDate && !document.getElementById('pr-depositDate'+i)?.value) pending++;
+  });
+  const fmt = n => '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+  const el = id => document.getElementById(id);
+  if(el('pm-earned')) el('pm-earned').textContent = fmt(earned);
+  if(el('pm-projected')) el('pm-projected').textContent = fmt(projected);
+  if(el('pm-invoiced')) el('pm-invoiced').textContent = invoiced;
+  if(el('pm-pending')) el('pm-pending').textContent = pending;
+}
+
+function renderPaymentRows() {
+  const body = document.getElementById('payments-table-body');
+  if(!body) return;
+  if(!_paymentRows.length) {
+    body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-faint);font-size:13px">No payment records yet — click + Add Case to start</div>';
+    renderPaymentSummary();
+    return;
+  }
+  const inp = (id, type, val, extra='') =>
+    `<input type="${type}" id="${id}" value="${val||''}" ${extra} style="width:100%;padding:5px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
+
+  body.innerHTML = _paymentRows.map((r, i) => {
+    const pill = r.worker==='dev'?'background:var(--dev-light);color:var(--dev)':'background:var(--josh-light);color:var(--josh)';
+    const bg = i%2===0?'var(--bg)':'var(--surface2)';
+    return `<div style="display:grid;grid-template-columns:180px 70px 100px 100px 100px 100px 60px 90px 90px 36px;gap:0;background:${bg};border-bottom:1px solid var(--border);align-items:center">
+      <div style="padding:6px 12px">${inp('pr-name'+i,'text',r.name,'placeholder="Case name"')}</div>
+      <div style="padding:6px 8px">
+        <select id="pr-worker${i}" style="width:100%;padding:5px 4px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">
+          <option value="josh" ${r.worker==='josh'?'selected':''}>Josh</option>
+          <option value="dev" ${r.worker==='dev'?'selected':''}>Dev</option>
+        </select>
+      </div>
+      <div style="padding:6px 8px">${inp('pr-caseDate'+i,'date',r.caseDate)}</div>
+      <div style="padding:6px 8px">${inp('pr-callDate'+i,'date',r.callDate)}</div>
+      <div style="padding:6px 8px">${inp('pr-depositDate'+i,'date',r.depositDate)}</div>
+      <div style="padding:6px 8px">${inp('pr-paidDate'+i,'date',r.paidDate)}</div>
+      <div style="padding:6px 8px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:16px;height:16px;cursor:pointer" onchange="renderPaymentSummary()"></div>
+      <div style="padding:6px 8px"><input type="number" id="pr-hrs${i}" value="${r.estHrs||''}" placeholder="hrs" min="0" step="0.5" style="width:100%;padding:5px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit" oninput="updatePaymentProjected(${i})"></div>
+      <div style="padding:6px 8px;font-size:12px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace" id="pr-proj${i}">${r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'—'}</div>
+      <div style="padding:6px 8px"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-faint)" title="Delete">🗑</button></div>
+    </div>`;
+  }).join('');
+  renderPaymentSummary();
+}
+
+// ── INVOICE MODAL ─────────────────────────────────────────────────────────────
+window.openInvoiceModal = function(prefill) {
+  const modal = document.getElementById('invoiceModal');
+  if(!modal) return;
+  if(prefill) {
+    if(prefill.location) document.getElementById('inv-modal-location').value = prefill.location;
+    if(prefill.date) document.getElementById('inv-modal-date').value = prefill.date;
+    if(prefill.provider) document.getElementById('inv-modal-provider').value = prefill.provider;
+    if(prefill.email) document.getElementById('inv-modal-email').value = prefill.email;
+  }
+  // Default provider from logged in user
+  const w = currentWorker || 'josh';
+  const provEl = document.getElementById('inv-modal-provider');
+  if(provEl && !provEl.value) provEl.value = w==='josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
+  modal.style.display = 'flex';
+  calcInvModal();
+};
+
+window.closeInvoiceModal = function() {
+  document.getElementById('invoiceModal').style.display = 'none';
+};
+
+window.calcInvModal = function() {
+  const start = document.getElementById('inv-modal-start')?.value;
+  const end = document.getElementById('inv-modal-end')?.value;
+  const fhr = parseFloat(document.getElementById('inv-modal-fhr')?.value) || 0;
+  const p15 = parseFloat(document.getElementById('inv-modal-p15')?.value) || 0;
+  const summEl = document.getElementById('inv-modal-summary');
+  const totEl = document.getElementById('inv-modal-total');
+  if(!start || !end || !fhr) { if(totEl) totEl.textContent='$0.00'; return; }
+  const [sh,sm] = start.split(':').map(Number);
+  const [eh,em] = end.split(':').map(Number);
+  const totalMins = (eh*60+em)-(sh*60+sm);
+  if(totalMins <= 0) { if(totEl) totEl.textContent='$0.00'; return; }
+  const roundedMins = totalMins <= 60 ? 60 : 60 + Math.ceil((totalMins-60)/15)*15;
+  let total = fhr;
+  if(roundedMins > 60) total += ((roundedMins-60)/15) * p15;
+  const hrs = Math.floor(roundedMins/60); const mins = roundedMins%60;
+  const billedStr = hrs>0?`${hrs}h${mins>0?' '+mins+'m':''}`:`${mins}m`;
+  const actHrs = Math.floor(totalMins/60); const actMins = totalMins%60;
+  const actStr = actHrs>0?`${actHrs}h${actMins>0?' '+actMins+'m':''}`:`${actMins}m`;
+  if(summEl) summEl.textContent = `Actual: ${actStr} · Billed: ${billedStr}`;
+  if(totEl) totEl.textContent = '$'+total.toFixed(2);
+  window._invModalCalc = { total, roundedMins, billedStr, actStr, start, end, fhr, p15 };
+};
+
+function buildInvoiceModalHTML() {
+  const w = currentWorker || 'josh';
+  const providerName = w==='josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
+  const location = document.getElementById('inv-modal-location')?.value || '—';
+  const date = document.getElementById('inv-modal-date')?.value || '';
+  const provider = document.getElementById('inv-modal-provider')?.value || providerName;
+  const calc = window._invModalCalc || {};
+  const total = calc.total || 0;
+  const formattedDate = date ? new Date(date+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
+  const fmt12 = t => { if(!t) return '—'; const [h,m]=t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+  return `<table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+    <tr><td style="vertical-align:top"><div style="font-size:16px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div><div style="font-size:10px;color:#444">${provider} | CRNA, Anesthesiology</div></td>
+    <td style="text-align:right;vertical-align:top"><div style="font-size:13px;font-weight:bold;color:#1d3557">INVOICE</div><div style="font-size:10px;color:#666">${formattedDate}</div></td></tr>
+  </table>
+  <hr style="border:none;border-top:2px solid #1d3557;margin:4px 0 8px">
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:10px">
+    <tr><td style="padding:3px 6px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:110px">BILLED TO:</td><td style="padding:3px 6px;border:1px solid #bbb">${location}</td>
+    <td style="padding:3px 6px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:60px">DATE:</td><td style="padding:3px 6px;border:1px solid #bbb">${formattedDate}</td></tr>
+    <tr><td style="padding:3px 6px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TIME:</td><td style="padding:3px 6px;border:1px solid #bbb" colspan="3">${fmt12(calc.start)} → ${fmt12(calc.end)} · Actual: ${calc.actStr||'—'} · Billed: ${calc.billedStr||'—'}</td></tr>
+  </table>
+  <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px">
+    <tr style="background:#1d3557;color:#fff"><td style="padding:4px 8px;font-weight:bold">Description</td><td style="padding:4px 8px;font-weight:bold;text-align:right">Amount</td></tr>
+    <tr style="background:#f0efe9"><td style="padding:4px 8px;border:1px solid #bbb">Anesthesia Services — First Hour</td><td style="padding:4px 8px;border:1px solid #bbb;text-align:right;font-family:monospace">$${(calc.fhr||0).toFixed(2)}</td></tr>
+    ${(calc.roundedMins||0)>60?`<tr><td style="padding:4px 8px;border:1px solid #bbb">Additional time (${((calc.roundedMins||0)-60)/15} × 15-min blocks)</td><td style="padding:4px 8px;border:1px solid #bbb;text-align:right;font-family:monospace">$${(((calc.roundedMins||0)-60)/15*(calc.p15||0)).toFixed(2)}</td></tr>`:''}
+    <tr style="background:#1d3557;color:#fff"><td style="padding:6px 8px;font-weight:bold;font-size:12px">TOTAL DUE</td><td style="padding:6px 8px;font-weight:bold;font-size:14px;text-align:right;font-family:monospace">$${total.toFixed(2)}</td></tr>
+  </table>
+  <div style="font-size:9px;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px">Atlas Anesthesia · Mobile Anesthesia Services</div>`;
+}
+
+window.previewInvoiceModal = function() {
+  calcInvModal();
+  const preview = document.getElementById('inv-modal-preview');
+  if(preview) preview.innerHTML = buildInvoiceModalHTML();
+};
+
+window.downloadInvoiceModal = function() {
+  calcInvModal();
+  const location = document.getElementById('inv-modal-location')?.value || 'Unknown';
+  const date = document.getElementById('inv-modal-date')?.value || '';
+  const provider = document.getElementById('inv-modal-provider')?.value || 'Atlas Anesthesia';
+  const calc = window._invModalCalc || {};
+  if(!calc.total) { alert('Please fill in all fields first.'); return; }
+  _generateFlatRateInvoicePDF(location, date, provider, 'Anesthesia Services', calc.total);
+};
+
+window.sendInvoiceEmail = async function() {
+  const email = document.getElementById('inv-modal-email')?.value?.trim();
+  const location = document.getElementById('inv-modal-location')?.value || '';
+  const date = document.getElementById('inv-modal-date')?.value || '';
+  if(!email) { alert('Please enter a recipient email address.'); return; }
+  if(!location || !date) { alert('Please fill in location and date.'); return; }
+  calcInvModal();
+  const calc = window._invModalCalc || {};
+  if(!calc.total) { alert('Please fill in times and rates to calculate the invoice.'); return; }
+  const btn = document.getElementById('inv-modal-send-btn');
+  btn.textContent = 'Sending...'; btn.disabled = true;
+  try {
+    const invoiceHTML = buildInvoiceModalHTML();
+    const invoiceNum = 'ATL-INV-' + new Date().toISOString().split('T')[0].replace(/-/g,'') + '-' + String(Math.floor(Math.random()*900)+100);
+    const res = await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: email, location, date,
+        provider: document.getElementById('inv-modal-provider')?.value || '',
+        total: calc.total, invoiceNum,
+        worker: currentWorker || 'josh',
+        html: invoiceHTML
+      })
+    });
+    const data = await res.json();
+    if(res.ok && data.success) {
+      alert('✅ Invoice sent to ' + email + '!');
+      closeInvoiceModal();
+    } else {
+      // Fallback — open mailto
+      const subject = encodeURIComponent(`Atlas Anesthesia Invoice ${invoiceNum}`);
+      const body = encodeURIComponent(`Please find your invoice attached.\n\nInvoice #: ${invoiceNum}\nLocation: ${location}\nDate: ${date}\nTotal: $${calc.total.toFixed(2)}\n\nAtlas Anesthesia`);
+      window.open(`mailto:${email}?subject=${subject}&body=${body}`);
+      alert('Email client opened. Attach your downloaded PDF invoice.');
+    }
+  } catch(e) {
+    // Fallback to mailto
+    const subject = encodeURIComponent('Atlas Anesthesia Invoice');
+    window.open(`mailto:${email}?subject=${subject}`);
+    alert('Email client opened as fallback.');
+  } finally {
+    btn.textContent = '📧 Send Invoice Email'; btn.disabled = false;
+  }
+};
+
+// Hook into showTab for payments
+const _origShowTabPayments = window.showTab;
+window.showTab = function(tab, pushState=true) {
+  _origShowTabPayments(tab, pushState);
+  if(tab === 'payments') loadPaymentRows();
+};
