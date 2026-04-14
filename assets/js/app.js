@@ -5707,27 +5707,41 @@ window.calcInvModal = function() {
 };
 
 function buildInvoiceModalHTML() {
-  const w = (typeof currentWorker!=='undefined'?currentWorker:'josh');
-  // Get location from surgery center dropdown or custom input
-  const _scSel = document.getElementById('inv-modal-sc-select');
-  const _scCenter = (window.surgeryCenters||[]).find(c => c.id === _scSel?.value);
-  const _locInput = document.getElementById('inv-modal-location');
-  const location = (_scSel?.value === '__custom__' || !_scCenter) ? (_locInput?.value || '—') : (_scCenter?.name || '—');
-  const date = document.getElementById('inv-modal-date')?.value || '';
+  const billingType = document.getElementById('inv-modal-billing-type')?.value || 'hourly';
+  return billingType === 'flat' ? buildFlatRateInvoiceHTML() : buildHourlyInvoiceHTML();
+}
+
+function _getInvoiceHeader() {
+  const w = (typeof currentWorker !== 'undefined' ? currentWorker : 'josh');
   const provider = document.getElementById('inv-modal-provider')?.value || (w==='josh'?'Josh Condado':'Dr. Dev Murthy');
   const phone = w==='josh'?'715-499-6858':'262-573-9095';
-  const calc = window._invModalCalc || {};
-  const total = calc.total || 0;
+  const scSel = document.getElementById('inv-modal-sc-select');
+  const center = (window.surgeryCenters||[]).find(c => c.id === scSel?.value);
+  const locInput = document.getElementById('inv-modal-location');
+  const location = (scSel?.value === '__custom__' || !center) ? (locInput?.value || '—') : (center?.name || '—');
+  const date = document.getElementById('inv-modal-date')?.value || '';
   const formattedDate = date ? new Date(date+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
-  const fmt12 = t => { if(!t) return '—'; const [h,m]=t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
   const invoiceNum = 'ATL-INV-'+(date||new Date().toISOString().split('T')[0]).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
   window._currentInvoiceNum = invoiceNum;
-  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.4">
+  return { provider, phone, location, date, formattedDate, invoiceNum, w };
+}
+
+function buildHourlyInvoiceHTML() {
+  const { provider, phone, location, formattedDate, invoiceNum } = _getInvoiceHeader();
+  const calc = window._invModalCalc || {};
+  const total = calc.total || 0;
+  const fmt12 = t => { if(!t) return '—'; const [h,m]=t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
+  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.5">
     <table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr>
-      <td style="vertical-align:top"><div style="font-size:17px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div><div style="font-size:10px;color:#444">${provider} | CRNA, Anesthesiology · ${phone}</div></td>
-      <td style="text-align:right;vertical-align:top"><div style="font-size:20px;font-weight:bold;color:#1d3557">INVOICE</div><div style="font-size:9px;color:#666">${invoiceNum}</div><div style="font-size:9px;color:#666">${formattedDate}</div></td>
+      <td style="vertical-align:top"><div style="font-size:17px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div>
+      <div style="font-size:10px;color:#444">${provider} | CRNA, Anesthesiology · ${phone}</div></td>
+      <td style="text-align:right;vertical-align:top">
+        <div style="font-size:20px;font-weight:bold;color:#1d3557">INVOICE</div>
+        <div style="font-size:9px;color:#666">${invoiceNum}</div>
+        <div style="font-size:9px;color:#666">${formattedDate}</div>
+      </td>
     </tr></table>
-    <hr style="border:none;border-top:2px solid #1d3557;margin:4px 0 8px">
+    <hr style="border:none;border-top:2px solid #1d3557;margin:4px 0 10px">
     <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px">
       <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:110px">BILLED TO:</td><td style="padding:4px 8px;border:1px solid #bbb;font-weight:500">${location}</td><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:65px">DATE:</td><td style="padding:4px 8px;border:1px solid #bbb">${formattedDate}</td></tr>
       <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">${provider} — Atlas Anesthesia</td></tr>
@@ -5738,6 +5752,39 @@ function buildInvoiceModalHTML() {
       <tr style="background:#f0efe9"><td style="padding:5px 8px;border:1px solid #bbb">Anesthesia Services — First Hour</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:center">60 min</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:right;font-family:monospace">$${(calc.fhr||0).toFixed(2)}</td></tr>
       ${(calc.roundedMins||0)>60?`<tr><td style="padding:5px 8px;border:1px solid #bbb">Additional Time (${((calc.roundedMins||0)-60)/15} × 15-min blocks)</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:center">${(calc.roundedMins||0)-60} min</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:right;font-family:monospace">$${(((calc.roundedMins||0)-60)/15*(calc.p15||0)).toFixed(2)}</td></tr>`:''}
       <tr style="background:#1d3557;color:#fff"><td style="padding:6px 8px;font-weight:bold;font-size:13px" colspan="2">TOTAL DUE</td><td style="padding:6px 8px;font-weight:bold;font-size:15px;text-align:right;font-family:monospace">$${total.toFixed(2)}</td></tr>
+    </table>
+    <div style="font-size:9px;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px">Thank you for choosing Atlas Anesthesia · Mobile Anesthesia Services</div>
+  </div>`;
+}
+
+function buildFlatRateInvoiceHTML() {
+  const { provider, phone, location, formattedDate, invoiceNum } = _getInvoiceHeader();
+  const procSel = document.getElementById('inv-modal-flat-proc-select');
+  const procCustom = document.getElementById('inv-modal-flat-proc');
+  const proc = (procSel?.value === '__custom__' || !procSel?.value)
+    ? (procCustom?.value || 'Anesthesia Services')
+    : procSel.options[procSel.selectedIndex]?.text.split(' — ')[0] || 'Anesthesia Services';
+  const amt = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || 0;
+  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.5">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr>
+      <td style="vertical-align:top"><div style="font-size:17px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div>
+      <div style="font-size:10px;color:#444">${provider} | CRNA, Anesthesiology · ${phone}</div></td>
+      <td style="text-align:right;vertical-align:top">
+        <div style="font-size:20px;font-weight:bold;color:#1d3557">INVOICE</div>
+        <div style="font-size:9px;color:#666">${invoiceNum}</div>
+        <div style="font-size:9px;color:#666">${formattedDate}</div>
+      </td>
+    </tr></table>
+    <hr style="border:none;border-top:2px solid #1d3557;margin:4px 0 10px">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px">
+      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:110px">BILLED TO:</td><td style="padding:4px 8px;border:1px solid #bbb;font-weight:500">${location}</td><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:65px">DATE:</td><td style="padding:4px 8px;border:1px solid #bbb">${formattedDate}</td></tr>
+      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">${provider} — Atlas Anesthesia</td></tr>
+      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TYPE:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">Flat Rate Procedure</td></tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">
+      <tr style="background:#1d3557;color:#fff"><td style="padding:5px 8px;font-weight:bold">Procedure</td><td style="padding:5px 8px;font-weight:bold;text-align:right">Flat Rate Amount</td></tr>
+      <tr style="background:#f0efe9"><td style="padding:8px 8px;border:1px solid #bbb;font-size:13px;font-weight:500">${proc}</td><td style="padding:8px 8px;border:1px solid #bbb;text-align:right;font-family:monospace;font-size:13px;font-weight:600">$${amt.toFixed(2)}</td></tr>
+      <tr style="background:#1d3557;color:#fff"><td style="padding:6px 8px;font-weight:bold;font-size:13px">TOTAL DUE</td><td style="padding:6px 8px;font-weight:bold;font-size:15px;text-align:right;font-family:monospace">$${amt.toFixed(2)}</td></tr>
     </table>
     <div style="font-size:9px;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px">Thank you for choosing Atlas Anesthesia · Mobile Anesthesia Services</div>
   </div>`;
@@ -5990,41 +6037,48 @@ window.onInvModalCenterChange = function() {
   const emailEl = document.getElementById('inv-modal-email');
   const val = sel?.value;
 
+  // Always clear lock first
+  if(emailEl) { emailEl.readOnly = false; emailEl.style.background=''; emailEl.style.color=''; emailEl.removeAttribute('title'); }
+
   if(val === '__custom__') {
     if(locInput) { locInput.style.display = ''; locInput.value = ''; locInput.focus(); }
-    if(emailEl) { emailEl.readOnly = false; emailEl.style.background=''; emailEl.style.color=''; emailEl.title=''; }
-  } else if(val) {
-    const center = (window.surgeryCenters||[]).find(c => c.id === val);
-    if(locInput) { locInput.style.display = 'none'; locInput.value = center?.name || ''; }
-    if(fhr) fhr.value = center?.firstHour?.toFixed(2) || '';
-    if(p15) p15.value = center?.per15?.toFixed(2) || '';
-    // Auto-fill and lock email from surgery center
-    if(emailEl && center?.invoiceEmail) {
-      emailEl.value = center.invoiceEmail;
-      emailEl.style.background = 'var(--surface2)';
-      emailEl.style.color = 'var(--text-muted)';
-      emailEl.readOnly = true;
-      emailEl.title = 'Auto-filled from Surgery Centers tab';
-    } else if(emailEl) {
-      emailEl.readOnly = false;
-      emailEl.style.background = '';
-      emailEl.style.color = '';
-      emailEl.title = '';
-    }
-    // Also populate flat rate dropdown if flat rate mode
-    if(document.getElementById('inv-modal-billing-type')?.value === 'flat') {
-      const frs = center?.flatRates || [];
-      const flatProc = document.getElementById('inv-modal-flat-proc-select');
-      if(flatProc) {
-        flatProc.innerHTML = '<option value="">— Select procedure —</option>'
-          + frs.map(fr => `<option value="${fr.id}" data-amount="${fr.amount}">${fr.procedure} — $${Number(fr.amount).toFixed(2)}</option>`).join('');
-        flatProc.style.display = frs.length ? '' : 'none';
-      }
-    }
-    calcInvModal();
-  } else {
-    if(locInput) { locInput.style.display = 'none'; locInput.value = ''; }
+    return;
   }
+
+  if(!val) {
+    if(locInput) { locInput.style.display = 'none'; locInput.value = ''; }
+    return;
+  }
+
+  const center = (window.surgeryCenters||[]).find(c => c.id === val);
+  if(!center) return;
+
+  // Set location (hidden, value used by buildInvoiceModalHTML)
+  if(locInput) { locInput.style.display = 'none'; locInput.value = center.name || ''; }
+
+  // Set rates
+  if(fhr) fhr.value = center.firstHour != null ? Number(center.firstHour).toFixed(2) : '';
+  if(p15) p15.value = center.per15 != null ? Number(center.per15).toFixed(2) : '';
+
+  // Lock email if center has one
+  if(emailEl && center.invoiceEmail) {
+    emailEl.value = center.invoiceEmail;
+    emailEl.readOnly = true;
+    emailEl.style.background = 'var(--surface2)';
+    emailEl.style.color = 'var(--text-muted)';
+    emailEl.title = 'From Surgery Centers tab — edit there to change';
+  }
+
+  // Always populate flat rate procedures for this center
+  const frs = center.flatRates || [];
+  const procSel = document.getElementById('inv-modal-flat-proc-select');
+  if(procSel) {
+    procSel.innerHTML = '<option value="">— Select procedure —</option>'
+      + frs.map(fr => `<option value="${fr.id}" data-amount="${fr.amount}">${fr.procedure} — $${Number(fr.amount).toFixed(2)}</option>`).join('')
+      + '<option value="__custom__">✏ Custom procedure...</option>';
+  }
+
+  calcInvModal();
 };
 
 // Populate surgery center dropdown in modal
@@ -6274,21 +6328,7 @@ window.onInvModalFlatProcSelect = function() {
   }
 };
 
-// Populate flat rate procedures when surgery center changes
-const _origOnInvModalCenterChange = window.onInvModalCenterChange;
-window.onInvModalCenterChange = function() {
-  _origOnInvModalCenterChange();
-  // Populate flat rate dropdown for this center
-  const sel = document.getElementById('inv-modal-sc-select');
-  const center = (window.surgeryCenters||[]).find(c => c.id === sel?.value);
-  const frs = center?.flatRates || [];
-  const procSel = document.getElementById('inv-modal-flat-proc-select');
-  if(procSel) {
-    procSel.innerHTML = '<option value="">— Select procedure —</option>'
-      + frs.map(fr => `<option value="${fr.id}" data-amount="${fr.amount}">${fr.procedure} — $${Number(fr.amount).toFixed(2)}</option>`).join('')
-      + '<option value="__custom__">✏ Custom procedure...</option>';
-  }
-};
+// flat rate patch consolidated into onInvModalCenterChange
 
 // Override setInvModalBilling to also populate procedures when switching to flat
 const _origSetInvModalBilling = window.setInvModalBilling;
