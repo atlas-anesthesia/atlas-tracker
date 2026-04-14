@@ -197,13 +197,36 @@ Connect Google Calendar
       </div>
       <button onclick="closeFaxModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
     </div>
-    <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
-      <div style="flex:1;min-width:220px">
-        <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax Number</label>
-        <input type="tel" id="fax-destination" placeholder="+12345678901" style="width:100%;padding:8px 11px;font-size:14px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Include country code, e.g. +1 for US</div>
+    <div style="padding:16px 24px;border-bottom:1px solid var(--border)">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax Number</label>
+          <input type="tel" id="fax-destination" placeholder="+12345678901" style="width:100%;padding:7px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">To (Facility)</label>
+          <input type="text" id="fax-to" placeholder="e.g. Howard Medical Group" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Attn</label>
+          <input type="text" id="fax-attn" placeholder="e.g. Medical Records Dept" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Patient Name</label>
+          <input type="text" id="fax-patient-name" placeholder="First Last" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Date of Birth</label>
+          <input type="text" id="fax-dob" placeholder="MM/DD/YYYY" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Pages</label>
+          <input type="text" id="fax-pages" placeholder="e.g. 2" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        </div>
       </div>
-      <button id="fax-send-btn" onclick="confirmAndSendFax()" style="background:#1d3557;color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">📠 Confirm & Send Fax</button>
+      <div style="display:flex;justify-content:flex-end">
+        <button id="fax-send-btn" onclick="confirmAndSendFax()" style="background:#1d3557;color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer">📠 Confirm & Send Fax</button>
+      </div>
     </div>
     <div style="padding:20px 24px;background:#f4f4f4">
       <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#666;margin-bottom:10px">FAX PREVIEW</div>
