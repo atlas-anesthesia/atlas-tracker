@@ -5574,19 +5574,27 @@ window.deletePaymentRow = async function(idx) {
 function renderPaymentSummary() {
   let earned=0, projected=0, invoiced=0, invAmt=0, pending=0;
   _paymentRows.forEach((r,i) => {
-    const cost = parseFloat(document.getElementById('pr-cost'+i)?.value) || r.caseCost || 0;
-    const hrs = parseFloat(document.getElementById('pr-hrs'+i)?.value) || r.estHrs || 0;
-    const ia = parseFloat(document.getElementById('pr-invamt'+i)?.value) || r.invoicedAmount || 0;
-    if(document.getElementById('pr-paid'+i)?.checked || r.paid) earned += cost;
-    projected += hrs * 600;
-    if(document.getElementById('pr-inv'+i)?.checked || r.invoiceSent) { invoiced++; invAmt += ia; }
-    if(!document.getElementById('pr-depositDate'+i)?.value && !r.depositDate) pending++;
+    // Always read from row data — DOM inputs may not exist (read-only fields are spans)
+    const paidChecked = document.getElementById('pr-paid'+i)?.checked ?? r.paid;
+    const invChecked  = document.getElementById('pr-inv'+i)?.checked  ?? r.invoiceSent;
+    const depositVal  = document.getElementById('pr-depositDate'+i)?.value || r.depositDate;
+
+    // Projected: use manual override if set, otherwise estHrs × 600
+    const proj = r.projOverride != null ? r.projOverride : (r.estHrs || 0) * 600;
+
+    // Invoiced amount: use row data directly (dom element is a display span, not input)
+    const ia = r.invoicedAmount || 0;
+
+    if(paidChecked) earned += r.caseCost || 0;
+    projected += proj;
+    if(invChecked) { invoiced++; invAmt += ia; }
+    if(!depositVal) pending++;
   });
   const fmt = n => '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
   const el = id => document.getElementById(id);
   if(el('pm-earned')) el('pm-earned').textContent = fmt(earned);
   if(el('pm-projected')) el('pm-projected').textContent = fmt(projected);
-  if(el('pm-invoiced')) el('pm-invoiced').textContent = invoiced + ' · ' + fmt(invAmt);
+  if(el('pm-invoiced')) el('pm-invoiced').textContent = invAmt > 0 ? fmt(invAmt) : invoiced + ' sent';
   if(el('pm-pending')) el('pm-pending').textContent = pending;
 }
 
