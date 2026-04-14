@@ -5329,18 +5329,24 @@ function syncPaymentRowsFromCases() {
     } else {
       // New finalized case — add to payments
       const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
+      const sc = preop?.['po-surgery-center'] || '';
+      const scCenter = (window.surgeryCenters||[]).find(c2 => c2.id === sc);
+      const callDt = preop?.['po-callDateTime'];
+      const callDate = callDt ? callDt.split('T')[0] : '';
       _paymentRows.push({
         id: uid(), caseId: c.caseId,
-        name: c.caseId || c.procedure || 'Unnamed',
+        name: c.caseId || '',
         worker: c.worker || 'josh',
-        caseDate: c.date || '',
-        callDate: preop?.['po-callDateTime']?.split('T')[0] || '',
+        caseDate: c.date || preop?.['po-surgeryDate'] || '',
+        callDate,
         depositDate: '', paidDate: '',
         invoiceSent: c.manuallyInvoiced || false,
         paid: c.depositStatus === 'paid' || false,
         invoicedAmount: 0, caseCost: c.total || 0,
         estHrs: parseFloat(preop?.['po-est-hours']) || 0,
-        projected: (parseFloat(preop?.['po-est-hours']) || 0) * 600
+        projected: (parseFloat(preop?.['po-est-hours']) || 0) * 600,
+        surgeryCenter: sc,
+        surgeryCenterName: scCenter?.name || ''
       });
       changed = true;
     }
@@ -5348,12 +5354,15 @@ function syncPaymentRowsFromCases() {
   // Also sync call dates from preop
   (window._rawPreopRecords||[]).forEach(r => {
     const rowIdx = _paymentRows.findIndex(pr => pr.caseId === r['po-caseId']);
-    if(rowIdx !== -1 && r['po-callDateTime']) {
-      const callDate = r['po-callDateTime'].split('T')[0];
-      if(_paymentRows[rowIdx].callDate !== callDate) {
-        _paymentRows[rowIdx].callDate = callDate;
-        changed = true;
-      }
+    if(rowIdx !== -1) {
+      const callDate = r['po-callDateTime']?.split('T')[0] || '';
+      const estHrs = parseFloat(r['po-est-hours']) || 0;
+      const sc = r['po-surgery-center'] || '';
+      const scCenter = (window.surgeryCenters||[]).find(c => c.id === sc);
+      if(_paymentRows[rowIdx].callDate !== callDate) { _paymentRows[rowIdx].callDate = callDate; changed = true; }
+      if(_paymentRows[rowIdx].estHrs !== estHrs) { _paymentRows[rowIdx].estHrs = estHrs; changed = true; }
+      if(_paymentRows[rowIdx].surgeryCenter !== sc) { _paymentRows[rowIdx].surgeryCenter = sc; _paymentRows[rowIdx].surgeryCenterName = scCenter?.name||''; changed = true; }
+      if(r['po-surgeryDate'] && _paymentRows[rowIdx].caseDate !== r['po-surgeryDate']) { _paymentRows[rowIdx].caseDate = r['po-surgeryDate']; changed = true; }
     }
   });
   if(changed) {
@@ -5480,55 +5489,58 @@ function renderPaymentRows() {
   const body = document.getElementById('payments-table-body');
   if(!body) return;
   if(!_paymentRows.length) {
-    body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-faint);font-size:13px">No cases yet — cases from Case History are loaded automatically</div>';
+    body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-faint);font-size:13px">No cases yet — save a Pre-Op to generate cases here automatically</div>';
     renderPaymentSummary();
     return;
   }
-  const inp = (id, type, val, extra='') => {
+
+  // Helper: read-only cell
+  const ro = (val, color='var(--text-muted)', bold=false) =>
+    `<div style="font-size:11px;color:${color};font-weight:${bold?'600':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px" title="${val||''}">${val||'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>`;
+
+  // Helper: editable date input with red if empty
+  const dateInp = (id, val) => {
     const empty = !val;
     const bdr = empty ? '1px solid #fca5a5' : '1px solid var(--border)';
     const bgc = empty ? 'rgba(239,68,68,0.06)' : 'var(--bg)';
-    return `<input type="${type}" id="${id}" value="${val||''}" ${extra} style="width:100%;padding:4px 5px;font-size:11px;border:${bdr};border-radius:4px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
+    return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:3px 4px;font-size:11px;border:${bdr};border-radius:4px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
   };
 
-  // Build surgery center options
-  const scOptions = '<option value="">-- Select or type --</option>'
-    + (window.surgeryCenters||[]).map(c => `<option value="${c.id}" data-fhr="${c.firstHour}" data-p15="${c.per15}">${c.name}</option>`).join('')
-    + '<option value="__custom__">✏ Custom...</option>';
+  const COLS = '180px 50px 105px 50px 62px 88px 88px 88px 88px 40px 68px 40px 52px 30px';
+  const wcolor = w => w==='dev'?'var(--dev)':'var(--josh)';
+  const wname = w => w==='dev'?'Dev':'Josh';
 
   body.innerHTML = _paymentRows.map((r, i) => {
-    const wcolor = r.worker==='dev'?'var(--dev)':'var(--josh)';
-    // Completion: all key date fields filled + invoice sent
-    const complete = r.caseDate && r.callDate && r.depositDate && r.paidDate && r.paid && r.invoiceSent;
+    // Completion: deposit date + remaining deposit date + paid checkbox + inv checkbox
+    const complete = r.depositDate && r.paidDate && r.paid && r.invoiceSent;
     const bg = complete ? 'rgba(45,106,79,0.08)' : i%2===0?'var(--bg)':'var(--surface2)';
     const borderLeft = complete ? '3px solid var(--accent)' : '3px solid transparent';
-    return `<div style="display:grid;grid-template-columns:110px 45px 90px 50px 60px 80px 80px 80px 80px 38px 65px 38px 50px 30px;gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center">
-      <div style="padding:5px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>
-      <div style="padding:5px 4px">
-        <select id="pr-worker${i}" style="width:100%;padding:3px 2px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:${wcolor};font-weight:600;font-family:inherit" onchange="renderPaymentSummary()">
-          <option value="josh" ${r.worker==='josh'?'selected':''}>Josh</option>
-          <option value="dev" ${r.worker==='dev'?'selected':''}>Dev</option>
-        </select>
+
+    // Format call date for display
+    const callFmt = r.callDate ? new Date(r.callDate+'T12:00:00').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}) : '';
+    const caseFmt = r.caseDate ? new Date(r.caseDate+'T12:00:00').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}) : '';
+
+    // Surgery center name
+    const center = (window.surgeryCenters||[]).find(c => c.id === r.surgeryCenter);
+    const scName = center?.name || r.surgeryCenterName || '';
+
+    return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center;min-height:38px">
+      <div style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||r.caseId||''}">${r.name||r.caseId||'—'}</div>
+      <div style="padding:4px 4px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${wname(r.worker)}</div>
+      <div style="padding:4px 4px">${ro(scName)}</div>
+      <div style="padding:4px 4px;font-size:11px;font-weight:600;color:var(--accent);text-align:right">${r.estHrs>0?r.estHrs+'h':'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
+      <div style="padding:4px 4px;font-size:11px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace;text-align:right">${r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
+      <div style="padding:4px 4px">${ro(caseFmt)}</div>
+      <div style="padding:4px 4px">${ro(callFmt)}</div>
+      <div style="padding:4px 4px">${dateInp('pr-depositDate'+i, r.depositDate)}</div>
+      <div style="padding:4px 4px">${dateInp('pr-paidDate'+i, r.paidDate)}</div>
+      <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
+      <div style="padding:4px 4px;font-size:11px;font-weight:600;font-family:DM Mono,monospace;color:var(--info);text-align:right" id="pr-invamt${i}">${r.invoicedAmount>0?'$'+Number(r.invoicedAmount).toFixed(2):'<span style="color:var(--text-faint)">—</span>'}</div>
+      <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
+      <div style="padding:4px 3px">
+        <button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button>
       </div>
-      <div style="padding:5px 4px">
-        <select id="pr-sc${i}" onchange="onPaymentCenterChange(${i})" style="width:100%;padding:3px 2px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit">
-          ${scOptions.replace(`value="${r.surgeryCenter||''}"`,`value="${r.surgeryCenter||''}" selected`)}
-        </select>
-        <input type="text" id="pr-sc-custom${i}" placeholder="Name..." value="${r.surgeryCenterCustom||''}" style="display:${r.surgeryCenter==='__custom__'?'':'none'};width:100%;padding:3px 4px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit;margin-top:3px">
-      </div>
-      <div style="padding:5px 4px"><input type="number" id="pr-hrs${i}" value="${r.estHrs||''}" placeholder="hrs" min="0" step="0.5" style="width:100%;padding:4px 5px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit" oninput="updatePaymentProjected(${i})"></div>
-      <div style="padding:5px 4px;font-size:11px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace;white-space:nowrap" id="pr-proj${i}">${r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'—'}</div>
-      <div style="padding:4px 3px;font-size:11px;color:var(--text-muted);text-align:center" title="Linked to case — not editable">${r.caseDate?fmtDate(r.caseDate):'<span style="color:#b91c1c;font-size:10px">No date</span>'}</div>
-      <div style="padding:4px 3px">${inp('pr-callDate'+i,'date',r.callDate,'','callDate')}</div>
-      <div style="padding:4px 3px">${inp('pr-depositDate'+i,'date',r.depositDate,'','depositDate')}</div>
-      <div style="padding:4px 3px">${inp('pr-paidDate'+i,'date',r.paidDate,'','paidDate')}</div>
-      <div style="padding:5px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
-      <div style="padding:5px 4px"><input type="number" id="pr-invamt${i}" value="${r.invoicedAmount||''}" placeholder="$" min="0" step="0.01" style="width:100%;padding:4px 5px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:DM Mono,monospace" onchange="renderPaymentSummary()"></div>
-      <div style="padding:5px 4px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
-      <div style="padding:5px 4px">
-        <button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄 PDF</button>
-      </div>
-      <div style="padding:5px 4px"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-faint)">🗑</button></div>
+      <div style="padding:4px 3px"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--text-faint)">🗑</button></div>
     </div>`;
   }).join('');
   renderPaymentSummary();
@@ -5691,10 +5703,13 @@ window.sendInvoiceEmail = async function() {
     // ✅ Auto-check invoice sent + fill invoiced amount on the row
     if(_invoiceModalRowIdx !== null) {
       const cb = document.getElementById('pr-inv'+_invoiceModalRowIdx);
-      const ia = document.getElementById('pr-invamt'+_invoiceModalRowIdx);
       if(cb) cb.checked = true;
-      if(ia && !ia.value) ia.value = calc.total.toFixed(2);
-      renderPaymentSummary();
+      // Save invoiced amount to row data
+      if(_paymentRows[_invoiceModalRowIdx]) {
+        _paymentRows[_invoiceModalRowIdx].invoiceSent = true;
+        _paymentRows[_invoiceModalRowIdx].invoicedAmount = calc.total;
+      }
+      renderPaymentRows();
     }
     closeInvoiceModal();
   } catch(e) {
@@ -5877,6 +5892,7 @@ window.onInvModalCenterChange = function() {
   const locInput = document.getElementById('inv-modal-location');
   const fhr = document.getElementById('inv-modal-fhr');
   const p15 = document.getElementById('inv-modal-p15');
+  const emailEl = document.getElementById('inv-modal-email');
   const val = sel?.value;
 
   if(val === '__custom__') {
@@ -5886,6 +5902,8 @@ window.onInvModalCenterChange = function() {
     if(locInput) { locInput.style.display = 'none'; locInput.value = center?.name || ''; }
     if(fhr) fhr.value = center?.firstHour?.toFixed(2) || '';
     if(p15) p15.value = center?.per15?.toFixed(2) || '';
+    // Auto-fill invoice email from surgery center's saved email
+    if(emailEl && center?.invoiceEmail) emailEl.value = center.invoiceEmail;
     // Also populate flat rate dropdown if flat rate mode
     if(document.getElementById('inv-modal-billing-type')?.value === 'flat') {
       const frs = center?.flatRates || [];
@@ -6068,10 +6086,13 @@ window.sendInvoiceEmail = async function() {
     await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total:calc.total, caseId, worker:currentWorker, emailed:true, savedAt:new Date().toISOString() });
     if(_invoiceModalRowIdx !== null) {
       const cb = document.getElementById('pr-inv'+_invoiceModalRowIdx);
-      const ia = document.getElementById('pr-invamt'+_invoiceModalRowIdx);
       if(cb) cb.checked = true;
-      if(ia && !ia.value) ia.value = calc.total.toFixed(2);
-      renderPaymentSummary();
+      // Save invoiced amount to row data
+      if(_paymentRows[_invoiceModalRowIdx]) {
+        _paymentRows[_invoiceModalRowIdx].invoiceSent = true;
+        _paymentRows[_invoiceModalRowIdx].invoicedAmount = calc.total;
+      }
+      renderPaymentRows();
     }
     closeInvoiceModal();
   } catch(e) {
@@ -6088,7 +6109,8 @@ const _origLoadPayments = window.showTab ? null : null;
 const _showTabOld3 = window.showTab;
 window.showTab = function(tab, pushState=true) {
   _showTabOld3(tab, pushState);
-  if(tab === 'payments') { loadPaymentRows(); loadSavedPDFs(); }
+  if(tab === 'payments') { loadPaymentRows(); }
+  if(tab === 'saved-pdfs') { loadSavedPDFs(); }
 };
 
 // ── FLAT RATE PROCEDURE SELECTOR IN INVOICE MODAL ────────────────────────────
