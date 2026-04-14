@@ -5303,7 +5303,7 @@ window.openFaxModalFromForm = function() {
   const centerId = document.getElementById('po-surgery-center')?.value;
   const center = surgeryCenters.find(c => c.id === centerId);
   const faxInput = document.getElementById('fax-destination');
-  if(faxInput) faxInput.value = center?.faxNumber || '';
+  if(faxInput) faxInput.value = center?.faxNumber || '+1';
 
   // Pre-populate editable modal fields
   const _center2 = (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center']);
@@ -5340,7 +5340,7 @@ window.openFaxModal = async function(id) {
 
     const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
     const faxInput = document.getElementById('fax-destination');
-    if(faxInput) faxInput.value = center?.faxNumber || '';
+    if(faxInput) faxInput.value = center?.faxNumber || '+1';
 
     const modal = document.getElementById('faxModal');
     if(!modal) { alert('Fax modal not found in DOM.'); return; }
