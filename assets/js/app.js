@@ -5390,34 +5390,54 @@ window.sortPaymentRows = function() {
 
 
 window.editPaymentField = function(field, rowIdx) {
-  const wrap = document.getElementById(field === 'proj' ? 'pr-proj-wrap'+rowIdx : 'pr-invamt-wrap'+rowIdx);
-  if(!wrap || wrap.querySelector('input')) return;
-
-  const currentVal = field === 'proj'
+  const isProj = field === 'proj';
+  const label = isProj ? 'Projected Income' : 'Invoiced Amount';
+  const currentVal = isProj
     ? (_paymentRows[rowIdx]?.projOverride != null ? _paymentRows[rowIdx].projOverride : (_paymentRows[rowIdx]?.estHrs||0)*600)
     : (_paymentRows[rowIdx]?.invoicedAmount || 0);
 
-  const inp = document.createElement('input');
-  inp.type = 'number';
-  inp.step = '0.01';
-  inp.min = '0';
-  inp.value = currentVal.toFixed(2);
-  inp.title = 'Enter to save · Esc to cancel';
-  inp.style.cssText = 'width:100%;padding:3px 5px;font-size:11px;font-weight:600;font-family:DM Mono,monospace;border:2px solid var(--info);border-radius:4px;background:var(--bg);color:var(--text);text-align:right;outline:none';
+  // Remove any existing edit popup
+  const existing = document.getElementById('payment-edit-popup');
+  if(existing) existing.remove();
 
-  const hint = document.createElement('span');
-  hint.style.cssText = 'font-size:9px;color:var(--text-faint);white-space:nowrap;display:block;text-align:right;margin-top:2px';
-  hint.textContent = '↵ save · esc cancel';
+  // Create popup overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'payment-edit-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
 
-  inp.addEventListener('blur', () => commitPaymentField(field, rowIdx, inp.value));
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;padding:28px 32px;width:320px;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center">
+      <div style="font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Edit ${label}</div>
+      <div style="font-size:11px;color:var(--text-faint);margin-bottom:16px">${isProj ? 'Overrides auto-calculated Hrs × $600' : 'Overrides amount set by invoice modal'}</div>
+      <input id="payment-edit-popup-input" type="number" step="0.01" min="0" value="${currentVal.toFixed(2)}"
+        style="width:100%;padding:12px 14px;font-size:22px;font-weight:700;font-family:DM Mono,monospace;border:2px solid var(--info);border-radius:8px;background:var(--bg);color:var(--text);text-align:center;outline:none;box-sizing:border-box">
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button id="payment-edit-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>
+        <button id="payment-edit-save" style="flex:2;padding:10px;border:none;border-radius:8px;background:var(--info);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Save Amount</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  const inp = document.getElementById('payment-edit-popup-input');
+  const saveBtn = document.getElementById('payment-edit-save');
+  const cancelBtn = document.getElementById('payment-edit-cancel');
+
+  const doSave = () => {
+    const val = parseFloat(inp.value) || 0;
+    commitPaymentField(field, rowIdx, val);
+    overlay.remove();
+  };
+  const doCancel = () => overlay.remove();
+
+  saveBtn.addEventListener('click', doSave);
+  cancelBtn.addEventListener('click', doCancel);
+  overlay.addEventListener('click', e => { if(e.target === overlay) doCancel(); });
   inp.addEventListener('keydown', e => {
-    if(e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-    if(e.key === 'Escape') { e.preventDefault(); renderPaymentRows(); }
+    if(e.key === 'Enter') doSave();
+    if(e.key === 'Escape') doCancel();
   });
 
-  wrap.innerHTML = '';
-  wrap.appendChild(inp);
-  wrap.appendChild(hint);
   requestAnimationFrame(() => { inp.focus(); inp.select(); });
 };
 
