@@ -5389,31 +5389,40 @@ window.sortPaymentRows = function() {
 };
 
 
-window.editPaymentField = function(field, idx) {
-  const confirmed = confirm(
-    field === 'proj'
-      ? '✏ Edit Projected Income?\n\nThis overrides the auto-calculated amount.\n\nAre you sure?'
-      : '✏ Edit Invoiced Amount?\n\nThis overrides the amount set by the invoice modal.\n\nAre you sure?'
-  );
-  if(!confirmed) return;
-
-  const wrapId = field === 'proj' ? 'pr-proj-wrap'+idx : 'pr-invamt-wrap'+idx;
-  const displayId = field === 'proj' ? 'pr-proj-display'+idx : 'pr-invamt'+idx;
-  const currentVal = field === 'proj'
-    ? (_paymentRows[idx].projOverride != null ? _paymentRows[idx].projOverride : _paymentRows[idx].estHrs * 600)
-    : (_paymentRows[idx].invoicedAmount || 0);
-
+window.editPaymentField = function(field, rowIdx) {
+  const wrapId = field === 'proj' ? 'pr-proj-wrap'+rowIdx : 'pr-invamt-wrap'+rowIdx;
   const wrap = document.getElementById(wrapId);
   if(!wrap) return;
 
-  // Replace with inline input
-  wrap.innerHTML = `<input type="number" id="pr-edit-${field}-${idx}" value="${currentVal.toFixed(2)}"
-    min="0" step="0.01" autofocus
-    style="width:100%;padding:3px 5px;font-size:11px;font-weight:600;font-family:DM Mono,monospace;border:2px solid var(--info);border-radius:4px;background:var(--bg);color:var(--text);text-align:right"
-    onblur="commitPaymentField('${field}',${idx},this.value)"
-    onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape')renderPaymentRows();">`;
-  const inp = document.getElementById('pr-edit-'+field+'-'+idx);
-  if(inp) { inp.focus(); inp.select(); }
+  // If already editing, do nothing
+  if(wrap.querySelector('input')) return;
+
+  const currentVal = field === 'proj'
+    ? (_paymentRows[rowIdx]?.projOverride != null
+        ? _paymentRows[rowIdx].projOverride
+        : (_paymentRows[rowIdx]?.estHrs || 0) * 600)
+    : (_paymentRows[rowIdx]?.invoicedAmount || 0);
+
+  const label = field === 'proj' ? 'Projected $' : 'Inv. Amount';
+
+  wrap.innerHTML =
+    '<input type="number" step="0.01" min="0"' +
+    ' value="' + currentVal.toFixed(2) + '"' +
+    ' style="width:100%;padding:3px 5px;font-size:11px;font-weight:600;' +
+    'font-family:DM Mono,monospace;border:2px solid var(--info);' +
+    'border-radius:4px;background:var(--bg);color:var(--text);text-align:right;outline:none"' +
+    ' title="Enter to save · Esc to cancel"' +
+    ' onblur="commitPaymentField('' + field + '',' + rowIdx + ',this.value)"' +
+    ' onkeydown="' +
+      'if(event.key==='Enter'){event.preventDefault();this.blur();}' +
+      'if(event.key==='Escape'){event.preventDefault();renderPaymentRows();}' +
+    '">' +
+    '<span style="font-size:9px;color:var(--text-faint);white-space:nowrap;display:block;text-align:right;margin-top:2px">↵ save · esc cancel</span>';
+
+  requestAnimationFrame(() => {
+    const inp = wrap.querySelector('input');
+    if(inp) { inp.focus(); inp.select(); }
+  });
 };
 
 window.commitPaymentField = function(field, idx, rawVal) {
@@ -5611,7 +5620,7 @@ function renderPaymentRows() {
       <div style="padding:4px 4px;font-size:11px;font-weight:600;color:var(--accent);text-align:right">${r.estHrs>0?r.estHrs+'h':'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
       <div style="padding:4px 4px;display:flex;align-items:center;gap:3px" id="pr-proj-wrap${i}">
         <span style="font-size:11px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace;flex:1;text-align:right" id="pr-proj-display${i}">${r.projOverride!=null?'$'+Number(r.projOverride).toFixed(0):r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'<span style="color:#fca5a5;font-size:10px">—</span>'}</span>
-        <button onclick="editPaymentField('proj',${i})" style="background:none;border:none;cursor:pointer;font-size:9px;color:var(--text-faint);padding:0;line-height:1" title="Edit projected amount">✏</button>
+        <button onclick="editPaymentField('proj',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px;line-height:1;transition:color .15s" onmouseover="this.style.color='var(--info)'" onmouseout="this.style.color='var(--text-faint)'" title="Click to edit projected amount">✏</button>
       </div>
       <div style="padding:4px 4px">${ro(caseFmt)}</div>
       <div style="padding:4px 4px">${ro(callFmt)}</div>
@@ -5620,7 +5629,7 @@ function renderPaymentRows() {
       <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
       <div style="padding:4px 4px;display:flex;align-items:center;gap:3px" id="pr-invamt-wrap${i}">
         <span style="font-size:11px;font-weight:600;color:var(--info);font-family:DM Mono,monospace;flex:1;text-align:right" id="pr-invamt${i}">${r.invoicedAmount>0?'$'+Number(r.invoicedAmount).toFixed(2):'<span style="color:var(--text-faint)">—</span>'}</span>
-        <button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:9px;color:var(--text-faint);padding:0;line-height:1" title="Edit invoiced amount">✏</button>
+        <button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px;line-height:1;transition:color .15s" onmouseover="this.style.color='var(--info)'" onmouseout="this.style.color='var(--text-faint)'" title="Click to edit invoiced amount">✏</button>
       </div>
       <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
       <div style="padding:4px 3px">
