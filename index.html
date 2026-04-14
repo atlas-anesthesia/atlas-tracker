@@ -225,8 +225,8 @@ Connect Google Calendar
           <div style="padding:10px 4px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Proj. $</div>
           <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Case Date</div>
           <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Call Date</div>
-          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Deposit</div>
-          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Paid Date</div>
+          <div style="padding:10px 4px;font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#fff">$500 Dep.</div>
+          <div style="padding:10px 4px;font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#fff">Remaining</div>
           <div style="padding:10px 4px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff;text-align:center">Paid✓</div>
           <div style="padding:10px 4px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Inv. Amt</div>
           <div style="padding:10px 4px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff;text-align:center">Inv✓</div>
@@ -236,6 +236,16 @@ Connect Google Calendar
         <!-- Rows -->
         <div id="payments-table-body"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Saved PDFs section -->
+  <div style="max-width:1100px;margin:24px auto 48px">
+    <div class="card">
+      <div class="action-bar" style="margin-bottom:12px">
+        <h2 style="font-size:15px">🗂 Saved Invoice PDFs</h2>
+      </div>
+      <div id="saved-pdfs-list"><div class="empty-state" style="font-size:13px">No saved invoices yet — generate a PDF from a case row above</div></div>
     </div>
   </div>
 
@@ -257,7 +267,14 @@ Connect Google Calendar
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Associated Case</label><select id="inv-modal-case" onchange="onInvModalCaseChange()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:2px solid var(--info);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none"><option value="">— Select a case (required) —</option></select></div>
-      <div><label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Surgery Center / Billed To</label><input type="text" id="inv-modal-location" placeholder="e.g. Affordable Dentures" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none"></div>
+      <div>
+  <label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Surgery Center / Billed To</label>
+  <select id="inv-modal-sc-select" onchange="onInvModalCenterChange()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-bottom:4px">
+    <option value="">— Select surgery center —</option>
+    <option value="__custom__">✏ Custom...</option>
+  </select>
+  <input type="text" id="inv-modal-location" placeholder="Enter center name" style="display:none;width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+</div>
         <div><label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Date of Service</label><input type="date" id="inv-modal-date" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none"></div>
         <div><label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Provider</label><input type="text" id="inv-modal-provider" placeholder="e.g. Josh Condado" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none"></div>
         <div><label style="font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:4px">Invoice Email (send to)</label><input type="email" id="inv-modal-email" placeholder="e.g. billing@center.com" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none"></div>
