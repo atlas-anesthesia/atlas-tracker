@@ -5607,7 +5607,7 @@ function renderPaymentRows() {
     return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:5px 4px;font-size:11px;border:${bdr};border-radius:5px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
   };
 
-  const COLS = '175px 48px 135px 48px 65px 88px 88px 88px 88px 40px 68px 40px 48px 32px';
+  const COLS = '150px 44px 110px 40px 60px 75px 75px 75px 30px 75px 30px 36px 70px 36px 44px 30px';
   const wcolor = w => w==='dev'?'var(--dev)':'var(--josh)';
   const wname = w => w==='dev'?'Dev':'Josh';
 
