@@ -209,7 +209,7 @@ Connect Google Calendar
     <div class="grid-4" style="margin-bottom:24px" id="payments-summary">
       <div class="metric-card"><div class="metric-label">Total Earned</div><div class="metric-value" id="pm-earned">$0</div></div>
       <div class="metric-card"><div class="metric-label">Projected Income</div><div class="metric-value" id="pm-projected">$0</div></div>
-      <div class="metric-card"><div class="metric-label">Invoices Sent</div><div class="metric-value" id="pm-invoiced">0</div></div>
+      <div class="metric-card"><div class="metric-label">Invoices Sent</div><div class="metric-value" style="font-size:18px" id="pm-invoiced">0</div></div>
       <div class="metric-card"><div class="metric-label">Pending Deposits</div><div class="metric-value" id="pm-pending">0</div></div>
     </div>
 
@@ -217,17 +217,19 @@ Connect Google Calendar
     <div class="card" style="overflow-x:auto;padding:0">
       <div style="min-width:1000px">
         <!-- Header -->
-        <div style="display:grid;grid-template-columns:180px 70px 100px 100px 100px 100px 60px 90px 90px 36px;gap:0;background:var(--info);border-radius:var(--radius) var(--radius) 0 0">
-          <div style="padding:10px 12px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Case Name</div>
-          <div style="padding:10px 8px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Who</div>
-          <div style="padding:10px 8px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Case Date</div>
-          <div style="padding:10px 8px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Call Date</div>
-          <div style="padding:10px 8px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Deposit</div>
-          <div style="padding:10px 8px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Paid Full</div>
-          <div style="padding:10px 8px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff;text-align:center">Inv.</div>
-          <div style="padding:10px 8px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Est. Hrs</div>
-          <div style="padding:10px 8px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Proj. $</div>
-          <div style="padding:10px 8px"></div>
+        <div style="display:grid;grid-template-columns:160px 60px 95px 95px 95px 95px 55px 90px 75px 75px 80px 36px;gap:0;background:var(--info);border-radius:var(--radius) var(--radius) 0 0">
+          <div style="padding:10px 10px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Case Name</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Who</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Case Date</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Call Date</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Deposit</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Paid Full</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff;text-align:center">Inv✓</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Inv. Amt</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Est. Hrs</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Proj. $</div>
+          <div style="padding:10px 6px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Invoice</div>
+          <div style="padding:10px 6px"></div>
         </div>
         <!-- Rows -->
         <div id="payments-table-body"></div>
