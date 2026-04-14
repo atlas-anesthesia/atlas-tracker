@@ -199,8 +199,8 @@ Connect Google Calendar
     <div class="action-bar">
       <h2>Payments</h2>
       <div style="display:flex;gap:10px">
-        <button class="btn btn-ghost btn-sm" onclick="addPaymentRow()">+ Add Case</button>
         <button class="btn btn-success btn-sm" onclick="savePaymentRows()">✓ Save Changes</button>
+        <button class="btn btn-ghost btn-sm" onclick="showTab('saved-pdfs')">🗂 Saved PDFs</button>
         
       </div>
     </div>
@@ -217,7 +217,7 @@ Connect Google Calendar
     <div class="card" style="overflow-x:hidden;padding:0;min-width:0">
       <div style="min-width:1000px">
         <!-- Header -->
-        <div style="display:grid;grid-template-columns:110px 45px 90px 50px 60px 80px 80px 80px 80px 38px 65px 38px 50px 30px;gap:0;background:var(--info);border-radius:var(--radius) var(--radius) 0 0">
+        <div style="display:grid;grid-template-columns:180px 50px 105px 50px 62px 88px 88px 88px 88px 40px 68px 40px 52px 30px;gap:0;background:var(--info);border-radius:var(--radius) var(--radius) 0 0">
           <div style="padding:10px 10px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Case ID</div>
           <div style="padding:10px 4px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#fff">Who</div>
           <div style="padding:10px 4px;font-size:8.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:#fff;white-space:nowrap">Surg. Center</div>
@@ -236,16 +236,6 @@ Connect Google Calendar
         <!-- Rows -->
         <div id="payments-table-body" style="min-width:0"></div>
       </div>
-    </div>
-  </div>
-
-  <!-- Saved PDFs section -->
-  <div style="max-width:1100px;margin:24px auto 48px">
-    <div class="card">
-      <div class="action-bar" style="margin-bottom:12px">
-        <h2 style="font-size:15px">🗂 Saved Invoice PDFs</h2>
-      </div>
-      <div id="saved-pdfs-list"><div class="empty-state" style="font-size:13px">No saved invoices yet — generate a PDF from a case row above</div></div>
     </div>
   </div>
 
@@ -315,6 +305,17 @@ Connect Google Calendar
         <button onclick="downloadInvoiceModal()" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">⬇ Download PDF</button>
         <button id="inv-modal-send-btn" onclick="sendInvoiceEmail()" style="background:#1d3557;color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">📧 Send Invoice Email</button>
       </div>
+    </div>
+  </div>
+</div>
+<div class="section" id="tab-saved-pdfs">
+  <div style="max-width:960px;margin:0 auto;padding-bottom:48px">
+    <div class="action-bar">
+      <h2>🗂 Saved Invoice PDFs</h2>
+      <button class="btn btn-ghost btn-sm" onclick="showTab('payments')">← Back to Payments</button>
+    </div>
+    <div class="card">
+      <div id="saved-pdfs-list"><div class="empty-state">No saved invoices yet — generate a PDF from the Payments tab</div></div>
     </div>
   </div>
 </div>
