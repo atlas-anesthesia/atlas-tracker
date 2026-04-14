@@ -5575,10 +5575,8 @@ function renderPaymentSummary() {
     // Invoiced amount: use row data directly (dom element is a display span, not input)
     const ia = r.invoicedAmount || 0;
 
-    if(paidChecked) earned += r.caseCost || 0;
     projected += proj;
-    if(invChecked) { invoiced++; invAmt += ia; }
-    if(!depositVal) pending++;
+    invAmt += ia;  // sum ALL invoiced amounts regardless of inv checkbox
   });
   const fmt = n => '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
   const el = id => document.getElementById(id);
@@ -5647,7 +5645,7 @@ function renderPaymentRows() {
       <div style="padding:4px 3px">
         <button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button>
       </div>
-      <div style="padding:4px 3px;display:flex;justify-content:flex-end"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete row">🗑</button></div>
+      <div style="padding:4px 6px;display:flex;justify-content:flex-end;align-items:center"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete row">🗑</button></div>
     </div>`;
   }).join('');
   renderPaymentSummary();
