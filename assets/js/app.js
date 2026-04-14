@@ -5379,37 +5379,70 @@ let _paymentRows = [];
 let _invoiceModalRowIdx = null;
 
 async function loadPaymentRows() {
-  runDailyPaymentBackup(); // daily backup, runs once per day
-  try {
-    const snap = await getDoc(doc(db,'atlas','payments'));
-    _paymentRows = snap.exists() ? (snap.data().rows || []) : [];
-  } catch(e) { _paymentRows = []; }
+  runDailyPaymentBackup();
 
-  // Merge in cases from Case History that aren't already tracked
-  const finalized = (cases||[]).filter(c => !c.draft);
+  // Fetch all data fresh in parallel so we don't depend on load order
+  const [paymentsSnap, casesSnap, preopSnap, scSnap] = await Promise.all([
+    getDoc(doc(db,'atlas','payments')),
+    getDoc(doc(db,'atlas','cases')),
+    getDoc(doc(db,'atlas','preop')),
+    getDoc(doc(db,'atlas','surgerycenters'))
+  ]);
+
+  _paymentRows = paymentsSnap.exists() ? (paymentsSnap.data().rows || []) : [];
+
+  // Refresh global caches with fresh data
+  const freshCases = casesSnap.exists() ? (casesSnap.data().cases || []) : (cases || []);
+  const freshPreop = preopSnap.exists() ? (preopSnap.data().records || []) : [];
+  const freshCenters = scSnap.exists() ? (scSnap.data().centers || []) : (window.surgeryCenters || []);
+  window._rawPreopRecords = freshPreop;
+  if(freshCenters.length) window.surgeryCenters = freshCenters;
+
+  // Merge every finalized case into payment rows
+  const finalized = freshCases.filter(c => !c.draft);
   finalized.forEach(c => {
-    const exists = _paymentRows.find(r => r.caseId === c.caseId);
-    if(!exists) {
-      // Find linked preop for call date
-      const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
+    const preop = freshPreop.find(r => r['po-caseId'] === c.caseId);
+    const scId = preop?.['po-surgery-center'] || '';
+    const center = freshCenters.find(sc => sc.id === scId);
+    const callDt = preop?.['po-callDateTime'];
+    const callDate = callDt ? callDt.split('T')[0] : '';
+    const caseDate = preop?.['po-surgeryDate'] || c.date || '';
+    const estHrs = parseFloat(preop?.['po-est-hours']) || 0;
+
+    const existIdx = _paymentRows.findIndex(r => r.caseId === c.caseId);
+    if(existIdx === -1) {
+      // New case — add row
       _paymentRows.push({
-        id: uid(),
-        caseId: c.caseId,
-        name: c.caseId || c.procedure || 'Unnamed',
+        id: uid(), caseId: c.caseId,
+        name: c.caseId || '',
         worker: c.worker || 'josh',
-        caseDate: c.date || '',
-        callDate: preop?.['po-callDateTime']?.split('T')[0] || '',
-        depositDate: '',
-        paidDate: '',
-        paid: c.depositStatus === 'paid' || false,
-        invoiceSent: c.manuallyInvoiced || false,
-        invoicedAmount: 0,
-        caseCost: c.total || 0,
-        estHrs: parseFloat(preop?.['po-est-hours']) || 0,
-        projected: (parseFloat(preop?.['po-est-hours']) || 0) * 600
+        caseDate, callDate,
+        depositDate: '', paidDate: '',
+        paid: false, invoiceSent: false,
+        invoicedAmount: 0, caseCost: c.total || 0,
+        estHrs, projected: estHrs * 600,
+        surgeryCenter: scId,
+        surgeryCenterName: center?.name || ''
       });
+    } else {
+      // Existing row — update read-only fields from live data
+      _paymentRows[existIdx] = {
+        ..._paymentRows[existIdx],
+        name: c.caseId || _paymentRows[existIdx].name,
+        worker: c.worker || _paymentRows[existIdx].worker,
+        caseDate,
+        callDate: callDate || _paymentRows[existIdx].callDate,
+        caseCost: c.total || _paymentRows[existIdx].caseCost,
+        estHrs: estHrs || _paymentRows[existIdx].estHrs,
+        projected: (estHrs || _paymentRows[existIdx].estHrs) * 600,
+        surgeryCenter: scId || _paymentRows[existIdx].surgeryCenter,
+        surgeryCenterName: center?.name || _paymentRows[existIdx].surgeryCenterName || ''
+      };
     }
   });
+
+  // Sort by case date descending
+  _paymentRows.sort((a,b) => (b.caseDate||'').localeCompare(a.caseDate||''));
 
   renderPaymentRows();
 }
@@ -5445,10 +5478,7 @@ window.savePaymentRows = async function() {
   } catch(e) { setSyncing(false); alert('Error: ' + e.message); }
 };
 
-window.addPaymentRow = function() {
-  _paymentRows.unshift({ id:uid(), caseId:'', name:'', worker:currentWorker||'josh', caseDate:'', callDate:'', depositDate:'', paidDate:'', invoiceSent:false, invoicedAmount:0, caseCost:0, estHrs:0, projected:0 });
-  renderPaymentRows();
-};
+// addPaymentRow removed — cases load automatically;
 
 window.deletePaymentRow = async function(idx) {
   if(!confirm('⚠️ Delete this payment row?\n\nThis will permanently remove this record from the Payments tracker.\n\nThis cannot be undone.')) return;
@@ -5459,12 +5489,7 @@ window.deletePaymentRow = async function(idx) {
   renderPaymentRows();
 };
 
-window.updatePaymentProjected = function(idx) {
-  const hrs = parseFloat(document.getElementById('pr-hrs'+idx)?.value) || 0;
-  const projEl = document.getElementById('pr-proj'+idx);
-  if(projEl) projEl.textContent = hrs > 0 ? '$'+(hrs*600).toFixed(0) : '—';
-  renderPaymentSummary();
-};
+// updatePaymentProjected removed — hrs is now read-only from Pre-Op
 
 function renderPaymentSummary() {
   let earned=0, projected=0, invoiced=0, invAmt=0, pending=0;
