@@ -5246,6 +5246,17 @@ window.onCustomFlatChange = function() {
   _updateFlatSummary(proc,amt);
 };
 
+
+window.previewFax = function() {
+  if(!_faxRecord) return;
+  const preview = document.getElementById('faxPreviewContent');
+  if(preview) {
+    preview.innerHTML = buildFaxHTML(_faxRecord);
+    // Scroll to preview
+    preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
 // ── BROWSER BACK BUTTON ──
 window.addEventListener('popstate', (event) => {
 const tab = event.state?.tab || 'preop';
