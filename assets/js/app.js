@@ -5321,7 +5321,7 @@ async function loadPaymentRows() {
       _paymentRows.push({
         id: uid(),
         caseId: c.caseId,
-        name: c.procedure || c.caseId || 'Unnamed',
+        name: c.caseId || c.procedure || 'Unnamed',
         worker: c.worker || 'josh',
         caseDate: c.date || '',
         callDate: preop?.['po-callDateTime']?.split('T')[0] || '',
@@ -5458,7 +5458,6 @@ window.openInvoiceModal = function(rowIdx) {
       const loc = document.getElementById('inv-modal-location');
       const dt = document.getElementById('inv-modal-date');
       const prov = document.getElementById('inv-modal-provider');
-      if(loc) loc.value = r.name || '';
       if(dt && r.caseDate) dt.value = r.caseDate;
       if(prov) prov.value = r.worker==='josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
       // Pre-fill rate from surgery center if linked
@@ -5505,8 +5504,8 @@ window.calcInvModal = function() {
   let total = fhr;
   if(roundedMins>60) total += ((roundedMins-60)/15)*p15;
   const billedStr = `${Math.floor(roundedMins/60)}h${roundedMins%60>0?' '+roundedMins%60+'m':''}`;
-  const actStr = `${Math.floor(totalMins/60)}h${totalMins%60>0?' '+totalMins%60+'m':''}`;
-  if(summEl) summEl.textContent = `Actual: ${actStr} · Billed: ${billedStr}`;
+  const actStr = billedStr;
+  if(summEl) summEl.textContent = `Billed: ${billedStr}`;
   if(totEl) totEl.textContent = '$'+total.toFixed(2);
   window._invModalCalc = { total, roundedMins, billedStr, actStr, start, end, fhr, p15 };
   return window._invModalCalc;
@@ -5533,7 +5532,7 @@ function buildInvoiceModalHTML() {
     <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px">
       <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:110px">BILLED TO:</td><td style="padding:4px 8px;border:1px solid #bbb;font-weight:500">${location}</td><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:65px">DATE:</td><td style="padding:4px 8px;border:1px solid #bbb">${formattedDate}</td></tr>
       <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">${provider} — Atlas Anesthesia</td></tr>
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TIME:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">${fmt12(calc.start)} → ${fmt12(calc.end)} &nbsp;·&nbsp; Actual: ${calc.actStr||'—'} &nbsp;·&nbsp; Billed: ${calc.billedStr||'—'}</td></tr>
+      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TIME:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">${fmt12(calc.start)} → ${fmt12(calc.end)} &nbsp;·&nbsp; Billed: ${calc.billedStr||'—'}</td></tr>
     </table>
     <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">
       <tr style="background:#1d3557;color:#fff"><td style="padding:5px 8px;font-weight:bold">Description</td><td style="padding:5px 8px;font-weight:bold;text-align:center">Time</td><td style="padding:5px 8px;font-weight:bold;text-align:right">Amount</td></tr>
@@ -5584,6 +5583,11 @@ window.sendInvoiceEmail = async function() {
     const data = await res.json();
     if(res.ok && data.success) {
       alert('✅ Invoice emailed to ' + email + '!');
+      const _invNum2 = window._currentInvoiceNum || 'ATL-INV';
+      const _billingType2 = document.getElementById('inv-modal-billing-type')?.value || 'hourly';
+      const _proc2 = document.getElementById('inv-modal-flat-proc')?.value || 'Anesthesia Services';
+      const _amt2 = _billingType2==='flat' ? parseFloat(document.getElementById('inv-modal-flat-amt')?.value)||calc.total : calc.total;
+      saveInvoiceRecord({ id:uid(), invoiceNum:_invNum2, location, date:new Date((date||'')+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}), rawDate:date, provider:document.getElementById('inv-modal-provider')?.value||'', billingType:_billingType2, procedure:_proc2, total:_amt2, savedAt:new Date().toISOString(), worker:currentWorker, linkedCaseId:'' });
     } else {
       const subj = encodeURIComponent(`Atlas Anesthesia Invoice ${invoiceNum}`);
       const body = encodeURIComponent(`Dear ${location},\n\nPlease find your invoice details below.\n\nInvoice #: ${invoiceNum}\nDate: ${date}\nTotal Due: $${calc.total.toFixed(2)}\n\nThank you,\nAtlas Anesthesia`);
@@ -5618,4 +5622,44 @@ const _origShowTabPayments = window.showTab;
 window.showTab = function(tab, pushState=true) {
   _origShowTabPayments(tab, pushState);
   if(tab === 'payments') loadPaymentRows();
+};
+
+// ── INVOICE MODAL BILLING TOGGLE ──────────────────────────────────────────────
+window.setInvModalBilling = function(type) {
+  document.getElementById('inv-modal-billing-type').value = type;
+  const btnH = document.getElementById('inv-modal-btn-hourly');
+  const btnF = document.getElementById('inv-modal-btn-flat');
+  const ACTIVE = '2px solid var(--info)';
+  const IDLE = '2px solid var(--border)';
+  if(type === 'flat') {
+    if(btnH){btnH.style.border=IDLE;btnH.style.background='var(--surface)';btnH.style.color='var(--text-muted)';btnH.style.fontWeight='500';}
+    if(btnF){btnF.style.border=ACTIVE;btnF.style.background='var(--info-light)';btnF.style.color='var(--info)';btnF.style.fontWeight='600';}
+    document.getElementById('inv-modal-hourly-fields').style.display = 'none';
+    document.getElementById('inv-modal-flat-fields').style.display = '';
+    document.getElementById('inv-modal-flat-amt-wrap').style.display = '';
+    const summEl = document.getElementById('inv-modal-summary');
+    const totEl = document.getElementById('inv-modal-total');
+    if(summEl) summEl.textContent = 'Enter procedure and flat rate amount';
+    if(totEl) totEl.textContent = '$0.00';
+  } else {
+    if(btnH){btnH.style.border=ACTIVE;btnH.style.background='var(--info-light)';btnH.style.color='var(--info)';btnH.style.fontWeight='600';}
+    if(btnF){btnF.style.border=IDLE;btnF.style.background='var(--surface)';btnF.style.color='var(--text-muted)';btnF.style.fontWeight='500';}
+    document.getElementById('inv-modal-hourly-fields').style.display = 'contents';
+    document.getElementById('inv-modal-flat-fields').style.display = 'none';
+    document.getElementById('inv-modal-flat-amt-wrap').style.display = 'none';
+  }
+};
+
+window.calcInvModalFlat = function() {
+  const proc = document.getElementById('inv-modal-flat-proc')?.value.trim();
+  const amt = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || 0;
+  const summEl = document.getElementById('inv-modal-summary');
+  const totEl = document.getElementById('inv-modal-total');
+  if(proc && amt > 0) {
+    if(summEl) summEl.textContent = proc + ' — Flat Rate';
+    if(totEl) totEl.textContent = '$'+amt.toFixed(2);
+    window._invModalCalc = { total: amt, billedStr: 'Flat Rate', flat: true };
+  } else {
+    if(totEl) totEl.textContent = '$0.00';
+  }
 };
