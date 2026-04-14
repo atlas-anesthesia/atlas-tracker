@@ -5661,6 +5661,9 @@ function renderPaymentRows() {
 ;
 
 window.closeInvoiceModal = function() {
+  // Re-enable surgery center dropdown for next open
+  const scSel = document.getElementById('inv-modal-sc-select');
+  if(scSel) { scSel.disabled = false; scSel.style.background=''; scSel.style.color=''; scSel.title=''; }
   document.getElementById('invoiceModal').style.display = 'none';
   _invoiceModalRowIdx = null;
 };
@@ -6136,6 +6139,19 @@ window.openInvoiceModal = function(rowIdx) {
 
   // Populate surgery center dropdown, pre-select from row
   populateInvModalCenterDropdown(r?.surgeryCenter || '');
+
+  // Trigger center change to auto-fill rates, email, and apply locks
+  if(r?.surgeryCenter) {
+    onInvModalCenterChange();
+    // Lock the surgery center dropdown — it's linked to this case's pre-op
+    const scSel = document.getElementById('inv-modal-sc-select');
+    if(scSel) {
+      scSel.disabled = true;
+      scSel.style.background = 'var(--surface2)';
+      scSel.style.color = 'var(--text-muted)';
+      scSel.title = 'Linked from Pre-Op — edit there to change';
+    }
+  }
 
   // Auto-fill date and provider from row
   if(r?.caseDate) {
