@@ -5627,8 +5627,8 @@ function renderPaymentRows() {
     const center = (window.surgeryCenters||[]).find(c => c.id === r.surgeryCenter);
     const scName = center?.name || r.surgeryCenterName || '';
 
-    return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center;min-height:42px">
-      <div style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||r.caseId||''}">${r.name||r.caseId||'—'}</div>
+    return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center;min-height:40px">
+      <div style="padding:0 6px 0 10px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;height:40px;display:flex;align-items:center" title="${r.name||r.caseId||''}">${r.name||r.caseId||'—'}</div>
       <div style="padding:4px 4px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${wname(r.worker)}</div>
       <div style="padding:4px 4px">${ro(scName)}</div>
       <div style="padding:4px 4px;font-size:11px;font-weight:600;color:var(--accent);text-align:right">${r.estHrs>0?r.estHrs+'h':'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
