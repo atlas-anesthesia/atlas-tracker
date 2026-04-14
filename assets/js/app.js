@@ -5535,6 +5535,8 @@ window.savePaymentRows = async function() {
       ...row,  // preserve all read-only fields + invoicedAmount + projOverride
       depositDate: document.getElementById('pr-depositDate'+i)?.value || row.depositDate || '',
       paidDate:    document.getElementById('pr-paidDate'+i)?.value    || row.paidDate    || '',
+      dep500Paid:  document.getElementById('pr-dep500'+i)?.checked    ?? row.dep500Paid ?? false,
+      remDepPaid:  document.getElementById('pr-remdep'+i)?.checked    ?? row.remDepPaid ?? false,
       paid:        document.getElementById('pr-paid'+i)?.checked      ?? row.paid,
       invoiceSent: document.getElementById('pr-inv'+i)?.checked       ?? row.invoiceSent,
     };
@@ -5634,8 +5636,10 @@ function renderPaymentRows() {
       </div>
       <div style="padding:4px 4px">${ro(caseFmt)}</div>
       <div style="padding:4px 4px">${ro(callFmt)}</div>
-      <div style="padding:4px 4px">${dateInp('pr-depositDate'+i, r.depositDate)}</div>
-      <div style="padding:4px 4px">${dateInp('pr-paidDate'+i, r.paidDate)}</div>
+      <div style="padding:4px 3px">${dateInp('pr-depositDate'+i, r.depositDate)}</div>
+      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
+      <div style="padding:4px 3px">${dateInp('pr-paidDate'+i, r.paidDate)}</div>
+      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-remdep${i}" ${r.remDepPaid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
       <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
       <div style="padding:4px 4px;display:flex;align-items:center;gap:3px" id="pr-invamt-wrap${i}">
         <span style="font-size:11px;font-weight:600;color:var(--info);font-family:DM Mono,monospace;flex:1;text-align:right" id="pr-invamt${i}">${r.invoicedAmount>0?'$'+Number(r.invoicedAmount).toFixed(2):'<span style="color:var(--text-faint)">—</span>'}</span>
@@ -5645,7 +5649,7 @@ function renderPaymentRows() {
       <div style="padding:4px 3px">
         <button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button>
       </div>
-      <div style="padding:4px 6px;display:flex;justify-content:flex-end;align-items:center"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete row">🗑</button></div>
+      <div style="padding:4px 8px;display:flex;justify-content:flex-end;align-items:center;padding-right:10px"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete row">🗑</button></div>
     </div>`;
   }).join('');
   renderPaymentSummary();
