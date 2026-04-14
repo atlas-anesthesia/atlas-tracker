@@ -656,7 +656,7 @@ if(tab==='history') { loadSavedInvoices().then(() => renderHistory()); }
 if(tab==='reports') renderReports();
 if(tab==='preop-history') renderPreopHistory();
 if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
-if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); renderDraftInvoices(); setTimeout(populateCenterDropdowns,100); setTimeout(injectBillingToggle, 100); }
+if(tab==='invoice') { showTab('payments'); } // Invoice moved to Payments modal
 if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
 if(tab==='analytics') {
 // Ensure preop records are loaded for projections
@@ -5306,6 +5306,7 @@ let _paymentRows = [];
 let _invoiceModalRowIdx = null;
 
 async function loadPaymentRows() {
+  runDailyPaymentBackup(); // daily backup, runs once per day
   try {
     const snap = await getDoc(doc(db,'atlas','payments'));
     _paymentRows = snap.exists() ? (snap.data().rows || []) : [];
@@ -5433,7 +5434,7 @@ function renderPaymentRows() {
     const complete = r.caseDate && r.callDate && r.depositDate && r.paidDate && r.paid && r.invoiceSent;
     const bg = complete ? 'rgba(45,106,79,0.08)' : i%2===0?'var(--bg)':'var(--surface2)';
     const borderLeft = complete ? '3px solid var(--accent)' : '3px solid transparent';
-    return `<div style="display:grid;grid-template-columns:150px 55px 120px 60px 75px 90px 90px 90px 90px 45px 80px 45px 75px 36px;gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center">
+    return `<div style="display:grid;grid-template-columns:110px 45px 90px 50px 60px 80px 80px 80px 80px 38px 65px 38px 50px 30px;gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center">
       <div style="padding:5px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>
       <div style="padding:5px 4px">
         <select id="pr-worker${i}" style="width:100%;padding:3px 2px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:${wcolor};font-weight:600;font-family:inherit" onchange="renderPaymentSummary()">
@@ -5449,10 +5450,10 @@ function renderPaymentRows() {
       </div>
       <div style="padding:5px 4px"><input type="number" id="pr-hrs${i}" value="${r.estHrs||''}" placeholder="hrs" min="0" step="0.5" style="width:100%;padding:4px 5px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit" oninput="updatePaymentProjected(${i})"></div>
       <div style="padding:5px 4px;font-size:11px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace;white-space:nowrap" id="pr-proj${i}">${r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'—'}</div>
-      <div style="padding:5px 4px">${inp('pr-caseDate'+i,'date',r.caseDate)}</div>
-      <div style="padding:5px 4px">${inp('pr-callDate'+i,'date',r.callDate)}</div>
-      <div style="padding:5px 4px">${inp('pr-depositDate'+i,'date',r.depositDate)}</div>
-      <div style="padding:5px 4px">${inp('pr-paidDate'+i,'date',r.paidDate)}</div>
+      <div style="padding:4px 3px;font-size:11px;color:var(--text-muted);text-align:center" title="Linked to case — not editable">${r.caseDate?fmtDate(r.caseDate):'<span style="color:#b91c1c;font-size:10px">No date</span>'}</div>
+      <div style="padding:4px 3px">${inp('pr-callDate'+i,'date',r.callDate,'','callDate')}</div>
+      <div style="padding:4px 3px">${inp('pr-depositDate'+i,'date',r.depositDate,'','depositDate')}</div>
+      <div style="padding:4px 3px">${inp('pr-paidDate'+i,'date',r.paidDate,'','paidDate')}</div>
       <div style="padding:5px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
       <div style="padding:5px 4px"><input type="number" id="pr-invamt${i}" value="${r.invoicedAmount||''}" placeholder="$" min="0" step="0.01" style="width:100%;padding:4px 5px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:DM Mono,monospace" onchange="renderPaymentSummary()"></div>
       <div style="padding:5px 4px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
@@ -5570,6 +5571,8 @@ window.previewInvoiceModal = function() {
 };
 
 window.downloadInvoiceModal = function() {
+  const caseId = document.getElementById('inv-modal-case')?.value;
+  if(!caseId) { alert('Please select an associated case before generating a PDF.'); return; }
   const calc = calcInvModal();
   if(!calc) { alert('Please fill in times and rates.'); return; }
   const location = document.getElementById('inv-modal-location')?.value || 'Unknown';
@@ -5700,3 +5703,97 @@ window.calcInvModalFlat = function() {
     if(totEl) totEl.textContent = '$0.00';
   }
 };
+
+// ── PAYMENTS INVOICE MODAL HELPERS ────────────────────────────────────────────
+window.onInvModalCaseChange = function() {
+  const sel = document.getElementById('inv-modal-case');
+  const caseId = sel?.value;
+  if(!caseId) return;
+  // Find the payment row for this case
+  const rowIdx = _paymentRows.findIndex(r => r.caseId === caseId || r.name === caseId);
+  if(rowIdx !== -1) _invoiceModalRowIdx = rowIdx;
+  // Find finalized case
+  const c = (cases||[]).find(x => x.caseId === caseId || x.id === caseId);
+  if(c) {
+    const dt = document.getElementById('inv-modal-date');
+    if(dt) dt.value = c.date || '';
+    // Find surgery center from preop
+    const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
+    if(preop) {
+      const center = (window.surgeryCenters||[]).find(sc => sc.id === preop['po-surgery-center']);
+      if(center) {
+        const loc = document.getElementById('inv-modal-location');
+        const fhr = document.getElementById('inv-modal-fhr');
+        const p15 = document.getElementById('inv-modal-p15');
+        if(loc) loc.value = center.name;
+        if(fhr) fhr.value = center.firstHour;
+        if(p15) p15.value = center.per15;
+      }
+      const email = document.getElementById('inv-modal-email');
+      if(email && !email.value) email.value = preop['po-patientEmail'] || '';
+    }
+  }
+  const w = currentWorker || 'josh';
+  const prov = document.getElementById('inv-modal-provider');
+  if(prov) prov.value = w==='josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
+  calcInvModal();
+};
+
+// Populate case dropdown when modal opens
+function populateInvModalCaseDropdown(preselect) {
+  const sel = document.getElementById('inv-modal-case');
+  if(!sel) return;
+  const finalized = (cases||[]).filter(c => !c.draft);
+  sel.innerHTML = '<option value="">— Select a case (required) —</option>'
+    + finalized.map(c => `<option value="${c.caseId}" ${c.caseId===preselect?'selected':''}>${c.caseId} · ${c.procedure||''}  (${c.date||''})</option>`).join('');
+  if(preselect) onInvModalCaseChange();
+}
+
+// Override openInvoiceModal to populate case dropdown
+const _origOpenInvModal = window.openInvoiceModal;
+window.openInvoiceModal = function(rowIdx) {
+  _invoiceModalRowIdx = rowIdx !== undefined ? rowIdx : null;
+  const r = rowIdx !== undefined ? _paymentRows[rowIdx] : null;
+  // Reset modal fields
+  ['inv-modal-location','inv-modal-provider','inv-modal-email','inv-modal-fhr','inv-modal-p15'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  ['inv-modal-date','inv-modal-start','inv-modal-end'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  // Set billing type to hourly
+  if(typeof setInvModalBilling === 'function') setInvModalBilling('hourly');
+  // Populate case dropdown, pre-select if row has a caseId
+  populateInvModalCaseDropdown(r?.caseId || '');
+  if(r?.caseDate) {
+    const dt = document.getElementById('inv-modal-date');
+    if(dt) dt.value = r.caseDate;
+  }
+  const w = currentWorker || 'josh';
+  const prov = document.getElementById('inv-modal-provider');
+  if(prov) prov.value = w==='josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
+  document.getElementById('invoiceModal').style.display = 'flex';
+  calcInvModal();
+};
+
+// ── DAILY BACKUP ──────────────────────────────────────────────────────────────
+async function runDailyPaymentBackup() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const backupKey = 'payments_backup_' + today;
+    // Check if already backed up today
+    const metaSnap = await getDoc(doc(db,'atlas','payments_meta'));
+    const meta = metaSnap.exists() ? metaSnap.data() : {};
+    if(meta.lastBackup === today) return; // already backed up today
+    // Save backup
+    const dataSnap = await getDoc(doc(db,'atlas','payments'));
+    if(dataSnap.exists()) {
+      await setDoc(doc(db,'atlas',backupKey), {
+        rows: dataSnap.data().rows || [],
+        backedUpAt: new Date().toISOString()
+      });
+      await setDoc(doc(db,'atlas','payments_meta'), { lastBackup: today });
+      console.log('✓ Daily payment backup saved:', today);
+    }
+  } catch(e) { console.warn('Backup failed:', e); }
+}
