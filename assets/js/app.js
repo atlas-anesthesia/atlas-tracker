@@ -5528,32 +5528,22 @@ async function loadPaymentRows() {
 }
 
 window.savePaymentRows = async function() {
+  // Only save editable fields from DOM — everything else kept from row data
+  // invoicedAmount and projOverride are already in _paymentRows from commitPaymentField
   _paymentRows = _paymentRows.map((row, i) => {
-    const g = id => document.getElementById(id+i)?.value ?? '';
-    const hrs = parseFloat(document.getElementById('pr-hrs'+i)?.value) || 0;
-    const invAmt = parseFloat(document.getElementById('pr-invamt'+i)?.value) || 0;
     return {
-      ...row,
-      name: document.getElementById('pr-name'+i)?.value || row.name,
-      worker: document.getElementById('pr-worker'+i)?.value || row.worker,
-      surgeryCenter: document.getElementById('pr-sc'+i)?.value || '',
-      surgeryCenterCustom: document.getElementById('pr-sc-custom'+i)?.value || '',
-      caseDate: g('pr-caseDate'),
-      callDate: g('pr-callDate'),
-      depositDate: g('pr-depositDate'),
-      paidDate: g('pr-paidDate'),
-      paid: document.getElementById('pr-paid'+i)?.checked || false,
-      invoiceSent: document.getElementById('pr-inv'+i)?.checked || false,
-      invoicedAmount: invAmt,
-      caseCost: parseFloat(document.getElementById('pr-cost'+i)?.value) || 0,
-      estHrs: hrs,
-      projected: hrs * 600
+      ...row,  // preserve all read-only fields + invoicedAmount + projOverride
+      depositDate: document.getElementById('pr-depositDate'+i)?.value || row.depositDate || '',
+      paidDate:    document.getElementById('pr-paidDate'+i)?.value    || row.paidDate    || '',
+      paid:        document.getElementById('pr-paid'+i)?.checked      ?? row.paid,
+      invoiceSent: document.getElementById('pr-inv'+i)?.checked       ?? row.invoiceSent,
     };
   });
   try {
     setSyncing(true);
     await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows });
     setSyncing(false);
+    renderPaymentSummary();
     alert('✓ Saved!');
   } catch(e) { setSyncing(false); alert('Error: ' + e.message); }
 };
