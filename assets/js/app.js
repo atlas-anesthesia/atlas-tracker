@@ -5536,7 +5536,6 @@ window.savePaymentRows = async function() {
       depositDate: document.getElementById('pr-depositDate'+i)?.value || row.depositDate || '',
       paidDate:    document.getElementById('pr-paidDate'+i)?.value    || row.paidDate    || '',
       dep500Paid:  document.getElementById('pr-dep500'+i)?.checked    ?? row.dep500Paid ?? false,
-      remDepPaid:  document.getElementById('pr-remdep'+i)?.checked    ?? row.remDepPaid ?? false,
       paid:        document.getElementById('pr-paid'+i)?.checked      ?? row.paid,
       invoiceSent: document.getElementById('pr-inv'+i)?.checked       ?? row.invoiceSent,
     };
@@ -5607,7 +5606,7 @@ function renderPaymentRows() {
     return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:5px 4px;font-size:11px;border:${bdr};border-radius:5px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary()">`;
   };
 
-  const COLS = '150px 44px 110px 40px 60px 75px 75px 75px 30px 75px 30px 36px 70px 36px 44px 30px';
+  const COLS = '160px 48px 120px 44px 68px 82px 82px 80px 34px 86px 40px 76px 40px 48px 32px';
   const wcolor = w => w==='dev'?'var(--dev)':'var(--josh)';
   const wname = w => w==='dev'?'Dev':'Josh';
 
@@ -5639,7 +5638,6 @@ function renderPaymentRows() {
       <div style="padding:4px 3px">${dateInp('pr-depositDate'+i, r.depositDate)}</div>
       <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
       <div style="padding:4px 3px">${dateInp('pr-paidDate'+i, r.paidDate)}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-remdep${i}" ${r.remDepPaid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
       <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
       <div style="padding:4px 4px;display:flex;align-items:center;gap:3px" id="pr-invamt-wrap${i}">
         <span style="font-size:11px;font-weight:600;color:var(--info);font-family:DM Mono,monospace;flex:1;text-align:right" id="pr-invamt${i}">${r.invoicedAmount>0?'$'+Number(r.invoicedAmount).toFixed(2):'<span style="color:var(--text-faint)">—</span>'}</span>
