@@ -5327,6 +5327,7 @@ async function loadPaymentRows() {
         callDate: preop?.['po-callDateTime']?.split('T')[0] || '',
         depositDate: '',
         paidDate: '',
+        paid: c.depositStatus === 'paid' || false,
         invoiceSent: c.manuallyInvoiced || false,
         invoicedAmount: 0,
         caseCost: c.total || 0,
@@ -5354,6 +5355,7 @@ window.savePaymentRows = async function() {
       callDate: g('pr-callDate'),
       depositDate: g('pr-depositDate'),
       paidDate: g('pr-paidDate'),
+      paid: document.getElementById('pr-paid'+i)?.checked || false,
       invoiceSent: document.getElementById('pr-inv'+i)?.checked || false,
       invoicedAmount: invAmt,
       caseCost: parseFloat(document.getElementById('pr-cost'+i)?.value) || 0,
@@ -5396,7 +5398,7 @@ function renderPaymentSummary() {
     const cost = parseFloat(document.getElementById('pr-cost'+i)?.value) || r.caseCost || 0;
     const hrs = parseFloat(document.getElementById('pr-hrs'+i)?.value) || r.estHrs || 0;
     const ia = parseFloat(document.getElementById('pr-invamt'+i)?.value) || r.invoicedAmount || 0;
-    if(document.getElementById('pr-paidDate'+i)?.value || r.paidDate) earned += cost;
+    if(document.getElementById('pr-paid'+i)?.checked || r.paid) earned += cost;
     projected += hrs * 600;
     if(document.getElementById('pr-inv'+i)?.checked || r.invoiceSent) { invoiced++; invAmt += ia; }
     if(!document.getElementById('pr-depositDate'+i)?.value && !r.depositDate) pending++;
@@ -5428,35 +5430,36 @@ function renderPaymentRows() {
   body.innerHTML = _paymentRows.map((r, i) => {
     const wcolor = r.worker==='dev'?'var(--dev)':'var(--josh)';
     // Completion: all key date fields filled + invoice sent
-    const complete = r.caseDate && r.callDate && r.depositDate && r.paidDate && r.invoiceSent;
+    const complete = r.caseDate && r.callDate && r.depositDate && r.paidDate && r.paid && r.invoiceSent;
     const bg = complete ? 'rgba(45,106,79,0.08)' : i%2===0?'var(--bg)':'var(--surface2)';
     const borderLeft = complete ? '3px solid var(--accent)' : '3px solid transparent';
-    return `<div style="display:grid;grid-template-columns:140px 60px 130px 95px 95px 95px 95px 55px 90px 75px 75px 80px 36px;gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center">
-      <div style="padding:5px 8px">${inp('pr-name'+i,'text',r.name,'placeholder="Case ID"')}</div>
-      <div style="padding:5px 6px">
-        <select id="pr-worker${i}" style="width:100%;padding:4px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:${wcolor};font-weight:600;font-family:inherit" onchange="renderPaymentSummary()">
+    return `<div style="display:grid;grid-template-columns:150px 55px 120px 60px 75px 90px 90px 90px 90px 45px 80px 45px 75px 36px;gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center">
+      <div style="padding:5px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>
+      <div style="padding:5px 4px">
+        <select id="pr-worker${i}" style="width:100%;padding:3px 2px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:${wcolor};font-weight:600;font-family:inherit" onchange="renderPaymentSummary()">
           <option value="josh" ${r.worker==='josh'?'selected':''}>Josh</option>
           <option value="dev" ${r.worker==='dev'?'selected':''}>Dev</option>
         </select>
       </div>
-      <div style="padding:5px 6px">
-        <select id="pr-sc${i}" onchange="onPaymentCenterChange(${i})" style="width:100%;padding:4px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit">
+      <div style="padding:5px 4px">
+        <select id="pr-sc${i}" onchange="onPaymentCenterChange(${i})" style="width:100%;padding:3px 2px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit">
           ${scOptions.replace(`value="${r.surgeryCenter||''}"`,`value="${r.surgeryCenter||''}" selected`)}
         </select>
-        <input type="text" id="pr-sc-custom${i}" placeholder="Center name..." value="${r.surgeryCenterCustom||''}" style="display:${r.surgeryCenter==='__custom__'?'':'none'};width:100%;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit;margin-top:3px">
+        <input type="text" id="pr-sc-custom${i}" placeholder="Name..." value="${r.surgeryCenterCustom||''}" style="display:${r.surgeryCenter==='__custom__'?'':'none'};width:100%;padding:3px 4px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit;margin-top:3px">
       </div>
-      <div style="padding:5px 6px">${inp('pr-caseDate'+i,'date',r.caseDate)}</div>
-      <div style="padding:5px 6px">${inp('pr-callDate'+i,'date',r.callDate)}</div>
-      <div style="padding:5px 6px">${inp('pr-depositDate'+i,'date',r.depositDate)}</div>
-      <div style="padding:5px 6px">${inp('pr-paidDate'+i,'date',r.paidDate)}</div>
-      <div style="padding:5px 6px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
-      <div style="padding:5px 6px"><input type="number" id="pr-invamt${i}" value="${r.invoicedAmount||''}" placeholder="$" min="0" step="0.01" style="width:100%;padding:5px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:DM Mono,monospace" onchange="renderPaymentSummary()"></div>
-      <div style="padding:5px 6px"><input type="number" id="pr-hrs${i}" value="${r.estHrs||''}" placeholder="hrs" min="0" step="0.5" style="width:100%;padding:5px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit" oninput="updatePaymentProjected(${i})"></div>
-      <div style="padding:5px 6px;font-size:11px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace;white-space:nowrap" id="pr-proj${i}">${r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'—'}</div>
-      <div style="padding:5px 6px">
+      <div style="padding:5px 4px"><input type="number" id="pr-hrs${i}" value="${r.estHrs||''}" placeholder="hrs" min="0" step="0.5" style="width:100%;padding:4px 5px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:inherit" oninput="updatePaymentProjected(${i})"></div>
+      <div style="padding:5px 4px;font-size:11px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace;white-space:nowrap" id="pr-proj${i}">${r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'—'}</div>
+      <div style="padding:5px 4px">${inp('pr-caseDate'+i,'date',r.caseDate)}</div>
+      <div style="padding:5px 4px">${inp('pr-callDate'+i,'date',r.callDate)}</div>
+      <div style="padding:5px 4px">${inp('pr-depositDate'+i,'date',r.depositDate)}</div>
+      <div style="padding:5px 4px">${inp('pr-paidDate'+i,'date',r.paidDate)}</div>
+      <div style="padding:5px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
+      <div style="padding:5px 4px"><input type="number" id="pr-invamt${i}" value="${r.invoicedAmount||''}" placeholder="$" min="0" step="0.01" style="width:100%;padding:4px 5px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:DM Mono,monospace" onchange="renderPaymentSummary()"></div>
+      <div style="padding:5px 4px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary()"></div>
+      <div style="padding:5px 4px">
         <button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄 PDF</button>
       </div>
-      <div style="padding:5px 6px"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-faint)">🗑</button></div>
+      <div style="padding:5px 4px"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--text-faint)">🗑</button></div>
     </div>`;
   }).join('');
   renderPaymentSummary();
