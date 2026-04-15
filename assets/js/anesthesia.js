@@ -1,5 +1,5 @@
 // ── anesthesia.js — Print Record PDF generator ──────────────────────────────
-// Depends on: app.js (currentWorker)
+// Depends on: app.js (window.currentWorker)
 // Requires: anesthesia-record.pdf in GitHub repo root
 
 
