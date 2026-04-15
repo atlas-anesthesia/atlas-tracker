@@ -302,7 +302,6 @@ onSnapshot(doc(db,'atlas','preop'), (snap) => {
   // Sync payment rows if loaded
   if(typeof _paymentRows !== 'undefined' && _paymentRows.length > 0) syncPaymentRowsFromCases();
 });
-);
 }
 async function saveInventory() {
 setSyncing(true);
