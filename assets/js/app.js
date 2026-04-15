@@ -773,50 +773,33 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   }
   function _uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
   function _fmt(n) { return '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-  function _fmtD(d) { if(!d) return '-'; const p=d.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; }
-  function _isExp(cat) { return cat==='meds'||cat==='other-expense'; }
-  const CATS = {
-    meds:'Medications / Supplies',
-    labor:'Hours Worked',
-    'other-income':'Other Income',
-    'other-expense':'Other Expense'
-  };
+  function _fmtD(d) { if(!d) return ''; const p=d.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; }
+  function _isExp(cat) { return cat === 'expense'; }
 
   function _totals(worker, data) {
-    const entries = (data.entries||[]).filter(e=>e.worker===worker);
-    const dists   = (data.distributions||[]).filter(d=>d.worker===worker);
-    const totalIn  = entries.filter(e=>!_isExp(e.cat)).reduce((s,e)=>s+e.amount,0);
-    const totalOut = entries.filter(e=> _isExp(e.cat)).reduce((s,e)=>s+e.amount,0);
-    const totalDist = dists.reduce((s,d)=>s+d.amount,0);
-    const rev = (cases||[]).filter(c=>c.worker===worker&&!c.draft).reduce((s,c)=>s+(c.total||0),0);
-    const suggested = Math.max(0, rev - totalDist - (totalOut - totalIn));
+    const entries  = (data.entries||[]).filter(e=>e.worker===worker);
+    const dists    = (data.distributions||[]).filter(d=>d.worker===worker);
+    const totalIn  = entries.filter(e=>!_isExp(e.cat)).reduce((s,e)=>s+(e.amount||0),0);
+    const totalOut = entries.filter(e=> _isExp(e.cat)).reduce((s,e)=>s+(e.amount||0),0);
+    const totalDist = dists.reduce((s,d)=>s+(d.amount||0),0);
+    const rev = (window.cases||[]).filter(c=>c.worker===worker&&!c.draft).reduce((s,c)=>s+(c.total||0),0);
+    const suggested = Math.max(0, rev + totalIn - totalOut - totalDist);
     return { entries, dists, totalIn, totalOut, totalDist, rev, suggested };
   }
 
-  function _delEntryBtn(id, worker, canEdit) {
-    if(!canEdit) return '';
-    var btn = document.createElement('button');
-    btn.textContent = 'Delete';
-    btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:2px 0;display:block';
-    btn.addEventListener('click', function() { window.deletePayoutEntry(id, worker); });
-    return btn;
+  function _inp(id, type, placeholder, required) {
+    return '<input type="'+type+'" id="'+id+'" placeholder="'+(placeholder||'')+'"'+(required?' required':'')+' style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">';
   }
-
-  function _delDistBtn(id, worker, canEdit) {
-    if(!canEdit) return '';
-    var btn = document.createElement('button');
-    btn.textContent = 'Delete';
-    btn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:2px 0';
-    btn.addEventListener('click', function() { window.deleteDistribution(id, worker); });
-    return btn;
+  function _lbl(text, optional) {
+    return '<label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">'+text+(optional?' <span style="font-weight:400;text-transform:none;font-style:italic">(optional)</span>':'')+' </label>';
   }
 
   function _buildSection(worker, canEdit, data, container) {
     const wname  = worker==='dev'?'Devarsh':'Josh';
     const wcolor = worker==='dev'?'var(--dev)':'var(--josh)';
     const { entries, dists, totalIn, totalOut, totalDist, rev, suggested } = _totals(worker, data);
-    const sorted  = [...entries].sort((a,b)=>b.date.localeCompare(a.date));
-    const sortedD = [...dists].sort((a,b)=>b.date.localeCompare(a.date));
+    const sorted  = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    const sortedD = [...dists].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
     const wrap = document.createElement('div');
     wrap.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px';
@@ -832,13 +815,13 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px';
     [
       ['Case Revenue', _fmt(rev), 'var(--accent)'],
-      ['Expenses Paid', _fmt(totalOut), 'var(--warn)'],
-      ['Distributed', _fmt(totalDist), '#2d6a4f'],
-      ['Suggested Payout', _fmt(suggested), 'var(--info)']
+      ['Expenses',     _fmt(totalOut), 'var(--warn)'],
+      ['Other Income', _fmt(totalIn), 'var(--info)'],
+      ['Suggested Payout', _fmt(suggested), '#2d6a4f']
     ].forEach(function(item, i) {
       const card = document.createElement('div');
       card.className = 'metric-card';
-      if(i===3) card.style.borderLeft = '3px solid var(--info)';
+      if(i===3) card.style.borderLeft = '3px solid #2d6a4f';
       card.innerHTML = '<div class="metric-label">'+item[0]+'</div><div class="metric-value" style="color:'+item[2]+'">'+item[1]+'</div>';
       grid.appendChild(card);
     });
@@ -857,11 +840,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       b2.style.color = 'var(--accent)';
       b2.textContent = 'Record Distribution';
       b2.addEventListener('click', function() { window.showRecordDistribution(worker); });
-      const b3 = document.createElement('button');
-      b3.className = 'btn btn-ghost btn-sm';
-      b3.textContent = 'Download PDF';
-      b3.addEventListener('click', function() { window.downloadPayoutReport(worker); });
-      btnRow.appendChild(b1); btnRow.appendChild(b2); btnRow.appendChild(b3);
+      btnRow.appendChild(b1); btnRow.appendChild(b2);
       wrap.appendChild(btnRow);
     } else {
       const note = document.createElement('div');
@@ -873,29 +852,41 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     // Add entry form
     const addForm = document.createElement('div');
     addForm.id = 'payout-add-form-'+worker;
-    addForm.style.display = 'none';
     addForm.style.cssText = 'display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px';
-    addForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Add Entry</div>'
+    addForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:12px">Add Entry</div>'
+      // Row 1: Name + Category
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Category</label>'
-      +'<select id="payout-cat-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
-      +'<option value="meds">Medications / Supplies</option>'
-      +'<option value="other-expense">Other Expense</option>'
-      +'<option value="other-income">Other Income</option>'
-      +'<option value="labor">Hours Worked</option>'
-      +'</select></div>'
-      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Date</label>'
-      +'<input type="date" id="payout-date-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
-      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Amount</label>'
-      +'<input type="number" id="payout-amount-'+worker+'" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
-      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Description</label>'
-      +'<input type="text" id="payout-desc-'+worker+'" placeholder="e.g. Propofol restock" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+        +'<div>'+_lbl('Name')
+          +'<input type="text" id="payout-name-'+worker+'" placeholder="e.g. Propofol restock" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
+        +'</div>'
+        +'<div>'+_lbl('Type')
+          +'<select id="payout-cat-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+            +'<option value="expense">Expense</option>'
+            +'<option value="income">Income</option>'
+          +'</select>'
+        +'</div>'
       +'</div>'
-      +'<div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Notes (optional)</label>'
-      +'<input type="text" id="payout-notes-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      // Row 2: Amount + Supplier (optional)
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+        +'<div>'+_lbl('Amount')
+          +'<input type="number" id="payout-amount-'+worker+'" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
+        +'</div>'
+        +'<div>'+_lbl('Supplier', true)
+          +'<input type="text" id="payout-supplier-'+worker+'" placeholder="e.g. Henry Schein" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
+        +'</div>'
+      +'</div>'
+      // Row 3: Date (optional) + Notes (optional)
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+        +'<div>'+_lbl('Date', true)
+          +'<input type="date" id="payout-date-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+        +'</div>'
+        +'<div>'+_lbl('Notes', true)
+          +'<input type="text" id="payout-notes-'+worker+'" placeholder="Additional details..." style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
+        +'</div>'
+      +'</div>'
       +'<div style="display:flex;gap:8px">'
-      +'<button class="btn btn-primary btn-sm" id="payout-save-'+worker+'">Save</button>'
-      +'<button class="btn btn-ghost btn-sm" id="payout-cancel-'+worker+'">Cancel</button>'
+        +'<button class="btn btn-primary btn-sm" id="payout-save-'+worker+'">Save</button>'
+        +'<button class="btn btn-ghost btn-sm" id="payout-cancel-'+worker+'">Cancel</button>'
       +'</div>';
     wrap.appendChild(addForm);
 
@@ -905,22 +896,20 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     distForm.style.cssText = 'display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px';
     distForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Record Distribution</div>'
       +'<div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">'
-      +'<div>Revenue: <strong>'+_fmt(rev)+'</strong></div>'
-      +'<div>Expenses: <strong style="color:var(--warn)">- '+_fmt(totalOut)+'</strong></div>'
-      +'<div>Already Distributed: <strong style="color:#2d6a4f">- '+_fmt(totalDist)+'</strong></div>'
-      +'<div style="border-top:1px solid #b8cfe8;padding-top:8px;margin-top:6px;font-weight:700;color:var(--info)">Suggested: '+_fmt(suggested)+'</div>'
+        +'<div>Case Revenue: <strong>'+_fmt(rev)+'</strong></div>'
+        +'<div>+ Other Income: <strong style="color:var(--info)">'+_fmt(totalIn)+'</strong></div>'
+        +'<div>- Expenses: <strong style="color:var(--warn)">'+_fmt(totalOut)+'</strong></div>'
+        +'<div>- Already Distributed: <strong style="color:#2d6a4f">'+_fmt(totalDist)+'</strong></div>'
+        +'<div style="border-top:1px solid #b8cfe8;padding-top:8px;margin-top:6px;font-weight:700;color:var(--info)">Suggested: '+_fmt(suggested)+'</div>'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Amount</label>'
-      +'<input type="number" id="dist-amount-'+worker+'" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
-      +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Date</label>'
-      +'<input type="date" id="dist-date-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+        +'<div>'+_lbl('Amount')+'<input type="number" id="dist-amount-'+worker+'" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+        +'<div>'+_lbl('Date', true)+'<input type="date" id="dist-date-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
       +'</div>'
-      +'<div style="margin-bottom:10px"><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Notes</label>'
-      +'<input type="text" id="dist-notes-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +'<div style="margin-bottom:10px">'+_lbl('Notes', true)+'<input type="text" id="dist-notes-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
       +'<div style="display:flex;gap:8px">'
-      +'<button class="btn btn-primary btn-sm" id="dist-save-'+worker+'">Save</button>'
-      +'<button class="btn btn-ghost btn-sm" id="dist-cancel-'+worker+'">Cancel</button>'
+        +'<button class="btn btn-primary btn-sm" id="dist-save-'+worker+'">Save</button>'
+        +'<button class="btn btn-ghost btn-sm" id="dist-cancel-'+worker+'">Cancel</button>'
       +'</div>';
     wrap.appendChild(distForm);
 
@@ -938,21 +927,25 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       wrap.appendChild(empty);
     } else {
       sorted.forEach(function(e) {
+        const isE = _isExp(e.cat);
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)';
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border)';
         const left = document.createElement('div');
-        left.innerHTML = '<div style="font-size:13px;font-weight:500">'+(CATS[e.cat]||e.cat)+'</div>'
-          +'<div style="font-size:12px;color:var(--text-muted)">'+(e.desc||'-')+'</div>'
+        left.style.flex = '1';
+        // Category pill
+        const pill = '<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;margin-right:6px;background:'+(isE?'rgba(239,68,68,0.1)':'rgba(45,106,79,0.1)')+';color:'+(isE?'var(--warn)':'#2d6a4f')+'">'+( isE ? 'EXPENSE' : 'INCOME' )+'</span>';
+        left.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:2px">'+pill+(e.name||e.desc||'-')+'</div>'
+          +(e.supplier?'<div style="font-size:12px;color:var(--text-muted)">Supplier: '+e.supplier+'</div>':'')
           +(e.notes?'<div style="font-size:11px;color:var(--text-faint);font-style:italic">'+e.notes+'</div>':'')
-          +'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(e.date)+'</div>';
+          +(e.date?'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(e.date)+'</div>':'');
         const right = document.createElement('div');
         right.style.cssText = 'text-align:right;margin-left:12px;flex-shrink:0';
         const amt = document.createElement('div');
-        amt.style.cssText = 'font-size:14px;font-weight:600;color:'+(_isExp(e.cat)?'var(--warn)':'var(--accent)');
-        amt.textContent = (_isExp(e.cat)?'-':'+') + _fmt(e.amount);
+        amt.style.cssText = 'font-size:14px;font-weight:700;color:'+(isE?'var(--warn)':'#2d6a4f');
+        amt.textContent = (isE?'- ':' + ') + _fmt(e.amount);
         right.appendChild(amt);
         if(canEdit) {
-          var delBtn = document.createElement('button');
+          const delBtn = document.createElement('button');
           delBtn.textContent = 'Delete';
           delBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:2px 0;display:block';
           (function(eid, ew) {
@@ -960,8 +953,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           })(e.id, worker);
           right.appendChild(delBtn);
         }
-        row.appendChild(left);
-        row.appendChild(right);
+        row.appendChild(left); row.appendChild(right);
         wrap.appendChild(row);
       });
     }
@@ -986,11 +978,11 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         inner.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start';
         const left = document.createElement('div');
         left.innerHTML = '<div style="font-size:14px;font-weight:600;color:#2d6a4f">'+_fmt(d.amount)+'</div>'
-          +'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(d.date)+'</div>'
+          +(d.date?'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(d.date)+'</div>':'')
           +(d.notes?'<div style="font-size:12px;color:var(--text-muted);font-style:italic">'+d.notes+'</div>':'');
         inner.appendChild(left);
         if(canEdit) {
-          var dBtn = document.createElement('button');
+          const dBtn = document.createElement('button');
           dBtn.textContent = 'Delete';
           dBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint)';
           (function(did, dw) {
@@ -1005,15 +997,14 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
     container.appendChild(wrap);
 
-    // Wire up form buttons after DOM insert
     setTimeout(function() {
-      var saveBtn = document.getElementById('payout-save-'+worker);
-      var cancelBtn = document.getElementById('payout-cancel-'+worker);
-      var dSaveBtn = document.getElementById('dist-save-'+worker);
+      var saveBtn    = document.getElementById('payout-save-'+worker);
+      var cancelBtn  = document.getElementById('payout-cancel-'+worker);
+      var dSaveBtn   = document.getElementById('dist-save-'+worker);
       var dCancelBtn = document.getElementById('dist-cancel-'+worker);
-      if(saveBtn) saveBtn.addEventListener('click', function() { window.savePayoutEntry(worker); });
-      if(cancelBtn) cancelBtn.addEventListener('click', function() { window.cancelPayoutEntry(worker); });
-      if(dSaveBtn) dSaveBtn.addEventListener('click', function() { window.saveDistribution(worker); });
+      if(saveBtn)    saveBtn.addEventListener('click', function() { window.savePayoutEntry(worker); });
+      if(cancelBtn)  cancelBtn.addEventListener('click', function() { window.cancelPayoutEntry(worker); });
+      if(dSaveBtn)   dSaveBtn.addEventListener('click', function() { window.saveDistribution(worker); });
       if(dCancelBtn) dCancelBtn.addEventListener('click', function() { window.cancelDistribution(worker); });
     }, 0);
   }
@@ -1036,28 +1027,33 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     var d = document.getElementById('payout-dist-form-'+w);
     if(f) f.style.display='';
     if(d) d.style.display='none';
-    var dt = document.getElementById('payout-date-'+w);
-    if(dt) dt.value = new Date().toISOString().split('T')[0];
-    ['payout-amount-','payout-desc-','payout-notes-'].forEach(function(p) {
+    // Clear all fields
+    ['payout-name-','payout-amount-','payout-supplier-','payout-notes-','payout-date-'].forEach(function(p) {
       var el = document.getElementById(p+w); if(el) el.value='';
     });
   };
+
   window.cancelPayoutEntry = function(w) {
     var f = document.getElementById('payout-add-form-'+w); if(f) f.style.display='none';
   };
+
   window.savePayoutEntry = async function(w) {
-    var cat    = document.getElementById('payout-cat-'+w).value;
-    var desc   = document.getElementById('payout-desc-'+w).value.trim();
-    var date   = document.getElementById('payout-date-'+w).value;
-    var amount = parseFloat(document.getElementById('payout-amount-'+w).value)||0;
-    var notes  = document.getElementById('payout-notes-'+w).value.trim();
-    if(!date||!amount){alert('Please enter a date and amount.');return;}
+    var name     = (document.getElementById('payout-name-'+w).value||'').trim();
+    var cat      = document.getElementById('payout-cat-'+w).value;
+    var amount   = parseFloat(document.getElementById('payout-amount-'+w).value)||0;
+    var supplier = (document.getElementById('payout-supplier-'+w).value||'').trim();
+    var date     = document.getElementById('payout-date-'+w).value;
+    var notes    = (document.getElementById('payout-notes-'+w).value||'').trim();
+    if(!name) { alert('Please enter a name for this entry.'); return; }
+    if(!amount) { alert('Please enter an amount.'); return; }
     var data = await _load();
     if(!data.entries) data.entries=[];
-    data.entries.push({id:_uid(),worker:w,cat:cat,desc:desc,date:date,amount:amount,notes:notes,createdAt:new Date().toISOString()});
+    data.entries.push({ id:_uid(), worker:w, cat:cat, name:name, supplier:supplier,
+      date:date||null, amount:amount, notes:notes, createdAt:new Date().toISOString() });
     await _save(data);
     renderPayoutTab();
   };
+
   window.deletePayoutEntry = async function(id, w) {
     if(!confirm('Delete this entry?')) return;
     var data = await _load();
@@ -1065,41 +1061,41 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     await _save(data);
     renderPayoutTab();
   };
+
   window.showRecordDistribution = function(w) {
     var f = document.getElementById('payout-add-form-'+w);
     var d = document.getElementById('payout-dist-form-'+w);
     if(f) f.style.display='none';
     if(d) d.style.display='';
-    var dt = document.getElementById('dist-date-'+w);
-    if(dt) dt.value = new Date().toISOString().split('T')[0];
-    ['dist-amount-','dist-notes-'].forEach(function(p) {
+    ['dist-amount-','dist-notes-','dist-date-'].forEach(function(p) {
       var el = document.getElementById(p+w); if(el) el.value='';
     });
   };
+
   window.cancelDistribution = function(w) {
     var f = document.getElementById('payout-dist-form-'+w); if(f) f.style.display='none';
   };
+
   window.saveDistribution = async function(w) {
     var amount = parseFloat(document.getElementById('dist-amount-'+w).value)||0;
     var date   = document.getElementById('dist-date-'+w).value;
-    var notes  = document.getElementById('dist-notes-'+w).value.trim();
-    if(!date||!amount){alert('Please enter a date and amount.');return;}
+    var notes  = (document.getElementById('dist-notes-'+w).value||'').trim();
+    if(!amount) { alert('Please enter an amount.'); return; }
     var data = await _load();
     if(!data.distributions) data.distributions=[];
-    data.distributions.push({id:_uid(),worker:w,amount:amount,date:date,notes:notes,createdAt:new Date().toISOString()});
+    data.distributions.push({ id:_uid(), worker:w, amount:amount, date:date||null,
+      notes:notes, createdAt:new Date().toISOString() });
     await _save(data);
     renderPayoutTab();
     alert('Distribution recorded!');
   };
+
   window.deleteDistribution = async function(id, w) {
     if(!confirm('Delete this distribution?')) return;
     var data = await _load();
     data.distributions = (data.distributions||[]).filter(function(d){return d.id!==id;});
     await _save(data);
     renderPayoutTab();
-  };
-  window.downloadPayoutReport = function(w) {
-    alert('PDF report for ' + (w==='dev'?'Devarsh':'Josh') + ' - coming soon!');
   };
 })();
 
