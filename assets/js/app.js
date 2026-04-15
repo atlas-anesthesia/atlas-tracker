@@ -257,6 +257,13 @@ renderReports();
 onSnapshot(doc(db,'atlas','cases'), (snap) => {
 if(snap.exists()) {
 cases = snap.data().cases || [];
+  const beforeLen = cases.length;
+  deduplicateCases();
+  // If dedup removed entries, save cleaned data back to Firestore immediately
+  if(cases.length < beforeLen) {
+    setDoc(doc(db,'atlas','cases'), {cases}).catch(()=>{});
+    console.log('Auto-cleaned', beforeLen - cases.length, 'duplicate case(s) from database');
+  }
 } else {
 cases = [];
 }
@@ -302,7 +309,35 @@ setSyncing(true);
 await setDoc(doc(db,'atlas','inventory'),{items});
 setSyncing(false);
 }
+
+// ── Deduplication — ensures no two cases share the same caseId ───────────────
+// Keeps the finalized (non-draft) version if one exists, otherwise most recent
+function deduplicateCases() {
+  const seen = new Map();
+  cases.forEach(c => {
+    const key = c.caseId;
+    if(!key) return;
+    if(!seen.has(key)) {
+      seen.set(key, c);
+    } else {
+      const existing = seen.get(key);
+      // Prefer finalized over draft
+      if(existing.draft && !c.draft) { seen.set(key, c); return; }
+      if(!existing.draft && c.draft) { return; } // keep existing finalized
+      // Both same type — keep most recently saved
+      const existingTime = existing.savedAt || existing.date || '';
+      const newTime = c.savedAt || c.date || '';
+      if(newTime > existingTime) seen.set(key, c);
+    }
+  });
+  const deduped = Array.from(seen.values());
+  if(deduped.length !== cases.length) {
+    console.log(`Dedup: removed ${cases.length - deduped.length} duplicate case(s)`);
+    cases = deduped;
+  }
+}
 async function saveCases() {
+deduplicateCases();
 setSyncing(true);
 await setDoc(doc(db,'atlas','cases'),{cases});
 setSyncing(false);
@@ -1276,6 +1311,17 @@ const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
 return sum+cpm*mg;
 },0);
 const total=suppliesTotal2+csTotal2;
+// Guard: if a non-draft case with this caseId already exists, update it instead
+const existingFinalIdx = cases.findIndex(c => c.caseId === caseId && !c.draft);
+if(existingFinalIdx !== -1) {
+  cases[existingFinalIdx] = { ...cases[existingFinalIdx],
+    procedure:proc, provider, date, notes, worker:currentWorker,
+    caseComments:comments, total,
+    items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
+    savedCsEntries:csEntries.map(e=>({...e})),
+    csTotal:csTotal2, savedAt:new Date().toISOString()
+  };
+} else {
 cases.unshift({
 id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
 startTime: document.getElementById('caseStartTime')?.value || '',
@@ -1288,6 +1334,7 @@ savedCsEntries:csEntries.map(e=>({...e})),
 csTotal:csTotal2,
 total,imageData:pendingImageData||null
 });
+} // end duplicate guard
 caseItems.forEach(item=>{
 const inv=items.find(i=>i.id===item.id);
 if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
@@ -1990,6 +2037,21 @@ setSyncing(true);
 await setDoc(doc(db,'atlas','preop'), { records: existing });
 setSyncing(false);
 // Create or update the linked draft case for this Case ID
+// Check for any existing case with this ID (draft OR finalized)
+const existingFinalized = cases.find(c => c.caseId === record['po-caseId'] && !c.draft);
+if(existingFinalized) {
+  // Finalized case exists — just update its provider/date/surgeryCenter from preop, don't create new draft
+  const fIdx = cases.findIndex(c => c.id === existingFinalized.id);
+  if(fIdx !== -1) {
+    cases[fIdx] = { ...cases[fIdx],
+      provider: record['po-provider'] || cases[fIdx].provider,
+      date: record['po-surgeryDate'] || cases[fIdx].date,
+      surgeryCenter: record['po-surgery-center'] || cases[fIdx].surgeryCenter || '',
+      savedAt: new Date().toISOString()
+    };
+    await saveCases();
+  }
+} else {
 const existingDraft = cases.find(c => c.caseId === record['po-caseId'] && c.draft);
 if(existingDraft) {
 // Update the existing draft's provider/date to match updated pre-op, preserve items
@@ -2024,6 +2086,7 @@ savedAt: new Date().toISOString()
 cases.unshift(draftCase);
 await saveCases();
 }
+} // end of finalized check else
 // Pre-fill the New Case form with pre-op info
 prefillNewCase(record);
 // Check if surgery is within 30 days — send immediate pre-op call reminder
