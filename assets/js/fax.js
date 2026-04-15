@@ -1,5 +1,5 @@
 // ── fax.js — Fax modal and cover sheet functions ──────────────────────────
-// Depends on: app.js (db, currentWorker, surgeryCenters)
+// Depends on: app.js (db, window.currentWorker, surgeryCenters)
 
 // ── FAX FUNCTIONS ──
 let _faxRecord = null;
@@ -19,7 +19,7 @@ window.openFaxModalFromForm = function() {
                    document.getElementById('po-caseId-display')?.textContent?.trim() || '(unsaved)';
   // Worker
   const devActive = document.getElementById('wbtn-dev')?.classList.contains('active-dev');
-  r.worker = (typeof currentWorker !== 'undefined' ? window.currentWorker : null) || (devActive ? 'dev' : 'josh');
+  r.worker = (typeof window.currentWorker !== 'undefined' ? window.currentWorker : null) || (devActive ? 'dev' : 'josh');
 
   _faxRecord = r;
 
@@ -116,7 +116,7 @@ function buildFaxHTML(r) {
   const now = new Date();
   const today = now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-  const worker = (typeof currentWorker !== 'undefined' ? window.currentWorker : null) || r.worker || 'dev';
+  const worker = (typeof window.currentWorker !== 'undefined' ? window.currentWorker : null) || r.worker || 'dev';
   const providerName = worker === 'josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
   const providerCreds = 'CRNA, Anesthesiology';
   const phone = worker === 'josh' ? '7154996858' : '2625739095';
