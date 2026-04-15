@@ -2121,6 +2121,7 @@ el.checked = !!record[fid];
 el.value = record[fid] || '';
 }
 });
+
 // Fill radio (mallampati)
 if(record['mallampati']) {
 const radio = document.querySelector(`input[name="mallampati"][value="${record['mallampati']}"]`);
