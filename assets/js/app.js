@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-// ── FIREBASE CONFIG ──
+// -- FIREBASE CONFIG --
 const firebaseConfig = {
 apiKey: "AIzaSyAAY9Ajrx4PJRqhxW5MgRY3wgZni9rJhMo",
 authDomain: "atlas-ane.firebaseapp.com",
@@ -13,7 +13,7 @@ appId: "1:677020713040:web:07f52f77fd225c607a5155"
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// ── STATE ──
+// -- STATE --
 let items = [];
 let cases = [];
 let caseItems = [];
@@ -22,7 +22,7 @@ let currentInvTab = 'dev';
 let currentHistoryFilter = 'all';
 let pendingImageData = null;
 let currentUser = null;
-// ── DEFAULT INVENTORY ──
+// -- DEFAULT INVENTORY --
 const ITEM_TEMPLATE = [
 {id:'141-1719',code:'141-1719',generic:'Face Mask O2',name:"Mask O2 Elongated 7\' Tube",category:'Airway Supplies',supplier:'Medline Industries Inc.',unitSize:'50/CA',costPerUnit:1.34,devStock:0,joshStock:0,alert:25},
 {id:'420-9994',code:'420-9994',generic:'Nasal Atomizer',name:"Nasal Atomization Device W/O Syringe",category:'Airway Supplies',supplier:'LMA North-America',unitSize:'CS=25/EA',costPerUnit:7.67,devStock:0,joshStock:0,alert:20},
@@ -116,14 +116,14 @@ const ITEM_TEMPLATE = [
 const DEFAULT_STOCK = {
 '141-1719':100,'420-9994':100,'146-4280':10,'136-3903':10,'136-3901':10,'139-3110':10,'113-5785':10,'113-2941':10,'743-0717':10,'146-9367':10,'491-8760':10,'147-3037':10,'123-5611':10,'743-3905':10,'700-1576':50,'700-1577':50,'700-1579':5,'627-0136':20,'627-0140':20,'627-0141':20,'122-8718':20,'145-7149':50,'149-6489':50,'987-0285':50,'987-0284':50,'118-7249':12,'777-9152':100,'777-7305':24,'112-7097':200,'148-6288':0,'987-0248':400,'127-8254':400,'987-3800':160,'570-3406':100,'114-0817':120,'681-3457':36,'570-0887':100,'777-9475':250,'106-1241':5,'113-9573':5,'570-3485':600,'570-3490':400,'00904-6720-59':100,'00093-3174-31':8,'00143-9875-25':25,'00904-6794-89':90,'64253-0400-91':10,'00641-6145-25':49,'71288-0505-03':25,'76329-3302-01':10,'25021-0319-10':10,'72485-0101-25':25,'70700-0249-25':25,'76329-3318-01':10,'55150-0194-10':25,'70860-0751-02':25,'71288-0203-05':25,'66794-0204-42':50,'00641-6231-25':25,'76204-0600-30':25,'72266-0118-25':49,'0143-9509-10':3,'36000-0322-02':8,'00264-7750-00':36,'00143-9595-25':50,'00009-3073-01':2,'23155-0240-41':25,'36000-0033-10':10,'70069-0671-10':20,'23155-0518-41':10,'69339-0174-41':25,'60505-6130-05':50,'00904-6761-30':10,'70756-0621-25':25,'23155-0345-44':80,'23155-0345-42':200,'00487-5901-99':30,'43066-0007-10':10,'70069-0301-25':25
 };
-// ── SYNC INDICATOR ──
+// -- SYNC INDICATOR --
 function setSyncing(on) {
 const dot = document.getElementById('syncDot');
 const txt = document.getElementById('syncText');
 if(on){dot.className='sync-dot syncing';txt.textContent='Saving...';}
 else{dot.className='sync-dot';txt.textContent='Synced';}
 }
-// ── AUTH ──
+// -- AUTH --
 window.doLogin = async function() {
 const email = document.getElementById('loginEmail').value.trim();
 const pass = document.getElementById('loginPassword').value;
@@ -139,8 +139,8 @@ errEl.textContent = e.code==='auth/invalid-credential' ? 'Incorrect email or pas
 window.doLogout = async function() {
 await signOut(auth);
 };
-// ── AUTH STATE ──
-// ── EMAIL → WORKER MAP ──
+// -- AUTH STATE --
+// -- EMAIL → WORKER MAP --
 const EMAIL_WORKER_MAP = {
 'jxcondado@gmail.com': 'josh',
 'murthy.devarsh@gmail.com': 'dev'
@@ -216,11 +216,11 @@ document.getElementById('loginScreen').style.display='flex';
 document.getElementById('appScreen').style.display='none';
 }
 });
-// ── FIRESTORE INIT ──
+// -- FIRESTORE INIT --
 async function initData() {
 // Listen to items in real time
 
-// ── Global refresh — called after any data mutation to sync all views ────────
+// -- Global refresh — called after any data mutation to sync all views --------
 window._globalRefresh = function() {
   renderHistory();
   renderReports();
@@ -309,7 +309,7 @@ await setDoc(doc(db,'atlas','inventory'),{items});
 setSyncing(false);
 }
 
-// ── Deduplication — ensures no two cases share the same caseId ───────────────
+// -- Deduplication — ensures no two cases share the same caseId ---------------
 // Keeps the finalized (non-draft) version if one exists, otherwise most recent
 function deduplicateCases() {
   const seen = new Map();
@@ -346,7 +346,7 @@ if(typeof _paymentRows !== 'undefined' && _paymentRows.length > 0) {
   syncPaymentRowsFromCases();
 }
 }
-// ── HELPERS ──
+// -- HELPERS --
 function getStock(item,w){return w==='dev'?item.stockDev:item.stockJosh;}
 function setStock(item,w,val){if(w==='dev')item.stockDev=val;else item.stockJosh=val;}
 function uid(){return Math.random().toString(36).substr(2,9);}
@@ -398,7 +398,7 @@ const id = generateCaseId(currentWorker, surgeryDate);
 if(display) display.textContent = id;
 if(input) input.value = id;
 }
-// ── WORKER / TAB ──
+// -- WORKER / TAB --
 window.setWorker = function(w) {
 // Prevent switching to the other person's worker
 if(currentUser && EMAIL_WORKER_MAP[currentUser.email.toLowerCase()] !== w) {
@@ -429,7 +429,7 @@ btn.style.color=x===f?'#fff':'';
 });
 renderHistory();
 };
-// ── CALENDAR ──
+// -- CALENDAR --
 const GCAL_CLIENT_ID = '677020713040-6smv4mss68prvd3mqnq3pkotcea8l16v.apps.googleusercontent.com';
 const GCAL_SCOPES = 'https://www.googleapis.com/auth/calendar.events';
 let calYear = new Date().getFullYear();
@@ -758,7 +758,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
 
 
-// ── PAYOUT CALCULATOR ──
+// -- PAYOUT CALCULATOR --
 (function() {
   async function _load() {
     try {
@@ -1103,7 +1103,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   };
 })();
 
-// ── ITEM SELECT ──
+// -- ITEM SELECT --
 function refreshItemSelect() {
 const sel=document.getElementById('addItemSelect');if(!sel)return;
 sel.innerHTML='<option value="">— Select an item to add —</option>';
@@ -1189,7 +1189,7 @@ el.innerHTML=html;
 }
 window.updateQty=(idx,val)=>{caseItems[idx].qty=Math.max(0,parseInt(val)||0);renderCaseSupplies();};
 window.removeItem=(idx)=>{caseItems.splice(idx,1);renderCaseSupplies();refreshItemSelect();};
-// ── IMAGE ──
+// -- IMAGE --
 window.handleImageUpload = function(e) {
 const file=e.target.files[0];if(!file)return;
 const reader=new FileReader();
@@ -1208,7 +1208,7 @@ document.getElementById('imgPreview').style.display='none';
 document.getElementById('previewImg').src='';
 document.getElementById('caseImageInput').value='';
 };
-// ── SAVE CASE ──
+// -- SAVE CASE --
 window.saveCase = async function() {
 const caseId=document.getElementById('caseId').value.trim()||'CASE-'+Date.now();
 const proc=document.getElementById('procedure').value.trim()||'Unnamed Procedure';
@@ -1377,7 +1377,7 @@ if(picker) picker.value = '';
 removeImage();renderCaseSupplies();refreshItemSelect();
 updateCaseIdDisplays();
 };
-// ── INVENTORY ──
+// -- INVENTORY --
 window.renderInventory = function renderInventory() {
 const search=(document.getElementById('invSearch')?.value||'').toLowerCase();
 const alertsEl=document.getElementById('inventoryAlerts');
@@ -1541,7 +1541,7 @@ await saveInventory();
 ['newCode','newGeneric','newItemName','newSupplier','newUnitSize','newItemCost','newItemStockDev','newItemStockJosh','newItemAlert'].forEach(id=>document.getElementById(id).value='');
 toggleAddForm();refreshItemSelect();
 };
-// ── HISTORY ──
+// -- HISTORY --
 function renderHistory() {
 const el=document.getElementById('caseHistoryList');
 let filtered=cases;
@@ -1763,7 +1763,7 @@ document.getElementById('lightboxImg').src=c.imageData;
 document.getElementById('lightbox').style.display='flex';
 };
 window.closeLightbox=function(){document.getElementById('lightbox').style.display='none';};
-// ── REPORTS ──
+// -- REPORTS --
 function renderReports() {
 const devCases=cases.filter(c=>c.worker==='dev');
 const joshCases=cases.filter(c=>c.worker==='josh');
@@ -1784,7 +1784,7 @@ topCard.innerHTML=`<div class="card-title">Top Items by Total Cost</div><div sty
 ${sorted.map(([name,data])=>`
 <div style="display:grid;grid-template-columns:2fr 80px 80px;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px">${name}</span><span style="font-size:13px;font-family:'DM Mono',monospace;text-align:right">${data.qty}</span><span style="font-size:13px;font-family:'DM Mono',monospace;text-align:right;font-weight:500">$${data.cost.toFixed(2)}</span></div>`).join('')}`;
 }
-// ── DRAFT CASE PICKER ──
+// -- DRAFT CASE PICKER --
 window.deleteSelectedDraft = async function() {
 const sel = document.getElementById('draftCasePicker');
 const id = sel ? sel.value : '';
@@ -1861,7 +1861,7 @@ window._activeDraftId = id;
 renderCaseSupplies();
 refreshItemSelect();
 };
-// ── RESUME DRAFT CASE ──
+// -- RESUME DRAFT CASE --
 window.resumeCase = function(draftId) {
 const c = cases.find(x => x.id === draftId);
 if(!c) return;
@@ -1922,7 +1922,7 @@ alert('Error loading pre-op record.');
 console.error(e);
 }
 };
-// ── PRE-OP ──
+// -- PRE-OP --
 function getPreopCheckboxes() {
 const fields = [
 'po-npo','po-driver','po-nodrive',
@@ -2300,7 +2300,7 @@ clearPreop();
 window._editingPreopId = null;
 };
 window.togglePreop = function(id) { document.getElementById('preop-detail-'+id).classList.toggle('open'); };
-// ── CASE LOG HELPERS ──
+// -- CASE LOG HELPERS --
 window.clearCaseLogDates = function() {
 const f = document.getElementById('cl-date-from');
 const t = document.getElementById('cl-date-to');
@@ -2327,7 +2327,7 @@ const gray = [107, 104, 96];
 const black = [26, 25, 22];
 const white = [255, 255, 255];
 const lightBlue = [232, 238, 245];
-// ── HEADER ──
+// -- HEADER --
 doc.setFillColor(...navy);
 doc.rect(0, 0, W, 38, 'F');
 // Logo white circle + image
@@ -2353,7 +2353,7 @@ doc.setFont('helvetica', 'normal');
 doc.text(wname, W - 15, 23, { align: 'right' });
 doc.text(`Generated: ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`, W - 15, 29, { align: 'right' });
 let y = 48;
-// ── DATE RANGE BANNER ──
+// -- DATE RANGE BANNER --
 if(fromDate || toDate) {
 doc.setFillColor(...lightBlue);
 doc.roundedRect(14, y, W-28, 10, 1, 1, 'F');
@@ -2364,7 +2364,7 @@ const rangeText = `Date Range: ${fromDate ? new Date(fromDate+'T12:00:00').toLoc
 doc.text(rangeText, W/2, y+7, { align:'center' });
 y += 14;
 }
-// ── SUMMARY CARDS ──
+// -- SUMMARY CARDS --
 doc.setFillColor(...lightGray);
 doc.roundedRect(14, y, 56, 18, 2, 2, 'F');
 doc.roundedRect(78, y, 56, 18, 2, 2, 'F');
@@ -2379,7 +2379,7 @@ doc.text(String(sorted.length), 106, y+15, {align:'center'});
 doc.setFontSize(9); doc.setFont('helvetica','normal');
 doc.text(worker==='dev'?'Devarsh':'Josh', 170, y+14, {align:'center'});
 y += 26;
-// ── TABLE HEADER ──
+// -- TABLE HEADER --
 doc.setFillColor(...navy);
 doc.roundedRect(14, y, W-28, 9, 1, 1, 'F');
 doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(...white);
@@ -2389,7 +2389,7 @@ doc.text('PROCEDURE', 90, y+6);
 doc.text('PROVIDER', 155, y+6);
 doc.text('NOTES', 185, y+6);
 y += 11;
-// ── TABLE ROWS ──
+// -- TABLE ROWS --
 sorted.forEach((c, i) => {
 // Check if we need a new page
 if(y > 250) {
@@ -2421,7 +2421,7 @@ const noteText = ((c.notes||'')+(c.caseComments?' '+c.caseComments:'')).substrin
 if(noteText) { doc.setTextColor(...gray); doc.text(noteText, 185, y+6); }
 y += 9;
 });
-// ── FOOTER LINE ──
+// -- FOOTER LINE --
 y += 6;
 doc.setDrawColor(...navy);
 doc.setLineWidth(0.8);
@@ -2434,7 +2434,7 @@ const fromStr = fromDate ? fromDate.replace(/-/g,'') : 'all';
 const toStr = toDate ? toDate.replace(/-/g,'') : 'all';
 doc.save(`Atlas-CaseLog-${worker.toUpperCase()}-${fromStr}-${toStr}.pdf`);
 };
-// ── INLINE COST UPDATE ──
+// -- INLINE COST UPDATE --
 window.updateCost = async function(id, val) {
 const cost = parseFloat(val);
 if(isNaN(cost) || cost < 0) return;
@@ -2453,7 +2453,7 @@ changedBy: currentUser ? currentUser.email.split('@')[0] : 'unknown'
 await saveInventory();
 refreshItemSelect();
 };
-// ── SET INVOICE PROVIDER FROM LOGGED IN USER ──
+// -- SET INVOICE PROVIDER FROM LOGGED IN USER --
 function setInvoiceProvider() {
 if(!currentUser) return;
 const w = EMAIL_WORKER_MAP[currentUser.email.toLowerCase()];
@@ -2463,7 +2463,7 @@ const input = document.getElementById('inv-provider');
 if(display) display.textContent = name;
 if(input) input.value = name;
 }
-// ── CASE LOG ──
+// -- CASE LOG --
 let currentCaseLogTab = 'dev';
 window.setCaseLogTab = function(tab) {
 currentCaseLogTab = tab;
@@ -2510,9 +2510,9 @@ ${c.caseComments?`<div style="font-size:11px;color:var(--text-faint);font-style:
 `;
 });
 }
-// ── CONTROLLED SUBSTANCES ──
+// -- CONTROLLED SUBSTANCES --
 const STRIPE_WORKER_URL = 'https://gentle-voice-6881.blue-disk-9b10.workers.dev';
-// ── CASE TOTAL HELPER ──
+// -- CASE TOTAL HELPER --
 function getCaseTotal(c) {
 const suppliesTotal = (c.items||[]).reduce((s,i) => s + (parseFloat(i.cost)||0)*(parseFloat(i.qty)||0), 0);
 const csTotal = (c.savedCsEntries||[]).reduce((s,e) => {
@@ -2522,7 +2522,7 @@ return s + cpm * mg;
 }, 0);
 return suppliesTotal + csTotal;
 }
-// ── DATE FORMATTER ──
+// -- DATE FORMATTER --
 function fmtDate(dateStr) {
 if(!dateStr || dateStr === '—') return dateStr || '—';
 const parts = dateStr.split('-');
@@ -2655,7 +2655,7 @@ csEntries.splice(idx, 1);
 renderCSEntries();
 renderCaseSupplies();
 };
-// ── WITNESS SIGNATURE MODAL ──
+// -- WITNESS SIGNATURE MODAL --
 window.openWitnessModal = function(entryIdx) {
 currentCSEntry = entryIdx;
 document.getElementById('witnessModal').style.display = 'flex';
@@ -2715,7 +2715,7 @@ renderCSEntries();
 }
 closeWitnessModal();
 };
-// ── SAVE CS ENTRIES WITH CASE ──
+// -- SAVE CS ENTRIES WITH CASE --
 async function saveCSEntriesWithCase(caseId, caseDate, provider) {
 if(!csEntries.length) return;
 const snap = await getDoc(doc(db,'atlas','cslog'));
@@ -2758,7 +2758,7 @@ setSyncing(false);
 csEntries = [];
 renderCSEntries();
 }
-// ── CS LOG TAB ──
+// -- CS LOG TAB --
 window.setCSTab = function(tab) {
 currentCSTab = tab;
 ['ephedrine','ketamine','versed'].forEach(x => {
@@ -2881,7 +2881,7 @@ doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...gray)
 doc.text(`Atlas Anesthesia · CS Log · ${drug.label} · ${entries.length} entries`, W/2, H-5, {align:'center'});
 doc.save(`Atlas-CSLog-${currentCSTab}-${fromDate||'all'}-${toDate||'all'}.pdf`);
 };
-// ── INVOICE GENERATOR ──
+// -- INVOICE GENERATOR --
 function timeToMinutes(t) {
 if(!t) return 0;
 const [h, m] = t.split(':').map(Number);
@@ -2996,7 +2996,7 @@ const gray = [107, 104, 96];
 const lightGray = [240, 239, 233];
 const black = [26, 25, 22];
 const white = [255, 255, 255];
-// ── HEADER BAND ──
+// -- HEADER BAND --
 doc.setFillColor(...navy);
 doc.rect(0, 0, W, 42, 'F');
 // White circle behind logo
@@ -3023,7 +3023,7 @@ doc.setFont('helvetica', 'normal');
 doc.text(`# ${invoiceNum}`, W - 15, 28, { align: 'right' });
 doc.text(`Date: ${formattedDate}`, W - 15, 34, { align: 'right' });
 let y = 55;
-// ── BILLED TO / FROM ──
+// -- BILLED TO / FROM --
 doc.setFillColor(...lightGray);
 doc.roundedRect(14, y, 85, 38, 2, 2, 'F');
 doc.roundedRect(116, y, 85, 38, 2, 2, 'F');
@@ -3051,7 +3051,7 @@ doc.setTextColor(...gray);
 doc.text(`Provider: ${provider}`, 122, y + 25);
 doc.text('Mobile Anesthesia Services', 122, y + 32);
 y += 50;
-// ── SERVICE TABLE HEADER ──
+// -- SERVICE TABLE HEADER --
 doc.setFillColor(...navy);
 doc.roundedRect(14, y, W - 28, 10, 1, 1, 'F');
 doc.setFontSize(9);
@@ -3062,7 +3062,7 @@ doc.text('TIME', 110, y + 7, { align: 'center' });
 doc.text('RATE', 155, y + 7, { align: 'center' });
 doc.text('AMOUNT', W - 20, y + 7, { align: 'right' });
 y += 12;
-// ── ROW 1: First hour ──
+// -- ROW 1: First hour --
 doc.setFillColor(...lightGray);
 doc.rect(14, y, W - 28, 10, 'F');
 doc.setFontSize(9);
@@ -3073,7 +3073,7 @@ doc.text('60 min', 110, y + 7, { align: 'center' });
 doc.text(`$${firstHourRate.toFixed(2)}`, 155, y + 7, { align: 'center' });
 doc.text(`$${firstHourRate.toFixed(2)}`, W - 20, y + 7, { align: 'right' });
 y += 12;
-// ── ROW 2: Additional time (if any) ──
+// -- ROW 2: Additional time (if any) --
 if(roundedMins > 60) {
 const extraMins = roundedMins - 60;
 const extra15Blocks = extraMins / 15;
@@ -3090,7 +3090,7 @@ doc.text(`$${extraCost.toFixed(2)}`, W - 20, y + 7, { align: 'right' });
 y += 12;
 }
 y += 4;
-// ── TIME DETAIL BOX ──
+// -- TIME DETAIL BOX --
 doc.setFillColor(...lightBlue);
 doc.roundedRect(14, y, W - 28, 22, 2, 2, 'F');
 doc.setFontSize(9);
@@ -3101,7 +3101,7 @@ doc.setFont('helvetica', 'normal');
 doc.setTextColor(...black);
 doc.text(`Start: ${fmtTime(start)} | End: ${fmtTime(end)} | Actual Duration: ${actualStr} | Billed Duration: ${timeStr}`, 20, y + 16);
 y += 30;
-// ── TOTAL BOX ──
+// -- TOTAL BOX --
 doc.setFillColor(...navy);
 doc.roundedRect(120, y, W - 134, 18, 2, 2, 'F');
 doc.setFontSize(10);
@@ -3111,13 +3111,13 @@ doc.text('TOTAL DUE', 128, y + 7);
 doc.setFontSize(16);
 doc.text(`$${total.toFixed(2)}`, W - 20, y + 12, { align: 'right' });
 y += 28;
-// ── FOOTER ──
+// -- FOOTER --
 doc.setFontSize(8);
 doc.setFont('helvetica', 'normal');
 doc.setTextColor(...gray);
 doc.text('Thank you for choosing Atlas Anesthesia — Mobile Anesthesia Services', W / 2, y, { align: 'center' });
 doc.text(`Invoice ${invoiceNum} · Generated ${new Date().toLocaleDateString()}`, W / 2, y + 6, { align: 'center' });
-// ── BOTTOM LINE ──
+// -- BOTTOM LINE --
 doc.setDrawColor(...navy);
 doc.setLineWidth(1.5);
 doc.line(14, y + 12, W - 14, y + 12);
@@ -3221,7 +3221,7 @@ const gray = [107, 104, 96];
 const lightGray = [240, 239, 233];
 const black = [26, 25, 22];
 const white = [255, 255, 255];
-// ── HEADER ──
+// -- HEADER --
 doc.setFillColor(...navy);
 doc.rect(0, 0, W, 42, 'F');
 doc.setFillColor(255, 255, 255);
@@ -3324,7 +3324,7 @@ if(el) el.value = '';
 document.getElementById('inv-summary').innerHTML = 'Enter times and rates to see summary';
 document.getElementById('inv-total').textContent = '$0.00';
 };
-// ── EKG ORDER LOGIC ──
+// -- EKG ORDER LOGIC --
 const EKG_CONDITIONS = {
 // Cardiovascular
 'po-cv-htn': 'Hypertension (HTN)',
@@ -3527,7 +3527,7 @@ const el = document.getElementById(id);
 if(el) el.addEventListener('change', checkEKGConditions);
 });
 }
-// ── MID-CASE ──
+// -- MID-CASE --
 let midCaseFilter = 'all';
 window.setMidCaseFilter = function(f) {
 midCaseFilter = f;
@@ -3833,7 +3833,7 @@ console.error(e);
 alert('Error loading case: ' + e.message);
 }
 };
-// ── BMI CALCULATOR ──
+// -- BMI CALCULATOR --
 window.calcBMI = function() {
 const ft = parseFloat(document.getElementById('po-height-ft')?.value) || 0;
 const inches = parseFloat(document.getElementById('po-height-in')?.value) || 0;
@@ -3871,7 +3871,7 @@ if(cmVal) cmVal.value = cm;
 if(kgVal) kgVal.value = kg;
 if(bmiVal) bmiVal.value = bmi;
 };
-// ── H&P AUTO-UNCHECK NEG ──
+// -- H&P AUTO-UNCHECK NEG --
 window.onHPCheck = function(checkbox, prefix) {
 const negEl = document.getElementById(prefix + '-neg');
 if(!negEl) return;
@@ -3889,7 +3889,7 @@ if(checkbox.checked && negEl) negEl.checked = false;
 // Trigger EKG check in case a CV condition changed
 if(typeof checkEKGConditions === 'function') checkEKGConditions();
 };
-// ── CS PROVIDER SIGNATURE ──
+// -- CS PROVIDER SIGNATURE --
 let csProviderEntryIdx = null;
 let csProviderDrawing = false;
 window.openCSProviderModal = function(idx) {
@@ -3936,7 +3936,7 @@ renderCSEntries();
 }
 closeCSProviderModal();
 };
-// ── PROVIDER SIGNATURE ──
+// -- PROVIDER SIGNATURE --
 let providerSigDrawing = false;
 window.openProviderSigModal = function() {
 document.getElementById('providerSigModal').style.display = 'flex';
@@ -3989,7 +3989,7 @@ document.getElementById('providerSigPreview').style.display = 'none';
 document.getElementById('providerSigZone').style.display = 'block';
 document.getElementById('providerSigImg').src = '';
 };
-// ── OTHER TOGGLE IN PRE-OP H&P ──
+// -- OTHER TOGGLE IN PRE-OP H&P --
 window.onHPOtherToggle = function(prefix) {
 const cb = document.getElementById(prefix + '-other-cb');
 const row = document.getElementById(prefix + '-other-row');
@@ -4005,7 +4005,7 @@ const val = document.getElementById(prefix + '-other-val');
 if(val) val.value = '';
 }
 };
-// ── OTHER TOGGLE IN PRE-OP ──
+// -- OTHER TOGGLE IN PRE-OP --
 window.onOtherToggle = function(checkbox) {
 const row = document.getElementById('po-other-other-row');
 if(row) row.style.display = checkbox.checked ? 'block' : 'none';
@@ -4014,7 +4014,7 @@ const commentEl = document.getElementById('po-other-other-comment');
 if(commentEl) commentEl.value = '';
 }
 };
-// ── PREVIEW DRAFT ──
+// -- PREVIEW DRAFT --
 window.previewDraft = async function(id) {
 try {
 // Use cached records if available, otherwise fetch
@@ -4095,7 +4095,7 @@ window.loadDraftCaseById = function(caseId) {
 window.closePreviewModal = function() {
 document.getElementById('previewModal').style.display = 'none';
 };
-// ── REVIEW FOR TOMORROW ──
+// -- REVIEW FOR TOMORROW --
 async function renderReviewTomorrow() {
 const tomorrow = new Date();
 tomorrow.setDate(tomorrow.getDate() + 1);
@@ -4135,7 +4135,7 @@ ${r['po-medications']?`<div style="margin-top:6px;font-size:12px;color:var(--tex
 }).join('');
 } catch(e) { console.error(e); }
 }
-// ── SYNC PRICES FROM TEMPLATE ──
+// -- SYNC PRICES FROM TEMPLATE --
 window.syncPricesFromTemplate = async function() {
 const confirmed = confirm(
 'This will:\n\n' +
@@ -4190,7 +4190,7 @@ alert('Error saving: ' + e.message);
 console.error(e);
 }
 };
-// ── SURGERY CENTERS ──
+// -- SURGERY CENTERS --
 let surgeryCenters = []; // loaded from Firebase
 window.surgeryCenters = surgeryCenters;
 async function loadSurgeryCenters() {
@@ -4381,7 +4381,7 @@ ${c.invoiceEmail?`<div style="font-size:11px;color:var(--text-faint);font-family
 </div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.firstHour.toFixed(2)}</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.per15.toFixed(2)}</div><div style="display:flex;gap:6px"><button onclick="editCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="deleteCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑</button></div></div>`;
 }).join('')}`;
 }
-// ── ANALYTICS ──
+// -- ANALYTICS --
 let analyticsFilter = 'all';
 window.setAnalyticsFilter = function(f) {
 analyticsFilter = f;
@@ -4449,7 +4449,7 @@ if(analyticsFilter !== 'all' && r.worker !== analyticsFilter) return false;
 return !finalizedCaseIds.has(r['po-caseId']);
 });
 const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-// ── Helpers ──
+// -- Helpers --
 const uniqueDays = arr => new Set(arr.map(c=>c.date)).size;
 // Actual hours from finalize case start/end
 const calcHours = arr => arr.reduce((s,c)=>{
@@ -4606,7 +4606,7 @@ casesLabel,
 <span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
 </div>` : '');
 };
-// ── CS TRANSFER LOG ──
+// -- CS TRANSFER LOG --
 window.showAddTransferForm = function() {
 const form = document.getElementById('transfer-form');
 if(form) {
@@ -4694,7 +4694,7 @@ el.innerHTML = '<div class="empty-state">Error loading transfers</div>';
 console.error(e);
 }
 }
-// ── DRAFT INVOICE ──
+// -- DRAFT INVOICE --
 function calcDraftInvoice(startTime, endTime, firstHourRate, per15Rate) {
 if(!startTime || !endTime || !firstHourRate) return null;
 const [sh, sm] = startTime.split(':').map(Number);
@@ -4794,7 +4794,7 @@ setTimeout(() => {
 window.generateInvoicePDF();
 }, 600);
 };
-// ── SCHEDULED PROJECTIONS ──
+// -- SCHEDULED PROJECTIONS --
 function renderScheduledProjections(scheduledDev, scheduledJosh) {
 const el = document.getElementById('analytics-scheduled');
 if(!el) return;
@@ -4926,7 +4926,7 @@ setSyncing(false);
 renderHistory();
 };
 
-// ── FLAT RATE MANAGEMENT ──
+// -- FLAT RATE MANAGEMENT --
 window.showAddFlatRate = function(centerId) {
   const form = document.getElementById('flat-rate-add-form-'+centerId);
   if(form) { form.style.display = form.style.display==='none'?'':'none'; }
@@ -4963,7 +4963,7 @@ window.deleteFlatRate = async function(centerId, flatRateId) {
   populateCenterDropdowns();
 };
 
-// ── INVOICE BILLING TYPE TOGGLE ──
+// -- INVOICE BILLING TYPE TOGGLE --
 window.onBillingTypeChange = function() {
   var el=document.querySelector('input[name="inv-billing-type"]:checked');
   setBillingType(el?el.value:'hourly');
@@ -5017,7 +5017,7 @@ window.updateInvoiceTotalDisplay = function() {
 };
 
 
-// ── FLAT RATE INVOICE PDF ──
+// -- FLAT RATE INVOICE PDF --
 function _generateFlatRateInvoicePDF(location, date, provider, procedure, total) {
   const invoiceNum = (function() {
     const now = new Date();
@@ -5124,7 +5124,7 @@ function _generateFlatRateInvoicePDF(location, date, provider, procedure, total)
 }
 
 
-// ── FLAT RATE MANAGEMENT ──
+// -- FLAT RATE MANAGEMENT --
 window.showAddFlatRate = function(centerId) {
   const form = document.getElementById('flat-rate-add-form-'+centerId);
   if(form) { form.style.display = form.style.display==='none'?'':'none'; }
@@ -5161,7 +5161,7 @@ window.deleteFlatRate = async function(centerId, flatRateId) {
   populateCenterDropdowns();
 };
 
-// ── INVOICE BILLING TYPE TOGGLE ──
+// -- INVOICE BILLING TYPE TOGGLE --
 window.onBillingTypeChange = function() {
   const type = document.querySelector('input[name="inv-billing-type"]:checked')?.value || 'hourly';
   const hourlyFields = document.getElementById('inv-hourly-fields');
@@ -5215,12 +5215,12 @@ window.updateInvoiceTotalDisplay = function() {
 };
 
 
-// ── FLAT RATE INVOICE PDF ──
+// -- FLAT RATE INVOICE PDF --
 
 function injectBillingToggle() { window._billingType='hourly'; setBillingType('hourly'); }
 
 
-// ── FLAT RATE FORM HELPERS ──
+// -- FLAT RATE FORM HELPERS --
 window._editingFlatRates = [];
 
 function renderFlatRatesInForm() {
@@ -5259,7 +5259,7 @@ window.removeFlatRateFromForm = function(idx) {
 };
 
 
-// ── INVOICE RATE CARD RENDERERS ──────────────────────────────────────────────
+// -- INVOICE RATE CARD RENDERERS ----------------------------------------------
 
 
 function _renderFlatRateInfoCard() { setBillingType("flat"); }
@@ -5267,7 +5267,7 @@ function _renderFlatRateInfoCard() { setBillingType("flat"); }
 function _renderHourlyRateCard() { setBillingType("hourly"); }
 
 
-// ── BILLING TYPE ──
+// -- BILLING TYPE --
 window.setBillingType = function(type) {
   window._billingType=type;
   var btnH=document.getElementById('inv-btn-hourly');
@@ -5361,7 +5361,7 @@ window.onCustomFlatChange = function() {
   _updateFlatSummary(proc,amt);
 };
 
-// ── BROWSER BACK BUTTON ──
+// -- BROWSER BACK BUTTON --
 window.addEventListener('popstate', (event) => {
 const tab = event.state?.tab || 'preop';
 showTab(tab, false); // false = don't push another state
@@ -5371,7 +5371,7 @@ try {
 const initTab = localStorage.getItem('atlas_active_tab') || 'preop';
 history.replaceState({ tab: initTab }, '', '#' + initTab);
 } catch(e) {}
-// ── REPORTS DROPDOWN ──
+// -- REPORTS DROPDOWN --
 window.toggleReportsDropdown = function() {
 const btn = document.getElementById('reports-dropdown-btn');
 const menu = document.getElementById('reports-dropdown-menu');
@@ -5390,7 +5390,7 @@ if(dropdown && !dropdown.contains(e.target)) closeReportsDropdown();
 
 
 
-// ── Global exposure for split script files ───────────────────────────────────
+// -- Global exposure for split script files -----------------------------------
 // Firebase functions needed by fax.js and payments.js
 window.getDoc = getDoc;
 window.setDoc = setDoc;
