@@ -668,6 +668,8 @@ setTimeout(buildCalendar, 50);
 if(tab==='mid-case') renderMidCase();
 if(tab==='caselog') renderCaseLog();
 if(tab==='payout') renderPayoutTab();
+if(tab==='payments' && typeof loadPaymentRows==='function') loadPaymentRows();
+if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 };
 
 
