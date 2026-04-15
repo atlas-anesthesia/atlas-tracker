@@ -25,7 +25,7 @@ async function runDailyPaymentBackup() {
 
 // ── Sync from window.cases/preop ─────────────────────────────────────────────
 function syncPaymentRowsFromCases() {
-  const finalized = (window.window.cases||[]).filter(c => !c.draft);
+  const finalized = (window.cases||[]).filter(c => !c.draft);
   let changed = false;
   finalized.forEach(c => {
     const rowIdx = _paymentRows.findIndex(r => r.caseId === c.caseId);
@@ -77,7 +77,7 @@ async function loadPaymentRows() {
     window.getDoc(window.doc(window.db,'atlas','surgerycenters'))
   ]);
   _paymentRows = paymentsSnap.exists() ? (paymentsSnap.data().rows||[]) : [];
-  const freshCases = casesSnap.exists() ? (casesSnap.data().window.cases||[]) : (window.window.cases||[]);
+  const freshCases = casesSnap.exists() ? (casesSnap.data().window.cases||[]) : (window.cases||[]);
   const freshPreop = preopSnap.exists() ? (preopSnap.data().records||[]) : [];
   const freshCenters = scSnap.exists() ? (scSnap.data().centers||[]) : (window.surgeryCenters||[]);
   window._rawPreopRecords = freshPreop;
@@ -326,7 +326,7 @@ window.openInvoiceModal = function(rowIdx) {
   populateInvModalCenterDropdown(r?.surgeryCenter||'');
   if(r?.caseDate){const dt=document.getElementById('inv-modal-date');if(dt)dt.value=r.caseDate;}
   const prov=document.getElementById('inv-modal-provider');
-  if(prov)prov.value=(r?.worker||window.window.currentWorker||'josh')==='dev'?'Dr. Dev Murthy':'Josh Condado';
+  if(prov)prov.value=(r?.worker||window.currentWorker||'josh')==='dev'?'Dr. Dev Murthy':'Josh Condado';
   if(r?.surgeryCenter){
     onInvModalCenterChange();
     const scSel=document.getElementById('inv-modal-sc-select');
@@ -611,7 +611,7 @@ window.sendInvoiceEmail = async function() {
   const invoiceNum=window._currentInvoiceNum||'ATL-INV';
   const provider=document.getElementById('inv-modal-provider')?.value||'';
   try {
-    const res=await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/invoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:email,location,date,provider,total,invoiceNum,worker:window.window.currentWorker||'josh',html:invoiceHTML})});
+    const res=await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/invoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:email,location,date,provider,total,invoiceNum,worker:window.currentWorker||'josh',html:invoiceHTML})});
     const data=await res.json().catch(()=>({}));
     if(res.ok&&data.success){alert('Invoice sent to '+email+'!');}
     else{window.open('mailto:'+email+'?subject='+encodeURIComponent('Atlas Anesthesia Invoice '+invoiceNum));alert('Email client opened.');}
