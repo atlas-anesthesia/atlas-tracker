@@ -67,7 +67,7 @@ function syncPaymentRowsFromCases() {
 }
 
 // ── Load ─────────────────────────────────────────────────────────────
-async function loadPaymentRows() {
+window.loadPaymentRows = async function loadPaymentRows() {
   try {
   runDailyPaymentBackup();
   const [paymentsSnap, casesSnap, preopSnap, scSnap] = await Promise.all([
@@ -275,7 +275,7 @@ window.commitPaymentField = function(field, idx, val) {
 // ── Saved PDFs ─────────────────────────────────────────────────────────
 let _savedPDFs = [];
 
-async function loadSavedPDFs() {
+window.loadSavedPDFs = async function loadSavedPDFs() {
   try {
     const snap = await window.getDoc(window.doc(window.db,'atlas','saved_pdfs'));
     _savedPDFs = snap.exists()?(snap.data().pdfs||[]):[];
@@ -630,4 +630,13 @@ window.sendInvoiceEmail = async function() {
   }
 };
 
-// showTab hook handled in app.js
+// ── showTab hook — triggers load when tab is opened ─────────────────────────
+(function() {
+  const _orig = window.showTab;
+  window.showTab = function(tab, pushState) {
+    if(pushState === undefined) pushState = true;
+    _orig(tab, pushState);
+    if(tab === 'payments')   loadPaymentRows();
+    if(tab === 'saved-pdfs') loadSavedPDFs();
+  };
+})();
