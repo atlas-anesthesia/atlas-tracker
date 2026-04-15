@@ -12,12 +12,12 @@ let _invoiceModalRowIdx = null;
 async function runDailyPaymentBackup() {
   try {
     const today = new Date().toISOString().split('T')[0];
-    const metaSnap = await getDoc(doc(window.db,'atlas','payments_meta'));
+    const metaSnap = await window.getDoc(window.doc(window.db,'atlas','payments_meta'));
     if(metaSnap.exists() && metaSnap.data().lastBackup === today) return;
-    const snap = await getDoc(doc(window.db,'atlas','payments'));
+    const snap = await window.getDoc(window.doc(window.db,'atlas','payments'));
     if(snap.exists()) {
-      await setDoc(doc(window.db,'atlas','payments_backup_'+today), { rows: snap.data().rows||[], backedUpAt: new Date().toISOString() });
-      await setDoc(doc(window.db,'atlas','payments_meta'), { lastBackup: today });
+      await window.setDoc(window.doc(window.db,'atlas','payments_backup_'+today), { rows: snap.data().rows||[], backedUpAt: new Date().toISOString() });
+      await window.setDoc(window.doc(window.db,'atlas','payments_meta'), { lastBackup: today });
       console.log('✓ Daily payment backup:', today);
     }
   } catch(e) { console.warn('Backup failed:', e); }
@@ -61,7 +61,7 @@ function syncPaymentRowsFromCases() {
     if(caseDate&&_paymentRows[rowIdx].caseDate!==caseDate){_paymentRows[rowIdx].caseDate=caseDate;changed=true;}
   });
   if(changed) {
-    setDoc(doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
+    window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
     if(document.getElementById('tab-payments')?.classList.contains('active')) renderPaymentRows();
   }
 }
@@ -70,10 +70,10 @@ function syncPaymentRowsFromCases() {
 async function loadPaymentRows() {
   runDailyPaymentBackup();
   const [paymentsSnap, casesSnap, preopSnap, scSnap] = await Promise.all([
-    getDoc(doc(window.db,'atlas','payments')),
-    getDoc(doc(window.db,'atlas','cases')),
-    getDoc(doc(window.db,'atlas','preop')),
-    getDoc(doc(window.db,'atlas','surgerycenters'))
+    window.getDoc(window.doc(window.db,'atlas','payments')),
+    window.getDoc(window.doc(window.db,'atlas','cases')),
+    window.getDoc(window.doc(window.db,'atlas','preop')),
+    window.getDoc(window.doc(window.db,'atlas','surgerycenters'))
   ]);
   _paymentRows = paymentsSnap.exists() ? (paymentsSnap.data().rows||[]) : [];
   const freshCases = casesSnap.exists() ? (casesSnap.data().window.cases||[]) : (window.window.cases||[]);
@@ -123,7 +123,7 @@ window.savePaymentRows = async function() {
   }));
   try {
     window.setSyncing(true);
-    await setDoc(doc(window.db,'atlas','payments'),{rows:_paymentRows});
+    await window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows});
     window.setSyncing(false);
     renderPaymentSummary();
     const btn = document.querySelector('[onclick="savePaymentRows()"]');
@@ -143,7 +143,7 @@ window.deletePaymentRow = async function(idx) {
   if(!confirm('Delete this payment row?\n\nThis cannot be undone.')) return;
   _paymentRows.splice(idx,1);
   window.setSyncing(true);
-  await setDoc(doc(window.db,'atlas','payments'),{rows:_paymentRows});
+  await window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows});
   window.setSyncing(false);
   renderPaymentRows();
 };
@@ -266,7 +266,7 @@ window.editPaymentField = function(field, rowIdx) {
 window.commitPaymentField = function(field, idx, val) {
   if(field==='proj') { _paymentRows[idx].projOverride=val; }
   else { _paymentRows[idx].invoicedAmount=val; }
-  setDoc(doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
+  window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
   renderPaymentRows(); renderPaymentSummary();
 };
 
@@ -275,17 +275,17 @@ let _savedPDFs = [];
 
 async function loadSavedPDFs() {
   try {
-    const snap = await getDoc(doc(window.db,'atlas','saved_pdfs'));
+    const snap = await window.getDoc(window.doc(window.db,'atlas','saved_pdfs'));
     _savedPDFs = snap.exists()?(snap.data().pdfs||[]):[];
   } catch(e){_savedPDFs=[];}
   renderSavedPDFs();
 }
 async function savePDFRecord(record) {
   try {
-    const snap = await getDoc(doc(window.db,'atlas','saved_pdfs'));
+    const snap = await window.getDoc(window.doc(window.db,'atlas','saved_pdfs'));
     const existing = snap.exists()?(snap.data().pdfs||[]):[];
     existing.unshift(record);
-    await setDoc(doc(window.db,'atlas','saved_pdfs'),{pdfs:existing});
+    await window.setDoc(window.doc(window.db,'atlas','saved_pdfs'),{pdfs:existing});
     _savedPDFs = existing; renderSavedPDFs();
   } catch(e){console.error('savePDFRecord error:',e);}
 }
