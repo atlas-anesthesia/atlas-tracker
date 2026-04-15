@@ -50,7 +50,7 @@ window.openFaxModal = async function(id) {
     if(!r) { alert('Record not found. ID: ' + id + '\nCache size: ' + records.length); return; }
     _faxRecord = r;
 
-    const center = (window.window.surgeryCenters||window.surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
+    const center = (window.surgeryCenters||window.surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
     const faxInput = document.getElementById('fax-destination');
     if(faxInput) faxInput.value = center?.faxNumber || '';
 
@@ -127,7 +127,7 @@ function buildFaxHTML(r) {
     || (r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '');
   const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '';
   const centerName = document.getElementById('fax-to')?.value.trim()
-    || (window.window.surgeryCenters||window.surgeryCenters||[]).find(c=>c.id===r['po-surgery-center'])?.name
+    || (window.surgeryCenters||window.surgeryCenters||[]).find(c=>c.id===r['po-surgery-center'])?.name
     || r['po-surgery-center']||'';
   const attn = document.getElementById('fax-attn')?.value.trim() || '';
   const pages = document.getElementById('fax-pages')?.value.trim() || '';
