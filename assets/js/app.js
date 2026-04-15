@@ -3474,7 +3474,7 @@ ${hasDraft ? '<span style="background:var(--warn-light);color:var(--warn);font-s
 </div><div class="case-date">
 Surgery: ${surgDateFmt} · Provider: ${provider}
 ${r['po-allergies'] ? ' · <span style="color:var(--warn)">⚠ Allergies</span>' : ''}
-</div>/div>
+</div>
 ${allFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
 ${allFlags.map(f=>`<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px">${f}</span>`).join('')}
 </div>` : ''}
