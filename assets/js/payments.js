@@ -77,7 +77,7 @@ window.loadPaymentRows = async function loadPaymentRows() {
     window.getDoc(window.doc(window.db,'atlas','surgerycenters'))
   ]);
   _paymentRows = paymentsSnap.exists() ? (paymentsSnap.data().rows||[]) : [];
-  const freshCases = casesSnap.exists() ? (casesSnap.data().window.cases||[]) : (window.cases||[]);
+  const freshCases = casesSnap.exists() ? (casesSnap.data().cases||[]) : (window.cases||[]);
   const freshPreop = preopSnap.exists() ? (preopSnap.data().records||[]) : [];
   const freshCenters = scSnap.exists() ? (scSnap.data().centers||[]) : (window.surgeryCenters||[]);
   window._rawPreopRecords = freshPreop;
