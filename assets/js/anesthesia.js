@@ -35,7 +35,7 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   // Offset: x = label_x - 12 (checkbox is left of label)
   //         y = Y(ty) + 4  (shifted down 5pt to center in checkbox square)
   const drawX = (tx, ty) => {
-    page.drawText('X', { x: tx - 12, y: Y(ty) - 5, size: 7.5, font: fontBold, color: rgb(0,0,0) });
+    page.drawText('X', { x: tx - 10, y: Y(ty) - 5, size: 7.5, font: fontBold, color: rgb(0,0,0) });
   };
 
   // Draw plain text
@@ -62,27 +62,33 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
     if(line && cy > minY) page.drawText(line.trim(), {x, y: cy, size: 6.5, font, color: rgb(0,0,0)});
   };
 
-  // Two-column wrapped text for tight boxes (medications, surgical history)
+  // Horizontal flowing text — joins items with ", " then wraps across full box width
   const drawWrap2Col = (text, x1, x2, startPy, stopPy, fs) => {
     if(!text) return;
-    const items = text.split(/[,;\n]+/).map(s=>s.trim()).filter(Boolean);
-    const colH = Y(stopPy) + 4;  // minimum pdf-lib y (hard bottom)
-    const topY = Y(startPy) - 1; // starting pdf-lib y
-    const lineH = (fs||6) + 1.5;
-    const maxLines = Math.floor((topY - colH) / lineH);
-    // Column 1: first half of items, Column 2: second half
-    const half = Math.ceil(items.length / 2);
-    const col1 = items.slice(0, half);
-    const col2 = items.slice(half);
-    col1.forEach((item, i) => {
-      const y = topY - i * lineH;
-      if(y > colH) page.drawText(item.substring(0, 28), {x: x1, y, size: fs||6, font, color: rgb(0,0,0)});
+    const items = text.split(/[\n]+/).map(s=>s.trim()).filter(Boolean);
+    const joined = items.join(', ');
+    const boxW = 273; // pt available (x=32 to x=305, left half of page)
+    const fontSize = fs || 6;
+    // Approx chars per line: boxW / (fontSize * 0.55)
+    const charsPerLine = Math.floor(boxW / (fontSize * 0.55));
+    const topY = Y(startPy) - 1;
+    const bottomY = Y(stopPy) + 4;
+    const lineH = fontSize + 2;
+    // Word-wrap the joined string
+    const words = joined.split(' ');
+    let line = '', cy = topY;
+    words.forEach(w => {
+      const test = line ? line + ' ' + w : w;
+      if(test.length > charsPerLine && line) {
+        if(cy > bottomY) page.drawText(line, {x: x1, y: cy, size: fontSize, font, color: rgb(0,0,0)});
+        cy -= lineH;
+        line = w;
+      } else {
+        line = test;
+      }
     });
-    col2.forEach((item, i) => {
-      const y = topY - i * lineH;
-      if(y > colH) page.drawText(item.substring(0, 28), {x: x2, y, size: fs||6, font, color: rgb(0,0,0)});
-    });
-  };
+    if(line && cy > bottomY) page.drawText(line, {x: x1, y: cy, size: fontSize, font, color: rgb(0,0,0)});
+  }
 
   // ALLERGIES (box: y=37 to y=114 in pymupdf, content area y=44-110)
   drawWrap2Col(val('po-allergies'), 32, 165, 45, 112, 6.5);
@@ -152,10 +158,10 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   if(chk('po-other-chemo'))     drawX(219, 384);
 
   // MEDICATIONS box: y=402 to y=449 → content: start y=412, stop before y=447
-  drawWrap(val('po-medications'), 32, 412, 52, 8, 446);
+  drawWrap2Col(val('po-medications'), 32, 165, 412, 445, 6);
 
-  // SURGICAL HISTORY box: y=449 to y=477 → content: start y=460, stop before y=475
-  drawWrap(val('po-surgicalHistory'), 32, 460, 52, 8, 474);
+  // SURGICAL HISTORY box: y=449 to y=477 → content: start y=456, stop before y=475
+  drawWrap2Col(val('po-surgicalHistory'), 32, 165, 456, 475, 6);
 
   // PHYSICAL ASSESSMENT
   drawT(val('po-assessTime'), 408, 477, 7.5);
