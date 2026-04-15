@@ -286,7 +286,7 @@ if(typeof _globalRefresh === 'function') {
 if(document.getElementById('tab-calendar')?.classList.contains('active')) {
   setTimeout(buildCalendar, 100);
 }
-}
+});
 
 // Listen for preop changes (real-time sync between users)
 onSnapshot(doc(db,'atlas','preop'), (snap) => {
