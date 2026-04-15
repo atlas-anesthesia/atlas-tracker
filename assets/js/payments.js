@@ -1,4 +1,4 @@
-// ── payments.js — Payments tab, invoice modal, saved PDFs ──────────────────
+// -- payments.js — Payments tab, invoice modal, saved PDFs ------------------
 // Depends on: app.js (db, window.cases, surgeryCenters, window.currentWorker, uid, setSyncing)
 
 let _paymentRows = [];
@@ -8,7 +8,7 @@ let _invoiceModalRowIdx = null;
 // PAYMENTS TAB — complete implementation
 // ════════════════════════════════════════════════════════════════════
 
-// ── Daily backup ─────────────────────────────────────────────────────
+// -- Daily backup -----------------------------------------------------
 async function runDailyPaymentBackup() {
   try {
     const today = new Date().toISOString().split('T')[0];
@@ -23,7 +23,7 @@ async function runDailyPaymentBackup() {
   } catch(e) { console.warn('Backup failed:', e); }
 }
 
-// ── Sync from window.cases/preop ─────────────────────────────────────────────
+// -- Sync from window.cases/preop ---------------------------------------------
 function syncPaymentRowsFromCases() {
   const finalized = (window.cases||[]).filter(c => !c.draft);
   let changed = false;
@@ -66,7 +66,7 @@ function syncPaymentRowsFromCases() {
   }
 }
 
-// ── Load ─────────────────────────────────────────────────────────────
+// -- Load -------------------------------------------------------------
 window.loadPaymentRows = async function loadPaymentRows() {
   try {
   runDailyPaymentBackup();
@@ -113,7 +113,7 @@ window.loadPaymentRows = async function loadPaymentRows() {
   } catch(e) { console.error('loadPaymentRows error:', e); const body=document.getElementById('payments-table-body'); if(body) body.innerHTML='<div style="padding:32px;color:red;font-size:13px">Error loading payments: '+e.message+'<br><small>'+e.stack+'</small></div>'; }
 }
 
-// ── Save (only editable fields) ───────────────────────────────────────
+// -- Save (only editable fields) ---------------------------------------
 window.savePaymentRows = async function() {
   _paymentRows = _paymentRows.map((row,i) => ({
     ...row,
@@ -133,14 +133,14 @@ window.savePaymentRows = async function() {
   } catch(e){window.setSyncing(false);alert('Error: '+e.message);}
 };
 
-// ── Auto-save (debounced) ─────────────────────────────────────────────
+// -- Auto-save (debounced) ---------------------------------------------
 let _paymentSaveTimer = null;
 function autoSavePayments() {
   clearTimeout(_paymentSaveTimer);
   _paymentSaveTimer = setTimeout(()=>window.savePaymentRows().catch(()=>{}), 900);
 }
 
-// ── Delete ────────────────────────────────────────────────────────────
+// -- Delete ------------------------------------------------------------
 window.deletePaymentRow = async function(idx) {
   if(!confirm('Delete this payment row?\n\nThis cannot be undone.')) return;
   _paymentRows.splice(idx,1);
@@ -150,7 +150,7 @@ window.deletePaymentRow = async function(idx) {
   renderPaymentRows();
 };
 
-// ── Sort ──────────────────────────────────────────────────────────────
+// -- Sort --------------------------------------------------------------
 window.sortPaymentRows = function() {
   const mode = document.getElementById('pm-sort')?.value||'date-asc';
   _paymentRows.sort((a,b)=>{
@@ -164,7 +164,7 @@ window.sortPaymentRows = function() {
   renderPaymentRows();
 };
 
-// ── Summary ───────────────────────────────────────────────────────────
+// -- Summary -----------------------------------------------------------
 function renderPaymentSummary() {
   let projected=0, invAmt=0;
   _paymentRows.forEach((r,i)=>{
@@ -178,7 +178,7 @@ function renderPaymentSummary() {
   if(el('pm-invoiced'))  el('pm-invoiced').textContent  = fmt(invAmt);
 }
 
-// ── Render rows ───────────────────────────────────────────────────────
+// -- Render rows -------------------------------------------------------
 function renderPaymentRows() {
   const body = document.getElementById('payments-table-body');
   if(!body) return;
@@ -230,7 +230,7 @@ function renderPaymentRows() {
   renderPaymentSummary();
 }
 
-// ── Edit popup (proj / invamt) ─────────────────────────────────────────
+// -- Edit popup (proj / invamt) -----------------------------------------
 window.editPaymentField = function(field, rowIdx) {
   const old = document.getElementById('payment-edit-popup');
   if(old) old.remove();
@@ -272,7 +272,7 @@ window.commitPaymentField = function(field, idx, val) {
   renderPaymentRows(); renderPaymentSummary();
 };
 
-// ── Saved PDFs ─────────────────────────────────────────────────────────
+// -- Saved PDFs ---------------------------------------------------------
 let _savedPDFs = [];
 
 window.loadSavedPDFs = async function loadSavedPDFs() {
@@ -308,7 +308,7 @@ function renderSavedPDFs() {
   }).join('');
 }
 
-// ── Invoice modal ─────────────────────────────────────────────────────
+// -- Invoice modal -----------------------------------------------------
 window.openInvoiceModal = function(rowIdx) {
   _invoiceModalRowIdx = rowIdx!==undefined?rowIdx:null;
   const r = rowIdx!==undefined?_paymentRows[rowIdx]:null;
@@ -630,7 +630,7 @@ window.sendInvoiceEmail = async function() {
   }
 };
 
-// ── showTab hook — triggers load when tab is opened ─────────────────────────
+// -- showTab hook — triggers load when tab is opened -------------------------
 (function() {
   const _orig = window.showTab;
   window.showTab = function(tab, pushState) {
