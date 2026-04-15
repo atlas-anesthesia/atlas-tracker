@@ -259,18 +259,9 @@ await setDoc(doc(db,'atlas','inventory'),{items});
 setSyncing(false);
 }
 async function saveCases() {
-  const seen = new Set();
-  const deduped = [];
-  for(const c of cases) {
-    const key = c.caseId || c.id;
-    if(!seen.has(key)) { seen.add(key); deduped.push(c); }
-  }
-  cases = deduped;
-  setSyncing(true);
-  await setDoc(doc(db,'atlas','cases'),{cases});
-  setSyncing(false);
-  // Auto-sync payment rows if loaded
-  if(_paymentRows.length > 0) syncPaymentRowsFromCases();
+setSyncing(true);
+await setDoc(doc(db,'atlas','cases'),{cases});
+setSyncing(false);
 }
 // ── HELPERS ──
 function getStock(item,w){return w==='dev'?item.stockDev:item.stockJosh;}
@@ -658,7 +649,7 @@ if(tab==='history') { loadSavedInvoices().then(() => renderHistory()); }
 if(tab==='reports') renderReports();
 if(tab==='preop-history') renderPreopHistory();
 if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
-if(tab==='invoice') { showTab('payments'); } // Invoice moved to Payments modal
+if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); renderDraftInvoices(); setTimeout(populateCenterDropdowns,100); setTimeout(injectBillingToggle, 100); }
 if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
 if(tab==='analytics') {
 // Ensure preop records are loaded for projections
@@ -1234,19 +1225,6 @@ const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
 return sum+cpm*mg;
 },0);
 const total=suppliesTotal2+csTotal2;
-const existingFinalIdx = cases.findIndex(x => x.caseId === caseId && !x.draft);
-if(existingFinalIdx !== -1) {
-  cases[existingFinalIdx] = {
-    ...cases[existingFinalIdx],
-    procedure:proc, provider, date, notes, worker:currentWorker,
-    startTime: document.getElementById('caseStartTime')?.value || '',
-    endTime: document.getElementById('caseEndTime')?.value || '',
-    caseComments:comments,
-    items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
-    savedCsEntries:csEntries.map(e=>({...e})),
-    csTotal:csTotal2, total, imageData:pendingImageData||null
-  };
-} else {
 cases.unshift({
 id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
 startTime: document.getElementById('caseStartTime')?.value || '',
@@ -1259,7 +1237,6 @@ savedCsEntries:csEntries.map(e=>({...e})),
 csTotal:csTotal2,
 total,imageData:pendingImageData||null
 });
-}
 caseItems.forEach(item=>{
 const inv=items.find(i=>i.id===item.id);
 if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
@@ -2066,8 +2043,7 @@ const cvChecked = ['neg','htn','cad','angina','mi','chf','murmur','arrythmia'].f
 const pulmChecked = ['neg','asthma','copd','uri','o2','cpap','sleep-apnea','bl-breath-sounds','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.replace(/-/g,' ')).join(', ').toUpperCase();
 return `<div class="case-item"><div class="case-item-header" onclick="togglePreop('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${r['po-caseId'] || 'No Case ID'}
-<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button>
-      <button onclick="event.stopPropagation();previewAnesthesiaRecord(window._rawPreopRecords?.find(x=>x.id==='${r.id}')||{})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">🖨 Print Record</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
+<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="event.stopPropagation();openFaxModal('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:#0369a1;border-color:#0369a1">📠 Send Fax</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
 ${r['po-allergies']?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Allergies</strong><div style="font-size:13px;margin-top:3px">${r['po-allergies']}</div></div>`:''}
 ${cvChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Cardiovascular</strong><div style="font-size:13px;margin-top:3px">${cvChecked}</div></div>`:''}
 ${pulmChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Pulmonary</strong><div style="font-size:13px;margin-top:3px">${pulmChecked}</div></div>`:''}
@@ -2122,7 +2098,6 @@ el.checked = !!record[fid];
 el.value = record[fid] || '';
 }
 });
-
 // Fill radio (mallampati)
 if(record['mallampati']) {
 const radio = document.querySelector(`input[name="mallampati"][value="${record['mallampati']}"]`);
@@ -3476,7 +3451,14 @@ ${hasDraft ? '<span style="background:var(--warn-light);color:var(--warn);font-s
 </div><div class="case-date">
 Surgery: ${surgDateFmt} · Provider: ${provider}
 ${r['po-allergies'] ? ' · <span style="color:var(--warn)">⚠ Allergies</span>' : ''}
-</div>
+</div><div style="margin-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;font-weight:600;color:var(--text-faint)">💰 Deposit:</span><button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','not-paid')"
+style="padding:3px 10px;border-radius:10px;border:1.5px solid ${(r['po-depositStatus']||'not-paid')==='not-paid'?'#fca5a5':'var(--border)'};background:${(r['po-depositStatus']||'not-paid')==='not-paid'?'#fee2e2':'transparent'};color:${(r['po-depositStatus']||'not-paid')==='not-paid'?'#b91c1c':'var(--text-faint)'};font-size:11px;font-weight:600;cursor:pointer">✗ Not Paid</button><button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','paid')"
+style="padding:3px 10px;border-radius:10px;border:1.5px solid ${r['po-depositStatus']==='paid'?'#86efac':'var(--border)'};background:${r['po-depositStatus']==='paid'?'#dcfce7':'transparent'};color:${r['po-depositStatus']==='paid'?'#166534':'var(--text-faint)'};font-size:11px;font-weight:600;cursor:pointer">✓ Paid</button><input type="text" id="midcase-pay-notes-${r.id}"
+placeholder="Payment notes…"
+value="${r['po-paymentNotes']||''}"
+onclick="event.stopPropagation()"
+onchange="event.stopPropagation();window.saveMidCasePaymentNotes('${r.id}',this.value)"
+style="flex:1;min-width:160px;padding:3px 8px;font-size:11px;border-radius:10px;border:1px solid var(--border)"></div>
 ${allFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
 ${allFlags.map(f=>`<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px">${f}</span>`).join('')}
 </div>` : ''}
@@ -3531,29 +3513,35 @@ window.toggleMidCase = function(id) {
 document.getElementById('midcase-detail-'+id).classList.toggle('open');
 };
 window.deleteMidCase = async function(type, id, caseId) {
-  const label = caseId || id;
-  const confirmed = confirm(`⚠️ Delete "${label}"?\n\nThis will permanently remove ALL records for this case (draft, finalized, and pre-op).\n\nThis cannot be undone.`);
-  if(!confirmed) return;
-  try {
-    if(type === 'preop') {
-      const snap = await getDoc(doc(db,'atlas','preop'));
-      const records = snap.exists() ? (snap.data().records || []) : [];
-      const updated = records.filter(r => r.id !== id);
-      setSyncing(true);
-      await setDoc(doc(db,'atlas','preop'), { records: updated });
-      setSyncing(false);
-    }
-    cases = cases.filter(c => c.caseId !== caseId && c.id !== id);
-    await saveCases();
-    renderMidCase();
-    renderHistory();
-    renderReports();
-    renderCaseLog();
-    refreshDraftPicker();
-  } catch(e) {
-    alert('Error deleting record. Please try again.');
-    console.error(e);
-  }
+const label = caseId || id;
+const confirmed = confirm(`Are you sure you want to delete "${label}"?\n\nThis will remove the ${type === 'preop' ? 'pre-op record' : 'draft case'}. This cannot be undone.`);
+if(!confirmed) return;
+try {
+if(type === 'preop') {
+// Delete the pre-op record
+const snap = await getDoc(doc(db,'atlas','preop'));
+const records = snap.exists() ? (snap.data().records || []) : [];
+const updated = records.filter(r => r.id !== id);
+setSyncing(true);
+await setDoc(doc(db,'atlas','preop'), { records: updated });
+setSyncing(false);
+// Also delete any matching draft case
+const matchingDraft = cases.find(c => c.draft && c.caseId === caseId);
+if(matchingDraft) {
+cases = cases.filter(c => c.id !== matchingDraft.id);
+await saveCases();
+}
+} else if(type === 'draft') {
+// Delete just the draft case
+cases = cases.filter(c => c.id !== id);
+await saveCases();
+}
+renderMidCase();
+refreshDraftPicker();
+} catch(e) {
+alert('Error deleting record. Please try again.');
+console.error(e);
+}
 };
 async function autoCheckDeposit(recordId, email) {
 const badge = document.getElementById('deposit-badge-' + recordId);
@@ -4173,9 +4161,6 @@ window.showAddCenterForm = function() {
   if(document.getElementById('sc-provider')) document.getElementById('sc-provider').value = '';
   if(document.getElementById('sc-invoice-email')) document.getElementById('sc-invoice-email').value = '';
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
-  if(document.getElementById('sc-fax-number')) document.getElementById('sc-fax-number').value = '';
-  if(document.getElementById('sc-worker-josh')) document.getElementById('sc-worker-josh').checked = false;
-  if(document.getElementById('sc-worker-dev')) document.getElementById('sc-worker-dev').checked = false;
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
   document.getElementById('add-center-form').style.display = 'block';
   renderFlatRatesInForm();
@@ -4195,17 +4180,13 @@ window.saveCenter = async function() {
   if(!name) { alert('Please enter a surgery center name.'); return; }
   const provider = document.getElementById('sc-provider')?.value.trim() || '';
   const invoiceEmail = document.getElementById('sc-invoice-email')?.value.trim() || '';
-  const faxNumber = document.getElementById('sc-fax-number')?.value.trim() || '';
-  const workers = [];
-  if(document.getElementById('sc-worker-josh')?.checked) workers.push('josh');
-  if(document.getElementById('sc-worker-dev')?.checked) workers.push('dev');
   // Grab flat rates from the in-memory editing array
   const flatRates = window._editingFlatRates || [];
   if(window._editingCenterId) {
     const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
-    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, faxNumber, workers, flatRates };
+    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, flatRates };
   } else {
-    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, faxNumber, workers, flatRates });
+    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, flatRates });
   }
   setSyncing(true);
   await saveSurgeryCenters();
@@ -4227,9 +4208,6 @@ window.editCenter = function(id) {
   document.getElementById('sc-first-hour').value = c.firstHour;
   document.getElementById('sc-per-15').value = c.per15;
   document.getElementById('sc-provider').value = c.provider || '';
-  if(document.getElementById('sc-fax-number')) document.getElementById('sc-fax-number').value = c.faxNumber || '';
-  if(document.getElementById('sc-worker-josh')) document.getElementById('sc-worker-josh').checked = (c.workers||[]).includes('josh');
-  if(document.getElementById('sc-worker-dev')) document.getElementById('sc-worker-dev').checked = (c.workers||[]).includes('dev');
   document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
@@ -4259,12 +4237,8 @@ el.innerHTML = `
 <div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint)"><span>Center Name</span><span>1st Hour</span><span>Per 15-min</span><span></span></div>
 ${surgeryCenters.map(c => {
   const frs = c.flatRates||[];
-  const frBadge = frs.length ? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px">${frs.length} flat rate${frs.length>1?'s':''}</span>` : '';
-  // Worker tags
-  const workers = c.workers || [];
-  const joshTag = workers.includes('josh') ? `<span style="background:var(--josh-light);color:var(--josh);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px">Josh</span>` : '';
-  const devTag = workers.includes('dev') ? `<span style="background:var(--dev-light);color:var(--dev);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px">Dev</span>` : '';
-  return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center"><div><div style="font-size:14px;font-weight:500;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${c.name}${frBadge}${joshTag}${devTag}</div>
+  const frBadge = frs.length ? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px">${frs.length} flat rate${frs.length>1?'s':''}</span>` : '';
+  return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center"><div><div style="font-size:14px;font-weight:500;display:flex;align-items:center">${c.name}${frBadge}</div>
 ${c.provider?`<div style="font-size:11px;color:var(--text-faint)">👤 ${c.provider}</div>`:''}
 ${c.invoiceEmail?`<div style="font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace">📧 ${c.invoiceEmail}</div>`:''}
 </div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.firstHour.toFixed(2)}</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.per15.toFixed(2)}</div><div style="display:flex;gap:6px"><button onclick="editCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="deleteCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑</button></div></div>`;
@@ -4308,7 +4282,193 @@ return center.firstHour + (extra15 * center.per15);
 function getCenterName(centerId) {
 return surgeryCenters.find(c => c.id === centerId)?.name || '—';
 }
-window.renderAnalytics = function() {};;
+window.renderAnalytics = function() {
+const yearSel = document.getElementById('analytics-year');
+const today = new Date().toISOString().split('T')[0];
+const allInvoices = window._savedInvoices || [];
+const preops = window._rawPreopRecords || [];
+// Collect all years from finalized cases + upcoming preops
+const finalized = (cases||[]).filter(c => !c.draft && c.date);
+const allYears = [...new Set([
+...finalized.map(c=>c.date.substring(0,4)),
+...preops.filter(r=>r['po-surgeryDate']>today).map(r=>(r['po-surgeryDate']||'').substring(0,4))
+].filter(Boolean))].sort().reverse();
+if(!allYears.length) allYears.push(new Date().getFullYear().toString());
+if(yearSel) {
+const curYear = yearSel.value || new Date().getFullYear().toString();
+yearSel.innerHTML = allYears.map(y=>`<option value="${y}"${y===curYear?' selected':''}>${y}</option>`).join('');
+}
+const selectedYear = yearSel?.value || new Date().getFullYear().toString();
+const filtered = analyticsFilter === 'all' ? finalized : finalized.filter(c=>c.worker===analyticsFilter);
+const yearCases = filtered.filter(c => c.date.startsWith(selectedYear));
+// Upcoming preops for selected year (not yet finalized)
+const finalizedCaseIds = new Set(finalized.map(c=>c.caseId));
+const upcomingPreops = preops.filter(r => {
+const d = r['po-surgeryDate']||'';
+if(!d.startsWith(selectedYear)) return false;
+if(d <= today) return false;
+if(analyticsFilter !== 'all' && r.worker !== analyticsFilter) return false;
+// exclude if already finalized
+return !finalizedCaseIds.has(r['po-caseId']);
+});
+const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// ── Helpers ──
+const uniqueDays = arr => new Set(arr.map(c=>c.date)).size;
+// Actual hours from finalize case start/end
+const calcHours = arr => arr.reduce((s,c)=>{
+if(!c.startTime||!c.endTime) return s;
+const [sh,sm]=c.startTime.split(':').map(Number);
+const [eh,em]=c.endTime.split(':').map(Number);
+return s+Math.max(0,((eh*60+em)-(sh*60+sm))/60);
+},0);
+// Projected pay: pre-op est hours × $600
+const calcProjPay = arr => arr.reduce((s,c)=>{
+const preop=preops.find(r=>r['po-caseId']===c.caseId);
+const estHrs=parseFloat(preop?.['po-est-hours'])||0;
+return s+estHrs*600;
+},0);
+// My Pay: actual hours × surgery center rates (estimateIncome uses start/end time)
+const calcMyPay = arr => arr.reduce((s,c)=>{
+const pay = estimateIncome(c);
+return s+(pay||0);
+},0);
+// Invoiced: sum of invoices by month+worker (not by case linkage — invoices may not be linked to a case)
+// This function takes a month index (0-11) and year string
+const sumInvoicesByMonth = (monthIdx, yearStr) => {
+const worker = analyticsFilter; // 'all', 'dev', or 'josh'
+return allInvoices
+.filter(inv => {
+// Match by date
+const d = inv.rawDate || '';
+const parts = d.split('-');
+if(parts.length < 2) return false;
+if(parts[0] !== yearStr) return false;
+if(parseInt(parts[1])-1 !== monthIdx) return false;
+// Match by worker — use inv.worker if set, otherwise infer from provider name
+if(worker !== 'all') {
+if(inv.worker) {
+if(inv.worker !== worker) return false;
+} else {
+// Fallback: infer from provider field
+const prov = (inv.provider || '').toLowerCase();
+const isJosh = prov.includes('josh') || prov.includes('condado');
+const isDev = prov.includes('devarsh') || prov.includes('murthy');
+if(worker === 'josh' && !isJosh) return false;
+if(worker === 'dev' && !isDev) return false;
+}
+}
+return true;
+})
+.reduce((s,inv)=>s+(parseFloat(inv.total)||0),0);
+};
+// Keep old sumInvoices for compatibility (used for per-case linkage elsewhere)
+const sumInvoices = arr => arr.reduce((s,c)=>{
+const inv=allInvoices.find(i=>i.linkedCaseId===c.caseId);
+return s+(inv?parseFloat(inv.total)||0:0);
+},0);
+// Supply cost: sum of case totals
+const calcSupply = arr => arr.reduce((s,c)=>s+(parseFloat(c.total)||0),0);
+// Projected pay for upcoming preops: est hours × $600
+const upcomingProjPay = arr => arr.reduce((s,r)=>{
+return s+(parseFloat(r['po-est-hours'])||0)*600;
+},0);
+// Group finalized cases by month
+const byMonth = {};
+for(let m=0;m<12;m++) byMonth[m]=[];
+yearCases.forEach(c=>{const m=parseInt(c.date.split('-')[1])-1; if(m>=0&&m<12) byMonth[m].push(c);});
+// Group upcoming preops by month
+const upcomingByMonth = {};
+for(let m=0;m<12;m++) upcomingByMonth[m]=[];
+upcomingPreops.forEach(r=>{
+const d=r['po-surgeryDate']||'';
+const m=parseInt(d.split('-')[1])-1;
+if(m>=0&&m<12) upcomingByMonth[m].push(r);
+});
+const monthEl = document.getElementById('analytics-monthly');
+if(!monthEl) return;
+// Columns: Month | Cases | Days | Hrs | Proj.Pay | My Pay | Invoiced | Atlas Takeaway
+const cols = '90px 60px 55px 60px 105px 105px 105px 105px 105px';
+const hdr = (label, align='left', title='') =>
+`<span style="text-align:${align}"${title?` title="${title}"`:''}>${label}</span>`;
+const gridRow = (cells, style='') =>
+`<div style="display:grid;grid-template-columns:${cols};gap:5px;${style}">${cells.join('')}</div>`;
+const d_ = (align='right') => `<span style="color:var(--text-faint);font-size:12px;text-align:${align}">—</span>`;
+// Totals
+const totHrs = calcHours(yearCases);
+const totProjPay = calcProjPay(yearCases);
+const totMyPay = calcMyPay(yearCases);
+const totInv = sumInvoices(yearCases);
+const totSupply = calcSupply(yearCases);
+const totInvByDate = Array.from({length:12},(_,i)=>sumInvoicesByMonth(i,selectedYear)).reduce((a,b)=>a+b,0);
+const totAtlas = Math.max(0, totInvByDate - totMyPay - totSupply);
+const totUpcomingCases = upcomingPreops.length;
+const totUpcomingDays = new Set(upcomingPreops.map(r=>r['po-surgeryDate'])).size;
+const totUpcomingProj = upcomingProjPay(upcomingPreops);
+monthEl.innerHTML =
+gridRow([
+hdr('Month'), hdr('Cases','center'), hdr('Days','center'), hdr('Hrs','center'),
+hdr('Proj. Pay','right','Pre-op est. hrs × $600'),
+hdr('My Pay','right','Actual hrs × center rate'),
+hdr('Invoiced','right'),
+hdr('Supply Cost','right'),
+hdr('Atlas Takeaway','right','Invoiced − My Pay − Supply Cost')
+], 'padding-bottom:8px;border-bottom:2px solid var(--border-strong);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)') +
+months.map((m,i)=>{
+const mc = byMonth[i];
+const uc = upcomingByMonth[i];
+const hasFinalized = mc.length > 0;
+const hasUpcoming = uc.length > 0;
+if(!hasFinalized && !hasUpcoming) return gridRow([
+`<span style="color:var(--text-faint);font-size:12px">${m}</span>`,
+d_('center'),d_('center'),d_('center'),d_(),d_(),d_(),d_(),d_()
+], 'padding:6px 0;border-bottom:1px solid var(--border)');
+const hrs = calcHours(mc);
+const projPay = calcProjPay(mc) + upcomingProjPay(uc);
+const myPay = calcMyPay(mc);
+const inv = sumInvoicesByMonth(i, selectedYear);
+const supply = calcSupply(mc);
+const atlas = Math.max(0, inv - myPay - supply);
+const totalCases = mc.length + uc.length;
+const totalDays = new Set([...mc.map(c=>c.date),...uc.map(r=>r['po-surgeryDate'])]).size;
+// Label upcoming count if mixed
+const casesLabel = uc.length > 0
+? `<span style="font-size:13px;text-align:center">${mc.length}<span style="font-size:10px;color:var(--info);font-style:italic"> +${uc.length}</span></span>`
+: `<span style="font-size:13px;text-align:center">${mc.length}</span>`;
+return gridRow([
+`<span style="font-size:13px;font-weight:600">${m}</span>`,
+casesLabel,
+`<span style="font-size:13px;text-align:center">${totalDays}</span>`,
+`<span style="font-size:13px;text-align:center;font-family:'DM Mono',monospace">${hrs>0?hrs.toFixed(1):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${projPay>0?'$'+projPay.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:#166534;text-align:right">${myPay>0?'$'+myPay.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${inv>0?'$'+inv.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--warn);text-align:right">${supply>0?'$'+supply.toFixed(2):'—'}</span>`,
+`<span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--info);font-weight:600;text-align:right">${inv>0?'$'+atlas.toFixed(2):'—'}</span>`
+], `padding:7px 0;border-bottom:1px solid var(--border);align-items:center${uc.length>0?';background:rgba(29,53,87,0.02)':''}`);
+}).join('') +
+`<div style="display:grid;grid-template-columns:${cols};gap:5px;padding:10px 0;border-top:2px solid var(--border-strong);align-items:center">
+<span style="font-size:13px;font-weight:700">Finalized</span>
+<span style="font-size:13px;font-weight:700;text-align:center">${yearCases.length}</span>
+<span style="font-size:13px;font-weight:700;text-align:center">${uniqueDays(yearCases)}</span>
+<span style="font-size:13px;font-weight:700;text-align:center;font-family:'DM Mono',monospace">${totHrs>0?totHrs.toFixed(1):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${totProjPay>0?'$'+totProjPay.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:#166534;text-align:right">${totMyPay>0?'$'+totMyPay.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent);text-align:right">${totInvByDate>0?'$'+totInvByDate.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--warn);text-align:right">${totSupply>0?'$'+totSupply.toFixed(2):'—'}</span>
+<span style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:var(--info);text-align:right">${totInvByDate>0?'$'+totAtlas.toFixed(2):'—'}</span>
+</div>` +
+(totUpcomingCases > 0 ? `<div style="display:grid;grid-template-columns:${cols};gap:5px;padding:8px 0;border-top:1px dashed var(--border);align-items:center;background:rgba(29,53,87,0.03)">
+<span style="font-size:12px;font-weight:600;color:var(--info);font-style:italic">Upcoming</span>
+<span style="font-size:12px;text-align:center;color:var(--info)">${totUpcomingCases}</span>
+<span style="font-size:12px;text-align:center;color:var(--info)">${totUpcomingDays}</span>
+<span style="font-size:12px;text-align:center;color:var(--text-faint)">—</span>
+<span style="font-size:12px;font-family:'DM Mono',monospace;color:#6b7280;text-align:right;font-style:italic">${totUpcomingProj>0?'$'+totUpcomingProj.toFixed(2):'—'}</span>
+<span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
+<span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
+<span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
+<span style="font-size:12px;text-align:right;color:var(--text-faint)">—</span>
+</div>` : '');
+};
 // ── CS TRANSFER LOG ──
 window.showAddTransferForm = function() {
 const form = document.getElementById('transfer-form');
@@ -5064,16 +5224,6 @@ window.onCustomFlatChange = function() {
   _updateFlatSummary(proc,amt);
 };
 
-
-window.previewFax = function() {
-  if(!_faxRecord) return;
-  const preview = document.getElementById('faxPreviewContent');
-  if(preview) {
-    preview.innerHTML = buildFaxHTML(_faxRecord);
-    preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-};
-
 // ── BROWSER BACK BUTTON ──
 window.addEventListener('popstate', (event) => {
 const tab = event.state?.tab || 'preop';
@@ -5128,20 +5278,8 @@ window.openFaxModalFromForm = function() {
   const centerId = document.getElementById('po-surgery-center')?.value;
   const center = surgeryCenters.find(c => c.id === centerId);
   const faxInput = document.getElementById('fax-destination');
-  if(faxInput) faxInput.value = center?.faxNumber || '+1';
+  if(faxInput) faxInput.value = center?.faxNumber || '';
 
-  // Pre-populate editable modal fields
-  const _center2 = (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center']);
-  const _toEl = document.getElementById('fax-to');
-  const _attnEl = document.getElementById('fax-attn');
-  const _nameEl = document.getElementById('fax-patient-name');
-  const _dobEl = document.getElementById('fax-dob');
-  const _pagesEl = document.getElementById('fax-pages');
-  if(_toEl) _toEl.value = _center2?.name || r['po-surgery-center'] || '';
-  if(_attnEl) _attnEl.value = '';
-  if(_nameEl) _nameEl.value = [r['po-firstName']||'',r['po-lastName']||''].filter(Boolean).join(' ') || r['po-patient']||'';
-  if(_dobEl) _dobEl.value = r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '';
-  if(_pagesEl) _pagesEl.value = '';
   // Build preview and show modal
   document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
   document.getElementById('faxModal').style.display = 'flex';
@@ -5165,7 +5303,7 @@ window.openFaxModal = async function(id) {
 
     const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
     const faxInput = document.getElementById('fax-destination');
-    if(faxInput) faxInput.value = center?.faxNumber || '+1';
+    if(faxInput) faxInput.value = center?.faxNumber || '';
 
     const modal = document.getElementById('faxModal');
     if(!modal) { alert('Fax modal not found in DOM.'); return; }
@@ -5185,7 +5323,6 @@ window.closeFaxModal = function() {
 };
 
 window.confirmAndSendFax = async function() {
-  if(_faxRecord) document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(_faxRecord);
   const faxNumber = document.getElementById('fax-destination').value.trim();
   if(!faxNumber) { alert('Please enter a destination fax number.'); return; }
   if(!faxNumber.startsWith('+')) { alert('Please include the country code, e.g. +12345678901'); return; }
@@ -5227,70 +5364,161 @@ window.confirmAndSendFax = async function() {
 };
 
 function buildFaxHTML(r) {
-  const now = new Date();
-  const today = now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-  const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-  const worker = (typeof currentWorker !== 'undefined' ? currentWorker : null) || r.worker || 'dev';
-  const providerName = worker === 'josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
-  const providerCreds = 'CRNA, Anesthesiology';
-  const phone = worker === 'josh' ? '7154996858' : '2625739095';
-  const patientName = document.getElementById('fax-patient-name')?.value.trim()
-    || [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ')
-    || r['po-patient']||'';
-  const dob = document.getElementById('fax-dob')?.value.trim()
-    || (r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '');
-  const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '';
-  const centerName = document.getElementById('fax-to')?.value.trim()
-    || (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center'])?.name
-    || r['po-surgery-center']||'';
-  const attn = document.getElementById('fax-attn')?.value.trim() || '';
-  const pages = document.getElementById('fax-pages')?.value.trim() || '';
+  const today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const caseId = r['po-caseId']||'—';
+  const provider = r['po-provider']||'—';
+  const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
+  const callDT = r['po-callDateTime'] ? new Date(r['po-callDateTime']).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+  const worker = r.worker==='dev' ? 'Devarsh Murthy, CRNA' : 'Josh Condado, CRNA';
+  const center = surgeryCenters.find(c => c.id === r['po-surgery-center']);
+  const centerName = center?.name||'—';
 
-  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.4">
-  <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
-    <tr>
-      <td style="width:50%;vertical-align:top;padding:8px 0">
-        <div style="font-size:18px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div>
-        <div style="font-size:11px;color:#444;margin-top:2px">${providerName} | ${providerCreds}</div>
-      </td>
-      <td style="width:50%;vertical-align:middle;text-align:right;padding:8px 0">
-        <div style="font-size:14px;font-weight:bold;color:#1d3557">Facsimile Transmission Cover Sheet</div>
-      </td>
-    </tr>
-  </table>
-  <hr style="border:none;border-top:2px solid #1d3557;margin:0 0 10px 0">
-  <div style="background:#f8f8f8;border:1px solid #ccc;padding:8px 12px;font-size:10px;color:#555;margin-bottom:12px;line-height:1.5">
-    <strong>Confidentiality Notice:</strong> This facsimile transmission contains confidential information, which may be legally privileged and is intended only for the use of the individual(s) named below. If you are not the intended recipient, you are hereby notified that any disclosure, copying, distribution, or action taken in reliance upon the contents of this transmission is strictly prohibited. If you have received this fax in error, please notify the sender immediately and destroy all copies.
+  // Helper: collect checked flags from checkboxes
+  const flags = (keys, prefix) => keys.filter(x=>r[prefix+x]).map(x=>x.toUpperCase().replace(/-/g,' ')).join(', ');
+
+  // All system findings
+  const cv     = [r['po-cv-neg']?'NEG':'', ...['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase())].filter(Boolean).join(', ');
+  const cvNote = r['po-cv-comment']||r['po-cv-other-val']||'';
+  const ekg    = [r['po-ekg-nsr']?'NSR':'', ...['afib','bbb','lvh','chngs'].filter(x=>r['po-ekg-'+x]).map(x=>x.toUpperCase())].filter(Boolean).join(', ');
+  const ekgNote= r['po-ekg-comment']||r['po-ekg-other-val']||'';
+  const pulm   = [r['po-pulm-neg']?'NEG':'', ...['asthma','copd','uri','o2','cpap','sleep-apnea','smoker','bl-breath-sounds'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
+  const pulmNote=r['po-pulm-comment']||r['po-pulm-other-val']||'';
+  const gastro = [r['po-gastro-neg']?'NEG':'', ...['gerd','hiat-hern','ulcer'].filter(x=>r['po-gastro-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
+  const gastroNote=r['po-gastro-comment']||r['po-gastro-other-val']||'';
+  const renal  = [r['po-renal-neg']?'NEG':'', ...['dialysis','esrd'].filter(x=>r['po-renal-'+x]).map(x=>x.toUpperCase())].filter(Boolean).join(', ');
+  const renalNote=r['po-renal-comment']||r['po-renal-other-val']||'';
+  const neuro  = [r['po-neuro-neg']?'NEG':'', ...['depression','anxiety-disorder','seizures','cva','nm-disease'].filter(x=>r['po-neuro-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
+  const neuroNote=r['po-neuro-comment']||r['po-neuro-other-val']||'';
+  const meta   = [r['po-meta-neg']?'NEG':'', ...['iddm','niddm','thyroid','hx-hep','obesity','morbid-obesity'].filter(x=>r['po-meta-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
+  const metaNote=r['po-meta-comment']||r['po-meta-other-val']||'';
+  const other  = [...['hiv','hep-c','anemia','steroids','cancers','drug-abuse','coagulopathy','chemotherapy'].filter(x=>r['po-other-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].join(', ');
+  const otherNote=r['po-other-comment']||r['po-other-other-val']||'';
+  const teeth  = [...['intact','missing','denture'].filter(x=>r['po-teeth-'+x]).map(x=>x.toUpperCase())].join(', ');
+  const teethNote=r['po-teeth-comment']||r['po-teeth-other-val']||'';
+  const pupil  = [r['po-pupil-normal']?'NORMAL':'', r['po-pupil-dilated']?'DILATED':'', r['po-pupil-constricted']?'CONSTRICTED':''].filter(Boolean).join(', ');
+  const pupilNote=r['po-pupil-comment']||r['po-pupil-other-val']||'';
+
+  // Physical exam
+  const heartWNL = r['po-heart-wnl'] ? 'WNL' : '';
+  const heartNote = r['po-heart-notes']||'';
+  const lungsWNL = r['po-lungs-wnl'] ? 'WNL' : '';
+  const lungsNote = r['po-lungs-notes']||'';
+  const abdWNL = r['po-abd-wnl'] ? 'WNL' : '';
+  const abdNote = r['po-abd-notes']||'';
+
+  // Weight/BMI
+  const weightLbs = r['po-weight-lbs']||'';
+  const weightKg = r['po-weight-kg-val']||'';
+  const bmi = r['po-bmi-val']||'';
+  const heightFt = r['po-height-ft']||'';
+  const heightIn = r['po-height-in']||'';
+  const heightCm = r['po-height-cm-val']||'';
+  const weightStr = [weightLbs?weightLbs+' lbs':'', weightKg?weightKg+' kg':''].filter(Boolean).join(' / ');
+  const heightStr = [heightFt&&heightIn?heightFt+"'"+heightIn+'"':'', heightCm?heightCm+' cm':''].filter(Boolean).join(' / ');
+
+  // Vitals / VSS
+  const vss = r['po-vss']||'';
+  const assessTime = r['po-assessTime']||'';
+
+  // Driver / NPO
+  const driverName = r['po-driverName']||'';
+  const driverRel = r['po-driverRel']||'';
+  const nodriveNote = r['po-nodrive']||'';
+  const npo = r['po-npo'] ? 'Confirmed' : 'Not confirmed';
+  const qa = r['po-qa']||'';
+
+  // Helpers
+  const sec = (title) => `<tr><td colspan="4" style="padding:10px 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#333;border-bottom:1px solid #ccc">${title}</td></tr>`;
+  const row2 = (label,val,note) => (val||note) ? `<tr><td style="padding:4px 10px 4px 0;font-size:11px;font-weight:700;color:#555;white-space:nowrap;vertical-align:top;width:130px">${label}</td><td style="padding:4px 0;font-size:12px;color:#000">${val||''}${note?`<span style="color:#555;font-style:italic;font-size:11px"> — ${note}</span>`:''}` + `</td></tr>` : '';
+  const row4 = (l1,v1,l2,v2) => (v1||v2)?`<tr><td style="padding:4px 10px 4px 0;font-size:11px;font-weight:700;color:#555;white-space:nowrap;vertical-align:top;width:120px">${l1}</td><td style="padding:4px 10px 4px 0;font-size:12px;color:#000;width:160px">${v1||'—'}</td><td style="padding:4px 10px 4px 0;font-size:11px;font-weight:700;color:#555;white-space:nowrap;width:120px">${l2}</td><td style="padding:4px 0;font-size:12px;color:#000">${v2||'—'}</td></tr>`:'';
+  const flag = (val) => val ? `<span style="display:inline-block;background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;margin:1px 2px">${val}</span>` : '';
+
+  return `<div style="font-family:Arial,sans-serif;color:#000;font-size:12px;line-height:1.4">
+
+  <!-- LETTERHEAD -->
+  <div style="border-bottom:3px solid #000;padding-bottom:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start">
+    <div><div style="font-size:20px;font-weight:700;letter-spacing:1px">ATLAS ANESTHESIA</div><div style="font-size:10px;color:#555;margin-top:2px">Pre-Operative Anesthesia Assessment</div></div>
+    <div style="font-size:10px;text-align:right;color:#555"><div>${today}</div><div style="margin-top:2px;font-weight:700">CONFIDENTIAL FAX</div></div>
   </div>
-  <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:130px">DATE:</td><td style="padding:5px 8px;border:1px solid #bbb">${today}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:80px">TIME:</td><td style="padding:5px 8px;border:1px solid #bbb">${timeStr}</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TO:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${centerName}</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX TO:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${document.getElementById('fax-destination')?.value||''}</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">ATTN:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${attn}</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${providerName} — Atlas Anesthesia</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">Atlas Anesthesia</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PHONE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${phone}</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td><td style="padding:5px 8px;border:1px solid #bbb">${pages}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td><td style="padding:5px 8px;border:1px solid #bbb">Patient Medical Records Request</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PATIENT NAME:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${patientName}</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">DATE OF BIRTH:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${dob}</td></tr>
-    ${surgDate ? `<tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">SURGERY DATE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${surgDate}</td></tr>` : ''}
+
+  <!-- COVER FIELDS -->
+  <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+    <tr style="background:#f0f0f0"><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;width:70px">TO:</td><td style="padding:6px 10px;font-size:12px;font-weight:600">${provider}</td><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;width:55px">DATE:</td><td style="padding:6px 10px;font-size:11px">${today}</td></tr>
+    <tr><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">FROM:</td><td style="padding:6px 10px;font-size:11px">${worker}</td><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">PAGES:</td><td style="padding:6px 10px;font-size:11px">1</td></tr>
+    <tr style="background:#f0f0f0"><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">RE:</td><td style="padding:6px 10px;font-size:11px" colspan="3">Pre-Op Assessment — Case <strong>${caseId}</strong> — Surgery: <strong>${surgDate}</strong></td></tr>
+    <tr><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">FACILITY:</td><td style="padding:6px 10px;font-size:11px" colspan="3">${centerName}</td></tr>
   </table>
-  <p style="color:#b91c1c;font-weight:bold;font-size:13px;margin:0 0 10px 0">⚠ Urgent — Please Respond ASAP</p>
-  <p style="margin:0 0 8px 0">Dear,</p>
-  <p style="margin:0 0 8px 0">We are writing on behalf of <strong>${providerName}</strong> at <strong>Atlas Anesthesia</strong> regarding the above-named patient who is scheduled for an upcoming anesthesia procedure at our facility. In order to ensure the safest and most comprehensive anesthesia care plan, we are respectfully requesting the following records be transmitted to our office at your earliest convenience — <strong>preferably as soon as possible</strong>.</p>
-  <p style="margin:0 0 6px 0">Please fax the following documents for the patient listed above:</p>
-  <ul style="margin:0 0 10px 20px;padding:0">
-    <li style="margin-bottom:4px">Most recent <strong>History &amp; Physical (H&amp;P)</strong></li>
-    <li style="margin-bottom:4px">Any and all applicable <strong>Laboratory Work / Lab Results</strong> (e.g., CBC, CMP, BMP, coagulation studies, or other relevant panels)</li>
-    <li style="margin-bottom:4px">Any additional pertinent medical records relevant to anesthesia clearance</li>
-  </ul>
-  <p style="margin:0 0 8px 0">Timely receipt of these records is critical to our pre-operative assessment and scheduling process. If you have any questions or require a signed release of information form, please do not hesitate to contact our office directly.</p>
-  <p style="margin:0 0 8px 0">We sincerely appreciate your prompt attention to this matter. Thank you for your cooperation.</p>
-  <p style="margin:0 0 24px 0">Warm regards,</p>
-  <div style="border-top:1px solid #000;width:220px;padding-top:4px;font-size:11px">
-    ${providerName}<br>Atlas Anesthesia<br>Phone: ${phone}
+
+  <div style="border:1px solid #999;padding:6px 10px;font-size:10px;margin-bottom:14px;background:#fffde7"><strong>CONFIDENTIALITY NOTICE:</strong> This fax contains privileged and confidential health information intended solely for the named recipient. If received in error, please notify the sender immediately and destroy this document.</div>
+
+  <div style="border-top:2px solid #000;margin:14px 0"></div>
+
+  <!-- H&P TITLE -->
+  <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;border-bottom:1px solid #000;padding-bottom:5px">Pre-Operative History & Physical</div>
+
+  <!-- ALERTS -->
+  ${r['po-allergies']?`<div style="background:#fff0f0;border:2px solid #c00;padding:7px 10px;margin-bottom:8px;font-size:11px"><strong style="color:#c00;font-size:12px">⚠ ALLERGIES: ${r['po-allergies']}</strong></div>`:''}
+  ${r['po-iv-difficulty']?`<div style="background:#fffbe6;border:1px solid #f59e0b;padding:6px 10px;margin-bottom:6px;font-size:11px"><strong>⚠ Difficult IV Access</strong>${r['po-iv-difficulty-comment']?' — '+r['po-iv-difficulty-comment']:''}</div>`:''}
+  ${r['po-anesthesia-issues']?`<div style="background:#fffbe6;border:1px solid #f59e0b;padding:6px 10px;margin-bottom:6px;font-size:11px"><strong>⚠ Previous Anesthesia Issues</strong>${r['po-anesthesia-issues-comment']?' — '+r['po-anesthesia-issues-comment']:''}</div>`:''}
+
+  <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
+
+    <!-- CASE INFO -->
+    ${sec('Case Information')}
+    ${row4('Case ID',caseId,'Surgery Date',surgDate)}
+    ${row4('Provider',provider,'Facility',centerName)}
+    ${row4('Call Date/Time',callDT,'Est. Hours',r['po-est-hours']?r['po-est-hours']+' hr':'')}
+    ${row4('Worker',worker,'Invoice Email',r['po-patientEmail']||'')}
+
+    <!-- VITALS & PHYSICAL -->
+    ${sec('Vitals & Measurements')}
+    ${row4('Height',heightStr,'Weight',weightStr)}
+    ${row4('BMI',bmi?bmi:'—','Mallampati',r['mallampati']?'Class '+r['mallampati']:'')}
+    ${row4('VSS / Vitals',vss,'Assessment Time',assessTime)}
+
+    <!-- PHYSICAL EXAM -->
+    ${sec('Physical Examination')}
+    ${row2('Heart',[heartWNL,heartNote].filter(Boolean).join(' — '))}
+    ${row2('Lungs',[lungsWNL,lungsNote].filter(Boolean).join(' — '))}
+    ${row2('Abdomen',[abdWNL,abdNote].filter(Boolean).join(' — '))}
+    ${row2('Pupils',pupil,pupilNote)}
+    ${row2('Teeth/Dentition',teeth,teethNote)}
+    ${row2('Venipuncture',r['po-venipuncture']||'')}
+
+    <!-- SYSTEMS REVIEW -->
+    ${sec('Systems Review')}
+    ${row2('Cardiovascular',cv,cvNote)}
+    ${row2('EKG',ekg,ekgNote)}
+    ${row2('Pulmonary',pulm,pulmNote)}
+    ${row2('GI / Gastro',gastro,gastroNote)}
+    ${row2('Renal',renal,renalNote)}
+    ${row2('Neurological',neuro,neuroNote)}
+    ${row2('Metabolic / Endocrine',meta,metaNote)}
+    ${row2('Other / Hematology',other,otherNote)}
+
+    <!-- HISTORY -->
+    ${sec('Medical & Social History')}
+    ${row2('Surgical History',r['po-surgicalHistory']||'')}
+    ${row2('Current Medications',r['po-medications']||'')}
+
+    <!-- PRE-OP CHECKLIST -->
+    ${sec('Pre-Op Checklist')}
+    ${row4('NPO Status',npo,'Driver',driverName?(driverName+(driverRel?' ('+driverRel+')':'')):'—')}
+    ${row2('No-Drive Note',nodriveNote)}
+    ${row2('Q&A / Notes',qa)}
+
+    <!-- INTRA-OP -->
+    ${sec('Intra-Operative')}
+    ${row4('Total Fluids',r['po-totalFluids']||'—','EBL',r['po-ebl']||'—')}
+
+    <!-- COMMENTS -->
+    ${r['po-comments']?sec('Comments')+''+row2('',r['po-comments']):''}
+
+  </table>
+
+  <div style="border-top:1px solid #ccc;margin-top:14px;padding-top:8px;font-size:9px;color:#777;text-align:center">
+    Atlas Anesthesia · Pre-Operative Anesthesia Assessment · ${today} · CONFIDENTIAL
   </div>
-  <p style="font-size:9px;color:#666;margin-top:16px;border-top:1px solid #ccc;padding-top:6px">This fax is intended solely for the use of the individual or entity to which it is addressed and may contain information that is privileged, confidential, and/or exempt from disclosure under applicable law.</p>
 </div>`;
 }
 
@@ -5298,992 +5526,25 @@ function checkHistoryDeposits(cases) {
   // stub — Stripe auto-check disabled
 }
 
-
-// ── SYNC PAYMENT ROWS FROM CASE DATA ─────────────────────────────────────────
-function syncPaymentRowsFromCases() {
-  const finalized = (cases||[]).filter(c => !c.draft);
-  let changed = false;
-  finalized.forEach(c => {
-    const rowIdx = _paymentRows.findIndex(r => r.caseId === c.caseId);
-    if(rowIdx !== -1) {
-      // Update case date if it changed
-      if(_paymentRows[rowIdx].caseDate !== c.date) {
-        _paymentRows[rowIdx].caseDate = c.date || '';
-        changed = true;
-      }
-      // Update worker
-      if(_paymentRows[rowIdx].worker !== c.worker) {
-        _paymentRows[rowIdx].worker = c.worker;
-        changed = true;
-      }
-      // Update case cost from case total
-      if(c.total && _paymentRows[rowIdx].caseCost !== c.total) {
-        _paymentRows[rowIdx].caseCost = c.total;
-        changed = true;
-      }
-    } else {
-      // New finalized case — add to payments
-      const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
-      const sc = preop?.['po-surgery-center'] || '';
-      const scCenter = (window.surgeryCenters||[]).find(c2 => c2.id === sc);
-      const callDt = preop?.['po-callDateTime'];
-      const callDate = callDt ? callDt.split('T')[0] : '';
-      _paymentRows.push({
-        id: uid(), caseId: c.caseId,
-        name: c.caseId || '',
-        worker: c.worker || 'josh',
-        caseDate: c.date || preop?.['po-surgeryDate'] || '',
-        callDate,
-        depositDate: '', paidDate: '',
-        invoiceSent: c.manuallyInvoiced || false,
-        paid: c.depositStatus === 'paid' || false,
-        invoicedAmount: 0, caseCost: c.total || 0,
-        estHrs: parseFloat(preop?.['po-est-hours']) || 0,
-        projected: (parseFloat(preop?.['po-est-hours']) || 0) * 600,
-        surgeryCenter: sc,
-        surgeryCenterName: scCenter?.name || ''
-      });
-      changed = true;
-    }
-  });
-  // Also sync call dates from preop
-  (window._rawPreopRecords||[]).forEach(r => {
-    const rowIdx = _paymentRows.findIndex(pr => pr.caseId === r['po-caseId']);
-    if(rowIdx !== -1) {
-      const callDate = r['po-callDateTime']?.split('T')[0] || '';
-      const estHrs = parseFloat(r['po-est-hours']) || 0;
-      const sc = r['po-surgery-center'] || '';
-      const scCenter = (window.surgeryCenters||[]).find(c => c.id === sc);
-      if(_paymentRows[rowIdx].callDate !== callDate) { _paymentRows[rowIdx].callDate = callDate; changed = true; }
-      if(_paymentRows[rowIdx].estHrs !== estHrs) { _paymentRows[rowIdx].estHrs = estHrs; changed = true; }
-      if(_paymentRows[rowIdx].surgeryCenter !== sc) { _paymentRows[rowIdx].surgeryCenter = sc; _paymentRows[rowIdx].surgeryCenterName = scCenter?.name||''; changed = true; }
-      if(r['po-surgeryDate'] && _paymentRows[rowIdx].caseDate !== r['po-surgeryDate']) { _paymentRows[rowIdx].caseDate = r['po-surgeryDate']; changed = true; }
-    }
-  });
-  if(changed) {
-    // Save and re-render if payments tab is visible
-    setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
-    if(document.getElementById('tab-payments')?.classList.contains('active')) {
-      renderPaymentRows();
-    }
-  }
-}
-
-
-window.sortPaymentRows = function() {
-  const mode = document.getElementById('pm-sort')?.value || 'date-asc';
-  _paymentRows.sort((a, b) => {
-    if(mode === 'date-asc')  return (a.caseDate||'9999').localeCompare(b.caseDate||'9999');
-    if(mode === 'date-desc') return (b.caseDate||'').localeCompare(a.caseDate||'');
-    if(mode === 'who')       return (a.worker||'').localeCompare(b.worker||'');
-    if(mode === 'center')    return (a.surgeryCenterName||'').localeCompare(b.surgeryCenterName||'');
-    if(mode === 'inv')       return (b.invoiceSent?1:0) - (a.invoiceSent?1:0);
-    return 0;
-  });
-  renderPaymentRows();
-};
-
-
-window.editPaymentField = function(field, rowIdx) {
-  const isProj = field === 'proj';
-  const label = isProj ? 'Projected Income' : 'Invoiced Amount';
-  const currentVal = isProj
-    ? (_paymentRows[rowIdx]?.projOverride != null ? _paymentRows[rowIdx].projOverride : (_paymentRows[rowIdx]?.estHrs||0)*600)
-    : (_paymentRows[rowIdx]?.invoicedAmount || 0);
-
-  // Remove any existing edit popup
-  const existing = document.getElementById('payment-edit-popup');
-  if(existing) existing.remove();
-
-  // Create popup overlay
-  const overlay = document.createElement('div');
-  overlay.id = 'payment-edit-popup';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
-
-  overlay.innerHTML = `
-    <div style="background:var(--surface);border-radius:12px;padding:28px 32px;width:320px;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center">
-      <div style="font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Edit ${label}</div>
-      <div style="font-size:11px;color:var(--text-faint);margin-bottom:16px">${isProj ? 'Overrides auto-calculated Hrs × $600' : 'Overrides amount set by invoice modal'}</div>
-      <input id="payment-edit-popup-input" type="number" step="0.01" min="0" value="${currentVal.toFixed(2)}"
-        style="width:100%;padding:12px 14px;font-size:22px;font-weight:700;font-family:DM Mono,monospace;border:2px solid var(--info);border-radius:8px;background:var(--bg);color:var(--text);text-align:center;outline:none;box-sizing:border-box">
-      <div style="display:flex;gap:10px;margin-top:18px">
-        <button id="payment-edit-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>
-        <button id="payment-edit-save" style="flex:2;padding:10px;border:none;border-radius:8px;background:var(--info);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Save Amount</button>
-      </div>
-    </div>`;
-
-  document.body.appendChild(overlay);
-
-  const inp = document.getElementById('payment-edit-popup-input');
-  const saveBtn = document.getElementById('payment-edit-save');
-  const cancelBtn = document.getElementById('payment-edit-cancel');
-
-  const doSave = () => {
-    const val = parseFloat(inp.value) || 0;
-    commitPaymentField(field, rowIdx, val);
-    overlay.remove();
-  };
-  const doCancel = () => overlay.remove();
-
-  saveBtn.addEventListener('click', doSave);
-  cancelBtn.addEventListener('click', doCancel);
-  overlay.addEventListener('click', e => { if(e.target === overlay) doCancel(); });
-  inp.addEventListener('keydown', e => {
-    if(e.key === 'Enter') doSave();
-    if(e.key === 'Escape') doCancel();
-  });
-
-  requestAnimationFrame(() => { inp.focus(); inp.select(); });
-};
-
-window.commitPaymentField = function(field, idx, rawVal) {
-  const val = parseFloat(rawVal) || 0;
-  if(field === 'proj') {
-    _paymentRows[idx].projOverride = val;
-  } else {
-    _paymentRows[idx].invoicedAmount = val;
-  }
-  // Save to Firestore
-  setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
-  renderPaymentRows();
-  renderPaymentSummary();
-};
-
-
-// Auto-save payments after any field change (debounced 800ms)
-let _paymentSaveTimer = null;
-function autoSavePayments() {
-  clearTimeout(_paymentSaveTimer);
-  _paymentSaveTimer = setTimeout(async () => {
-    _paymentRows = _paymentRows.map((row, i) => ({
-      ...row,
-      depositDate: document.getElementById('pr-depositDate'+i)?.value || row.depositDate || '',
-      paidDate:    document.getElementById('pr-paidDate'+i)?.value    || row.paidDate    || '',
-      dep500Paid:  document.getElementById('pr-dep500'+i)?.checked    ?? row.dep500Paid  ?? false,
-      paid:        document.getElementById('pr-paid'+i)?.checked      ?? row.paid,
-      invoiceSent: document.getElementById('pr-inv'+i)?.checked       ?? row.invoiceSent,
-    }));
-    try {
-      await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows });
-      // Brief visual feedback on save button
-      const btn = document.querySelector('[onclick="savePaymentRows()"]');
-      if(btn) { const orig=btn.textContent; btn.textContent='✓ Saved'; setTimeout(()=>btn.textContent=orig, 1200); }
-    } catch(e) { console.error('Auto-save failed:', e); }
-  }, 800);
-}
-
-// ── PAYMENTS TAB ──────────────────────────────────────────────────────────────
-let _paymentRows = [];
-let _invoiceModalRowIdx = null;
-
-async function loadPaymentRows() {
-  runDailyPaymentBackup();
-
-  // Fetch all data fresh in parallel so we don't depend on load order
-  const [paymentsSnap, casesSnap, preopSnap, scSnap] = await Promise.all([
-    getDoc(doc(db,'atlas','payments')),
-    getDoc(doc(db,'atlas','cases')),
-    getDoc(doc(db,'atlas','preop')),
-    getDoc(doc(db,'atlas','surgerycenters'))
-  ]);
-
-  _paymentRows = paymentsSnap.exists() ? (paymentsSnap.data().rows || []) : [];
-
-  // Refresh global caches with fresh data
-  const freshCases = casesSnap.exists() ? (casesSnap.data().cases || []) : (cases || []);
-  const freshPreop = preopSnap.exists() ? (preopSnap.data().records || []) : [];
-  const freshCenters = scSnap.exists() ? (scSnap.data().centers || []) : (window.surgeryCenters || []);
-  window._rawPreopRecords = freshPreop;
-  if(freshCenters.length) window.surgeryCenters = freshCenters;
-
-  // Merge every finalized case into payment rows
-  const finalized = freshCases.filter(c => !c.draft);
-  finalized.forEach(c => {
-    const preop = freshPreop.find(r => r['po-caseId'] === c.caseId);
-    const scId = preop?.['po-surgery-center'] || '';
-    const center = freshCenters.find(sc => sc.id === scId);
-    const callDt = preop?.['po-callDateTime'];
-    const callDate = callDt ? callDt.split('T')[0] : '';
-    const caseDate = preop?.['po-surgeryDate'] || c.date || '';
-    const estHrs = parseFloat(preop?.['po-est-hours']) || 0;
-
-    const existIdx = _paymentRows.findIndex(r => r.caseId === c.caseId);
-    if(existIdx === -1) {
-      // New case — add row
-      _paymentRows.push({
-        id: uid(), caseId: c.caseId,
-        name: c.caseId || '',
-        worker: c.worker || 'josh',
-        caseDate, callDate,
-        depositDate: '', paidDate: '',
-        paid: false, invoiceSent: false,
-        invoicedAmount: 0, caseCost: c.total || 0,
-        estHrs, projected: estHrs * 600,
-        surgeryCenter: scId,
-        surgeryCenterName: center?.name || ''
-      });
-    } else {
-      // Existing row — update read-only fields from live data
-      _paymentRows[existIdx] = {
-        ..._paymentRows[existIdx],
-        name: c.caseId || _paymentRows[existIdx].name,
-        worker: c.worker || _paymentRows[existIdx].worker,
-        caseDate,
-        callDate: callDate || _paymentRows[existIdx].callDate,
-        caseCost: c.total || _paymentRows[existIdx].caseCost,
-        estHrs: estHrs || _paymentRows[existIdx].estHrs,
-        projected: (estHrs || _paymentRows[existIdx].estHrs) * 600,
-        surgeryCenter: scId || _paymentRows[existIdx].surgeryCenter,
-        surgeryCenterName: center?.name || _paymentRows[existIdx].surgeryCenterName || ''
-      };
-    }
-  });
-
-  // Sort by case date ascending (earliest first)
-  _paymentRows.sort((a,b) => (a.caseDate||'9999').localeCompare(b.caseDate||'9999'));
-
-  renderPaymentRows();
-}
-
-window.savePaymentRows = async function() {
-  // Only save editable fields from DOM — everything else kept from row data
-  // invoicedAmount and projOverride are already in _paymentRows from commitPaymentField
-  _paymentRows = _paymentRows.map((row, i) => {
-    return {
-      ...row,  // preserve all read-only fields + invoicedAmount + projOverride
-      depositDate: document.getElementById('pr-depositDate'+i)?.value || row.depositDate || '',
-      paidDate:    document.getElementById('pr-paidDate'+i)?.value    || row.paidDate    || '',
-      dep500Paid:  document.getElementById('pr-dep500'+i)?.checked    ?? row.dep500Paid ?? false,
-      paid:        document.getElementById('pr-paid'+i)?.checked      ?? row.paid,
-      invoiceSent: document.getElementById('pr-inv'+i)?.checked       ?? row.invoiceSent,
-    };
-  });
-  try {
-    setSyncing(true);
-    await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows });
-    setSyncing(false);
-    renderPaymentSummary();
-    alert('✓ Saved!');
-  } catch(e) { setSyncing(false); alert('Error: ' + e.message); }
-};
-
-// addPaymentRow removed — cases load automatically;
-
-window.deletePaymentRow = async function(idx) {
-  if(!confirm('⚠️ Delete this payment row?\n\nThis will permanently remove this record from the Payments tracker.\n\nThis cannot be undone.')) return;
-  _paymentRows.splice(idx, 1);
-  setSyncing(true);
-  await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows });
-  setSyncing(false);
-  renderPaymentRows();
-};
-
-// updatePaymentProjected removed — hrs is now read-only from Pre-Op
-
-function renderPaymentSummary() {
-  let earned=0, projected=0, invoiced=0, invAmt=0, pending=0;
-  _paymentRows.forEach((r,i) => {
-    // Always read from row data — DOM inputs may not exist (read-only fields are spans)
-    const paidChecked = document.getElementById('pr-paid'+i)?.checked ?? r.paid;
-    const invChecked  = document.getElementById('pr-inv'+i)?.checked  ?? r.invoiceSent;
-    const depositVal  = document.getElementById('pr-depositDate'+i)?.value || r.depositDate;
-
-    // Projected: use manual override if set, otherwise estHrs × 600
-    const proj = r.projOverride != null ? r.projOverride : (r.estHrs || 0) * 600;
-
-    // Invoiced amount: use row data directly (dom element is a display span, not input)
-    const ia = r.invoicedAmount || 0;
-
-    projected += proj;
-    invAmt += ia;  // sum ALL invoiced amounts regardless of inv checkbox
-  });
-  const fmt = n => '$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
-  const el = id => document.getElementById(id);
-  if(el('pm-projected')) el('pm-projected').textContent = fmt(projected);
-  if(el('pm-invoiced')) el('pm-invoiced').textContent = fmt(invAmt);
-}
-
-function renderPaymentRows() {
-  const body = document.getElementById('payments-table-body');
-  if(!body) return;
-  if(!_paymentRows.length) {
-    body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-faint);font-size:13px">No cases yet — save a Pre-Op to generate cases here automatically</div>';
-    renderPaymentSummary();
-    return;
-  }
-
-  // Helper: read-only cell
-  const ro = (val, color='var(--text-muted)', bold=false) =>
-    `<div style="font-size:11px;color:${color};font-weight:${bold?'600':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px" title="${val||''}">${val||'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>`;
-
-  // Helper: editable date input with red if empty
-  const dateInp = (id, val) => {
-    const empty = !val;
-    const bdr = empty ? '1px solid #fca5a5' : '1px solid var(--border)';
-    const bgc = empty ? 'rgba(239,68,68,0.06)' : 'var(--bg)';
-    return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:5px 4px;font-size:11px;border:${bdr};border-radius:5px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary();autoSavePayments()">`;
-  };
-
-  const COLS = '160px 50px 1fr 44px 68px 88px 88px 86px 32px 86px 38px 76px 38px 46px 30px';
-  const wcolor = w => w==='dev'?'var(--dev)':'var(--josh)';
-  const wname = w => w==='dev'?'Dev':'Josh';
-
-  body.innerHTML = _paymentRows.map((r, i) => {
-    // Completion: deposit date + remaining deposit date + paid checkbox + inv checkbox
-    const complete = r.depositDate && r.paidDate && r.paid && r.invoiceSent;
-    const bg = complete ? 'rgba(45,106,79,0.08)' : i%2===0?'var(--bg)':'var(--surface2)';
-    const borderLeft = complete ? '3px solid var(--accent)' : '3px solid transparent';
-
-    // Format call date for display
-    const callFmt = r.callDate ? new Date(r.callDate+'T12:00:00').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}) : '';
-    const caseFmt = r.caseDate ? new Date(r.caseDate+'T12:00:00').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}) : '';
-
-    // Surgery center name
-    const center = (window.surgeryCenters||[]).find(c => c.id === r.surgeryCenter);
-    const scName = center?.name || r.surgeryCenterName || '';
-
-    return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${borderLeft};align-items:center;min-height:40px">
-      <div style="padding:0 6px 0 10px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;height:40px;display:flex;align-items:center" title="${r.name||r.caseId||''}">${r.name||r.caseId||'—'}</div>
-      <div style="padding:4px 4px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${wname(r.worker)}</div>
-      <div style="padding:4px 4px">${ro(scName)}</div>
-      <div style="padding:4px 4px;font-size:11px;font-weight:600;color:var(--accent);text-align:right">${r.estHrs>0?r.estHrs+'h':'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
-      <div style="padding:4px 4px;display:flex;align-items:center;gap:3px" id="pr-proj-wrap${i}">
-        <span style="font-size:11px;font-weight:600;color:var(--accent);font-family:DM Mono,monospace;flex:1;text-align:right" id="pr-proj-display${i}">${r.projOverride!=null?'$'+Number(r.projOverride).toFixed(0):r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'<span style="color:#fca5a5;font-size:10px">—</span>'}</span>
-        <button onclick="editPaymentField('proj',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px;line-height:1;transition:color .15s" onmouseover="this.style.color='var(--info)'" onmouseout="this.style.color='var(--text-faint)'" title="Click to edit projected amount">✏</button>
-      </div>
-      <div style="padding:4px 4px">${ro(caseFmt)}</div>
-      <div style="padding:4px 4px">${ro(callFmt)}</div>
-      <div style="padding:4px 3px">${dateInp('pr-depositDate'+i, r.depositDate)}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
-      <div style="padding:4px 3px">${dateInp('pr-paidDate'+i, r.paidDate)}</div>
-      <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
-      <div style="padding:4px 4px;display:flex;align-items:center;gap:3px" id="pr-invamt-wrap${i}">
-        <span style="font-size:11px;font-weight:600;color:var(--info);font-family:DM Mono,monospace;flex:1;text-align:right" id="pr-invamt${i}">${r.invoicedAmount>0?'$'+Number(r.invoicedAmount).toFixed(2):'<span style="color:var(--text-faint)">—</span>'}</span>
-        <button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px;line-height:1;transition:color .15s" onmouseover="this.style.color='var(--info)'" onmouseout="this.style.color='var(--text-faint)'" title="Click to edit invoiced amount">✏</button>
-      </div>
-      <div style="padding:4px 4px;text-align:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:15px;height:15px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
-      <div style="padding:4px 3px">
-        <button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button>
-      </div>
-      <div style="padding:4px 8px;display:flex;justify-content:flex-end;align-items:center;padding-right:10px"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete row">🗑</button></div>
-    </div>`;
-  }).join('');
-  renderPaymentSummary();
-}
-
-// ── INVOICE MODAL ─────────────────────────────────────────────────────────────
-;
-
-window.closeInvoiceModal = function() {
-  // Re-enable surgery center dropdown for next open
-  const scSel = document.getElementById('inv-modal-sc-select');
-  if(scSel) { scSel.disabled = false; scSel.style.background=''; scSel.style.color=''; scSel.title=''; }
-  document.getElementById('invoiceModal').style.display = 'none';
-  _invoiceModalRowIdx = null;
-};
-
-window.calcInvModal = function() {
-  // If flat rate mode, delegate to flat rate calculator
-  if(document.getElementById('inv-modal-billing-type')?.value === 'flat') {
-    calcInvModalFlat();
-    return window._invModalCalc || null;
-  }
-  const start = document.getElementById('inv-modal-start')?.value;
-  const end = document.getElementById('inv-modal-end')?.value;
-  const fhr = parseFloat(document.getElementById('inv-modal-fhr')?.value) || 0;
-  const p15 = parseFloat(document.getElementById('inv-modal-p15')?.value) || 0;
-  const summEl = document.getElementById('inv-modal-summary');
-  const totEl = document.getElementById('inv-modal-total');
-  if(!start || !end || !fhr) { if(totEl) totEl.textContent='$0.00'; return null; }
-  const [sh,sm] = start.split(':').map(Number);
-  const [eh,em] = end.split(':').map(Number);
-  const totalMins = (eh*60+em)-(sh*60+sm);
-  if(totalMins<=0) { if(totEl) totEl.textContent='$0.00'; return null; }
-  const roundedMins = totalMins<=60 ? 60 : 60+Math.ceil((totalMins-60)/15)*15;
-  let total = fhr;
-  if(roundedMins>60) total += ((roundedMins-60)/15)*p15;
-  const billedStr = `${Math.floor(roundedMins/60)}h${roundedMins%60>0?' '+roundedMins%60+'m':''}`;
-  const actStr = billedStr;
-  if(summEl) summEl.textContent = `Billed: ${billedStr}`;
-  if(totEl) totEl.textContent = '$'+total.toFixed(2);
-  window._invModalCalc = { total, roundedMins, billedStr, actStr, start, end, fhr, p15 };
-  return window._invModalCalc;
-};
-
-function buildInvoiceModalHTML() {
-  const billingType = document.getElementById('inv-modal-billing-type')?.value || 'hourly';
-  return billingType === 'flat' ? buildFlatRateInvoiceHTML() : buildHourlyInvoiceHTML();
-}
-
-function _getInvoiceHeader() {
-  const w = (typeof currentWorker !== 'undefined' ? currentWorker : 'josh');
-  const provider = document.getElementById('inv-modal-provider')?.value || (w==='josh'?'Josh Condado':'Dr. Dev Murthy');
-  const phone = w==='josh'?'715-499-6858':'262-573-9095';
-  const scSel = document.getElementById('inv-modal-sc-select');
-  const center = (window.surgeryCenters||[]).find(c => c.id === scSel?.value);
-  const locInput = document.getElementById('inv-modal-location');
-  const location = (scSel?.value === '__custom__' || !center) ? (locInput?.value || '—') : (center?.name || '—');
-  const date = document.getElementById('inv-modal-date')?.value || '';
-  const formattedDate = date ? new Date(date+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
-  const invoiceNum = 'ATL-INV-'+(date||new Date().toISOString().split('T')[0]).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
-  window._currentInvoiceNum = invoiceNum;
-  return { provider, phone, location, date, formattedDate, invoiceNum, w };
-}
-
-function buildHourlyInvoiceHTML() {
-  const { provider, phone, location, formattedDate, invoiceNum } = _getInvoiceHeader();
-  const calc = window._invModalCalc || {};
-  const total = calc.total || 0;
-  const fmt12 = t => { if(!t) return '—'; const [h,m]=t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; };
-  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.5">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr>
-      <td style="vertical-align:top"><div style="font-size:17px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div>
-      <div style="font-size:10px;color:#444">${provider} | CRNA, Anesthesiology · ${phone}</div></td>
-      <td style="text-align:right;vertical-align:top">
-        <div style="font-size:20px;font-weight:bold;color:#1d3557">INVOICE</div>
-        <div style="font-size:9px;color:#666">${invoiceNum}</div>
-        <div style="font-size:9px;color:#666">${formattedDate}</div>
-      </td>
-    </tr></table>
-    <hr style="border:none;border-top:2px solid #1d3557;margin:4px 0 10px">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px">
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:110px">BILLED TO:</td><td style="padding:4px 8px;border:1px solid #bbb;font-weight:500">${location}</td><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:65px">DATE:</td><td style="padding:4px 8px;border:1px solid #bbb">${formattedDate}</td></tr>
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">${provider} — Atlas Anesthesia</td></tr>
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TIME:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">${fmt12(calc.start)} → ${fmt12(calc.end)} &nbsp;·&nbsp; Billed: ${calc.billedStr||'—'}</td></tr>
-    </table>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">
-      <tr style="background:#1d3557;color:#fff"><td style="padding:5px 8px;font-weight:bold">Description</td><td style="padding:5px 8px;font-weight:bold;text-align:center">Time</td><td style="padding:5px 8px;font-weight:bold;text-align:right">Amount</td></tr>
-      <tr style="background:#f0efe9"><td style="padding:5px 8px;border:1px solid #bbb">Anesthesia Services — First Hour</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:center">60 min</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:right;font-family:monospace">$${(calc.fhr||0).toFixed(2)}</td></tr>
-      ${(calc.roundedMins||0)>60?`<tr><td style="padding:5px 8px;border:1px solid #bbb">Additional Time (${((calc.roundedMins||0)-60)/15} × 15-min blocks)</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:center">${(calc.roundedMins||0)-60} min</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:right;font-family:monospace">$${(((calc.roundedMins||0)-60)/15*(calc.p15||0)).toFixed(2)}</td></tr>`:''}
-      <tr style="background:#1d3557;color:#fff"><td style="padding:6px 8px;font-weight:bold;font-size:13px" colspan="2">TOTAL DUE</td><td style="padding:6px 8px;font-weight:bold;font-size:15px;text-align:right;font-family:monospace">$${total.toFixed(2)}</td></tr>
-    </table>
-    <div style="font-size:9px;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px">Thank you for choosing Atlas Anesthesia · Mobile Anesthesia Services</div>
-  </div>`;
-}
-
-function buildFlatRateInvoiceHTML() {
-  const { provider, phone, location, formattedDate, invoiceNum } = _getInvoiceHeader();
-  const procSel = document.getElementById('inv-modal-flat-proc-select');
-  const procCustom = document.getElementById('inv-modal-flat-proc');
-  const proc = (procSel?.value === '__custom__' || !procSel?.value)
-    ? (procCustom?.value || 'Anesthesia Services')
-    : procSel.options[procSel.selectedIndex]?.text.split(' — ')[0] || 'Anesthesia Services';
-  const amt = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || 0;
-  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.5">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr>
-      <td style="vertical-align:top"><div style="font-size:17px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div>
-      <div style="font-size:10px;color:#444">${provider} | CRNA, Anesthesiology · ${phone}</div></td>
-      <td style="text-align:right;vertical-align:top">
-        <div style="font-size:20px;font-weight:bold;color:#1d3557">INVOICE</div>
-        <div style="font-size:9px;color:#666">${invoiceNum}</div>
-        <div style="font-size:9px;color:#666">${formattedDate}</div>
-      </td>
-    </tr></table>
-    <hr style="border:none;border-top:2px solid #1d3557;margin:4px 0 10px">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px">
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:110px">BILLED TO:</td><td style="padding:4px 8px;border:1px solid #bbb;font-weight:500">${location}</td><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:65px">DATE:</td><td style="padding:4px 8px;border:1px solid #bbb">${formattedDate}</td></tr>
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">${provider} — Atlas Anesthesia</td></tr>
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TYPE:</td><td style="padding:4px 8px;border:1px solid #bbb" colspan="3">Flat Rate Procedure</td></tr>
-    </table>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">
-      <tr style="background:#1d3557;color:#fff"><td style="padding:5px 8px;font-weight:bold">Procedure</td><td style="padding:5px 8px;font-weight:bold;text-align:right">Flat Rate Amount</td></tr>
-      <tr style="background:#f0efe9"><td style="padding:8px 8px;border:1px solid #bbb;font-size:13px;font-weight:500">${proc}</td><td style="padding:8px 8px;border:1px solid #bbb;text-align:right;font-family:monospace;font-size:13px;font-weight:600">$${amt.toFixed(2)}</td></tr>
-      <tr style="background:#1d3557;color:#fff"><td style="padding:6px 8px;font-weight:bold;font-size:13px">TOTAL DUE</td><td style="padding:6px 8px;font-weight:bold;font-size:15px;text-align:right;font-family:monospace">$${amt.toFixed(2)}</td></tr>
-    </table>
-    <div style="font-size:9px;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px">Thank you for choosing Atlas Anesthesia · Mobile Anesthesia Services</div>
-  </div>`;
-}
-
-window.previewInvoiceModal = function() {
-  calcInvModal();
-  const preview = document.getElementById('inv-modal-preview');
-  if(preview) preview.innerHTML = buildInvoiceModalHTML();
-};
-
-window.downloadInvoiceModal = function() {
-  const caseId = document.getElementById('inv-modal-case')?.value;
-  if(!caseId) { alert('Please select an associated case before generating a PDF.'); return; }
-  const calc = calcInvModal();
-  if(!calc) { alert('Please fill in times and rates.'); return; }
-  const location = document.getElementById('inv-modal-location')?.value || 'Unknown';
-  const date = document.getElementById('inv-modal-date')?.value || new Date().toISOString().split('T')[0];
-  const provider = document.getElementById('inv-modal-provider')?.value || 'Atlas Anesthesia';
-  _generateFlatRateInvoicePDF(location, date, provider, 'Anesthesia Services', calc.total);
-
-};
-
-;
-
-// Hook into showTab
-const _origShowTabPayments = window.showTab;
-window.showTab = function(tab, pushState=true) {
-  _origShowTabPayments(tab, pushState);
-  if(tab === 'payments') loadPaymentRows();
-};
-
-
-window.onPaymentCenterChange = function(idx) {
-  const sel = document.getElementById('pr-sc'+idx);
-  const customInput = document.getElementById('pr-sc-custom'+idx);
-  const val = sel?.value;
-  if(val === '__custom__') {
-    if(customInput) { customInput.style.display = ''; customInput.focus(); }
-    return;
-  }
-  if(customInput) customInput.style.display = 'none';
-  // Auto-fill rates in modal if open
-  const center = (window.surgeryCenters||[]).find(c => c.id === val);
-  const fhr = document.getElementById('inv-modal-fhr');
-  const p15 = document.getElementById('inv-modal-p15');
-  if(center && fhr && !fhr.value) fhr.value = center.firstHour;
-  if(center && p15 && !p15.value) p15.value = center.per15;
-};
-
-// ── INVOICE MODAL BILLING TOGGLE ──────────────────────────────────────────────
-;
-
-window.calcInvModalFlat = function() {
-  // Get procedure from dropdown or custom input
-  const procSel = document.getElementById('inv-modal-flat-proc-select');
-  const procCustom = document.getElementById('inv-modal-flat-proc');
-  const proc = (procSel?.value === '__custom__' || !procSel?.value)
-    ? (procCustom?.value?.trim() || '')
-    : procSel.options[procSel.selectedIndex]?.text.split(' — ')[0] || '';
-  const amt = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || 0;
-  const summEl = document.getElementById('inv-modal-summary');
-  const totEl = document.getElementById('inv-modal-total');
-  if(amt > 0) {
-    if(summEl) summEl.textContent = proc ? proc + ' — Flat Rate' : 'Flat Rate';
-    if(totEl) totEl.textContent = '$'+amt.toFixed(2);
-    window._invModalCalc = { total: amt, billedStr: 'Flat Rate', flat: true, proc };
-  } else {
-    if(summEl) summEl.textContent = 'Enter flat rate amount';
-    if(totEl) totEl.textContent = '$0.00';
-    window._invModalCalc = null;
-  }
-};
-
-// ── PAYMENTS INVOICE MODAL HELPERS ────────────────────────────────────────────
-window.onInvModalCaseChange = function() {
-  const sel = document.getElementById('inv-modal-case');
-  const caseId = sel?.value;
-  if(!caseId) return;
-  // Find the payment row for this case
-  const rowIdx = _paymentRows.findIndex(r => r.caseId === caseId || r.name === caseId);
-  if(rowIdx !== -1) _invoiceModalRowIdx = rowIdx;
-  // Find finalized case
-  const c = (cases||[]).find(x => x.caseId === caseId || x.id === caseId);
-  if(c) {
-    const dt = document.getElementById('inv-modal-date');
-    if(dt) dt.value = c.date || '';
-    // Find surgery center from preop
-    const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
-    if(preop) {
-      const center = (window.surgeryCenters||[]).find(sc => sc.id === preop['po-surgery-center']);
-      if(center) {
-        const loc = document.getElementById('inv-modal-location');
-        const fhr = document.getElementById('inv-modal-fhr');
-        const p15 = document.getElementById('inv-modal-p15');
-        if(loc) loc.value = center.name;
-        if(fhr) fhr.value = center.firstHour;
-        if(p15) p15.value = center.per15;
-      }
-      const email = document.getElementById('inv-modal-email');
-      if(email && !email.value) email.value = preop['po-patientEmail'] || '';
-    }
-  }
-  const w = currentWorker || 'josh';
-  const prov = document.getElementById('inv-modal-provider');
-  if(prov) prov.value = w==='josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
-  calcInvModal();
-};
-
-// Populate case dropdown when modal opens
-function populateInvModalCaseDropdown(preselect) {
-  const sel = document.getElementById('inv-modal-case');
-  if(!sel) return;
-  const finalized = (cases||[]).filter(c => !c.draft);
-  sel.innerHTML = '<option value="">— Select a case (required) —</option>'
-    + finalized.map(c => `<option value="${c.caseId}" ${c.caseId===preselect?'selected':''}>${c.caseId} · ${c.procedure||''}  (${c.date||''})</option>`).join('');
-  if(preselect) onInvModalCaseChange();
-}
-
-// Override openInvoiceModal to populate case dropdown
-;
-
-// ── DAILY BACKUP ──────────────────────────────────────────────────────────────
-async function runDailyPaymentBackup() {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const backupKey = 'payments_backup_' + today;
-    // Check if already backed up today
-    const metaSnap = await getDoc(doc(db,'atlas','payments_meta'));
-    const meta = metaSnap.exists() ? metaSnap.data() : {};
-    if(meta.lastBackup === today) return; // already backed up today
-    // Save backup
-    const dataSnap = await getDoc(doc(db,'atlas','payments'));
-    if(dataSnap.exists()) {
-      await setDoc(doc(db,'atlas',backupKey), {
-        rows: dataSnap.data().rows || [],
-        backedUpAt: new Date().toISOString()
-      });
-      await setDoc(doc(db,'atlas','payments_meta'), { lastBackup: today });
-      console.log('✓ Daily payment backup saved:', today);
-    }
-  } catch(e) { console.warn('Backup failed:', e); }
-}
-
-// ── PAYMENTS MODAL ENHANCEMENTS ───────────────────────────────────────────────
-
-window.onInvModalCenterChange = function() {
-  const sel = document.getElementById('inv-modal-sc-select');
-  const locInput = document.getElementById('inv-modal-location');
-  const fhr = document.getElementById('inv-modal-fhr');
-  const p15 = document.getElementById('inv-modal-p15');
-  const emailEl = document.getElementById('inv-modal-email');
-  const val = sel?.value;
-
-  // Always clear lock first
-  if(emailEl) { emailEl.readOnly = false; emailEl.style.background=''; emailEl.style.color=''; emailEl.removeAttribute('title'); }
-
-  if(val === '__custom__') {
-    if(locInput) { locInput.style.display = ''; locInput.value = ''; locInput.focus(); }
-    return;
-  }
-
-  if(!val) {
-    if(locInput) { locInput.style.display = 'none'; locInput.value = ''; }
-    return;
-  }
-
-  const center = (window.surgeryCenters||[]).find(c => c.id === val);
-  if(!center) return;
-
-  // Set location (hidden, value used by buildInvoiceModalHTML)
-  if(locInput) { locInput.style.display = 'none'; locInput.value = center.name || ''; }
-
-  // Set rates
-  if(fhr) fhr.value = center.firstHour != null ? Number(center.firstHour).toFixed(2) : '';
-  if(p15) p15.value = center.per15 != null ? Number(center.per15).toFixed(2) : '';
-
-  // Lock email if center has one
-  if(emailEl && center.invoiceEmail) {
-    emailEl.value = center.invoiceEmail;
-    emailEl.readOnly = true;
-    emailEl.style.background = 'var(--surface2)';
-    emailEl.style.color = 'var(--text-muted)';
-    emailEl.title = 'From Surgery Centers tab — edit there to change';
-  }
-
-  // Always populate flat rate procedures for this center
-  const frs = center.flatRates || [];
-  const procSel = document.getElementById('inv-modal-flat-proc-select');
-  if(procSel) {
-    procSel.innerHTML = '<option value="">— Select procedure —</option>'
-      + frs.map(fr => `<option value="${fr.id}" data-amount="${fr.amount}">${fr.procedure} — $${Number(fr.amount).toFixed(2)}</option>`).join('')
-      + '<option value="__custom__">✏ Custom procedure...</option>';
-  }
-
-  calcInvModal();
-};
-
-// Populate surgery center dropdown in modal
-function populateInvModalCenterDropdown(preselect) {
-  const sel = document.getElementById('inv-modal-sc-select');
-  if(!sel) return;
-  const centers = window.surgeryCenters || [];
-  sel.innerHTML = '<option value="">— Select surgery center —</option>'
-    + centers.map(c => `<option value="${c.id}" ${c.id===preselect?'selected':''}>${c.name}</option>`).join('')
-    + '<option value="__custom__">✏ Custom...</option>';
-  if(preselect) onInvModalCenterChange();
-}
-
-// Patch openInvoiceModal to also populate center dropdown and pre-select from row
-;
-
-// ── SAVED PDFS ────────────────────────────────────────────────────────────────
-let _savedPDFs = [];
-
-async function loadSavedPDFs() {
-  try {
-    const snap = await getDoc(doc(db,'atlas','saved_pdfs'));
-    _savedPDFs = snap.exists() ? (snap.data().pdfs || []) : [];
-  } catch(e) { _savedPDFs = []; }
-  renderSavedPDFs();
-}
-
-async function savePDFRecord(record) {
-  try {
-    const snap = await getDoc(doc(db,'atlas','saved_pdfs'));
-    const existing = snap.exists() ? (snap.data().pdfs || []) : [];
-    existing.unshift(record);
-    await setDoc(doc(db,'atlas','saved_pdfs'), { pdfs: existing });
-    _savedPDFs = existing;
-    renderSavedPDFs();
-  } catch(e) { console.error('Error saving PDF record:', e); }
-}
-
-function renderSavedPDFs() {
-  const el = document.getElementById('saved-pdfs-list');
-  if(!el) return;
-  if(!_savedPDFs.length) {
-    el.innerHTML = '<div class="empty-state" style="font-size:13px">No saved invoices yet</div>';
-    return;
-  }
-  el.innerHTML = _savedPDFs.map(p => {
-    const pill = p.worker==='dev' ? 'pill-dev' : 'pill-josh';
-    const wname = p.worker==='dev' ? 'Dev' : 'Josh';
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div>
-        <div style="font-size:13px;font-weight:500">${p.invoiceNum||'Invoice'}</div>
-        <div style="font-size:11px;color:var(--text-faint)">${p.date} · ${p.location} · <span class="worker-pill ${pill}">${wname}</span></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <span style="font-size:16px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$${Number(p.total||0).toFixed(2)}</span>
-        ${p.emailed ? '<span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:10px;font-weight:600">📧 Sent</span>' : ''}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-// Patch downloadInvoiceModal and sendInvoiceEmail to also save to saved PDFs
-const _origDownloadInvModal = window.downloadInvoiceModal;
-window.downloadInvoiceModal = async function() {
-  const caseId = document.getElementById('inv-modal-case')?.value;
-  if(!caseId) { alert('Please select an associated case before generating a PDF.'); return; }
-
-  const scSel = document.getElementById('inv-modal-sc-select');
-  const scVal = scSel?.value;
-  const center = (window.surgeryCenters||[]).find(c => c.id === scVal);
-  const locInput = document.getElementById('inv-modal-location');
-  const location = (scVal === '__custom__' || !center) ? (locInput?.value || '') : (center?.name || '');
-  const date = document.getElementById('inv-modal-date')?.value || '';
-  const provider = document.getElementById('inv-modal-provider')?.value || '';
-  const billingType = document.getElementById('inv-modal-billing-type')?.value || 'hourly';
-  const invoiceNum = 'ATL-INV-'+(date||new Date().toISOString().split('T')[0]).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
-
-  if(!location || !date) { alert('Please fill in surgery center and date.'); return; }
-
-  if(billingType === 'flat') {
-    // Flat rate — get procedure and amount directly (no time calc needed)
-    const procSel = document.getElementById('inv-modal-flat-proc-select');
-    const procCustom = document.getElementById('inv-modal-flat-proc');
-    const proc = (procSel?.value === '__custom__' || !procSel?.value)
-      ? (procCustom?.value || 'Anesthesia Services')
-      : procSel.options[procSel.selectedIndex]?.text.split(' — ')[0] || 'Anesthesia Services';
-    const amt = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || 0;
-    if(!proc || amt <= 0) { alert('Please select a procedure and enter a flat rate amount.'); return; }
-    window._invModalCalc = { total: amt, billedStr: 'Flat Rate', flat: true };
-    previewInvoiceModal();
-    _generateFlatRateInvoicePDF(location, date, provider, proc, amt);
-    await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total:amt, caseId, worker:currentWorker, emailed:false, savedAt:new Date().toISOString() });
-    if(_invoiceModalRowIdx !== null && _paymentRows[_invoiceModalRowIdx]) {
-      _paymentRows[_invoiceModalRowIdx].invoicedAmount = amt;
-      renderPaymentRows();
-      setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
-    }
-  } else {
-    // Hourly billing
-    const calc = calcInvModal();
-    if(!calc) { alert('Please fill in start time, end time, and rates.'); return; }
-    _generateFlatRateInvoicePDF(location, date, provider, 'Anesthesia Services', calc.total);
-    await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total:calc.total, caseId, worker:currentWorker, emailed:false, savedAt:new Date().toISOString() });
-    if(_invoiceModalRowIdx !== null && _paymentRows[_invoiceModalRowIdx]) {
-      _paymentRows[_invoiceModalRowIdx].invoicedAmount = calc.total;
-      renderPaymentRows();
-      setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
-    }
-  }
-};
-
-;
-
-// Also load saved PDFs when Payments tab opens
-const _origLoadPayments = window.showTab ? null : null;
-const _showTabOld3 = window.showTab;
-window.showTab = function(tab, pushState=true) {
-  _showTabOld3(tab, pushState);
-  if(tab === 'payments') { loadPaymentRows(); }
-  if(tab === 'saved-pdfs') { loadSavedPDFs(); }
-};
-
-// ── FLAT RATE PROCEDURE SELECTOR IN INVOICE MODAL ────────────────────────────
-window.onInvModalFlatProcSelect = function() {
-  const sel = document.getElementById('inv-modal-flat-proc-select');
-  const customInput = document.getElementById('inv-modal-flat-proc');
-  const amtInput = document.getElementById('inv-modal-flat-amt');
-  const val = sel?.value;
-
-  if(val === '__custom__') {
-    // Show custom text input
-    if(customInput) { customInput.style.display = ''; customInput.value = ''; customInput.focus(); }
-    if(amtInput) amtInput.value = '';
-  } else if(val) {
-    // Auto-fill amount from selected procedure's data-amount
-    const opt = sel.options[sel.selectedIndex];
-    const amount = parseFloat(opt?.getAttribute('data-amount')) || 0;
-    if(customInput) customInput.style.display = 'none';
-    if(amtInput && amount > 0) {
-      amtInput.value = amount.toFixed(2);
-      calcInvModalFlat();
-    }
-  } else {
-    if(customInput) customInput.style.display = 'none';
-    if(amtInput) amtInput.value = '';
-  }
-};
-
-// flat rate patch consolidated into onInvModalCenterChange
-
-// Override setInvModalBilling to also populate procedures when switching to flat
-;
-
-// Patch openInvoiceModal: set case hidden field from row, don't show dropdown
-;
-
-// ── INVOICE MODAL FUNCTIONS (consolidated) ────────────────────────────────────
-window.openInvoiceModal = function(rowIdx) {
-  _invoiceModalRowIdx = rowIdx !== undefined ? rowIdx : null;
-  const r = rowIdx !== undefined ? _paymentRows[rowIdx] : null;
-
-  // Set hidden case field
-  const caseEl = document.getElementById('inv-modal-case');
-  if(caseEl) caseEl.value = r?.caseId || '';
-
-  // Reset all fields
-  ['inv-modal-provider','inv-modal-email','inv-modal-fhr','inv-modal-p15'].forEach(id => {
-    const el = document.getElementById(id); if(el) { el.value=''; el.readOnly=false; el.style.background=''; el.style.color=''; }
-  });
-  ['inv-modal-date','inv-modal-start','inv-modal-end','inv-modal-location'].forEach(id => {
-    const el = document.getElementById(id); if(el) el.value='';
-  });
-  const locInput = document.getElementById('inv-modal-location');
-  if(locInput) locInput.style.display = 'none';
-
-  // Reset billing to hourly
-  setInvModalBilling('hourly');
-
-  // Populate surgery center dropdown, pre-select from row
-  populateInvModalCenterDropdown(r?.surgeryCenter || '');
-
-  // Trigger center change to auto-fill rates, email, and apply locks
-  if(r?.surgeryCenter) {
-    onInvModalCenterChange();
-    // Lock the surgery center dropdown — it's linked to this case's pre-op
-    const scSel = document.getElementById('inv-modal-sc-select');
-    if(scSel) {
-      scSel.disabled = true;
-      scSel.style.background = 'var(--surface2)';
-      scSel.style.color = 'var(--text-muted)';
-      scSel.title = 'Linked from Pre-Op — edit there to change';
-    }
-  }
-
-  // Auto-fill date and provider from row
-  if(r?.caseDate) {
-    const dt = document.getElementById('inv-modal-date');
-    if(dt) dt.value = r.caseDate;
-  }
-  const prov = document.getElementById('inv-modal-provider');
-  if(prov) prov.value = r?.worker === 'dev' ? 'Dr. Dev Murthy' : 'Josh Condado';
-
-  document.getElementById('invoiceModal').style.display = 'flex';
-  calcInvModal();
-};
-
-window.setInvModalBilling = function(type) {
-  document.getElementById('inv-modal-billing-type').value = type;
-  const btnH = document.getElementById('inv-modal-btn-hourly');
-  const btnF = document.getElementById('inv-modal-btn-flat');
-  const ACTIVE = '2px solid var(--info)';
-  const IDLE = '2px solid var(--border)';
-  if(type === 'flat') {
-    if(btnH){btnH.style.border=IDLE;btnH.style.background='var(--surface)';btnH.style.color='var(--text-muted)';btnH.style.fontWeight='500';}
-    if(btnF){btnF.style.border=ACTIVE;btnF.style.background='var(--info-light)';btnF.style.color='var(--info)';btnF.style.fontWeight='600';}
-    document.getElementById('inv-modal-hourly-fields').style.display = 'none';
-    document.getElementById('inv-modal-flat-fields').style.display = '';
-    document.getElementById('inv-modal-flat-amt-wrap').style.display = '';
-    // Populate procedures for currently selected center
-    onInvModalCenterChange();
-    // Reset summary to flat rate display (clear any leftover hourly amount)
-    calcInvModalFlat();
-  } else {
-    if(btnH){btnH.style.border=ACTIVE;btnH.style.background='var(--info-light)';btnH.style.color='var(--info)';btnH.style.fontWeight='600';}
-    if(btnF){btnF.style.border=IDLE;btnF.style.background='var(--surface)';btnF.style.color='var(--text-muted)';btnF.style.fontWeight='500';}
-    document.getElementById('inv-modal-hourly-fields').style.display = 'contents';
-    document.getElementById('inv-modal-flat-fields').style.display = 'none';
-    document.getElementById('inv-modal-flat-amt-wrap').style.display = 'none';
-  }
-};
-
-window.sendInvoiceEmail = async function() {
-  const email = document.getElementById('inv-modal-email')?.value?.trim();
-  const caseId = document.getElementById('inv-modal-case')?.value;
-  const scSel = document.getElementById('inv-modal-sc-select');
-  const center = (window.surgeryCenters||[]).find(c => c.id === scSel?.value);
-  const locInput = document.getElementById('inv-modal-location');
-  const location = (scSel?.value === '__custom__' || !center) ? (locInput?.value || '') : (center?.name || '');
-  const date = document.getElementById('inv-modal-date')?.value || '';
-  const billingType = document.getElementById('inv-modal-billing-type')?.value || 'hourly';
-  if(!email) { alert('Please enter a recipient email address.'); return; }
-  if(!caseId) { alert('Please select an associated case.'); return; }
-  if(!location || !date) { alert('Please fill in surgery center and date.'); return; }
-
-  let total = 0;
-  if(billingType === 'flat') {
-    total = parseFloat(document.getElementById('inv-modal-flat-amt')?.value) || 0;
-    if(total <= 0) { alert('Please enter a flat rate amount.'); return; }
-    window._invModalCalc = { total, billedStr: 'Flat Rate', flat: true };
-  } else {
-    const calc = calcInvModal();
-    if(!calc) { alert('Please fill in times and rates.'); return; }
-    total = calc.total;
-  }
-
-  const btn = document.getElementById('inv-modal-send-btn');
-  btn.textContent = 'Sending...'; btn.disabled = true;
-  previewInvoiceModal();
-  const invoiceHTML = buildInvoiceModalHTML();
-  const invoiceNum = window._currentInvoiceNum || 'ATL-INV';
-  const provider = document.getElementById('inv-modal-provider')?.value || '';
-
-  try {
-    const res = await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/invoice', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ to:email, location, date, provider, total, invoiceNum, worker:currentWorker||'josh', html:invoiceHTML })
-    });
-    const data = await res.json().catch(()=>({}));
-    if(res.ok && data.success) {
-      alert('Email sent to ' + email + '!');
-    } else {
-      window.open('mailto:'+email+'?subject='+encodeURIComponent('Atlas Anesthesia Invoice '+invoiceNum));
-      alert('Email client opened — attach your PDF.');
-    }
-    await savePDFRecord({ id:uid(), invoiceNum, location, date, provider, total, caseId, worker:currentWorker, emailed:true, savedAt:new Date().toISOString() });
-    if(_invoiceModalRowIdx !== null && _paymentRows[_invoiceModalRowIdx]) {
-      _paymentRows[_invoiceModalRowIdx].invoiceSent = true;
-      _paymentRows[_invoiceModalRowIdx].invoicedAmount = total;
-    }
-    renderPaymentRows();
-    closeInvoiceModal();
-  } catch(e) {
-    window.open('mailto:'+email+'?subject='+encodeURIComponent('Atlas Anesthesia Invoice'));
-    await savePDFRecord({ id:uid(), invoiceNum:invoiceNum||'ATL-INV', location, date, provider, total, caseId, worker:currentWorker, emailed:false, savedAt:new Date().toISOString() }).catch(()=>{});
-  } finally {
-    btn.textContent = 'Send Invoice Email'; btn.disabled = false;
-  }
-};
-
 // ── ANESTHESIA RECORD PDF GENERATOR (overlays onto exact sheet) ───────────────
-const _ANES_RECORD_B64 = "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bjRwEg0KZW5kc3RyZWFtDQplbmRvYmoNCnhyZWYNCjAgMjQNCjAwMDAwMDAwMDAgNjU1MzUgZg0KMDAwMDAwMDAxNyAwMDAwMCBuDQowMDAwMDAwMDY2IDAwMDAwIG4NCjAwMDAwMDAxMjIgMDAwMDAgbg0KMDAwMDAwMDIwOSAwMDAwMCBuDQowMDAwMDAwMzIxIDAwMDAwIG4NCjAwMDAwMTIxMDkgMDAwMDAgbg0KMDAwMDAxMjI0OCAwMDAwMCBuDQowMDAwMDE0OTU3IDAwMDAwIG4NCjAwMDAwMTUxMTIgMDAwMDAgbg0KMDAwMDAxNTMyNSAwMDAwMCBuDQowMDAwMDE4NjAyIDAwMDAwIG4NCjAwMDAwMTg4OTggMDAwMDAgbg0KMDAwMDAxOTIxMCAwMDAwMCBuDQowMDAwMDE5NDE5IDAwMDAwIG4NCjAwMDAwMjU3NDQgMDAwMDAgbg0KMDAwMDAyNjI3MyAwMDAwMCBuDQowMDAwMDI2NDI1IDAwMDAwIG4NCjAwMDAwMjY2MzQgMDAwMDAgbg0KMDAwMDAzMDAwNCAwMDAwMCBuDQowMDAwMDMwMzAyIDAwMDAwIG4NCjAwMDAwMzA0NTQgMDAwMDAgbg0KMDAwMDAzMDY2MyAwMDAwMCBuDQowMDAwMDMzOTI5IDAwMDAwIG4NCnRyYWlsZXINCjw8DQovUm9vdCAxIDAgUg0KL0luZm8gMyAwIFINCi9TaXplIDI0L0lEWzxBMkJBMEJGMjBBMkY0Q0EwMUIzMjQ3NUFBRkMzMDFEQz48QTJCQTBCRjIwQTJGNENBMDFCMzI0NzVBQUZDMzAxREM+XT4+DQpzdGFydHhyZWYNCjM0MjI1DQolJUVPRg0K";
+let _anesPdfBytes = null;
+
+async function _loadAnesPdf() {
+  if(_anesPdfBytes) return _anesPdfBytes;
+  const res = await fetch('./anesthesia-record.pdf');
+  if(!res.ok) throw new Error('Could not load anesthesia-record.pdf — upload it to GitHub alongside app.js');
+  const buf = await res.arrayBuffer();
+  _anesPdfBytes = new Uint8Array(buf);
+  return _anesPdfBytes;
+}
 
 window.generateAnesthesiaRecord = async function(record, previewOnly) {
   const r = record || {};
   const { PDFDocument, rgb, StandardFonts } = PDFLib;
 
-  const pdfBytes = Uint8Array.from(atob(_ANES_RECORD_B64), c => c.charCodeAt(0));
+  const pdfBytes = await _loadAnesPdf();
   const pdfDoc = await PDFDocument.load(pdfBytes);
-  const page = pdfDoc.getPages()[0];
+  const page = pdfDoc.getPages()[1]; // Page 2 = back side (pre-op assessment)
   const H = page.getHeight();
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -6294,145 +5555,120 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   const Y = py => H - py;
 
   const drawX = (tx, ty) => {
-    page.drawText('X', { x: tx - 12, y: Y(ty) - 1, size: 7, font: fontBold, color: rgb(0,0,0) });
+    page.drawText('X', { x: tx-12, y: Y(ty)-1, size: 7, font: fontBold, color: rgb(0,0,0) });
   };
-  const drawText = (text, x, py, size=7.5, bold=false) => {
+  const drawT = (text, x, py, size, bold) => {
     if(!text) return;
-    page.drawText(String(text).substring(0,80), { x, y: Y(py)-1, size, font: bold ? fontBold : font, color: rgb(0,0,0) });
+    page.drawText(String(text).substring(0,80), { x, y: Y(py)-1, size: size||7.5, font: bold ? fontBold : font, color: rgb(0,0,0) });
   };
-  const drawWrapped = (text, x, py, maxW=38, lineH=10) => {
+  const drawWrap = (text, x, py, maxW, lineH) => {
     if(!text) return;
     const words = String(text).split(' ');
     let line = '', cy = Y(py)-1;
     words.forEach(w => {
-      if((line+' '+w).trim().length > maxW) {
-        page.drawText(line.trim(), {x, y: cy, size: 7, font, color: rgb(0,0,0)});
-        cy -= lineH; line = w;
+      if((line+' '+w).trim().length > (maxW||38)) {
+        page.drawText(line.trim(), {x, y:cy, size:7, font, color:rgb(0,0,0)});
+        cy -= (lineH||10); line = w;
       } else { line = (line+' '+w).trim(); }
     });
-    if(line) page.drawText(line.trim(), {x, y: cy, size: 7, font, color: rgb(0,0,0)});
+    if(line) page.drawText(line.trim(), {x, y:cy, size:7, font, color:rgb(0,0,0)});
   };
 
-  // ALLERGIES
-  drawWrapped(val('po-allergies'), 32, 60, 70, 10);
+  drawWrap(val('po-allergies'), 32, 60, 70, 10);
 
-  // PUPIL EXAM y=133
   if(chk('po-pupil-normal'))      drawX(107,133);
   if(chk('po-pupil-dilated'))     drawX(164,133);
   if(chk('po-pupil-constricted')) drawX(223,133);
 
-  // CARDIOVASCULAR y=156
   if(chk('po-cv-neg'))     drawX(122,156); if(chk('po-cv-htn'))    drawX(152,156);
   if(chk('po-cv-cad'))     drawX(182,156); if(chk('po-cv-angina')) drawX(211,156);
   if(chk('po-cv-mi'))      drawX(253,156); if(chk('po-cv-chf'))    drawX(276,156);
-  // y=171
   if(chk('po-cv-murmur'))    drawX(111,171);
   if(chk('po-cv-arrythmia')) drawX(162,171);
-  if(val('po-cv-other')) drawText(val('po-cv-other'), 245, 171, 7);
+  drawT(val('po-cv-other'), 245, 171, 7);
 
-  // EKG y=192
-  if(chk('po-ekg-nsr'))   drawX(72,192);  if(chk('po-ekg-afib')) drawX(103,192);
-  if(chk('po-ekg-bbb'))   drawX(135,192); if(chk('po-ekg-lvh'))  drawX(166,192);
+  if(chk('po-ekg-nsr'))   drawX(72,192);  if(chk('po-ekg-afib'))  drawX(103,192);
+  if(chk('po-ekg-bbb'))   drawX(135,192); if(chk('po-ekg-lvh'))   drawX(166,192);
   if(chk('po-ekg-chngs')) drawX(195,192);
 
-  // PULMONARY y=214
   if(chk('po-pulm-neg'))    drawX(102,214); if(chk('po-pulm-asthma')) drawX(135,214);
   if(chk('po-pulm-copd'))   drawX(180,214); if(chk('po-pulm-uri'))    drawX(215,214);
   if(chk('po-pulm-o2cpap')) drawX(241,214);
-  // y=226
   if(chk('po-pulm-sleepapnea')) drawX(101,226);
   if(chk('po-pulm-blbs'))       drawX(165,226);
   if(chk('po-pulm-smoker'))     drawX(252,226);
 
-  // GASTRO y=247
-  if(chk('po-gi-neg'))      drawX(90,247);  if(chk('po-gi-gerd'))     drawX(123,247);
-  if(chk('po-gi-hiathern')) drawX(158,247); if(chk('po-gi-ulcer'))    drawX(211,247);
+  if(chk('po-gi-neg'))      drawX(90,247); if(chk('po-gi-gerd'))     drawX(123,247);
+  if(chk('po-gi-hiathern')) drawX(158,247); if(chk('po-gi-ulcer'))   drawX(211,247);
 
-  // RENAL y=267
   if(chk('po-renal-neg'))      drawX(90,267);
   if(chk('po-renal-dialysis')) drawX(122,267);
   if(chk('po-renal-esrd'))     drawX(170,267);
 
-  // NEURO y=285
   if(chk('po-neuro-neg'))        drawX(91,285);
   if(chk('po-neuro-depression')) drawX(123,285);
   if(chk('po-neuro-anxiety'))    drawX(184,285);
   if(chk('po-neuro-seizures'))   drawX(267,285);
-  // y=299
-  if(chk('po-neuro-cva'))       drawX(91,299);
-  if(chk('po-neuro-nmdisease')) drawX(122,299);
+  if(chk('po-neuro-cva'))        drawX(91,299);
+  if(chk('po-neuro-nmdisease'))  drawX(122,299);
 
-  // METABOLIC y=319
-  if(chk('po-met-neg'))    drawX(101,319); if(chk('po-met-iddm'))   drawX(133,319);
-  if(chk('po-met-niddm'))  drawX(168,319); if(chk('po-met-thyroid')) drawX(209,319);
-  if(chk('po-met-hep'))    drawX(258,319);
-  // y=334
+  if(chk('po-met-neg'))     drawX(101,319); if(chk('po-met-iddm'))    drawX(133,319);
+  if(chk('po-met-niddm'))   drawX(168,319); if(chk('po-met-thyroid')) drawX(209,319);
+  if(chk('po-met-hep'))     drawX(258,319);
   if(chk('po-met-obesity'))       drawX(101,334);
   if(chk('po-met-morbidobesity')) drawX(149,334);
 
-  // TEETH y=352
   if(chk('po-teeth-intact'))  drawX(78,352);
   if(chk('po-teeth-missing')) drawX(120,352);
   if(chk('po-teeth-denture')) drawX(166,352);
 
-  // OTHER y=371
-  if(chk('po-other-hiv'))      drawX(81,371);  if(chk('po-other-hepc'))    drawX(111,371);
-  if(chk('po-other-anemia'))   drawX(149,371); if(chk('po-other-steroids')) drawX(192,371);
+  if(chk('po-other-hiv'))      drawX(81,371);  if(chk('po-other-hepc'))     drawX(111,371);
+  if(chk('po-other-anemia'))   drawX(149,371); if(chk('po-other-steroids'))  drawX(192,371);
   if(chk('po-other-cancers'))  drawX(243,371);
-  // y=384
   if(chk('po-other-drugabuse')) drawX(82,384);
   if(chk('po-other-coag'))      drawX(143,384);
   if(chk('po-other-chemo'))     drawX(219,384);
 
-  // MEDICATIONS (box y≈402-448)
-  drawWrapped(val('po-medications'), 32, 416, 38, 10);
+  drawWrap(val('po-medications'),    32, 416, 38, 10);
+  drawWrap(val('po-surgicalHistory'), 32, 462, 38, 10);
 
-  // SURGICAL HISTORY (box y≈449-475)
-  drawWrapped(val('po-surgicalHistory'), 32, 462, 38, 10);
+  drawT(val('po-assessTime'), 408, 477, 7.5);
+  drawX(52,491); drawX(86,491); drawX(125,491);
 
-  // PHYSICAL ASSESSMENT
-  drawText(val('po-assessTime'), 408, 477, 7.5);
-  drawX(52,491); drawX(86,491); drawX(125,491); // VSS A+0x3 QUESTIONS
-  drawText(val('po-heart-notes'), 115, 508, 7.5);
-  drawText(val('po-lungs-notes'), 115, 522, 7.5);
-  drawText(val('po-abd-notes'), 200, 537, 7.5);
+  drawT(val('po-heart-notes'), 115, 508, 7.5);
+  drawT(val('po-lungs-notes'), 115, 522, 7.5);
+  drawT(val('po-abd-notes'),   200, 537, 7.5);
 
-  // MALLAMPATI y=552
   const mp = val('mallampati');
   if(mp==='1') drawX(133,552); if(mp==='2') drawX(149,552);
   if(mp==='3') drawX(164,552); if(mp==='4') drawX(179,552);
 
-  // VENIPUNCTURE / TOTAL FLUIDS / EBL y=570
-  drawText(val('po-venipuncture'), 80, 570, 7.5);
-  drawText(val('po-totalFluids'), 240, 570, 7.5);
-  drawText(val('po-ebl'), 280, 570, 7.5);
+  drawT(val('po-venipuncture'), 80,  570, 7.5);
+  drawT(val('po-totalFluids'),  240, 570, 7.5);
+  drawT(val('po-ebl'),          280, 570, 7.5);
 
-  // PRE-OP CALL INFORMATION (right column)
   const surgDate = val('po-surgeryDate') ? new Date(val('po-surgeryDate')+'T12:00:00Z').toLocaleDateString('en-US') : '';
-  drawText(surgDate, 450, 76, 7.5);
+  drawT(surgDate, 450, 76, 7.5);
 
   const callDT = val('po-callDateTime');
   let callFmt = '';
   if(callDT) {
     const d = new Date(callDT.includes('T') ? callDT : callDT+'T00:00');
-    callFmt = d.toLocaleDateString('en-US') + (callDT.includes('T') ? ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '');
+    callFmt = d.toLocaleDateString('en-US') + (callDT.includes('T') ? ' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '');
   }
-  drawText(callFmt, 435, 96, 7.5);
+  drawT(callFmt, 435, 96, 7.5);
 
-  drawX(329, 126); // PRE-OP INSTRUCTIONS CONFIRMED
-  if(chk('po-npo')) drawX(356, 138);
+  drawX(329, 126);
+  if(chk('po-npo'))    drawX(356, 138);
   if(chk('po-driver')) drawX(356, 167);
-  drawText(val('po-driverName'), 415, 180, 7.5);
-  drawText(val('po-driverRel'), 415, 192, 7.5);
+  drawT(val('po-driverName'), 415, 180, 7.5);
+  drawT(val('po-driverRel'),  415, 192, 7.5);
   if(chk('po-nodrive')) drawX(355, 205);
 
-  // COMMENTS (right column y≈264)
-  drawWrapped(val('po-comments'), 315, 278, 36, 10);
+  drawWrap(val('po-comments'), 315, 278, 36, 10);
 
-  // Provider name
-  const w = (r.worker || (typeof currentWorker !== 'undefined' ? currentWorker : 'josh'));
-  const provName = w==='josh' ? 'Josh Condado, CRNA' : 'Dr. Dev Murthy, CRNA';
-  drawText(provName, 30, 756, 7, true);
+  const w = r.worker || (typeof currentWorker !== 'undefined' ? currentWorker : 'josh');
+  drawT(w==='josh' ? 'Josh Condado, CRNA' : 'Dr. Dev Murthy, CRNA', 30, 756, 7, true);
 
   const outBytes = await pdfDoc.save();
   const blob = new Blob([outBytes], {type:'application/pdf'});
@@ -6442,7 +5678,8 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
 
   const pName = [val('po-firstName'),val('po-lastName')].filter(Boolean).join('_') || val('po-caseId') || 'PreOp';
   const a = document.createElement('a');
-  a.href = url; a.download = 'AnesthesiaRecord_'+pName+'_'+(surgDate.replace(/\//g,'-'))+'.pdf';
+  a.href = url;
+  a.download = 'AnesthesiaRecord_'+pName+'_'+surgDate.replace(/\//g,'-')+'.pdf';
   a.click();
 };
 
@@ -6450,8 +5687,9 @@ window.previewAnesthesiaRecord = async function(record) {
   const old = document.getElementById('anes-preview-modal');
   if(old) old.remove();
   const loading = document.createElement('div');
+  loading.id = 'anes-loading';
   loading.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2147483647;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-family:DM Sans,sans-serif';
-  loading.textContent = 'Generating preview…';
+  loading.textContent = 'Generating preview...';
   document.body.appendChild(loading);
   try {
     const blobUrl = await window.generateAnesthesiaRecord(record, true);
@@ -6459,9 +5697,33 @@ window.previewAnesthesiaRecord = async function(record) {
     const modal = document.createElement('div');
     modal.id = 'anes-preview-modal';
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2147483647;display:flex;flex-direction:column;align-items:center;padding:20px;overflow-y:auto';
-    modal.innerHTML = '<div style="background:#fff;border-radius:10px;width:100%;max-width:700px;box-shadow:0 20px 60px rgba(0,0,0,.5)"><div style="background:#1d3557;color:#fff;padding:14px 20px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:15px">🖨 Anesthesia Record Preview</span><div style="display:flex;gap:10px"><button id="anes-dl-btn" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">⬇ Download PDF</button><button onclick="document.getElementById('anes-preview-modal').remove()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit">✕ Close</button></div></div><iframe src="'+blobUrl+'" style="width:100%;height:80vh;border:none;border-radius:0 0 10px 10px"></iframe></div>';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:10px;width:100%;max-width:700px;box-shadow:0 20px 60px rgba(0,0,0,.5)';
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1d3557;color:#fff;padding:14px 20px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center';
+    hdr.innerHTML = '<span style="font-weight:600;font-size:15px">Anesthesia Record Preview</span>';
+    const btns = document.createElement('div');
+    btns.style.display = 'flex'; btns.style.gap = '10px';
+    const dlBtn = document.createElement('button');
+    dlBtn.textContent = 'Download PDF';
+    dlBtn.style.cssText = 'background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit';
+    dlBtn.onclick = () => window.generateAnesthesiaRecord(record, false);
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close';
+    closeBtn.style.cssText = 'background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit';
+    closeBtn.onclick = () => modal.remove();
+    btns.appendChild(dlBtn); btns.appendChild(closeBtn);
+    hdr.appendChild(btns);
+    const iframe = document.createElement('iframe');
+    iframe.src = blobUrl;
+    iframe.style.cssText = 'width:100%;height:80vh;border:none;border-radius:0 0 10px 10px';
+    box.appendChild(hdr); box.appendChild(iframe);
+    modal.appendChild(box);
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
-    document.getElementById('anes-dl-btn').onclick = () => window.generateAnesthesiaRecord(record, false);
-  } catch(e) { loading.remove(); alert('Error: '+e.message); console.error(e); }
+  } catch(e) {
+    document.getElementById('anes-loading')?.remove();
+    alert('Error: '+e.message);
+    console.error(e);
+  }
 };
