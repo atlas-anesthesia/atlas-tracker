@@ -35,7 +35,7 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   // Offset: x = label_x - 12 (checkbox is left of label)
   //         y = Y(ty) + 4  (shifted down 5pt to center in checkbox square)
   const drawX = (tx, ty) => {
-    page.drawText('X', { x: tx - 12, y: Y(ty) + 4, size: 7.5, font: fontBold, color: rgb(0,0,0) });
+    page.drawText('X', { x: tx - 12, y: Y(ty) - 5, size: 7.5, font: fontBold, color: rgb(0,0,0) });
   };
 
   // Draw plain text
@@ -52,25 +52,40 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
     if(!text) return;
     const words = String(text).split(' ');
     let line = '', cy = Y(startPy) - 1;
-    const minY = maxY ? Y(maxY) + 2 : 0; // stop before this Y (pdf-lib coords)
+    const minY = maxY ? Y(maxY) + 4 : 0;
     words.forEach(w => {
       if((line + ' ' + w).trim().length > maxChars) {
-        if(cy > minY) {
-          page.drawText(line.trim(), {x, y: cy, size: 6.5, font, color: rgb(0,0,0)});
-        }
-        cy -= lineH;
-        line = w;
-      } else {
-        line = (line + ' ' + w).trim();
-      }
+        if(cy > minY) page.drawText(line.trim(), {x, y: cy, size: 6.5, font, color: rgb(0,0,0)});
+        cy -= lineH; line = w;
+      } else { line = (line + ' ' + w).trim(); }
     });
-    if(line && cy > minY) {
-      page.drawText(line.trim(), {x, y: cy, size: 6.5, font, color: rgb(0,0,0)});
-    }
+    if(line && cy > minY) page.drawText(line.trim(), {x, y: cy, size: 6.5, font, color: rgb(0,0,0)});
+  };
+
+  // Two-column wrapped text for tight boxes (medications, surgical history)
+  const drawWrap2Col = (text, x1, x2, startPy, stopPy, fs) => {
+    if(!text) return;
+    const items = text.split(/[,;\n]+/).map(s=>s.trim()).filter(Boolean);
+    const colH = Y(stopPy) + 4;  // minimum pdf-lib y (hard bottom)
+    const topY = Y(startPy) - 1; // starting pdf-lib y
+    const lineH = (fs||6) + 1.5;
+    const maxLines = Math.floor((topY - colH) / lineH);
+    // Column 1: first half of items, Column 2: second half
+    const half = Math.ceil(items.length / 2);
+    const col1 = items.slice(0, half);
+    const col2 = items.slice(half);
+    col1.forEach((item, i) => {
+      const y = topY - i * lineH;
+      if(y > colH) page.drawText(item.substring(0, 28), {x: x1, y, size: fs||6, font, color: rgb(0,0,0)});
+    });
+    col2.forEach((item, i) => {
+      const y = topY - i * lineH;
+      if(y > colH) page.drawText(item.substring(0, 28), {x: x2, y, size: fs||6, font, color: rgb(0,0,0)});
+    });
   };
 
   // ALLERGIES (box: y=37 to y=114 in pymupdf, content area y=44-110)
-  drawWrap(val('po-allergies'), 32, 52, 75, 9, 110);
+  drawWrap2Col(val('po-allergies'), 32, 165, 45, 112, 6.5);
 
   // PUPIL EXAM y=133
   if(chk('po-pupil-normal'))      drawX(107, 133);
