@@ -5247,6 +5247,10 @@ if(dropdown && !dropdown.contains(e.target)) closeReportsDropdown();
 
 
 // ── Global exposure for split script files ───────────────────────────────────
+// Firebase functions needed by fax.js and payments.js
+window.getDoc = getDoc;
+window.setDoc = setDoc;
+window.doc = doc;
 // fax.js, payments.js, anesthesia.js access these via window.*
 window.db = db;
 window.uid = uid;
