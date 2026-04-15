@@ -5364,161 +5364,70 @@ window.confirmAndSendFax = async function() {
 };
 
 function buildFaxHTML(r) {
-  const today = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-  const caseId = r['po-caseId']||'—';
-  const provider = r['po-provider']||'—';
-  const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
-  const callDT = r['po-callDateTime'] ? new Date(r['po-callDateTime']).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
-  const worker = r.worker==='dev' ? 'Devarsh Murthy, CRNA' : 'Josh Condado, CRNA';
-  const center = surgeryCenters.find(c => c.id === r['po-surgery-center']);
-  const centerName = center?.name||'—';
+  const now = new Date();
+  const today = now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  const worker = (typeof currentWorker !== 'undefined' ? currentWorker : null) || r.worker || 'dev';
+  const providerName = worker === 'josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
+  const providerCreds = 'CRNA, Anesthesiology';
+  const phone = worker === 'josh' ? '7154996858' : '2625739095';
+  const patientName = document.getElementById('fax-patient-name')?.value.trim()
+    || [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ')
+    || r['po-patient']||'';
+  const dob = document.getElementById('fax-dob')?.value.trim()
+    || (r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '');
+  const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '';
+  const centerName = document.getElementById('fax-to')?.value.trim()
+    || (window.surgeryCenters||surgeryCenters||[]).find(c=>c.id===r['po-surgery-center'])?.name
+    || r['po-surgery-center']||'';
+  const attn = document.getElementById('fax-attn')?.value.trim() || '';
+  const pages = document.getElementById('fax-pages')?.value.trim() || '';
 
-  // Helper: collect checked flags from checkboxes
-  const flags = (keys, prefix) => keys.filter(x=>r[prefix+x]).map(x=>x.toUpperCase().replace(/-/g,' ')).join(', ');
-
-  // All system findings
-  const cv     = [r['po-cv-neg']?'NEG':'', ...['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase())].filter(Boolean).join(', ');
-  const cvNote = r['po-cv-comment']||r['po-cv-other-val']||'';
-  const ekg    = [r['po-ekg-nsr']?'NSR':'', ...['afib','bbb','lvh','chngs'].filter(x=>r['po-ekg-'+x]).map(x=>x.toUpperCase())].filter(Boolean).join(', ');
-  const ekgNote= r['po-ekg-comment']||r['po-ekg-other-val']||'';
-  const pulm   = [r['po-pulm-neg']?'NEG':'', ...['asthma','copd','uri','o2','cpap','sleep-apnea','smoker','bl-breath-sounds'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
-  const pulmNote=r['po-pulm-comment']||r['po-pulm-other-val']||'';
-  const gastro = [r['po-gastro-neg']?'NEG':'', ...['gerd','hiat-hern','ulcer'].filter(x=>r['po-gastro-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
-  const gastroNote=r['po-gastro-comment']||r['po-gastro-other-val']||'';
-  const renal  = [r['po-renal-neg']?'NEG':'', ...['dialysis','esrd'].filter(x=>r['po-renal-'+x]).map(x=>x.toUpperCase())].filter(Boolean).join(', ');
-  const renalNote=r['po-renal-comment']||r['po-renal-other-val']||'';
-  const neuro  = [r['po-neuro-neg']?'NEG':'', ...['depression','anxiety-disorder','seizures','cva','nm-disease'].filter(x=>r['po-neuro-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
-  const neuroNote=r['po-neuro-comment']||r['po-neuro-other-val']||'';
-  const meta   = [r['po-meta-neg']?'NEG':'', ...['iddm','niddm','thyroid','hx-hep','obesity','morbid-obesity'].filter(x=>r['po-meta-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].filter(Boolean).join(', ');
-  const metaNote=r['po-meta-comment']||r['po-meta-other-val']||'';
-  const other  = [...['hiv','hep-c','anemia','steroids','cancers','drug-abuse','coagulopathy','chemotherapy'].filter(x=>r['po-other-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '))].join(', ');
-  const otherNote=r['po-other-comment']||r['po-other-other-val']||'';
-  const teeth  = [...['intact','missing','denture'].filter(x=>r['po-teeth-'+x]).map(x=>x.toUpperCase())].join(', ');
-  const teethNote=r['po-teeth-comment']||r['po-teeth-other-val']||'';
-  const pupil  = [r['po-pupil-normal']?'NORMAL':'', r['po-pupil-dilated']?'DILATED':'', r['po-pupil-constricted']?'CONSTRICTED':''].filter(Boolean).join(', ');
-  const pupilNote=r['po-pupil-comment']||r['po-pupil-other-val']||'';
-
-  // Physical exam
-  const heartWNL = r['po-heart-wnl'] ? 'WNL' : '';
-  const heartNote = r['po-heart-notes']||'';
-  const lungsWNL = r['po-lungs-wnl'] ? 'WNL' : '';
-  const lungsNote = r['po-lungs-notes']||'';
-  const abdWNL = r['po-abd-wnl'] ? 'WNL' : '';
-  const abdNote = r['po-abd-notes']||'';
-
-  // Weight/BMI
-  const weightLbs = r['po-weight-lbs']||'';
-  const weightKg = r['po-weight-kg-val']||'';
-  const bmi = r['po-bmi-val']||'';
-  const heightFt = r['po-height-ft']||'';
-  const heightIn = r['po-height-in']||'';
-  const heightCm = r['po-height-cm-val']||'';
-  const weightStr = [weightLbs?weightLbs+' lbs':'', weightKg?weightKg+' kg':''].filter(Boolean).join(' / ');
-  const heightStr = [heightFt&&heightIn?heightFt+"'"+heightIn+'"':'', heightCm?heightCm+' cm':''].filter(Boolean).join(' / ');
-
-  // Vitals / VSS
-  const vss = r['po-vss']||'';
-  const assessTime = r['po-assessTime']||'';
-
-  // Driver / NPO
-  const driverName = r['po-driverName']||'';
-  const driverRel = r['po-driverRel']||'';
-  const nodriveNote = r['po-nodrive']||'';
-  const npo = r['po-npo'] ? 'Confirmed' : 'Not confirmed';
-  const qa = r['po-qa']||'';
-
-  // Helpers
-  const sec = (title) => `<tr><td colspan="4" style="padding:10px 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#333;border-bottom:1px solid #ccc">${title}</td></tr>`;
-  const row2 = (label,val,note) => (val||note) ? `<tr><td style="padding:4px 10px 4px 0;font-size:11px;font-weight:700;color:#555;white-space:nowrap;vertical-align:top;width:130px">${label}</td><td style="padding:4px 0;font-size:12px;color:#000">${val||''}${note?`<span style="color:#555;font-style:italic;font-size:11px"> — ${note}</span>`:''}` + `</td></tr>` : '';
-  const row4 = (l1,v1,l2,v2) => (v1||v2)?`<tr><td style="padding:4px 10px 4px 0;font-size:11px;font-weight:700;color:#555;white-space:nowrap;vertical-align:top;width:120px">${l1}</td><td style="padding:4px 10px 4px 0;font-size:12px;color:#000;width:160px">${v1||'—'}</td><td style="padding:4px 10px 4px 0;font-size:11px;font-weight:700;color:#555;white-space:nowrap;width:120px">${l2}</td><td style="padding:4px 0;font-size:12px;color:#000">${v2||'—'}</td></tr>`:'';
-  const flag = (val) => val ? `<span style="display:inline-block;background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;margin:1px 2px">${val}</span>` : '';
-
-  return `<div style="font-family:Arial,sans-serif;color:#000;font-size:12px;line-height:1.4">
-
-  <!-- LETTERHEAD -->
-  <div style="border-bottom:3px solid #000;padding-bottom:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start">
-    <div><div style="font-size:20px;font-weight:700;letter-spacing:1px">ATLAS ANESTHESIA</div><div style="font-size:10px;color:#555;margin-top:2px">Pre-Operative Anesthesia Assessment</div></div>
-    <div style="font-size:10px;text-align:right;color:#555"><div>${today}</div><div style="margin-top:2px;font-weight:700">CONFIDENTIAL FAX</div></div>
-  </div>
-
-  <!-- COVER FIELDS -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
-    <tr style="background:#f0f0f0"><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;width:70px">TO:</td><td style="padding:6px 10px;font-size:12px;font-weight:600">${provider}</td><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;width:55px">DATE:</td><td style="padding:6px 10px;font-size:11px">${today}</td></tr>
-    <tr><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">FROM:</td><td style="padding:6px 10px;font-size:11px">${worker}</td><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">PAGES:</td><td style="padding:6px 10px;font-size:11px">1</td></tr>
-    <tr style="background:#f0f0f0"><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">RE:</td><td style="padding:6px 10px;font-size:11px" colspan="3">Pre-Op Assessment — Case <strong>${caseId}</strong> — Surgery: <strong>${surgDate}</strong></td></tr>
-    <tr><td style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase">FACILITY:</td><td style="padding:6px 10px;font-size:11px" colspan="3">${centerName}</td></tr>
+  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.4">
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+    <tr>
+      <td style="width:50%;vertical-align:top;padding:8px 0">
+        <div style="font-size:18px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div>
+        <div style="font-size:11px;color:#444;margin-top:2px">${providerName} | ${providerCreds}</div>
+      </td>
+      <td style="width:50%;vertical-align:middle;text-align:right;padding:8px 0">
+        <div style="font-size:14px;font-weight:bold;color:#1d3557">Facsimile Transmission Cover Sheet</div>
+      </td>
+    </tr>
   </table>
-
-  <div style="border:1px solid #999;padding:6px 10px;font-size:10px;margin-bottom:14px;background:#fffde7"><strong>CONFIDENTIALITY NOTICE:</strong> This fax contains privileged and confidential health information intended solely for the named recipient. If received in error, please notify the sender immediately and destroy this document.</div>
-
-  <div style="border-top:2px solid #000;margin:14px 0"></div>
-
-  <!-- H&P TITLE -->
-  <div style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;border-bottom:1px solid #000;padding-bottom:5px">Pre-Operative History & Physical</div>
-
-  <!-- ALERTS -->
-  ${r['po-allergies']?`<div style="background:#fff0f0;border:2px solid #c00;padding:7px 10px;margin-bottom:8px;font-size:11px"><strong style="color:#c00;font-size:12px">⚠ ALLERGIES: ${r['po-allergies']}</strong></div>`:''}
-  ${r['po-iv-difficulty']?`<div style="background:#fffbe6;border:1px solid #f59e0b;padding:6px 10px;margin-bottom:6px;font-size:11px"><strong>⚠ Difficult IV Access</strong>${r['po-iv-difficulty-comment']?' — '+r['po-iv-difficulty-comment']:''}</div>`:''}
-  ${r['po-anesthesia-issues']?`<div style="background:#fffbe6;border:1px solid #f59e0b;padding:6px 10px;margin-bottom:6px;font-size:11px"><strong>⚠ Previous Anesthesia Issues</strong>${r['po-anesthesia-issues-comment']?' — '+r['po-anesthesia-issues-comment']:''}</div>`:''}
-
-  <table style="width:100%;border-collapse:collapse;margin-bottom:4px">
-
-    <!-- CASE INFO -->
-    ${sec('Case Information')}
-    ${row4('Case ID',caseId,'Surgery Date',surgDate)}
-    ${row4('Provider',provider,'Facility',centerName)}
-    ${row4('Call Date/Time',callDT,'Est. Hours',r['po-est-hours']?r['po-est-hours']+' hr':'')}
-    ${row4('Worker',worker,'Invoice Email',r['po-patientEmail']||'')}
-
-    <!-- VITALS & PHYSICAL -->
-    ${sec('Vitals & Measurements')}
-    ${row4('Height',heightStr,'Weight',weightStr)}
-    ${row4('BMI',bmi?bmi:'—','Mallampati',r['mallampati']?'Class '+r['mallampati']:'')}
-    ${row4('VSS / Vitals',vss,'Assessment Time',assessTime)}
-
-    <!-- PHYSICAL EXAM -->
-    ${sec('Physical Examination')}
-    ${row2('Heart',[heartWNL,heartNote].filter(Boolean).join(' — '))}
-    ${row2('Lungs',[lungsWNL,lungsNote].filter(Boolean).join(' — '))}
-    ${row2('Abdomen',[abdWNL,abdNote].filter(Boolean).join(' — '))}
-    ${row2('Pupils',pupil,pupilNote)}
-    ${row2('Teeth/Dentition',teeth,teethNote)}
-    ${row2('Venipuncture',r['po-venipuncture']||'')}
-
-    <!-- SYSTEMS REVIEW -->
-    ${sec('Systems Review')}
-    ${row2('Cardiovascular',cv,cvNote)}
-    ${row2('EKG',ekg,ekgNote)}
-    ${row2('Pulmonary',pulm,pulmNote)}
-    ${row2('GI / Gastro',gastro,gastroNote)}
-    ${row2('Renal',renal,renalNote)}
-    ${row2('Neurological',neuro,neuroNote)}
-    ${row2('Metabolic / Endocrine',meta,metaNote)}
-    ${row2('Other / Hematology',other,otherNote)}
-
-    <!-- HISTORY -->
-    ${sec('Medical & Social History')}
-    ${row2('Surgical History',r['po-surgicalHistory']||'')}
-    ${row2('Current Medications',r['po-medications']||'')}
-
-    <!-- PRE-OP CHECKLIST -->
-    ${sec('Pre-Op Checklist')}
-    ${row4('NPO Status',npo,'Driver',driverName?(driverName+(driverRel?' ('+driverRel+')':'')):'—')}
-    ${row2('No-Drive Note',nodriveNote)}
-    ${row2('Q&A / Notes',qa)}
-
-    <!-- INTRA-OP -->
-    ${sec('Intra-Operative')}
-    ${row4('Total Fluids',r['po-totalFluids']||'—','EBL',r['po-ebl']||'—')}
-
-    <!-- COMMENTS -->
-    ${r['po-comments']?sec('Comments')+''+row2('',r['po-comments']):''}
-
-  </table>
-
-  <div style="border-top:1px solid #ccc;margin-top:14px;padding-top:8px;font-size:9px;color:#777;text-align:center">
-    Atlas Anesthesia · Pre-Operative Anesthesia Assessment · ${today} · CONFIDENTIAL
+  <hr style="border:none;border-top:2px solid #1d3557;margin:0 0 10px 0">
+  <div style="background:#f8f8f8;border:1px solid #ccc;padding:8px 12px;font-size:10px;color:#555;margin-bottom:12px;line-height:1.5">
+    <strong>Confidentiality Notice:</strong> This facsimile transmission contains confidential information, which may be legally privileged and is intended only for the use of the individual(s) named below. If you are not the intended recipient, you are hereby notified that any disclosure, copying, distribution, or action taken in reliance upon the contents of this transmission is strictly prohibited. If you have received this fax in error, please notify the sender immediately and destroy all copies.
   </div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:130px">DATE:</td><td style="padding:5px 8px;border:1px solid #bbb">${today}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:80px">TIME:</td><td style="padding:5px 8px;border:1px solid #bbb">${timeStr}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TO:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${centerName}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX TO:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${document.getElementById('fax-destination')?.value||''}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">ATTN:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${attn}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${providerName} — Atlas Anesthesia</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">Atlas Anesthesia</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PHONE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${phone}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td><td style="padding:5px 8px;border:1px solid #bbb">${pages}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td><td style="padding:5px 8px;border:1px solid #bbb">Patient Medical Records Request</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PATIENT NAME:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${patientName}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">DATE OF BIRTH:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${dob}</td></tr>
+    ${surgDate ? `<tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">SURGERY DATE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${surgDate}</td></tr>` : ''}
+  </table>
+  <p style="color:#b91c1c;font-weight:bold;font-size:13px;margin:0 0 10px 0">⚠ Urgent — Please Respond ASAP</p>
+  <p style="margin:0 0 8px 0">Dear,</p>
+  <p style="margin:0 0 8px 0">We are writing on behalf of <strong>${providerName}</strong> at <strong>Atlas Anesthesia</strong> regarding the above-named patient who is scheduled for an upcoming anesthesia procedure at our facility. In order to ensure the safest and most comprehensive anesthesia care plan, we are respectfully requesting the following records be transmitted to our office at your earliest convenience — <strong>preferably as soon as possible</strong>.</p>
+  <p style="margin:0 0 6px 0">Please fax the following documents for the patient listed above:</p>
+  <ul style="margin:0 0 10px 20px;padding:0">
+    <li style="margin-bottom:4px">Most recent <strong>History &amp; Physical (H&amp;P)</strong></li>
+    <li style="margin-bottom:4px">Any and all applicable <strong>Laboratory Work / Lab Results</strong> (e.g., CBC, CMP, BMP, coagulation studies, or other relevant panels)</li>
+    <li style="margin-bottom:4px">Any additional pertinent medical records relevant to anesthesia clearance</li>
+  </ul>
+  <p style="margin:0 0 8px 0">Timely receipt of these records is critical to our pre-operative assessment and scheduling process. If you have any questions or require a signed release of information form, please do not hesitate to contact our office directly.</p>
+  <p style="margin:0 0 8px 0">We sincerely appreciate your prompt attention to this matter. Thank you for your cooperation.</p>
+  <p style="margin:0 0 24px 0">Warm regards,</p>
+  <div style="border-top:1px solid #000;width:220px;padding-top:4px;font-size:11px">
+    ${providerName}<br>Atlas Anesthesia<br>Phone: ${phone}
+  </div>
+  <p style="font-size:9px;color:#666;margin-top:16px;border-top:1px solid #ccc;padding-top:6px">This fax is intended solely for the use of the individual or entity to which it is addressed and may contain information that is privileged, confidential, and/or exempt from disclosure under applicable law.</p>
 </div>`;
 }
 
