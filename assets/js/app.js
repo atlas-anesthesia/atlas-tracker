@@ -2066,7 +2066,8 @@ const cvChecked = ['neg','htn','cad','angina','mi','chf','murmur','arrythmia'].f
 const pulmChecked = ['neg','asthma','copd','uri','o2','cpap','sleep-apnea','bl-breath-sounds','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.replace(/-/g,' ')).join(', ').toUpperCase();
 return `<div class="case-item"><div class="case-item-header" onclick="togglePreop('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${r['po-caseId'] || 'No Case ID'}
-<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
+<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button>
+      <button onclick="event.stopPropagation();generateAnesthesiaRecord(window._rawPreopRecords?.find(x=>x.id==='${r.id}')||{})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">🖨 Print Record</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
 ${r['po-allergies']?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Allergies</strong><div style="font-size:13px;margin-top:3px">${r['po-allergies']}</div></div>`:''}
 ${cvChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Cardiovascular</strong><div style="font-size:13px;margin-top:3px">${cvChecked}</div></div>`:''}
 ${pulmChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Pulmonary</strong><div style="font-size:13px;margin-top:3px">${pulmChecked}</div></div>`:''}
@@ -6271,4 +6272,258 @@ window.sendInvoiceEmail = async function() {
   } finally {
     btn.textContent = 'Send Invoice Email'; btn.disabled = false;
   }
+};
+
+// ── ANESTHESIA RECORD PDF GENERATOR ──────────────────────────────────────────
+window.generateAnesthesiaRecord = function(record) {
+  const r = record;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+  const W = 612, H = 792;
+  const M = 28; // margin
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const chk = (key) => !!r[key];
+  const val = (key) => r[key] || '';
+  const box = (x, y, checked) => {
+    doc.setLineWidth(0.5);
+    doc.rect(x, y, 8, 8);
+    if(checked) {
+      doc.setFontSize(7);
+      doc.setFont('Helvetica','bold');
+      doc.text('✓', x+1, y+6.5);
+    }
+  };
+  const labelVal = (label, value, x, y, labelW, lineW) => {
+    doc.setFontSize(6.5);
+    doc.setFont('Helvetica','bold');
+    doc.setTextColor(80,80,80);
+    doc.text(label, x, y);
+    doc.setFont('Helvetica','normal');
+    doc.setTextColor(0,0,0);
+    doc.setFontSize(8.5);
+    doc.setLineWidth(0.3);
+    doc.line(x+labelW, y+1, x+labelW+lineW, y+1);
+    if(value) doc.text(value, x+labelW+2, y);
+    doc.setTextColor(0,0,0);
+  };
+  const sectionHeader = (text, x, y, w) => {
+    doc.setFillColor(220,230,240);
+    doc.rect(x, y-7, w, 9, 'F');
+    doc.setFontSize(7);
+    doc.setFont('Helvetica','bold');
+    doc.setTextColor(0,0,0);
+    doc.text(text, x+3, y);
+  };
+  const checkRow = (items, x, y) => {
+    // items: [{key, label}]
+    let cx = x;
+    items.forEach(({key, label, isVal}) => {
+      box(cx, y-7, chk(key));
+      doc.setFontSize(6.5);
+      doc.setFont('Helvetica', chk(key)?'bold':'normal');
+      doc.text(label, cx+10, y);
+      cx += 10 + doc.getTextWidth(label) + 6;
+    });
+    return cx;
+  };
+  const multilineVal = (text, x, y, maxW, lineH) => {
+    if(!text) return y;
+    const lines = doc.splitTextToSize(text, maxW);
+    doc.setFontSize(8);
+    doc.setFont('Helvetica','normal');
+    lines.forEach(line => { doc.text(line, x, y); y += lineH; });
+    return y;
+  };
+
+  // ── TITLE ─────────────────────────────────────────────────────────────────
+  doc.setFontSize(11);
+  doc.setFont('Helvetica','bold');
+  doc.text('ANESTHESIA RECORD — PRE-OP ASSESSMENT', W/2, M+8, {align:'center'});
+  doc.setFontSize(7.5);
+  doc.setFont('Helvetica','normal');
+  const caseId = val('po-caseId') || '—';
+  doc.text(`Case ID: ${caseId}`, W/2, M+18, {align:'center'});
+  doc.setLineWidth(1);
+  doc.line(M, M+22, W-M, M+22);
+
+  let y = M + 34;
+
+  // ── PATIENT INFO ROW ─────────────────────────────────────────────────────
+  const patName = [val('po-firstName'), val('po-lastName')].filter(Boolean).join(' ') || val('po-patient') || '—';
+  const dob = val('po-dob') ? new Date(val('po-dob')+'T12:00:00Z').toLocaleDateString('en-US') : '';
+  const ht = val('po-height-ft') ? `${val('po-height-ft')}' ${val('po-height-in') || 0}"` : '';
+  const wt = val('po-weight-lbs') ? `${val('po-weight-lbs')} lbs` : '';
+  const surgDate = val('po-surgeryDate') ? new Date(val('po-surgeryDate')+'T12:00:00Z').toLocaleDateString('en-US') : '';
+  
+  labelVal('PATIENT:', patName, M, y, 50, 180);
+  labelVal('DOB:', dob, M+240, y, 28, 70);
+  labelVal('DATE:', surgDate, M+350, y, 32, 100);
+  y += 14;
+  labelVal('HT:', ht, M, y, 18, 55); 
+  labelVal('WT:', wt, M+85, y, 18, 55);
+  labelVal('PROVIDER:', val('po-provider'), M+155, y, 52, 120);
+  labelVal('SURGERY CENTER:', [val('po-surgery-center-name')||''].join(''), M+340, y, 85, 145);
+  y += 14;
+  doc.setLineWidth(0.4);
+  doc.line(M, y, W-M, y);
+  y += 10;
+
+  // ── PT IDENTIFIED / H&P ──────────────────────────────────────────────────
+  box(M, y-7, true); doc.setFontSize(7.5); doc.setFont('Helvetica','normal'); doc.text('PT IDENTIFIED', M+11, y);
+  box(M+110, y-7, true); doc.text('H&P REVIEWED', M+121, y);
+  box(M+220, y-7, chk('po-npo')); doc.text('NPO CONFIRMED', M+231, y);
+  y += 14;
+  doc.line(M, y-4, W-M, y-4);
+
+  // ── ALLERGIES ─────────────────────────────────────────────────────────────
+  sectionHeader('ALLERGIES', M, y, W-2*M);
+  y += 6;
+  doc.setLineWidth(0.3);
+  doc.rect(M, y, W-2*M, 22);
+  y = multilineVal(val('po-allergies'), M+3, y+9, W-2*M-6, 10);
+  y = Math.max(y, M+34+14+14+14+6+22) + 6;
+
+  // ── MEDICATIONS ───────────────────────────────────────────────────────────
+  sectionHeader('MEDICATIONS', M, y, (W-2*M)/2-3);
+  sectionHeader('SURGICAL HISTORY', M+(W-2*M)/2+3, y, (W-2*M)/2-3);
+  y += 6;
+  const colW = (W-2*M-6)/2;
+  doc.rect(M, y, colW, 36);
+  doc.rect(M+colW+6, y, colW, 36);
+  multilineVal(val('po-medications'), M+3, y+9, colW-6, 9);
+  multilineVal(val('po-surgicalHistory'), M+colW+9, y+9, colW-6, 9);
+  y += 42;
+
+  // ── PHYSICAL ASSESSMENT ───────────────────────────────────────────────────
+  sectionHeader('PHYSICAL ASSESSMENT', M, y, W-2*M);
+  y += 6;
+  // Row 1: VSS, A+0x3, Questions answered (always checked)
+  box(M, y-7, true); doc.setFontSize(7.5); doc.text('VSS', M+11, y);
+  box(M+50, y-7, true); doc.text('A+Ox3', M+61, y);
+  box(M+110, y-7, true); doc.text('QUESTIONS ANSWERED', M+121, y);
+  labelVal('ASSESSMENT TIME:', val('po-assessTime'), M+290, y, 95, 80);
+  y += 13;
+
+  // HEART
+  box(M, y-7, true); doc.text('HEART WNL', M+11, y);
+  if(val('po-heart-notes')) { doc.setFontSize(7.5); doc.text(val('po-heart-notes').substring(0,80), M+85, y); }
+  y += 12;
+  // LUNGS  
+  box(M, y-7, true); doc.text('LUNGS WNL', M+11, y);
+  if(val('po-lungs-notes')) doc.text(val('po-lungs-notes').substring(0,80), M+85, y);
+  y += 12;
+  // ABD
+  box(M, y-7, true); doc.text('ABDOMEN/EXTREMITIES WNL', M+11, y);
+  if(val('po-abd-notes')) doc.text(val('po-abd-notes').substring(0,80), M+200, y);
+  y += 12;
+  // Mallampati
+  doc.setFontSize(7.5); doc.setFont('Helvetica','bold'); doc.text('MALLAMPATI SCORE:', M, y);
+  doc.setFont('Helvetica','normal');
+  [1,2,3,4].forEach((n,i) => { 
+    box(M+105+(i*30), y-7, val('mallampati')==String(n));
+    doc.text(String(n), M+116+(i*30), y);
+  });
+  y += 12;
+
+  // ── PUPIL ─────────────────────────────────────────────────────────────────
+  doc.setFont('Helvetica','bold'); doc.text('PUPIL EXAM:', M, y); doc.setFont('Helvetica','normal');
+  checkRow([{key:'po-pupil-normal',label:'NORMAL'},{key:'po-pupil-dilated',label:'DILATED'},{key:'po-pupil-constricted',label:'CONSTRICTED'}], M+70, y);
+  y += 12;
+  doc.line(M, y-4, W-M, y-4);
+
+  // ── MEDICAL H&P CHECKBOXES ────────────────────────────────────────────────
+  sectionHeader('MEDICAL HISTORY', M, y, W-2*M);
+  y += 8;
+
+  // CARDIOVASCULAR
+  doc.setFontSize(7); doc.setFont('Helvetica','bold'); doc.text('CARDIOVASCULAR:', M, y);
+  checkRow([
+    {key:'po-cv-neg',label:'NEG'},{key:'po-cv-htn',label:'HTN'},{key:'po-cv-cad',label:'CAD'},
+    {key:'po-cv-angina',label:'ANGINA'},{key:'po-cv-mi',label:'MI'},{key:'po-cv-chf',label:'CHF'},
+    {key:'po-cv-murmur',label:'MURMUR'},{key:'po-cv-arrythmia',label:'ARRYTHMIA'}
+  ], M+90, y);
+  y += 11;
+  if(val('po-cv-other')) { doc.text('OTHER: '+val('po-cv-other').substring(0,70), M+90, y); y+=11; }
+
+  // EKG
+  doc.setFont('Helvetica','bold'); doc.text('EKG:', M, y); doc.setFont('Helvetica','normal');
+  checkRow([
+    {key:'po-ekg-nsr',label:'NSR'},{key:'po-ekg-afib',label:'AFIB'},{key:'po-ekg-bbb',label:'BBB'},
+    {key:'po-ekg-lvh',label:'LVH'},{key:'po-ekg-chngs',label:'CHNGS'}
+  ], M+90, y);
+  y += 11;
+
+  // PULMONARY
+  doc.setFont('Helvetica','bold'); doc.text('PULMONARY:', M, y);
+  checkRow([
+    {key:'po-pulm-neg',label:'NEG'},{key:'po-pulm-asthma',label:'ASTHMA'},{key:'po-pulm-copd',label:'COPD'},{key:'po-pulm-uri',label:'URI'}
+  ], M+90, y);
+  y += 11;
+
+  // GASTRO, RENAL, NEURO, METABOLIC, TEETH, OTHER
+  const sections = [
+    {label:'GASTRO:', items:[{key:'po-gi-neg',label:'NEG'},{key:'po-gi-gerd',label:'GERD'},{key:'po-gi-hiathern',label:'HIAT HERN'},{key:'po-gi-ulcer',label:'ULCER'}]},
+    {label:'RENAL:', items:[{key:'po-renal-neg',label:'NEG'},{key:'po-renal-dialysis',label:'DIALYSIS'},{key:'po-renal-esrd',label:'ESRD'}]},
+    {label:'NEURO:', items:[{key:'po-neuro-neg',label:'NEG'},{key:'po-neuro-depression',label:'DEPRESSION'},{key:'po-neuro-anxiety',label:'ANXIETY'},{key:'po-neuro-seizures',label:'SEIZURES'},{key:'po-neuro-cva',label:'CVA'}]},
+    {label:'METABOLIC:', items:[{key:'po-met-neg',label:'NEG'},{key:'po-met-iddm',label:'IDDM'},{key:'po-met-niddm',label:'NIDDM'},{key:'po-met-thyroid',label:'THYROID'},{key:'po-met-hep',label:'HEP'},{key:'po-met-obesity',label:'OBESITY'}]},
+    {label:'TEETH:', items:[{key:'po-teeth-intact',label:'INTACT'},{key:'po-teeth-missing',label:'MISSING'},{key:'po-teeth-denture',label:'DENTURE'}]},
+    {label:'OTHER:', items:[{key:'po-other-hiv',label:'HIV'},{key:'po-other-hepc',label:'HEP C'},{key:'po-other-anemia',label:'ANEMIA'},{key:'po-other-steroids',label:'STEROIDS'},{key:'po-other-coag',label:'COAGULOPATHY'}]},
+  ];
+  sections.forEach(sec => {
+    doc.setFont('Helvetica','bold'); doc.text(sec.label, M, y);
+    checkRow(sec.items, M+90, y);
+    y += 11;
+  });
+
+  doc.line(M, y-4, W-M, y-4);
+
+  // ── PRE-OP CALL SECTION ────────────────────────────────────────────────────
+  sectionHeader('PRE-OP CALL INFORMATION', M, y, W-2*M);
+  y += 8;
+  const callDT = val('po-callDateTime');
+  const callDate = callDT ? new Date(callDT.split('T')[0]+'T12:00:00Z').toLocaleDateString('en-US') : '';
+  const callTime = callDT && callDT.includes('T') ? (() => { const t=callDT.split('T')[1].substring(0,5); const [h,m]=t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; })() : '';
+  
+  labelVal('DATE OF SURGERY:', surgDate, M, y, 88, 100);
+  labelVal('DATE/TIME OF CALL:', callDate+(callTime?' '+callTime:''), M+220, y, 105, 150);
+  y += 13;
+
+  box(M, y-7, chk('po-npo')); doc.setFontSize(7.5); doc.text('NPO AFTER MIDNIGHT', M+11, y);
+  box(M+140, y-7, chk('po-driver')); doc.text('RESPONSIBLE ADULT TO DRIVE', M+151, y);
+  box(M+330, y-7, chk('po-nodrive')); doc.text('PATIENT CANNOT DRIVE', M+341, y);
+  y += 13;
+  labelVal('DRIVER NAME:', val('po-driverName'), M, y, 70, 130);
+  labelVal('RELATIONSHIP:', val('po-driverRel'), M+220, y, 76, 110);
+  y += 13;
+
+  // ── VENIPUNCTURE / FLUIDS / EBL ───────────────────────────────────────────
+  labelVal('VENIPUNCTURE:', val('po-venipuncture'), M, y, 78, 80);
+  labelVal('TOTAL FLUIDS:', val('po-totalFluids'), M+180, y, 72, 70);
+  labelVal('EBL:', val('po-ebl'), M+340, y, 28, 80);
+  y += 14;
+  doc.line(M, y-4, W-M, y-4);
+
+  // ── COMMENTS ─────────────────────────────────────────────────────────────
+  sectionHeader('COMMENTS', M, y, W-2*M);
+  y += 6;
+  doc.rect(M, y, W-2*M, 36);
+  multilineVal(val('po-comments'), M+3, y+9, W-2*M-6, 10);
+  y += 42;
+
+  // ── SIGNATURE BLOCK ───────────────────────────────────────────────────────
+  doc.line(M, y, M+160, y); doc.line(M+180, y, M+380, y); doc.line(M+400, y, W-M, y);
+  doc.setFontSize(6.5);
+  doc.text('PROVIDER SIGNATURE', M, y+8);
+  doc.text('DATE', M+180, y+8);
+  doc.text('WITNESS SIGNATURE', M+400, y+8);
+
+  // ── FOOTER ────────────────────────────────────────────────────────────────
+  doc.setFontSize(6);
+  doc.setTextColor(150,150,150);
+  doc.text('Generated by Atlas Anesthesia · '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}), W/2, H-M+10, {align:'center'});
+
+  // Download
+  const fname = `AnesthesiaRecord_${(r['po-caseId']||'').replace(/[^A-Z0-9-]/gi,'_') || 'PreOp'}_${(surgDate||'').replace(/\//g,'-')}.pdf`;
+  doc.save(fname);
 };
