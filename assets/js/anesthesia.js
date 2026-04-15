@@ -91,7 +91,7 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   }
 
   // ALLERGIES (box: y=37 to y=114 in pymupdf, content area y=44-110)
-  drawWrap2Col(val('po-allergies'), 32, 165, 45, 112, 6.5);
+  drawWrap2Col(val('po-allergies'), 32, 165, 52, 112, 6.5);
 
   // PUPIL EXAM y=133
   if(chk('po-pupil-normal'))      drawX(107, 133);
