@@ -285,7 +285,7 @@ const maxNum = allNums.length > 0 ? Math.max(...allNums) : 0;
 const seq = String(maxNum + 1).padStart(3, '0');
 return `${prefix}${seq}`;
 }
-function updateCaseIdDisplays() {
+window.updateCaseIdDisplays = function updateCaseIdDisplays() {
 const ncDisplay = document.getElementById('caseId-display');
 const ncInput = document.getElementById('caseId');
 // If editing or resuming a draft, keep the original case ID — never regenerate
@@ -301,7 +301,7 @@ const id = generateCaseId(currentWorker, date);
 if(ncDisplay) ncDisplay.textContent = id;
 if(ncInput) ncInput.value = id;
 }
-function updatePreopCaseIdDisplay() {
+window.updatePreopCaseIdDisplay = function updatePreopCaseIdDisplay() {
 const surgeryDate = document.getElementById('po-surgeryDate')?.value;
 const display = document.getElementById('po-caseId-display');
 const input = document.getElementById('po-caseId');
@@ -1283,7 +1283,7 @@ removeImage();renderCaseSupplies();refreshItemSelect();
 updateCaseIdDisplays();
 };
 // ── INVENTORY ──
-function renderInventory() {
+window.renderInventory = function renderInventory() {
 const search=(document.getElementById('invSearch')?.value||'').toLowerCase();
 const alertsEl=document.getElementById('inventoryAlerts');
 const tableEl=document.getElementById('inventoryTable');
@@ -1709,7 +1709,7 @@ await saveCases();
 refreshDraftPicker();
 alert(`Draft "${label}" deleted.`);
 };
-function refreshDraftPicker() {
+window.refreshDraftPicker = function refreshDraftPicker() {
 const sel = document.getElementById('draftCasePicker');
 if(!sel) return;
 sel.innerHTML = '<option value="">— Start a new case —</option>';
@@ -2330,7 +2330,7 @@ document.getElementById('cltab-'+x).classList.toggle('active', x===tab);
 document.getElementById('caselog-'+x).style.display = x===tab ? 'block' : 'none';
 });
 };
-function renderCaseLog() {
+window.renderCaseLog = function renderCaseLog() {
 const fromDate = document.getElementById('cl-date-from')?.value || '';
 const toDate = document.getElementById('cl-date-to')?.value || '';
 ['dev','josh'].forEach(worker => {
@@ -2630,7 +2630,7 @@ document.getElementById('cs-date-from').value = '';
 document.getElementById('cs-date-to').value = '';
 renderCSLog();
 };
-async function renderCSLog() {
+window.renderCSLog = async function renderCSLog() {
 const el = document.getElementById('cs-log-content');
 if(!el) return;
 el.innerHTML = '<div class="empty-state">Loading...</div>';
