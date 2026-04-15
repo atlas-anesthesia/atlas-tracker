@@ -35,7 +35,7 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   // Offset: x = label_x - 12 (checkbox is left of label)
   //         y = Y(ty) + 4  (shifted down 5pt to center in checkbox square)
   const drawX = (tx, ty) => {
-    page.drawText('X', { x: tx - 10, y: Y(ty) - 5, size: 7.5, font: fontBold, color: rgb(0,0,0) });
+    page.drawText('X', { x: tx - 7, y: Y(ty) - 5, size: 7.5, font: fontBold, color: rgb(0,0,0) });
   };
 
   // Draw plain text
@@ -158,10 +158,10 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   if(chk('po-other-chemo'))     drawX(219, 384);
 
   // MEDICATIONS box: y=402 to y=449 → content: start y=412, stop before y=447
-  drawWrap2Col(val('po-medications'), 32, 165, 412, 445, 6);
+  drawWrap2Col(val('po-medications'), 32, 165, 420, 445, 6);
 
   // SURGICAL HISTORY box: y=449 to y=477 → content: start y=456, stop before y=475
-  drawWrap2Col(val('po-surgicalHistory'), 32, 165, 456, 475, 6);
+  drawWrap2Col(val('po-surgicalHistory'), 32, 165, 463, 475, 6);
 
   // PHYSICAL ASSESSMENT
   drawT(val('po-assessTime'), 408, 477, 7.5);
