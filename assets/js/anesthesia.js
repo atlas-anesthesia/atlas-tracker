@@ -34,8 +34,13 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   // Draw X inside checkbox — tx/ty are the label text position in pymupdf coords
   // Offset: x = label_x - 12 (checkbox is left of label)
   //         y = Y(ty) + 4  (shifted down 5pt to center in checkbox square)
-  const drawX = (tx, ty) => {
-    page.drawText('X', { x: tx - 7, y: Y(ty) - 5, size: 7.5, font: fontBold, color: rgb(0,0,0) });
+  // cx, cy = EXACT checkbox center in pymupdf coords (extracted from template)
+  const drawX = (cx, cy) => {
+    page.drawText('X', {
+      x: cx - 2.5,            // center X char (X glyph ~5pt wide at size 6)
+      y: (792 - cy) - 2.5,    // center X char vertically in 6pt checkbox
+      size: 6, font: fontBold, color: rgb(0,0,0)
+    });
   };
 
   // Draw plain text
@@ -94,68 +99,68 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   drawWrap2Col(val('po-allergies'), 32, 165, 52, 112, 6.5);
 
   // PUPIL EXAM y=133
-  if(chk('po-pupil-normal'))      drawX(107, 133);
-  if(chk('po-pupil-dilated'))     drawX(164, 133);
-  if(chk('po-pupil-constricted')) drawX(223, 133);
+  if(chk('po-pupil-normal'))      drawX(101.5,137.9);
+  if(chk('po-pupil-dilated'))     drawX(159.3,138.2);
+  if(chk('po-pupil-constricted')) drawX(217.7,137.9);
 
   // CARDIOVASCULAR y=156
-  if(chk('po-cv-neg'))     drawX(122, 156); if(chk('po-cv-htn'))    drawX(152, 156);
-  if(chk('po-cv-cad'))     drawX(182, 156); if(chk('po-cv-angina')) drawX(211, 156);
-  if(chk('po-cv-mi'))      drawX(253, 156); if(chk('po-cv-chf'))    drawX(276, 156);
+  if(chk('po-cv-neg'))     drawX(116.7,160.4); if(chk('po-cv-htn'))    drawX(147.0,160.2);
+  if(chk('po-cv-cad'))     drawX(177.2,160.8); if(chk('po-cv-angina')) drawX(206.2,160.6);
+  if(chk('po-cv-mi'))      drawX(248.7,160.6); if(chk('po-cv-chf'))    drawX(270.7,160.6);
   // row 2 y=171
-  if(chk('po-cv-murmur'))    drawX(111, 171);
-  if(chk('po-cv-arrythmia')) drawX(162, 171);
+  if(chk('po-cv-murmur'))    drawX(105.1,175.6);
+  if(chk('po-cv-arrythmia')) drawX(156.4,175.4);
   drawT(val('po-cv-other'), 245, 171, 7);
 
   // EKG y=192
-  if(chk('po-ekg-nsr'))   drawX(72,  192); if(chk('po-ekg-afib'))  drawX(103, 192);
-  if(chk('po-ekg-bbb'))   drawX(135, 192); if(chk('po-ekg-lvh'))   drawX(166, 192);
-  if(chk('po-ekg-chngs')) drawX(195, 192);
+  if(chk('po-ekg-nsr'))   drawX(66.9,196.0); if(chk('po-ekg-afib'))  drawX(98.4,196.0);
+  if(chk('po-ekg-bbb'))   drawX(130.7,196.0); if(chk('po-ekg-lvh'))   drawX(161.2,196.0);
+  if(chk('po-ekg-chngs')) drawX(190.8,195.9);
 
   // PULMONARY y=214
-  if(chk('po-pulm-neg'))        drawX(102, 214); if(chk('po-pulm-asthma'))     drawX(135, 214);
-  if(chk('po-pulm-copd'))       drawX(180, 214); if(chk('po-pulm-uri'))        drawX(215, 214);
-  if(chk('po-pulm-o2cpap'))     drawX(241, 214);
-  if(chk('po-pulm-sleepapnea')) drawX(101, 226);
-  if(chk('po-pulm-blbs'))       drawX(165, 226);
-  if(chk('po-pulm-smoker'))     drawX(252, 226);
+  if(chk('po-pulm-neg'))        drawX(97.2,218.9); if(chk('po-pulm-asthma'))     drawX(130.6,218.9);
+  if(chk('po-pulm-copd'))       drawX(175.8,218.9); if(chk('po-pulm-uri'))        drawX(209.9,218.9);
+  if(chk('po-pulm-o2cpap'))     drawX(236.4,218.9);
+  if(chk('po-pulm-sleepapnea')) drawX(95.9,230.9);
+  if(chk('po-pulm-blbs'))       drawX(159.7,230.9);
+  if(chk('po-pulm-smoker'))     drawX(246.5,230.9);
 
   // GASTRO y=247
-  if(chk('po-gi-neg'))      drawX(90,  247); if(chk('po-gi-gerd'))     drawX(123, 247);
-  if(chk('po-gi-hiathern')) drawX(158, 247); if(chk('po-gi-ulcer'))    drawX(211, 247);
+  if(chk('po-gi-neg'))      drawX(85.7,251.5); if(chk('po-gi-gerd'))     drawX(117.8,251.5);
+  if(chk('po-gi-hiathern')) drawX(152.6,251.5); if(chk('po-gi-ulcer'))    drawX(206.6,251.5);
 
   // RENAL y=267
-  if(chk('po-renal-neg'))      drawX(90,  267);
-  if(chk('po-renal-dialysis')) drawX(122, 267);
-  if(chk('po-renal-esrd'))     drawX(170, 267);
+  if(chk('po-renal-neg'))      drawX(85.5,271.9);
+  if(chk('po-renal-dialysis')) drawX(117.7,271.8);
+  if(chk('po-renal-esrd'))     drawX(165.4,271.8);
 
   // NEURO y=285
-  if(chk('po-neuro-neg'))        drawX(91,  285);
-  if(chk('po-neuro-depression')) drawX(123, 285);
-  if(chk('po-neuro-anxiety'))    drawX(184, 285);
-  if(chk('po-neuro-seizures'))   drawX(267, 285);
-  if(chk('po-neuro-cva'))        drawX(91,  299);
-  if(chk('po-neuro-nmdisease'))  drawX(122, 299);
+  if(chk('po-neuro-neg'))        drawX(85.6,289.9);
+  if(chk('po-neuro-depression')) drawX(117.8,289.9);
+  if(chk('po-neuro-anxiety'))    drawX(178.8,289.9);
+  if(chk('po-neuro-seizures'))   drawX(262.4,289.9);
+  if(chk('po-neuro-cva'))        drawX(86.0,303.3);
+  if(chk('po-neuro-nmdisease'))  drawX(116.8,303.3);
 
   // METABOLIC y=319
-  if(chk('po-met-neg'))     drawX(101, 319); if(chk('po-met-iddm'))    drawX(133, 319);
-  if(chk('po-met-niddm'))   drawX(168, 319); if(chk('po-met-thyroid')) drawX(209, 319);
-  if(chk('po-met-hep'))     drawX(258, 319);
-  if(chk('po-met-obesity'))       drawX(101, 334);
-  if(chk('po-met-morbidobesity')) drawX(149, 334);
+  if(chk('po-met-neg'))     drawX(95.8,323.8); if(chk('po-met-iddm'))    drawX(128.7,323.8);
+  if(chk('po-met-niddm'))   drawX(163.2,323.8); if(chk('po-met-thyroid')) drawX(204.2,323.8);
+  if(chk('po-met-hep'))     drawX(252.9,323.8);
+  if(chk('po-met-obesity'))       drawX(95.8,338.2);
+  if(chk('po-met-morbidobesity')) drawX(143.7,338.2);
 
   // TEETH y=352
-  if(chk('po-teeth-intact'))  drawX(78,  352);
-  if(chk('po-teeth-missing')) drawX(120, 352);
-  if(chk('po-teeth-denture')) drawX(166, 352);
+  if(chk('po-teeth-intact'))  drawX(72.8,356.1);
+  if(chk('po-teeth-missing')) drawX(115.4,356.1);
+  if(chk('po-teeth-denture')) drawX(161.1,356.1);
 
   // OTHER y=371
-  if(chk('po-other-hiv'))       drawX(81,  371); if(chk('po-other-hepc'))     drawX(111, 371);
-  if(chk('po-other-anemia'))    drawX(149, 371); if(chk('po-other-steroids'))  drawX(192, 371);
-  if(chk('po-other-cancers'))   drawX(243, 371);
-  if(chk('po-other-drugabuse')) drawX(82,  384);
-  if(chk('po-other-coag'))      drawX(143, 384);
-  if(chk('po-other-chemo'))     drawX(219, 384);
+  if(chk('po-other-hiv'))       drawX(76.5,375.3); if(chk('po-other-hepc'))     drawX(105.5,375.3);
+  if(chk('po-other-anemia'))    drawX(143.5,375.3); if(chk('po-other-steroids'))  drawX(187.4,375.3);
+  if(chk('po-other-cancers'))   drawX(238.2,375.3);
+  if(chk('po-other-drugabuse')) drawX(76.3,388.7);
+  if(chk('po-other-coag'))      drawX(138.1,388.7);
+  if(chk('po-other-chemo'))     drawX(214.2,388.7);
 
   // MEDICATIONS box: y=402 to y=449 → content: start y=412, stop before y=447
   drawWrap2Col(val('po-medications'), 32, 165, 420, 445, 6);
@@ -166,7 +171,7 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   // PHYSICAL ASSESSMENT
   drawT(val('po-assessTime'), 408, 477, 7.5);
   // VSS / A+0x3 / QUESTIONS ANSWERED — always mark when record is filled
-  drawX(52, 491); drawX(86, 491); drawX(125, 491);
+  drawX(45.4,495.2); drawX(80.0,495.2); drawX(119.4,495.2);
 
   drawT(val('po-heart-notes'), 115, 508, 7.5);
   drawT(val('po-lungs-notes'), 115, 522, 7.5);
@@ -174,8 +179,8 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
 
   // MALLAMPATI
   const mp = val('mallampati');
-  if(mp==='1') drawX(133, 552); if(mp==='2') drawX(149, 552);
-  if(mp==='3') drawX(164, 552); if(mp==='4') drawX(179, 552);
+  if(mp==='1') drawX(130.0,554.0); if(mp==='2') drawX(146.0,554.0);
+  if(mp==='3') drawX(161.0,554.0); if(mp==='4') drawX(176.0,554.0);
 
   // VENIPUNCTURE / TOTAL FLUIDS / EBL y=570
   drawT(val('po-venipuncture'), 80,  570, 7.5);
@@ -192,14 +197,12 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
     const d = new Date(callDT.includes('T') ? callDT : callDT+'T00:00');
     callFmt = d.toLocaleDateString('en-US') + (callDT.includes('T') ? ' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '');
   }
-  drawT(callFmt, 435, 96, 7.5);
-
-  drawX(329, 126); // PRE-OP INSTRUCTIONS CONFIRMED
-  if(chk('po-npo'))    drawX(356, 138);
-  if(chk('po-driver')) drawX(356, 167);
+  drawT(callFmt, 435, 96, 7.5); // PRE-OP INSTRUCTIONS CONFIRMED
+  if(chk('po-npo'))    drawX(349.9,142.6);
+  if(chk('po-driver')) drawX(349.9,171.4);
   drawT(val('po-driverName'), 415, 180, 7.5);
   drawT(val('po-driverRel'),  415, 192, 7.5);
-  if(chk('po-nodrive')) drawX(355, 205);
+  if(chk('po-nodrive')) drawX(349.9,210.0);
 
   // COMMENTS right column y≈264
   drawWrap(val('po-comments'), 315, 278, 36, 9, 330);
