@@ -1,7 +1,7 @@
-// ── fax.js — Fax modal and cover sheet functions ──────────────────────────
+// -- fax.js — Fax modal and cover sheet functions --------------------------
 // Depends on: app.js (db, window.currentWorker, surgeryCenters)
 
-// ── FAX FUNCTIONS ──
+// -- FAX FUNCTIONS --
 let _faxRecord = null;
 
 // Called from the Send Fax button on the pre-op form itself (reads current form values)
