@@ -3474,14 +3474,7 @@ ${hasDraft ? '<span style="background:var(--warn-light);color:var(--warn);font-s
 </div><div class="case-date">
 Surgery: ${surgDateFmt} · Provider: ${provider}
 ${r['po-allergies'] ? ' · <span style="color:var(--warn)">⚠ Allergies</span>' : ''}
-</div><div style="margin-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:11px;font-weight:600;color:var(--text-faint)">💰 Deposit:</span><button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','not-paid')"
-style="padding:3px 10px;border-radius:10px;border:1.5px solid ${(r['po-depositStatus']||'not-paid')==='not-paid'?'#fca5a5':'var(--border)'};background:${(r['po-depositStatus']||'not-paid')==='not-paid'?'#fee2e2':'transparent'};color:${(r['po-depositStatus']||'not-paid')==='not-paid'?'#b91c1c':'var(--text-faint)'};font-size:11px;font-weight:600;cursor:pointer">✗ Not Paid</button><button onclick="event.stopPropagation();window.setMidCaseDeposit('${r.id}','paid')"
-style="padding:3px 10px;border-radius:10px;border:1.5px solid ${r['po-depositStatus']==='paid'?'#86efac':'var(--border)'};background:${r['po-depositStatus']==='paid'?'#dcfce7':'transparent'};color:${r['po-depositStatus']==='paid'?'#166534':'var(--text-faint)'};font-size:11px;font-weight:600;cursor:pointer">✓ Paid</button><input type="text" id="midcase-pay-notes-${r.id}"
-placeholder="Payment notes…"
-value="${r['po-paymentNotes']||''}"
-onclick="event.stopPropagation()"
-onchange="event.stopPropagation();window.saveMidCasePaymentNotes('${r.id}',this.value)"
-style="flex:1;min-width:160px;padding:3px 8px;font-size:11px;border-radius:10px;border:1px solid var(--border)"></div>
+</div>/div>
 ${allFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
 ${allFlags.map(f=>`<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px">${f}</span>`).join('')}
 </div>` : ''}
