@@ -219,6 +219,27 @@ document.getElementById('appScreen').style.display='none';
 // ── FIRESTORE INIT ──
 async function initData() {
 // Listen to items in real time
+
+// ── Global refresh — called after any data mutation to sync all views ────────
+window._globalRefresh = function() {
+  renderHistory();
+  renderReports();
+  renderCaseLog();
+  renderMidCase();
+  refreshDraftPicker();
+  if(document.getElementById('tab-calendar')?.classList.contains('active')) {
+    setTimeout(buildCalendar, 100);
+  }
+  if(document.getElementById('tab-payments')?.classList.contains('active') && typeof loadPaymentRows==='function') {
+    loadPaymentRows();
+  }
+  if(document.getElementById('tab-saved-pdfs')?.classList.contains('active') && typeof loadSavedPDFs==='function') {
+    loadSavedPDFs();
+  }
+  if(document.getElementById('tab-preop-history')?.classList.contains('active')) {
+    renderPreopHistory();
+  }
+};
 onSnapshot(doc(db,'atlas','inventory'), (snap) => {
 if(snap.exists()) {
 items = snap.data().items || [];
@@ -244,14 +265,37 @@ getDoc(doc(db,'atlas','preop')).then(ps => {
 window._rawPreopRecords = ps.exists() ? (ps.data().records||[]) : [];
 window._cachedPreopRecords = [...(window._rawPreopRecords||[])];
 }).catch(()=>{});
-renderHistory();
-renderReports();
-refreshDraftPicker();
-renderCaseLog();
-renderMidCase();
+// Update was from Firestore — refresh all dependent views
+if(typeof _globalRefresh === 'function') {
+  _globalRefresh();
+} else {
+  renderHistory();
+  renderReports();
+  refreshDraftPicker();
+  renderCaseLog();
+  renderMidCase();
+}
 // Refresh calendar if open
-if(document.getElementById('tab-calendar')?.classList.contains('active')) renderCalendar();
+if(document.getElementById('tab-calendar')?.classList.contains('active')) {
+  setTimeout(buildCalendar, 100);
+}
+}
+
+// Listen for preop changes (real-time sync between users)
+onSnapshot(doc(db,'atlas','preop'), (snap) => {
+  const records = snap.exists() ? (snap.data().records||[]) : [];
+  window._rawPreopRecords = records;
+  window._cachedPreopRecords = [...records];
+  // Re-render tabs that depend on preop data
+  const activeTab = document.querySelector('.section.active')?.id?.replace('tab-','');
+  if(activeTab === 'preop-history') renderPreopHistory();
+  if(activeTab === 'mid-case') renderMidCase();
+  if(activeTab === 'history') renderHistory();
+  if(activeTab === 'caselog') renderCaseLog();
+  // Sync payment rows if loaded
+  if(typeof _paymentRows !== 'undefined' && _paymentRows.length > 0) syncPaymentRowsFromCases();
 });
+);
 }
 async function saveInventory() {
 setSyncing(true);
@@ -262,6 +306,11 @@ async function saveCases() {
 setSyncing(true);
 await setDoc(doc(db,'atlas','cases'),{cases});
 setSyncing(false);
+// onSnapshot fires automatically and calls _globalRefresh indirectly,
+// but sync payments immediately if loaded
+if(typeof _paymentRows !== 'undefined' && _paymentRows.length > 0) {
+  syncPaymentRowsFromCases();
+}
 }
 // ── HELPERS ──
 function getStock(item,w){return w==='dev'?item.stockDev:item.stockJosh;}
@@ -1991,9 +2040,14 @@ console.log('Immediate pre-op call reminder triggered for', textData['po-caseId'
 } catch(e) { console.warn('Could not trigger reminder:', e); }
 }
 }
+// Refresh preop cache so all views have latest data
+getDoc(doc(db,'atlas','preop')).then(ps => {
+  window._rawPreopRecords = ps.exists() ? (ps.data().records||[]) : [];
+  window._cachedPreopRecords = [...(window._rawPreopRecords||[])];
+  _globalRefresh();
+}).catch(()=>{});
 alert('✓ Pre-Op saved! New Case has been pre-filled — head to New Case to finish logging supplies.');
 clearPreop();
-// Navigate to New Case tab
 showTab('new-case');
 };
 function prefillNewCase(preopRecord) {
@@ -2065,16 +2119,42 @@ console.error(e);
 }
 }
 window.deletePreopRecord = async function(id) {
-if(!confirm('Delete this pre-op record? This cannot be undone.')) return;
+if(!confirm('Delete this pre-op record?\n\nThis will also remove the linked case from Mid-Case and Case History.')) return;
 try {
-const snap = await getDoc(doc(db,'atlas','preop'));
-const records = snap.exists() ? (snap.data().records || []) : [];
-const updated = records.filter(r => r.id !== id);
-setSyncing(true);
-await setDoc(doc(db,'atlas','preop'), { records: updated });
-setSyncing(false);
-renderPreopHistory();
-} catch(e) { console.error(e); }
+  setSyncing(true);
+  // 1. Get and update preop records
+  const preopSnap = await getDoc(doc(db,'atlas','preop'));
+  const records = preopSnap.exists() ? (preopSnap.data().records||[]) : [];
+  const deletedRecord = records.find(r => r.id === id);
+  const updatedPreop = records.filter(r => r.id !== id);
+  await setDoc(doc(db,'atlas','preop'), { records: updatedPreop });
+  // Update local preop cache immediately
+  window._rawPreopRecords = updatedPreop;
+  window._cachedPreopRecords = [...updatedPreop];
+  // 2. Remove linked case from cases array (matched by caseId)
+  if(deletedRecord?.['po-caseId']) {
+    const deletedCaseId = deletedRecord['po-caseId'];
+    const casesSnap = await getDoc(doc(db,'atlas','cases'));
+    const allCases = casesSnap.exists() ? (casesSnap.data().cases||[]) : [];
+    const updatedCases = allCases.filter(c => c.caseId !== deletedCaseId);
+    if(updatedCases.length !== allCases.length) {
+      cases = updatedCases;
+      await setDoc(doc(db,'atlas','cases'), { cases });
+    }
+    // 3. Remove from payments rows
+    if(typeof _paymentRows !== 'undefined') {
+      const before = _paymentRows.length;
+      _paymentRows = _paymentRows.filter(r => r.caseId !== deletedCaseId);
+      if(_paymentRows.length !== before) {
+        await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
+      }
+    }
+  }
+  setSyncing(false);
+  // 4. Refresh all views
+  _globalRefresh();
+  renderPreopHistory();
+} catch(e) { setSyncing(false); console.error(e); alert('Error deleting: '+e.message); }
 };
 window.editPreopRecord = async function(id) {
 try {
