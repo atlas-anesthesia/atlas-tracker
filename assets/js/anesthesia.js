@@ -166,15 +166,18 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   drawWrap2Col(val('po-medications'), 32, 165, 420, 445, 6);
 
   // SURGICAL HISTORY box: y=449 to y=477 → content: start y=456, stop before y=475
-  drawWrap2Col(val('po-surgicalHistory'), 32, 165, 463, 475, 6);
+  drawWrap2Col(val('po-surgicalHistory'), 32, 165, 467, 475, 6);
 
   // PHYSICAL ASSESSMENT
   drawT(val('po-assessTime'), 408, 477, 7.5);
   // VSS / A+0x3 / QUESTIONS ANSWERED — always mark when record is filled
   drawX(45.4,495.2); drawX(80.0,495.2); drawX(119.4,495.2);
 
+  if(chk('po-heart-wnl')) drawX(81.4, 512.5);
   drawT(val('po-heart-notes'), 115, 508, 7.5);
+  if(chk('po-lungs-wnl')) drawX(82.1, 527.1);
   drawT(val('po-lungs-notes'), 115, 522, 7.5);
+  if(chk('po-abd-wnl'))  drawX(145.2, 541.4);
   drawT(val('po-abd-notes'),   200, 537, 7.5);
 
   // MALLAMPATI
@@ -200,8 +203,8 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   drawT(callFmt, 435, 96, 7.5); // PRE-OP INSTRUCTIONS CONFIRMED
   if(chk('po-npo'))    drawX(349.9,142.6);
   if(chk('po-driver')) drawX(349.9,171.4);
-  drawT(val('po-driverName'), 415, 180, 7.5);
-  drawT(val('po-driverRel'),  415, 192, 7.5);
+  drawT(val('po-driverName'), 440, 184, 7.5);
+  drawT(val('po-driverRel'),  440, 196, 7.5);
   if(chk('po-nodrive')) drawX(349.9,210.0);
 
   // COMMENTS right column y≈264
