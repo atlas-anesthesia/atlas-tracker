@@ -2067,7 +2067,7 @@ const pulmChecked = ['neg','asthma','copd','uri','o2','cpap','sleep-apnea','bl-b
 return `<div class="case-item"><div class="case-item-header" onclick="togglePreop('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${r['po-caseId'] || 'No Case ID'}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button>
-      <button onclick="event.stopPropagation();generateAnesthesiaRecord(window._rawPreopRecords?.find(x=>x.id==='${r.id}')||{})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">🖨 Print Record</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
+      <button onclick="event.stopPropagation();previewAnesthesiaRecord(window._rawPreopRecords?.find(x=>x.id==='${r.id}')||{})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">🖨 Print Record</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
 ${r['po-allergies']?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Allergies</strong><div style="font-size:13px;margin-top:3px">${r['po-allergies']}</div></div>`:''}
 ${cvChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Cardiovascular</strong><div style="font-size:13px;margin-top:3px">${cvChecked}</div></div>`:''}
 ${pulmChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Pulmonary</strong><div style="font-size:13px;margin-top:3px">${pulmChecked}</div></div>`:''}
@@ -6274,256 +6274,372 @@ window.sendInvoiceEmail = async function() {
   }
 };
 
-// ── ANESTHESIA RECORD PDF GENERATOR ──────────────────────────────────────────
-window.generateAnesthesiaRecord = function(record) {
-  const r = record;
+// ── ANESTHESIA RECORD PDF GENERATOR (exact sheet match) ───────────────────────
+window.generateAnesthesiaRecord = function(record, previewOnly) {
+  const r = record || {};
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
-  const W = 612, H = 792;
-  const M = 28; // margin
+  const W = 612, H = 792, LM = 30, RM = 30;
+  const CW = W - LM - RM; // content width = 552
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
-  const chk = (key) => !!r[key];
-  const val = (key) => r[key] || '';
-  const box = (x, y, checked) => {
-    doc.setLineWidth(0.5);
-    doc.rect(x, y, 8, 8);
-    if(checked) {
-      doc.setFontSize(7);
-      doc.setFont('Helvetica','bold');
-      doc.text('✓', x+1, y+6.5);
-    }
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  const chk = k => !!r[k];
+  const val = k => (r[k] || '');
+  const setFont = (sz, style='normal', color=[0,0,0]) => {
+    doc.setFontSize(sz); doc.setFont('Helvetica', style); doc.setTextColor(...color);
   };
-  const labelVal = (label, value, x, y, labelW, lineW) => {
-    doc.setFontSize(6.5);
-    doc.setFont('Helvetica','bold');
-    doc.setTextColor(80,80,80);
-    doc.text(label, x, y);
-    doc.setFont('Helvetica','normal');
-    doc.setTextColor(0,0,0);
-    doc.setFontSize(8.5);
-    doc.setLineWidth(0.3);
-    doc.line(x+labelW, y+1, x+labelW+lineW, y+1);
-    if(value) doc.text(value, x+labelW+2, y);
-    doc.setTextColor(0,0,0);
+  const hline = (x1,y,x2,lw=0.4) => { doc.setLineWidth(lw); doc.line(x1,y,x2,y); };
+  const vline = (x,y1,y2,lw=0.4) => { doc.setLineWidth(lw); doc.line(x,y1,x,y2); };
+  const rect  = (x,y,w,h,lw=0.4) => { doc.setLineWidth(lw); doc.rect(x,y,w,h); };
+  const fillRect = (x,y,w,h,r,g,b) => { doc.setFillColor(r,g,b); doc.rect(x,y,w,h,'F'); };
+
+  // Draw checkbox + label; returns x after label
+  const cb = (x, y, checked, label, fs=7) => {
+    doc.setLineWidth(0.5); doc.rect(x, y-6.5, 7, 7);
+    if(checked) { setFont(7,'bold',[0,0,0]); doc.text('X', x+1, y-0.5); }
+    if(label) { setFont(fs,'normal'); doc.text(label, x+9, y); }
+    return x + 9 + doc.getTextWidth(label || '') + 5;
   };
-  const sectionHeader = (text, x, y, w) => {
-    doc.setFillColor(220,230,240);
-    doc.rect(x, y-7, w, 9, 'F');
-    doc.setFontSize(7);
-    doc.setFont('Helvetica','bold');
-    doc.setTextColor(0,0,0);
-    doc.text(text, x+3, y);
+
+  // Section header bar
+  const secBar = (text, x, y, w, h=10) => {
+    fillRect(x, y-h+2, w, h, 200, 200, 200);
+    setFont(7,'bold'); doc.text(text, x+3, y);
+    hline(x, y-h+2, x+w, 0.5);
+    hline(x, y+2, x+w, 0.5);
   };
-  const checkRow = (items, x, y) => {
-    // items: [{key, label}]
-    let cx = x;
-    items.forEach(({key, label, isVal}) => {
-      box(cx, y-7, chk(key));
-      doc.setFontSize(6.5);
-      doc.setFont('Helvetica', chk(key)?'bold':'normal');
-      doc.text(label, cx+10, y);
-      cx += 10 + doc.getTextWidth(label) + 6;
-    });
-    return cx;
-  };
-  const multilineVal = (text, x, y, maxW, lineH) => {
+
+  // Write wrapped text in a box, returns new y
+  const wrappedText = (text, x, y, maxW, lineH=9, fs=7.5) => {
     if(!text) return y;
+    setFont(fs,'normal');
     const lines = doc.splitTextToSize(text, maxW);
-    doc.setFontSize(8);
-    doc.setFont('Helvetica','normal');
-    lines.forEach(line => { doc.text(line, x, y); y += lineH; });
+    lines.forEach(l => { doc.text(l, x, y); y += lineH; });
     return y;
   };
 
-  // ── TITLE ─────────────────────────────────────────────────────────────────
-  doc.setFontSize(11);
-  doc.setFont('Helvetica','bold');
-  doc.text('ANESTHESIA RECORD — PRE-OP ASSESSMENT', W/2, M+8, {align:'center'});
-  doc.setFontSize(7.5);
-  doc.setFont('Helvetica','normal');
-  const caseId = val('po-caseId') || '—';
-  doc.text(`Case ID: ${caseId}`, W/2, M+18, {align:'center'});
-  doc.setLineWidth(1);
-  doc.line(M, M+22, W-M, M+22);
+  // Labelled underline field: "LABEL: _______"
+  const field = (label, value, x, y, labelW, lineLen) => {
+    setFont(6.5,'bold',[100,100,100]); doc.text(label+':', x, y);
+    hline(x+labelW, y+1, x+labelW+lineLen, 0.4);
+    setFont(7.5,'normal',[0,0,0]);
+    if(value) doc.text(String(value).substring(0,Math.floor(lineLen/3.5)), x+labelW+2, y);
+  };
 
-  let y = M + 34;
+  let y = LM + 2;
 
-  // ── PATIENT INFO ROW ─────────────────────────────────────────────────────
-  const patName = [val('po-firstName'), val('po-lastName')].filter(Boolean).join(' ') || val('po-patient') || '—';
-  const dob = val('po-dob') ? new Date(val('po-dob')+'T12:00:00Z').toLocaleDateString('en-US') : '';
-  const ht = val('po-height-ft') ? `${val('po-height-ft')}' ${val('po-height-in') || 0}"` : '';
-  const wt = val('po-weight-lbs') ? `${val('po-weight-lbs')} lbs` : '';
-  const surgDate = val('po-surgeryDate') ? new Date(val('po-surgeryDate')+'T12:00:00Z').toLocaleDateString('en-US') : '';
-  
-  labelVal('PATIENT:', patName, M, y, 50, 180);
-  labelVal('DOB:', dob, M+240, y, 28, 70);
-  labelVal('DATE:', surgDate, M+350, y, 32, 100);
-  y += 14;
-  labelVal('HT:', ht, M, y, 18, 55); 
-  labelVal('WT:', wt, M+85, y, 18, 55);
-  labelVal('PROVIDER:', val('po-provider'), M+155, y, 52, 120);
-  labelVal('SURGERY CENTER:', [val('po-surgery-center-name')||''].join(''), M+340, y, 85, 145);
-  y += 14;
-  doc.setLineWidth(0.4);
-  doc.line(M, y, W-M, y);
-  y += 10;
+  // ═══════════════════════════════════════════════════════════
+  // TOP BORDER BOX around entire page
+  // ═══════════════════════════════════════════════════════════
+  rect(LM, y, CW, H - 2*LM - 2, 0.6);
 
-  // ── PT IDENTIFIED / H&P ──────────────────────────────────────────────────
-  box(M, y-7, true); doc.setFontSize(7.5); doc.setFont('Helvetica','normal'); doc.text('PT IDENTIFIED', M+11, y);
-  box(M+110, y-7, true); doc.text('H&P REVIEWED', M+121, y);
-  box(M+220, y-7, chk('po-npo')); doc.text('NPO CONFIRMED', M+231, y);
+  // ── BACK SIDE header ─────────────────────────────────────────────────────
+  fillRect(LM, y, CW, 14, 180, 180, 180);
+  setFont(9,'bold'); doc.text('BACK SIDE', W/2, y+10, {align:'center'});
   y += 14;
-  doc.line(M, y-4, W-M, y-4);
 
   // ── ALLERGIES ─────────────────────────────────────────────────────────────
-  sectionHeader('ALLERGIES', M, y, W-2*M);
-  y += 6;
-  doc.setLineWidth(0.3);
-  doc.rect(M, y, W-2*M, 22);
-  y = multilineVal(val('po-allergies'), M+3, y+9, W-2*M-6, 10);
-  y = Math.max(y, M+34+14+14+14+6+22) + 6;
+  hline(LM, y, LM+CW, 0.5);
+  fillRect(LM, y, CW, 10, 230,230,230);
+  setFont(7,'bold'); doc.text('ALLERGIES', LM+3, y+8);
+  y += 10;
+  hline(LM, y, LM+CW, 0.4);
+  const allergyBox = 28;
+  rect(LM+1, y+1, CW-2, allergyBox-2, 0.3);
+  wrappedText(val('po-allergies'), LM+4, y+9, CW-8, 9, 7.5);
+  y += allergyBox;
 
-  // ── MEDICATIONS ───────────────────────────────────────────────────────────
-  sectionHeader('MEDICATIONS', M, y, (W-2*M)/2-3);
-  sectionHeader('SURGICAL HISTORY', M+(W-2*M)/2+3, y, (W-2*M)/2-3);
-  y += 6;
-  const colW = (W-2*M-6)/2;
-  doc.rect(M, y, colW, 36);
-  doc.rect(M+colW+6, y, colW, 36);
-  multilineVal(val('po-medications'), M+3, y+9, colW-6, 9);
-  multilineVal(val('po-surgicalHistory'), M+colW+9, y+9, colW-6, 9);
-  y += 42;
+  // ── MEDICAL H&P ───────────────────────────────────────────────────────────
+  hline(LM, y, LM+CW, 0.5);
+  fillRect(LM, y, CW, 10, 230,230,230);
+  setFont(7,'bold'); doc.text('MEDICAL H&P', LM+3, y+8);
+  y += 10; hline(LM, y, LM+CW, 0.4); y += 7;
 
-  // ── PHYSICAL ASSESSMENT ───────────────────────────────────────────────────
-  sectionHeader('PHYSICAL ASSESSMENT', M, y, W-2*M);
-  y += 6;
-  // Row 1: VSS, A+0x3, Questions answered (always checked)
-  box(M, y-7, true); doc.setFontSize(7.5); doc.text('VSS', M+11, y);
-  box(M+50, y-7, true); doc.text('A+Ox3', M+61, y);
-  box(M+110, y-7, true); doc.text('QUESTIONS ANSWERED', M+121, y);
-  labelVal('ASSESSMENT TIME:', val('po-assessTime'), M+290, y, 95, 80);
-  y += 13;
+  // PUPIL EXAM
+  setFont(7,'bold'); doc.text('PUPIL EXAM', LM+3, y);
+  let px = LM+62;
+  px = cb(px, y, chk('po-pupil-normal'), 'NORMAL');
+  px = cb(px, y, chk('po-pupil-dilated'), 'DILATED');
+  cb(px, y, chk('po-pupil-constricted'), 'CONSTRICTED');
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 6;
 
-  // HEART
-  box(M, y-7, true); doc.text('HEART WNL', M+11, y);
-  if(val('po-heart-notes')) { doc.setFontSize(7.5); doc.text(val('po-heart-notes').substring(0,80), M+85, y); }
-  y += 12;
-  // LUNGS  
-  box(M, y-7, true); doc.text('LUNGS WNL', M+11, y);
-  if(val('po-lungs-notes')) doc.text(val('po-lungs-notes').substring(0,80), M+85, y);
-  y += 12;
-  // ABD
-  box(M, y-7, true); doc.text('ABDOMEN/EXTREMITIES WNL', M+11, y);
-  if(val('po-abd-notes')) doc.text(val('po-abd-notes').substring(0,80), M+200, y);
-  y += 12;
-  // Mallampati
-  doc.setFontSize(7.5); doc.setFont('Helvetica','bold'); doc.text('MALLAMPATI SCORE:', M, y);
-  doc.setFont('Helvetica','normal');
-  [1,2,3,4].forEach((n,i) => { 
-    box(M+105+(i*30), y-7, val('mallampati')==String(n));
-    doc.text(String(n), M+116+(i*30), y);
-  });
-  y += 12;
-
-  // ── PUPIL ─────────────────────────────────────────────────────────────────
-  doc.setFont('Helvetica','bold'); doc.text('PUPIL EXAM:', M, y); doc.setFont('Helvetica','normal');
-  checkRow([{key:'po-pupil-normal',label:'NORMAL'},{key:'po-pupil-dilated',label:'DILATED'},{key:'po-pupil-constricted',label:'CONSTRICTED'}], M+70, y);
-  y += 12;
-  doc.line(M, y-4, W-M, y-4);
-
-  // ── MEDICAL H&P CHECKBOXES ────────────────────────────────────────────────
-  sectionHeader('MEDICAL HISTORY', M, y, W-2*M);
+  // CARDIOVASCULAR row 1
+  setFont(7,'bold'); doc.text('CARDIOVASCULAR:', LM+3, y);
+  let cx = LM+82;
+  cx = cb(cx, y, chk('po-cv-neg'), 'NEG');
+  cx = cb(cx, y, chk('po-cv-htn'), 'HTN');
+  cx = cb(cx, y, chk('po-cv-cad'), 'CAD');
+  cx = cb(cx, y, chk('po-cv-angina'), 'ANGINA');
+  cx = cb(cx, y, chk('po-cv-mi'), 'MI');
+  cb(cx, y, chk('po-cv-chf'), 'CHF');
   y += 8;
-
-  // CARDIOVASCULAR
-  doc.setFontSize(7); doc.setFont('Helvetica','bold'); doc.text('CARDIOVASCULAR:', M, y);
-  checkRow([
-    {key:'po-cv-neg',label:'NEG'},{key:'po-cv-htn',label:'HTN'},{key:'po-cv-cad',label:'CAD'},
-    {key:'po-cv-angina',label:'ANGINA'},{key:'po-cv-mi',label:'MI'},{key:'po-cv-chf',label:'CHF'},
-    {key:'po-cv-murmur',label:'MURMUR'},{key:'po-cv-arrythmia',label:'ARRYTHMIA'}
-  ], M+90, y);
-  y += 11;
-  if(val('po-cv-other')) { doc.text('OTHER: '+val('po-cv-other').substring(0,70), M+90, y); y+=11; }
+  // CARDIOVASCULAR row 2
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-cv-murmur'), 'MURMUR');
+  cx = cb(cx, y, chk('po-cv-arrythmia'), 'ARRYTHMIA');
+  setFont(7,'bold'); doc.text('OTHER', cx, y);
+  hline(cx+28, y+1, LM+CW-4, 0.3);
+  if(val('po-cv-other')) { setFont(7,'normal'); doc.text(val('po-cv-other').substring(0,45), cx+30, y); }
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 6;
 
   // EKG
-  doc.setFont('Helvetica','bold'); doc.text('EKG:', M, y); doc.setFont('Helvetica','normal');
-  checkRow([
-    {key:'po-ekg-nsr',label:'NSR'},{key:'po-ekg-afib',label:'AFIB'},{key:'po-ekg-bbb',label:'BBB'},
-    {key:'po-ekg-lvh',label:'LVH'},{key:'po-ekg-chngs',label:'CHNGS'}
-  ], M+90, y);
-  y += 11;
+  setFont(7,'bold'); doc.text('EKG:', LM+3, y);
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-ekg-nsr'), 'NSR');
+  cx = cb(cx, y, chk('po-ekg-afib'), 'AFIB');
+  cx = cb(cx, y, chk('po-ekg-bbb'), 'BBB');
+  cx = cb(cx, y, chk('po-ekg-lvh'), 'LVH');
+  cb(cx, y, chk('po-ekg-chngs'), 'CHNGS');
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 6;
 
-  // PULMONARY
-  doc.setFont('Helvetica','bold'); doc.text('PULMONARY:', M, y);
-  checkRow([
-    {key:'po-pulm-neg',label:'NEG'},{key:'po-pulm-asthma',label:'ASTHMA'},{key:'po-pulm-copd',label:'COPD'},{key:'po-pulm-uri',label:'URI'}
-  ], M+90, y);
-  y += 11;
-
-  // GASTRO, RENAL, NEURO, METABOLIC, TEETH, OTHER
-  const sections = [
-    {label:'GASTRO:', items:[{key:'po-gi-neg',label:'NEG'},{key:'po-gi-gerd',label:'GERD'},{key:'po-gi-hiathern',label:'HIAT HERN'},{key:'po-gi-ulcer',label:'ULCER'}]},
-    {label:'RENAL:', items:[{key:'po-renal-neg',label:'NEG'},{key:'po-renal-dialysis',label:'DIALYSIS'},{key:'po-renal-esrd',label:'ESRD'}]},
-    {label:'NEURO:', items:[{key:'po-neuro-neg',label:'NEG'},{key:'po-neuro-depression',label:'DEPRESSION'},{key:'po-neuro-anxiety',label:'ANXIETY'},{key:'po-neuro-seizures',label:'SEIZURES'},{key:'po-neuro-cva',label:'CVA'}]},
-    {label:'METABOLIC:', items:[{key:'po-met-neg',label:'NEG'},{key:'po-met-iddm',label:'IDDM'},{key:'po-met-niddm',label:'NIDDM'},{key:'po-met-thyroid',label:'THYROID'},{key:'po-met-hep',label:'HEP'},{key:'po-met-obesity',label:'OBESITY'}]},
-    {label:'TEETH:', items:[{key:'po-teeth-intact',label:'INTACT'},{key:'po-teeth-missing',label:'MISSING'},{key:'po-teeth-denture',label:'DENTURE'}]},
-    {label:'OTHER:', items:[{key:'po-other-hiv',label:'HIV'},{key:'po-other-hepc',label:'HEP C'},{key:'po-other-anemia',label:'ANEMIA'},{key:'po-other-steroids',label:'STEROIDS'},{key:'po-other-coag',label:'COAGULOPATHY'}]},
-  ];
-  sections.forEach(sec => {
-    doc.setFont('Helvetica','bold'); doc.text(sec.label, M, y);
-    checkRow(sec.items, M+90, y);
-    y += 11;
-  });
-
-  doc.line(M, y-4, W-M, y-4);
-
-  // ── PRE-OP CALL SECTION ────────────────────────────────────────────────────
-  sectionHeader('PRE-OP CALL INFORMATION', M, y, W-2*M);
+  // PULMONARY row 1
+  setFont(7,'bold'); doc.text('PULMONARY:', LM+3, y);
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-pulm-neg'), 'NEG');
+  cx = cb(cx, y, chk('po-pulm-asthma'), 'ASTHMA');
+  cx = cb(cx, y, chk('po-pulm-copd'), 'COPD');
+  cx = cb(cx, y, chk('po-pulm-uri'), 'URI');
+  cx = cb(cx, y, chk('po-pulm-o2cpap'), 'O2 CPAP');
   y += 8;
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-pulm-sleepapnea'), 'SLEEP APNEA');
+  cx = cb(cx, y, chk('po-pulm-blbs'), 'BL BREATH SOUNDS');
+  cb(cx, y, chk('po-pulm-smoker'), 'SMOKER');
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 6;
+
+  // GASTRO
+  setFont(7,'bold'); doc.text('GASTRO:', LM+3, y);
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-gi-neg'), 'NEG');
+  cx = cb(cx, y, chk('po-gi-gerd'), 'GERD');
+  cx = cb(cx, y, chk('po-gi-hiathern'), 'HIAT HERN');
+  cb(cx, y, chk('po-gi-ulcer'), 'ULCER');
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 6;
+
+  // RENAL
+  setFont(7,'bold'); doc.text('RENAL:', LM+3, y);
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-renal-neg'), 'NEG');
+  cx = cb(cx, y, chk('po-renal-dialysis'), 'DIALYSIS');
+  cb(cx, y, chk('po-renal-esrd'), 'ESRD');
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 6;
+
+  // NEURO row 1
+  setFont(7,'bold'); doc.text('NUERO:', LM+3, y);
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-neuro-neg'), 'NEG');
+  cx = cb(cx, y, chk('po-neuro-depression'), 'DEPRESSION');
+  cx = cb(cx, y, chk('po-neuro-anxiety'), 'ANXIETY DISORDER');
+  cb(cx, y, chk('po-neuro-seizures'), 'SEIZURES');
+  y += 8;
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-neuro-cva'), 'CVA');
+  cb(cx, y, chk('po-neuro-nmdisease'), 'NM DISEASE');
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 6;
+
+  // METABOLIC row 1
+  setFont(7,'bold'); doc.text('METABOLIC:', LM+3, y);
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-met-neg'), 'NEG');
+  cx = cb(cx, y, chk('po-met-iddm'), 'IDDM');
+  cx = cb(cx, y, chk('po-met-niddm'), 'NIDDM');
+  cx = cb(cx, y, chk('po-met-thyroid'), 'THYROID Hx');
+  cb(cx, y, chk('po-met-hep'), 'HEP');
+  y += 8;
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-met-obesity'), 'OBESITY');
+  cb(cx, y, chk('po-met-morbidobesity'), 'MORBID OBESITY');
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 6;
+
+  // TEETH
+  setFont(7,'bold'); doc.text('TEETH:', LM+3, y);
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-teeth-intact'), 'INTACT');
+  cx = cb(cx, y, chk('po-teeth-missing'), 'MISSING');
+  cb(cx, y, chk('po-teeth-denture'), 'DENTURE');
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 6;
+
+  // OTHER row 1
+  setFont(7,'bold'); doc.text('OTHER:', LM+3, y);
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-other-hiv'), 'HIV');
+  cx = cb(cx, y, chk('po-other-hepc'), 'HEP C');
+  cx = cb(cx, y, chk('po-other-anemia'), 'ANEMIA');
+  cx = cb(cx, y, chk('po-other-steroids'), 'STEROIDS');
+  cx = cb(cx, y, chk('po-other-cancers'), 'CANCERS');
+  y += 8;
+  cx = LM+82;
+  cx = cb(cx, y, chk('po-other-drugabuse'), 'DRUG ABUSE');
+  cx = cb(cx, y, chk('po-other-coag'), 'COAGULOPATHY');
+  cb(cx, y, chk('po-other-chemo'), 'CHEMOTHERAPY');
+  y += 9; hline(LM, y, LM+CW, 0.5); y += 2;
+
+  // ── MEDICATIONS & SURGICAL HISTORY (side by side) ─────────────────────────
+  const halfW = (CW-1)/2;
+  // Headers
+  setFont(7,'bold'); doc.text('MEDICATIONS:', LM+3, y+8);
+  vline(LM+halfW, y, y+42, 0.4);
+  setFont(7,'bold'); doc.text('SURGICAL HISTORY:', LM+halfW+4, y+8);
+  hline(LM, y, LM+CW, 0.5);
+  y += 10; hline(LM, y, LM+CW, 0.25);
+  // Content
+  const medY = y+2;
+  wrappedText(val('po-medications'), LM+3, medY+7, halfW-6, 8.5, 7);
+  wrappedText(val('po-surgicalHistory'), LM+halfW+4, medY+7, halfW-6, 8.5, 7);
+  y += 34;
+  hline(LM, y, LM+CW, 0.5); y += 2;
+
+  // ── PHYSICAL ASSESSMENT ───────────────────────────────────────────────────
+  fillRect(LM, y, CW, 10, 230,230,230);
+  setFont(7,'bold'); doc.text('PHYSICAL ASSESSMENT', LM+3, y+8);
+  setFont(7,'bold'); doc.text('PRE-PROCEDURE TIME:', LM+CW-130, y+8);
+  hline(LM+CW-130+100, y+9, LM+CW-3, 0.4);
+  if(val('po-assessTime')) { setFont(7.5,'normal'); doc.text(val('po-assessTime'), LM+CW-130+102, y+8); }
+  y += 10; hline(LM, y, LM+CW, 0.4); y += 7;
+
+  // VSS / A+0x3 / QUESTIONS ANSWERED
+  cx = LM+5;
+  cx = cb(cx, y, true, 'VSS'); // always checked when assessed
+  cx = cb(cx, y, true, 'A+0x3');
+  cb(cx, y, true, 'QUESTIONS ANSWERED');
+  y += 9; hline(LM, y, LM+CW, 0.25); y += 7;
+
+  // HEART WNL
+  setFont(7,'bold'); doc.text('HEART WNL', LM+3, y);
+  hline(LM+60, y+1, LM+CW-3, 0.35);
+  if(val('po-heart-notes')) { setFont(7.5,'normal'); doc.text(val('po-heart-notes').substring(0,80), LM+62, y); }
+  y += 8;
+
+  // LUNGS WNL
+  setFont(7,'bold'); doc.text('LUNGS WNL', LM+3, y);
+  hline(LM+60, y+1, LM+CW-3, 0.35);
+  if(val('po-lungs-notes')) { setFont(7.5,'normal'); doc.text(val('po-lungs-notes').substring(0,80), LM+62, y); }
+  y += 8;
+
+  // ABDOMEN/EXTREMITIES WNL
+  setFont(7,'bold'); doc.text('ABDOMEN/EXTREMITIES WNL', LM+3, y);
+  hline(LM+140, y+1, LM+CW-3, 0.35);
+  if(val('po-abd-notes')) { setFont(7.5,'normal'); doc.text(val('po-abd-notes').substring(0,60), LM+142, y); }
+  y += 8;
+
+  // MALLAMPATI
+  setFont(7,'bold'); doc.text('MALLAMPATI SCORE', LM+3, y);
+  [1,2,3,4].forEach((n,i) => cb(LM+100+(i*28), y, val('mallampati')==String(n), String(n)));
+  y += 8; hline(LM, y, LM+CW, 0.25); y += 6;
+
+  // VENIPUNCTURE / TOTAL FLUIDS / EBL
+  setFont(7,'bold'); doc.text('VENIPUNCTURE', LM+3, y);
+  hline(LM+72, y+1, LM+185, 0.35);
+  if(val('po-venipuncture')) { setFont(7.5,'normal'); doc.text(val('po-venipuncture'), LM+74, y); }
+  setFont(7,'bold'); doc.text('TOTAL FLUIDS', LM+195, y);
+  hline(LM+258, y+1, LM+355, 0.35);
+  if(val('po-totalFluids')) { setFont(7.5,'normal'); doc.text(val('po-totalFluids'), LM+260, y); }
+  setFont(7,'bold'); doc.text('EBL', LM+365, y);
+  hline(LM+383, y+1, LM+CW-3, 0.35);
+  if(val('po-ebl')) { setFont(7.5,'normal'); doc.text(val('po-ebl'), LM+385, y); }
+  y += 9; hline(LM, y, LM+CW, 0.5); y += 2;
+
+  // ── PATIENT SIGNATURE + CONSENT ───────────────────────────────────────────
+  fillRect(LM, y, CW, 10, 230,230,230);
+  setFont(7,'bold'); doc.text('PATIENT SIGNATURE', LM+3, y+8);
+  y += 10; hline(LM, y, LM+CW, 0.4); y += 5;
+  // Consent text (small)
+  const consentText = 'I HEREBY ACKNOWLEDGE THAT ALL MEDICAL, SURGICAL, MEDICATION, AND PERSONAL INFORMATION I HAVE PROVIDED IS COMPLETE, ACCURATE, AND TRUE TO THE BEST OF MY KNOWLEDGE. I UNDERSTAND THAT WITHHOLDING INFORMATION OR PROVIDING INCORRECT OR INCOMPLETE INFORMATION MAY AFFECT MY CARE, ANESTHESIA, AND SURGICAL OUTCOME, AND COULD INCREASE THE RISK OF COMPLICATIONS.\n\nI CONFIRM THAT I HAVE DISCLOSED ALL RELEVANT MEDICAL CONDITIONS, ALLERGIES, MEDICATIONS (INCLUDING OVER-THE-COUNTER DRUGS, SUPPLEMENTS, AND RECREATIONAL SUBSTANCES) AND RECENT CHANGES IN MY HEALTH. I AGREE TO PROMPTLY INFORM THE HEALTHCARE TEAM OF ANY INFORMATION OR CHANGES TO MY CONDITION PRIOR TO THE PROCEDURE.\n\nTHE ANESTHESIA PLAN, INCLUDING POTENTIAL RISKS, BENEFITS, AND ALTERNATIVES, HAS BEEN EXPLAINED TO ME, MY QUESTIONS WERE ANSWERED, AND I CONSENT TO PROCEED. BY SIGNING BELOW, I ACCEPT RESPONSIBILITY FOR THE ACCURACY OF THE INFORMATION PROVIDED.';
+  setFont(5.5,'normal',[60,60,60]);
+  const consentLines = doc.splitTextToSize(consentText, CW-8);
+  consentLines.forEach(l => { doc.text(l, LM+4, y); y += 6.5; });
+  y += 3;
+  // Patient signature line
+  hline(LM+4, y, LM+200, 0.5);
+  hline(LM+220, y, LM+350, 0.5);
+  setFont(6,'normal',[80,80,80]);
+  doc.text('PATIENT SIGNATURE', LM+4, y+7);
+  doc.text('DATE', LM+220, y+7);
+  y += 14; hline(LM, y, LM+CW, 0.5); y += 2;
+
+  // ── PRE-OP CALL INFORMATION ───────────────────────────────────────────────
+  fillRect(LM, y, CW, 10, 230,230,230);
+  setFont(7,'bold'); doc.text('PRE-OP CALL INFORMATION', LM+3, y+8);
+  y += 10; hline(LM, y, LM+CW, 0.4); y += 7;
+
+  const surgDate2 = val('po-surgeryDate') ? new Date(val('po-surgeryDate')+'T12:00:00Z').toLocaleDateString('en-US') : '';
   const callDT = val('po-callDateTime');
-  const callDate = callDT ? new Date(callDT.split('T')[0]+'T12:00:00Z').toLocaleDateString('en-US') : '';
-  const callTime = callDT && callDT.includes('T') ? (() => { const t=callDT.split('T')[1].substring(0,5); const [h,m]=t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`; })() : '';
-  
-  labelVal('DATE OF SURGERY:', surgDate, M, y, 88, 100);
-  labelVal('DATE/TIME OF CALL:', callDate+(callTime?' '+callTime:''), M+220, y, 105, 150);
-  y += 13;
+  const callFmt = callDT ? (() => {
+    const d = new Date(callDT.includes('T') ? callDT : callDT+'T00:00');
+    return d.toLocaleDateString('en-US') + (callDT.includes('T') ? ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) : '');
+  })() : '';
 
-  box(M, y-7, chk('po-npo')); doc.setFontSize(7.5); doc.text('NPO AFTER MIDNIGHT', M+11, y);
-  box(M+140, y-7, chk('po-driver')); doc.text('RESPONSIBLE ADULT TO DRIVE', M+151, y);
-  box(M+330, y-7, chk('po-nodrive')); doc.text('PATIENT CANNOT DRIVE', M+341, y);
-  y += 13;
-  labelVal('DRIVER NAME:', val('po-driverName'), M, y, 70, 130);
-  labelVal('RELATIONSHIP:', val('po-driverRel'), M+220, y, 76, 110);
-  y += 13;
+  field('DATE OF SURGERY', surgDate2, LM+4, y, 90, 160);
+  y += 9;
+  field('DATE/TIME OF CALL', callFmt, LM+4, y, 100, 155);
+  y += 9;
+  cb(LM+4, y, true, 'PRE-OP INSTRUCTIONS CONFIRMED'); y += 9;
+  cb(LM+4, y, chk('po-npo'), 'NPO AFTER MIDNIGHT CONFIRMED'); y += 9;
+  setFont(7,'bold'); doc.text('TRANSPORTATION', LM+4, y); y += 8;
+  cb(LM+4, y, chk('po-driver'), 'RESPONSIBLE ADULT AVAILABLE TO DRIVE PATIENT HOME'); y += 9;
+  field('NAME OF DRIVER', val('po-driverName'), LM+4, y, 80, 150);
+  field('RELATIONSHIP', val('po-driverRel'), LM+250, y, 72, 120);
+  y += 9;
+  cb(LM+4, y, chk('po-nodrive'), 'PATIENT UNDERSTANDS THEY CANNOT DRIVE THEMSELVES'); y += 9;
+  hline(LM, y, LM+CW, 0.4); y += 5;
 
-  // ── VENIPUNCTURE / FLUIDS / EBL ───────────────────────────────────────────
-  labelVal('VENIPUNCTURE:', val('po-venipuncture'), M, y, 78, 80);
-  labelVal('TOTAL FLUIDS:', val('po-totalFluids'), M+180, y, 72, 70);
-  labelVal('EBL:', val('po-ebl'), M+340, y, 28, 80);
-  y += 14;
-  doc.line(M, y-4, W-M, y-4);
-
-  // ── COMMENTS ─────────────────────────────────────────────────────────────
-  sectionHeader('COMMENTS', M, y, W-2*M);
-  y += 6;
-  doc.rect(M, y, W-2*M, 36);
-  multilineVal(val('po-comments'), M+3, y+9, W-2*M-6, 10);
-  y += 42;
+  // COMMENTS
+  setFont(7,'bold'); doc.text('COMMENTS:', LM+4, y); y += 6;
+  const commentBoxH = 24;
+  rect(LM+1, y, CW-2, commentBoxH, 0.3);
+  wrappedText(val('po-comments'), LM+4, y+8, CW-8, 9, 7.5);
+  y += commentBoxH + 5;
 
   // ── SIGNATURE BLOCK ───────────────────────────────────────────────────────
-  doc.line(M, y, M+160, y); doc.line(M+180, y, M+380, y); doc.line(M+400, y, W-M, y);
-  doc.setFontSize(6.5);
-  doc.text('PROVIDER SIGNATURE', M, y+8);
-  doc.text('DATE', M+180, y+8);
-  doc.text('WITNESS SIGNATURE', M+400, y+8);
+  hline(LM, y, LM+CW, 0.5); y += 8;
+  const sig1End = LM+180, dateStart = LM+200, dateEnd = LM+310, witStart = LM+330;
+  hline(LM+4, y, sig1End, 0.5);
+  hline(dateStart, y, dateEnd, 0.5);
+  hline(witStart, y, LM+CW-4, 0.5);
+  setFont(6,'normal',[80,80,80]);
+  doc.text('PROVIDER SIGNATURE', LM+4, y+7);
+  doc.text('DATE', dateStart, y+7);
+  doc.text('WITNESS SIGNATURE', witStart, y+7);
+  y += 14;
+  // Second DATE line (for witness)
+  hline(witStart+90, y-5, LM+CW-4, 0.5);
+  doc.text('DATE', witStart+90, y);
 
-  // ── FOOTER ────────────────────────────────────────────────────────────────
-  doc.setFontSize(6);
-  doc.setTextColor(150,150,150);
-  doc.text('Generated by Atlas Anesthesia · '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}), W/2, H-M+10, {align:'center'});
+  // ── Generate PDF ──────────────────────────────────────────────────────────
+  if(previewOnly) {
+    return doc.output('datauristring');
+  } else {
+    const pName = [val('po-firstName'), val('po-lastName')].filter(Boolean).join('_') || 'PreOp';
+    const pDate = (surgDate2||'').replace(/\//g,'-');
+    doc.save(`AnesthesiaRecord_${pName}_${pDate}.pdf`);
+  }
+};
 
-  // Download
-  const fname = `AnesthesiaRecord_${(r['po-caseId']||'').replace(/[^A-Z0-9-]/gi,'_') || 'PreOp'}_${(surgDate||'').replace(/\//g,'-')}.pdf`;
-  doc.save(fname);
+// ── ANESTHESIA RECORD PREVIEW MODAL ──────────────────────────────────────────
+window.previewAnesthesiaRecord = function(record) {
+  // Remove any existing preview modal
+  const old = document.getElementById('anes-preview-modal');
+  if(old) old.remove();
+
+  const dataUri = window.generateAnesthesiaRecord(record, true);
+
+  const modal = document.createElement('div');
+  modal.id = 'anes-preview-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:20px;overflow-y:auto';
+
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:10px;width:100%;max-width:680px;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <div style="background:#1d3557;color:#fff;padding:14px 20px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600;font-size:15px">🖨 Anesthesia Record Preview</span>
+        <div style="display:flex;gap:10px">
+          <button onclick="generateAnesthesiaRecord(window._anesPrevRecord)" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">⬇ Download PDF</button>
+          <button onclick="document.getElementById('anes-preview-modal').remove()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer;font-family:inherit">✕ Close</button>
+        </div>
+      </div>
+      <iframe src="${dataUri}" style="width:100%;height:75vh;border:none;border-radius:0 0 10px 10px"></iframe>
+    </div>`;
+
+  window._anesPrevRecord = record;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if(e.target === modal) modal.remove(); });
 };
