@@ -42,7 +42,7 @@ window.openFaxModal = async function(id) {
     let r = records.find(x => x.id === id);
     if(!r) {
       // Not in cache — fetch fresh
-      const snap = await getDoc(doc(window.db,'atlas','preop'));
+      const snap = await window.getDoc(window.doc(window.db,'atlas','preop'));
       records = snap.exists() ? (snap.data().records||[]) : [];
       window._rawPreopRecords = records;
       r = records.find(x => x.id === id);
