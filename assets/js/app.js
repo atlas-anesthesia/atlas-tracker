@@ -5629,7 +5629,7 @@ function renderPaymentRows() {
     return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:5px 4px;font-size:11px;border:${bdr};border-radius:5px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary();autoSavePayments()">`;
   };
 
-  const COLS = '1.5fr 48px 1fr 44px 68px 1fr 1fr 1fr 34px 1fr 40px 76px 40px 44px 32px';
+  const COLS = '160px 50px 1fr 44px 68px 88px 88px 86px 32px 86px 38px 76px 38px 46px 30px';
   const wcolor = w => w==='dev'?'var(--dev)':'var(--josh)';
   const wname = w => w==='dev'?'Dev':'Josh';
 
