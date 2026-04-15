@@ -5,6 +5,12 @@
 let _faxRecord = null;
 
 // Called from the Send Fax button on the pre-op form itself (reads current form values)
+
+window.previewFax = function() {
+  const preview = document.getElementById('fax-preview-content');
+  const record = window._faxRecord || {};
+  if(preview) preview.innerHTML = buildFaxHTML(record);
+};
 window.openFaxModalFromForm = function() {
   // Read all form fields directly — no save, no clear, nothing changes
   const r = {};
@@ -180,6 +186,6 @@ function buildFaxHTML(r) {
 </div>`;
 }
 
-function checkHistoryDeposits(cases) {
+window.checkHistoryDeposits = function checkHistoryDeposits(cases) {
   // stub — Stripe auto-check disabled
 }
