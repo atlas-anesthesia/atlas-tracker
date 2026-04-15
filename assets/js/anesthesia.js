@@ -1,9 +1,9 @@
-// ── anesthesia.js — Print Record PDF generator ──────────────────────────────
+// -- anesthesia.js — Print Record PDF generator ------------------------------
 // Depends on: app.js (window.currentWorker)
 // Requires: anesthesia-record.pdf in GitHub repo root
 
 
-// ── ANESTHESIA RECORD PDF GENERATOR (overlays onto exact sheet) ───────────────
+// -- ANESTHESIA RECORD PDF GENERATOR (overlays onto exact sheet) ---------------
 let _anesPdfBytes = null;
 
 async function _loadAnesPdf() {
