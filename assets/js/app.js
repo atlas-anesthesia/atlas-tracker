@@ -1067,13 +1067,26 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       var dSaveBtn   = document.getElementById('dist-save-'+worker);
       var dCancelBtn = document.getElementById('dist-cancel-'+worker);
       var payAllBtn  = document.getElementById('dist-payall-'+worker);
+      var investInp  = document.getElementById('dist-payback-invest-'+worker);
       if(saveBtn)    saveBtn.addEventListener('click', function() { window.savePayoutEntry(worker); });
       if(cancelBtn)  cancelBtn.addEventListener('click', function() { window.cancelPayoutEntry(worker); });
       if(dSaveBtn)   dSaveBtn.addEventListener('click', function() { window.saveDistribution(worker); });
       if(dCancelBtn) dCancelBtn.addEventListener('click', function() { window.cancelDistribution(worker); });
       if(payAllBtn)  payAllBtn.addEventListener('click', function() {
-        var inp = document.getElementById(payAllBtn.getAttribute('data-target'));
-        if(inp) inp.value = payAllBtn.getAttribute('data-max');
+        var max = parseFloat(payAllBtn.getAttribute('data-max'))||0;
+        if(investInp) { investInp.value = max.toFixed(2); investInp.dispatchEvent(new Event('input')); }
+      });
+      // Live update: clamp entered value to remaining balance and update Pay All label
+      if(investInp) investInp.addEventListener('input', function() {
+        var max = parseFloat(investInp.getAttribute('max'))||0;
+        var entered = parseFloat(investInp.value)||0;
+        if(entered > max) investInp.value = max.toFixed(2);
+        if(payAllBtn) {
+          var remaining = max - Math.min(entered, max);
+          payAllBtn.textContent = entered > 0
+            ? 'Pay All ('+('$'+(max).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}))+')'
+            : 'Pay All ('+('$'+(max).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}))+')';
+        }
       });
     }, 0);
   }
