@@ -272,7 +272,11 @@ window.editPaymentField = function(field, rowIdx) {
 
 window.commitPaymentField = function(field, idx, val) {
   if(field==='proj') { _paymentRows[idx].projOverride=val; }
-  else { _paymentRows[idx].invoicedAmount=val; }
+  else { _paymentRows[idx].invoicedAmount=val;
+    if(val > 0 && _paymentRows[idx].invoiceSent) {
+      _syncInvoiceToPayouts(_paymentRows[idx], parseFloat(val)||0).catch(()=>{});
+    }
+  }
   window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
   renderPaymentRows(); renderPaymentSummary();
 };
@@ -584,6 +588,74 @@ window.downloadInvoiceModal = async function() {
   }
 };
 
+// Backfill: sync all already-invoiced cases to Expenses & Distributions
+async function _backfillInvoicesToPayouts() {
+  try {
+    const invoiced = _paymentRows.filter(r => r.invoiceSent && (r.invoicedAmount||0) > 0);
+    if(!invoiced.length) return;
+    const snap = await window.getDoc(window.doc(window.db,'atlas','payouts'));
+    const data = snap.exists() ? snap.data() : { entries:[], distributions:[] };
+    if(!data.entries) data.entries = [];
+    const existingCaseIds = new Set(data.entries.filter(e=>e.cat==='case-income').map(e=>e.caseId));
+    const toAdd = invoiced.filter(r => !existingCaseIds.has(r.caseId));
+    if(!toAdd.length) return;
+    toAdd.forEach(row => {
+      data.entries.push({
+        id:        window.uid ? window.uid() : Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+        worker:    row.worker || 'josh',
+        cat:       'case-income',
+        name:      row.caseId || 'Unknown Case',
+        amount:    row.invoicedAmount,
+        date:      row.caseDate || null,
+        notes:     [
+          row.surgeryCenter ? 'Center: '+row.surgeryCenter : '',
+          row.caseDate      ? 'Date: '  +row.caseDate      : ''
+        ].filter(Boolean).join(' | '),
+        caseId:    row.caseId,
+        createdAt: new Date().toISOString()
+      });
+    });
+    await window.setDoc(window.doc(window.db,'atlas','payouts'), data);
+    console.log('Backfilled', toAdd.length, 'invoice income entry/entries to Expenses & Distributions');
+  } catch(e) { console.warn('Backfill failed:', e); }
+}
+
+// Auto-sync invoiced payment → Income entry in Expenses & Distributions
+async function _syncInvoiceToPayouts(row, total) {
+  if(!total || total <= 0) return;
+  try {
+    const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payouts'));
+    const data = snap.exists() ? snap.data() : { entries: [], distributions: [] };
+    if(!data.entries) data.entries = [];
+    // Check if entry already exists for this caseId
+    const existing = data.entries.findIndex(e => e.caseId === row.caseId && e.cat === 'case-income');
+    const entry = {
+      id: existing !== -1 ? data.entries[existing].id : (window.uid ? window.uid() : Date.now().toString(36)),
+      worker:    row.worker || 'josh',
+      cat:       'case-income',
+      name:      row.caseId || 'Unknown Case',
+      amount:    total,
+      date:      row.caseDate || null,
+      notes:     [
+        row.surgeryCenter ? 'Center: ' + row.surgeryCenter : '',
+        row.caseDate      ? 'Date: '   + row.caseDate      : '',
+        row.provider      ? 'Provider: '+ row.provider      : ''
+      ].filter(Boolean).join(' | '),
+      caseId:    row.caseId,
+      createdAt: new Date().toISOString()
+    };
+    if(existing !== -1) {
+      data.entries[existing] = entry;
+    } else {
+      data.entries.push(entry);
+    }
+    await window.setDoc(window.doc(window.db, 'atlas', 'payouts'), data);
+    console.log('Synced invoice income entry for', row.caseId);
+  } catch(e) {
+    console.warn('Could not sync invoice to payouts:', e);
+  }
+}
+
 window.sendInvoiceEmail = async function() {
   const email=document.getElementById('inv-modal-email')?.value?.trim();
   const caseId=document.getElementById('inv-modal-case')?.value;
@@ -624,6 +696,8 @@ window.sendInvoiceEmail = async function() {
     if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){
       _paymentRows[_invoiceModalRowIdx].invoiceSent=true;
       _paymentRows[_invoiceModalRowIdx].invoicedAmount=total;
+      // Auto-sync to Expenses & Distributions
+      _syncInvoiceToPayouts(_paymentRows[_invoiceModalRowIdx], total).catch(()=>{});
     }
     renderPaymentRows();
     closeInvoiceModal();
