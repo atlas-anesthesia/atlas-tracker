@@ -67,6 +67,9 @@ function _buildDepositEmailHTML(opts) {
         ${isReminder ? 'Complete $500 Deposit' : 'Pay $500 Deposit Securely'}
       </a>
     </div>
+    <p style="background:#f0f5ff;border-left:3px solid #1d3557;padding:10px 14px;border-radius:0 6px 6px 0;font-size:13px;color:#333;margin:0 0 16px">
+      <strong>Please note:</strong> The remaining balance for your procedure will be collected 7–8 days prior to your surgery date.
+    </p>
     ${isReminder
       ? '<p>If you have any questions or need to reschedule, please don\'t hesitate to reach out. We want to make this process as easy as possible for you.</p>'
       : '<p>If you have any questions before your procedure, please don\'t hesitate to reach out. We\'re here to make sure you feel comfortable and well-prepared.</p>'}
@@ -81,7 +84,7 @@ function _buildDepositEmailHTML(opts) {
 // -- Send deposit email -------------------------------------------------------
 async function _sendDepositEmail(record, isReminder, firstName) {
   const html = _buildDepositEmailHTML({
-        provider: record.provider,
+        provider: (record.worker || window.currentWorker || 'josh') === 'josh' ? 'Joshua Condado, CRNA' : 'Dev Murthy, CRNA',
     surgDate: _fmtDate(record.surgDate),
     stripeLink: record.stripeLink || STRIPE_PAYMENT_LINK,
     isReminder
@@ -94,7 +97,7 @@ async function _sendDepositEmail(record, isReminder, firstName) {
       body: JSON.stringify({
         to: record.patientEmail,
                 caseId: record.caseId,
-        provider: record.provider,
+        provider: (record.worker || window.currentWorker || 'josh') === 'josh' ? 'Joshua Condado, CRNA' : 'Dev Murthy, CRNA',
         stripeLink: record.stripeLink || STRIPE_PAYMENT_LINK,
         worker: record.worker || window.currentWorker || 'josh',
         isReminder,
