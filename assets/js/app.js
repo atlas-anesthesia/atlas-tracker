@@ -466,7 +466,7 @@ const records = window._cachedPreopRecords || [];
 const events = [];
 records.forEach(r => {
 try {
-if(calFilter !== 'all' && r.worker !== calFilter) return;
+// Shared calendar — show all workers' events
 const surgDate = r['po-surgeryDate'];
 if(!surgDate || surgDate === '—') return;
 const caseId = r['po-caseId'] || '—';
@@ -474,13 +474,13 @@ const provider = r['po-provider'] || '';
 const worker = r.worker || 'dev';
 const wname = worker==='dev'?'Devarsh':'Josh';
 const email = r['po-patientEmail'] || '';
-events.push({ type:'surgery', date:surgDate, label:`🔴 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+events.push({ type:'surgery', date:surgDate, label:`${worker==='josh'?'J':'D'} ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
 const callD = new Date(surgDate+'T12:00:00');
 callD.setDate(callD.getDate() - preopDays);
-events.push({ type:'preop-call', date:callD.toISOString().split('T')[0], label:`📞 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+events.push({ type:'preop-call', date:callD.toISOString().split('T')[0], label:`📞 ${worker==='josh'?'J':'D'} ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
 const depD = new Date(surgDate+'T12:00:00');
 depD.setDate(depD.getDate() - depositDays);
-events.push({ type:'deposit', date:depD.toISOString().split('T')[0], label:`💰 ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+events.push({ type:'deposit', date:depD.toISOString().split('T')[0], label:`💰 ${worker==='josh'?'J':'D'} ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
 } catch(rowErr) { console.warn('Calendar row error:', rowErr); }
 });
 return events;
@@ -544,12 +544,14 @@ numEl.textContent = day;
 d.appendChild(numEl);
 dayEvents.forEach(e => {
 const ev = document.createElement('div');
-const colors = {
-surgery:'background:#fee2e2;color:#b91c1c;',
-'preop-call':'background:#dbeafe;color:#1d4ed8;',
-deposit:'background:#dcfce7;color:#166534;'
+// Color by worker: Josh = warm red/orange, Dev = blue/teal
+const workerColors = {
+  josh: { surgery:'background:#fff1f0;color:#b91c1c;border-left:3px solid #f87171;', 'preop-call':'background:#fff7ed;color:#c2410c;border-left:3px solid #fb923c;', deposit:'background:#fef9c3;color:#854d0e;border-left:3px solid #facc15;' },
+  dev:  { surgery:'background:#eff6ff;color:#1d4ed8;border-left:3px solid #60a5fa;', 'preop-call':'background:#f0fdf4;color:#166534;border-left:3px solid #4ade80;', deposit:'background:#faf5ff;color:#6b21a8;border-left:3px solid #c084fc;' },
 };
-ev.style.cssText = `font-size:10px;font-weight:500;padding:2px 4px;border-radius:3px;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${colors[e.type]||''}`;
+const workerKey = e.worker === 'josh' ? 'josh' : 'dev';
+const typeStyle = workerColors[workerKey][e.type] || (workerKey==='josh' ? 'background:#fff1f0;color:#b91c1c;' : 'background:#eff6ff;color:#1d4ed8;');
+ev.style.cssText = `font-size:10px;font-weight:500;padding:2px 5px;border-radius:3px;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${typeStyle}`;
 ev.textContent = e.label;
 ev.title = e.detail || e.label;
 ev.onclick = () => { try { showCalDetail(e); } catch(err) { console.warn(err); } };
