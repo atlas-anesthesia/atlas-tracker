@@ -2395,6 +2395,39 @@ try {
         await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
       }
     }
+    // 4. Remove from CS log
+    try {
+      const csSnap = await getDoc(doc(db,'atlas','cslog'));
+      if(csSnap.exists()) {
+        const csEntries = csSnap.data().entries || [];
+        const updatedCS = csEntries.filter(e => e.caseId !== deletedCaseId);
+        if(updatedCS.length !== csEntries.length) {
+          await setDoc(doc(db,'atlas','cslog'), { entries: updatedCS });
+        }
+      }
+    } catch(csErr) { console.warn('CS log cleanup skipped:', csErr); }
+    // 5. Remove from deposits
+    try {
+      const depSnap = await getDoc(doc(db,'atlas','deposits'));
+      if(depSnap.exists()) {
+        const depRecords = depSnap.data().records || [];
+        const updatedDep = depRecords.filter(r => r.caseId !== deletedCaseId);
+        if(updatedDep.length !== depRecords.length) {
+          await setDoc(doc(db,'atlas','deposits'), { records: updatedDep });
+        }
+      }
+    } catch(depErr) { console.warn('Deposits cleanup skipped:', depErr); }
+    // 6. Remove from saved PDFs
+    try {
+      const pdfSnap = await getDoc(doc(db,'atlas','saved_pdfs'));
+      if(pdfSnap.exists()) {
+        const pdfs = pdfSnap.data().records || [];
+        const updatedPdfs = pdfs.filter(p => p.caseId !== deletedCaseId);
+        if(updatedPdfs.length !== pdfs.length) {
+          await setDoc(doc(db,'atlas','saved_pdfs'), { records: updatedPdfs });
+        }
+      }
+    } catch(pdfErr) { console.warn('Saved PDFs cleanup skipped:', pdfErr); }
   }
   setSyncing(false);
   // 4. Refresh all views
