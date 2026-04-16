@@ -7,7 +7,7 @@ let _faxRecord = null;
 // Called from the Send Fax button on the pre-op form itself (reads current form values)
 
 window.previewFax = function() {
-  const preview = document.getElementById('fax-preview-content');
+  const preview = document.getElementById('faxPreviewContent');
   const record = window._faxRecord || {};
   if(preview) preview.innerHTML = buildFaxHTML(record);
 };
