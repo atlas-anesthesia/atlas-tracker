@@ -218,9 +218,23 @@ Connect Google Calendar
     </div>
 
     <!-- Analytics summary -->
-    <div class="grid-2" style="margin-bottom:24px;max-width:480px" id="payments-summary">
-      <div class="metric-card"><div class="metric-label">Projected Income</div><div class="metric-value" id="pm-projected">$0</div></div>
-      <div class="metric-card"><div class="metric-label">Invoiced Amount</div><div class="metric-value" id="pm-invoiced">$0</div></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px" id="payments-summary">
+      <div class="metric-card" style="border-left:3px solid var(--accent)">
+        <div class="metric-label">Total Invoiced</div>
+        <div class="metric-value" id="pm-invoiced">$0</div>
+      </div>
+      <div class="metric-card" style="border-left:3px solid var(--josh)">
+        <div class="metric-label">Josh Invoiced</div>
+        <div class="metric-value" style="color:var(--josh)" id="pm-invoiced-josh">$0</div>
+      </div>
+      <div class="metric-card" style="border-left:3px solid var(--dev)">
+        <div class="metric-label">Dev Invoiced</div>
+        <div class="metric-value" style="color:var(--dev)" id="pm-invoiced-dev">$0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Projected Income</div>
+        <div class="metric-value" id="pm-projected">$0</div>
+      </div>
     </div>
 
     <!-- Table -->
