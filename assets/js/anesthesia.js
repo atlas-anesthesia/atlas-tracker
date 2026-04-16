@@ -212,7 +212,7 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
 
   // Provider name near signature
   const w = r.worker || (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'josh');
-  drawT(w==='josh' ? 'Josh Condado, CRNA' : 'Dr. Dev Murthy, CRNA', 30, 756, 7, true);
+  drawT(w==='josh' ? 'Josh Condado, CRNA' : 'Dev Murthy, CRNA', 120, 749, 7, true);
 
   // Output
   const outBytes = await pdfDoc.save();
