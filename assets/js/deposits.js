@@ -8,7 +8,7 @@ const WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
 
 // Stripe payment link — set in Atlas settings or hardcoded
 // Change this to your real Stripe payment link URL
-const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/your_link_here';
+const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/00wfZgh0refXfSIarfejK00';
 
 // -- Firestore helpers --------------------------------------------------------
 async function _loadDeposits() {
@@ -122,8 +122,7 @@ async function _checkStripePayment(record) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        paymentLinkId: record.stripePaymentLinkId,
-        sessionId: record.stripeSessionId,
+        customerEmail: record.patientEmail,
         caseId: record.caseId
       })
     });
