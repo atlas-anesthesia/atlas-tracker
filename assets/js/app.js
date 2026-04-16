@@ -774,7 +774,15 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   function _uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
   function _fmt(n) { return '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function _fmtD(d) { if(!d) return ''; const p=d.split('-'); return p[1]+'/'+p[2]+'/'+p[0]; }
-  function _isExp(cat) { return cat === 'expense'; }
+
+  // cat → { label, color, isExpense }
+  const CAT_META = {
+    expense:           { label:'EXPENSE',            color:'var(--warn)',  bg:'rgba(239,68,68,0.1)',   isExpense:true  },
+    income:            { label:'INCOME',             color:'#2d6a4f',     bg:'rgba(45,106,79,0.1)',    isExpense:false },
+    'initial-invest':  { label:'INITIAL INVESTMENT', color:'var(--info)', bg:'rgba(29,83,198,0.1)',   isExpense:true  },
+  };
+  function _meta(cat) { return CAT_META[cat] || CAT_META.expense; }
+  function _isExp(cat) { return _meta(cat).isExpense; }
 
   function _totals(worker, data) {
     const entries  = (data.entries||[]).filter(e=>e.worker===worker);
@@ -787,11 +795,40 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     return { entries, dists, totalIn, totalOut, totalDist, rev, suggested };
   }
 
-  function _inp(id, type, placeholder, required) {
-    return '<input type="'+type+'" id="'+id+'" placeholder="'+(placeholder||'')+'"'+(required?' required':'')+' style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">';
-  }
   function _lbl(text, optional) {
-    return '<label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">'+text+(optional?' <span style="font-weight:400;text-transform:none;font-style:italic">(optional)</span>':'')+' </label>';
+    return '<label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">'
+      +text+(optional?' <span style="font-weight:400;text-transform:none;font-style:italic">(optional)</span>':'')+' </label>';
+  }
+  function _field(id, type, placeholder) {
+    return '<input type="'+type+'" id="'+id+'" placeholder="'+(placeholder||'')+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">';
+  }
+
+  function _entryFormHTML(worker, editing) {
+    var title = editing ? 'Edit Entry' : 'Add Entry';
+    return '<div style="font-size:13px;font-weight:600;margin-bottom:12px">'+title+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+        +'<div>'+_lbl('Name')+_field('payout-name-'+worker,'text','e.g. Propofol restock')+'</div>'
+        +'<div>'+_lbl('Type')
+          +'<select id="payout-cat-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+            +'<option value="expense">Expense</option>'
+            +'<option value="income">Income</option>'
+            +'<option value="initial-invest">Initial Investment</option>'
+          +'</select>'
+        +'</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+        +'<div>'+_lbl('Amount')+_field('payout-amount-'+worker,'number','0.00')+'</div>'
+        +'<div>'+_lbl('Supplier',true)+_field('payout-supplier-'+worker,'text','e.g. Henry Schein')+'</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+        +'<div>'+_lbl('Date',true)+_field('payout-date-'+worker,'date','')+'</div>'
+        +'<div>'+_lbl('Notes',true)+_field('payout-notes-'+worker,'text','Additional details...')+'</div>'
+      +'</div>'
+      +'<input type="hidden" id="payout-editing-id-'+worker+'" value="">'
+      +'<div style="display:flex;gap:8px">'
+        +'<button class="btn btn-primary btn-sm" id="payout-save-'+worker+'">Save</button>'
+        +'<button class="btn btn-ghost btn-sm" id="payout-cancel-'+worker+'">Cancel</button>'
+      +'</div>';
   }
 
   function _buildSection(worker, canEdit, data, container) {
@@ -814,10 +851,10 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px';
     [
-      ['Case Revenue', _fmt(rev), 'var(--accent)'],
-      ['Expenses',     _fmt(totalOut), 'var(--warn)'],
-      ['Other Income', _fmt(totalIn), 'var(--info)'],
-      ['Suggested Payout', _fmt(suggested), '#2d6a4f']
+      ['Case Revenue',     _fmt(rev),       'var(--accent)'],
+      ['Expenses',         _fmt(totalOut),  'var(--warn)'],
+      ['Other Income',     _fmt(totalIn),   'var(--info)'],
+      ['Suggested Payout', _fmt(suggested), '#2d6a4f'],
     ].forEach(function(item, i) {
       const card = document.createElement('div');
       card.className = 'metric-card';
@@ -831,14 +868,9 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     if(canEdit) {
       const btnRow = document.createElement('div');
       btnRow.style.cssText = 'display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap';
-      const b1 = document.createElement('button');
-      b1.className = 'btn btn-ghost btn-sm';
-      b1.textContent = '+ Add Entry';
+      const b1 = document.createElement('button'); b1.className='btn btn-ghost btn-sm'; b1.textContent='+ Add Entry';
       b1.addEventListener('click', function() { window.showAddPayoutExpense(worker); });
-      const b2 = document.createElement('button');
-      b2.className = 'btn btn-ghost btn-sm';
-      b2.style.color = 'var(--accent)';
-      b2.textContent = 'Record Distribution';
+      const b2 = document.createElement('button'); b2.className='btn btn-ghost btn-sm'; b2.style.color='var(--accent)'; b2.textContent='Record Distribution';
       b2.addEventListener('click', function() { window.showRecordDistribution(worker); });
       btnRow.appendChild(b1); btnRow.appendChild(b2);
       wrap.appendChild(btnRow);
@@ -849,45 +881,11 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       wrap.appendChild(note);
     }
 
-    // Add entry form
+    // Add/Edit entry form
     const addForm = document.createElement('div');
     addForm.id = 'payout-add-form-'+worker;
     addForm.style.cssText = 'display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px';
-    addForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:12px">Add Entry</div>'
-      // Row 1: Name + Category
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-        +'<div>'+_lbl('Name')
-          +'<input type="text" id="payout-name-'+worker+'" placeholder="e.g. Propofol restock" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
-        +'</div>'
-        +'<div>'+_lbl('Type')
-          +'<select id="payout-cat-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
-            +'<option value="expense">Expense</option>'
-            +'<option value="income">Income</option>'
-          +'</select>'
-        +'</div>'
-      +'</div>'
-      // Row 2: Amount + Supplier (optional)
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-        +'<div>'+_lbl('Amount')
-          +'<input type="number" id="payout-amount-'+worker+'" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
-        +'</div>'
-        +'<div>'+_lbl('Supplier', true)
-          +'<input type="text" id="payout-supplier-'+worker+'" placeholder="e.g. Henry Schein" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
-        +'</div>'
-      +'</div>'
-      // Row 3: Date (optional) + Notes (optional)
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-        +'<div>'+_lbl('Date', true)
-          +'<input type="date" id="payout-date-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
-        +'</div>'
-        +'<div>'+_lbl('Notes', true)
-          +'<input type="text" id="payout-notes-'+worker+'" placeholder="Additional details..." style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
-        +'</div>'
-      +'</div>'
-      +'<div style="display:flex;gap:8px">'
-        +'<button class="btn btn-primary btn-sm" id="payout-save-'+worker+'">Save</button>'
-        +'<button class="btn btn-ghost btn-sm" id="payout-cancel-'+worker+'">Cancel</button>'
-      +'</div>';
+    addForm.innerHTML = _entryFormHTML(worker, false);
     wrap.appendChild(addForm);
 
     // Distribution form
@@ -903,94 +901,118 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         +'<div style="border-top:1px solid #b8cfe8;padding-top:8px;margin-top:6px;font-weight:700;color:var(--info)">Suggested: '+_fmt(suggested)+'</div>'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-        +'<div>'+_lbl('Amount')+'<input type="number" id="dist-amount-'+worker+'" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
-        +'<div>'+_lbl('Date', true)+'<input type="date" id="dist-date-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+        +'<div>'+_lbl('Amount')+_field('dist-amount-'+worker,'number','0.00')+'</div>'
+        +'<div>'+_lbl('Date',true)+_field('dist-date-'+worker,'date','')+'</div>'
       +'</div>'
-      +'<div style="margin-bottom:10px">'+_lbl('Notes', true)+'<input type="text" id="dist-notes-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +'<div style="margin-bottom:10px">'+_lbl('Notes',true)+_field('dist-notes-'+worker,'text','')+'</div>'
       +'<div style="display:flex;gap:8px">'
         +'<button class="btn btn-primary btn-sm" id="dist-save-'+worker+'">Save</button>'
         +'<button class="btn btn-ghost btn-sm" id="dist-cancel-'+worker+'">Cancel</button>'
       +'</div>';
     wrap.appendChild(distForm);
 
-    // Entries list
+    // ── Entries list ─────────────────────────────────────────────────────────
     const eLabel = document.createElement('div');
-    eLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px';
+    eLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:6px';
     eLabel.textContent = 'Expense & Income Log';
     wrap.appendChild(eLabel);
 
     if(!sorted.length) {
       const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      empty.style.fontSize = '12px';
-      empty.textContent = 'No entries yet';
-      wrap.appendChild(empty);
+      empty.className = 'empty-state'; empty.style.fontSize = '12px';
+      empty.textContent = 'No entries yet'; wrap.appendChild(empty);
     } else {
+      // Column header
+      const colHdr = document.createElement('div');
+      colHdr.style.cssText = 'display:grid;grid-template-columns:1fr 72px 1px 80px;gap:0;align-items:center;padding:4px 0 4px 0;border-bottom:2px solid var(--border)';
+      colHdr.innerHTML = '<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Entry</span>'
+        +'<span></span><span></span>'
+        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);text-align:right">Amount</span>';
+      wrap.appendChild(colHdr);
+
       sorted.forEach(function(e) {
-        const isE = _isExp(e.cat);
+        const meta = _meta(e.cat);
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border)';
+        // 4-column grid: info | actions | divider | amount
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 72px 1px 80px;gap:0;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)';
+
+        // Left: pill + name + details
         const left = document.createElement('div');
-        left.style.flex = '1';
-        // Category pill
-        const pill = '<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;margin-right:6px;background:'+(isE?'rgba(239,68,68,0.1)':'rgba(45,106,79,0.1)')+';color:'+(isE?'var(--warn)':'#2d6a4f')+'">'+( isE ? 'EXPENSE' : 'INCOME' )+'</span>';
-        left.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:2px">'+pill+(e.name||e.desc||'-')+'</div>'
-          +(e.supplier?'<div style="font-size:12px;color:var(--text-muted)">Supplier: '+e.supplier+'</div>':'')
+        left.style.minWidth = '0';
+        const pill = '<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.3px;margin-right:5px;background:'+meta.bg+';color:'+meta.color+'">'+meta.label+'</span>';
+        left.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+pill+(e.name||'-')+'</div>'
+          +(e.supplier?'<div style="font-size:11px;color:var(--text-muted)">'+e.supplier+'</div>':'')
           +(e.notes?'<div style="font-size:11px;color:var(--text-faint);font-style:italic">'+e.notes+'</div>':'')
           +(e.date?'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(e.date)+'</div>':'');
-        const right = document.createElement('div');
-        right.style.cssText = 'text-align:right;margin-left:12px;flex-shrink:0';
-        const amt = document.createElement('div');
-        amt.style.cssText = 'font-size:14px;font-weight:700;color:'+(isE?'var(--warn)':'#2d6a4f');
-        amt.textContent = (isE?'- ':' + ') + _fmt(e.amount);
-        right.appendChild(amt);
+
+        // Action buttons (edit + delete)
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-right:10px';
         if(canEdit) {
+          const editBtn = document.createElement('button');
+          editBtn.textContent = 'Edit';
+          editBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--info);padding:1px 0';
+          (function(entry, w) {
+            editBtn.addEventListener('click', function() { window.editPayoutEntry(entry, w); });
+          })(e, worker);
           const delBtn = document.createElement('button');
           delBtn.textContent = 'Delete';
-          delBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:2px 0;display:block';
+          delBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:1px 0';
           (function(eid, ew) {
             delBtn.addEventListener('click', function() { window.deletePayoutEntry(eid, ew); });
           })(e.id, worker);
-          right.appendChild(delBtn);
+          actions.appendChild(editBtn); actions.appendChild(delBtn);
         }
-        row.appendChild(left); row.appendChild(right);
+
+        // Divider line
+        const divider = document.createElement('div');
+        divider.style.cssText = 'width:1px;background:var(--border);align-self:stretch;margin:4px 0';
+
+        // Amount column — right-aligned, fixed width
+        const amtCol = document.createElement('div');
+        amtCol.style.cssText = 'text-align:right;padding-left:12px';
+        const sign = _isExp(e.cat) ? '-' : '+';
+        const amtColor = e.cat==='initial-invest' ? 'var(--info)' : (_isExp(e.cat) ? 'var(--warn)' : '#2d6a4f');
+        amtCol.innerHTML = '<span style="font-size:13px;font-weight:700;color:'+amtColor+';font-family:DM Mono,monospace">'+sign+_fmt(e.amount)+'</span>';
+
+        row.appendChild(left); row.appendChild(actions); row.appendChild(divider); row.appendChild(amtCol);
         wrap.appendChild(row);
       });
     }
 
-    // Distributions list
+    // ── Distributions list ───────────────────────────────────────────────────
     const dLabel = document.createElement('div');
-    dLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin:14px 0 8px';
+    dLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin:14px 0 6px';
     dLabel.textContent = 'Distribution History';
     wrap.appendChild(dLabel);
 
     if(!sortedD.length) {
       const empty2 = document.createElement('div');
-      empty2.className = 'empty-state';
-      empty2.style.fontSize = '12px';
-      empty2.textContent = 'No distributions yet';
-      wrap.appendChild(empty2);
+      empty2.className = 'empty-state'; empty2.style.fontSize = '12px';
+      empty2.textContent = 'No distributions yet'; wrap.appendChild(empty2);
     } else {
       sortedD.forEach(function(d) {
         const row = document.createElement('div');
-        row.style.cssText = 'padding:9px 0;border-bottom:1px solid var(--border)';
-        const inner = document.createElement('div');
-        inner.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start';
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 72px 1px 80px;gap:0;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)';
         const left = document.createElement('div');
-        left.innerHTML = '<div style="font-size:14px;font-weight:600;color:#2d6a4f">'+_fmt(d.amount)+'</div>'
+        left.innerHTML = '<div style="font-size:13px;font-weight:600;color:#2d6a4f">Distribution</div>'
           +(d.date?'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(d.date)+'</div>':'')
           +(d.notes?'<div style="font-size:12px;color:var(--text-muted);font-style:italic">'+d.notes+'</div>':'');
-        inner.appendChild(left);
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-right:10px';
         if(canEdit) {
           const dBtn = document.createElement('button');
           dBtn.textContent = 'Delete';
           dBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint)';
-          (function(did, dw) {
-            dBtn.addEventListener('click', function() { window.deleteDistribution(did, dw); });
-          })(d.id, worker);
-          inner.appendChild(dBtn);
+          (function(did, dw) { dBtn.addEventListener('click', function() { window.deleteDistribution(did, dw); }); })(d.id, worker);
+          actions.appendChild(dBtn);
         }
-        row.appendChild(inner);
+        const divider = document.createElement('div');
+        divider.style.cssText = 'width:1px;background:var(--border);align-self:stretch;margin:4px 0';
+        const amtCol = document.createElement('div');
+        amtCol.style.cssText = 'text-align:right;padding-left:12px';
+        amtCol.innerHTML = '<span style="font-size:13px;font-weight:700;color:#2d6a4f;font-family:DM Mono,monospace">'+_fmt(d.amount)+'</span>';
+        row.appendChild(left); row.appendChild(actions); row.appendChild(divider); row.appendChild(amtCol);
         wrap.appendChild(row);
       });
     }
@@ -1009,6 +1031,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     }, 0);
   }
 
+  // ── Public API ─────────────────────────────────────────────────────────────
   window.renderPayoutTab = async function() {
     const data = await _load();
     const me = currentUser ? (EMAIL_WORKER_MAP[currentUser.email.toLowerCase()]||'dev') : 'dev';
@@ -1025,12 +1048,36 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   window.showAddPayoutExpense = function(w) {
     var f = document.getElementById('payout-add-form-'+w);
     var d = document.getElementById('payout-dist-form-'+w);
-    if(f) f.style.display='';
+    if(f) { f.innerHTML = _entryFormHTML(w, false); f.style.display=''; }
     if(d) d.style.display='none';
-    // Clear all fields
-    ['payout-name-','payout-amount-','payout-supplier-','payout-notes-','payout-date-'].forEach(function(p) {
-      var el = document.getElementById(p+w); if(el) el.value='';
-    });
+    // Re-wire buttons
+    setTimeout(function() {
+      var sb = document.getElementById('payout-save-'+w);
+      var cb = document.getElementById('payout-cancel-'+w);
+      if(sb) sb.addEventListener('click', function() { window.savePayoutEntry(w); });
+      if(cb) cb.addEventListener('click', function() { window.cancelPayoutEntry(w); });
+    }, 0);
+  };
+
+  window.editPayoutEntry = function(e, w) {
+    var f = document.getElementById('payout-add-form-'+w);
+    var d = document.getElementById('payout-dist-form-'+w);
+    if(f) { f.innerHTML = _entryFormHTML(w, true); f.style.display=''; }
+    if(d) d.style.display='none';
+    // Populate fields
+    setTimeout(function() {
+      var n = document.getElementById('payout-name-'+w); if(n) n.value = e.name||e.desc||'';
+      var c = document.getElementById('payout-cat-'+w);  if(c) c.value = e.cat||'expense';
+      var a = document.getElementById('payout-amount-'+w); if(a) a.value = e.amount||'';
+      var s = document.getElementById('payout-supplier-'+w); if(s) s.value = e.supplier||'';
+      var dt= document.getElementById('payout-date-'+w);   if(dt) dt.value = e.date||'';
+      var nt= document.getElementById('payout-notes-'+w);  if(nt) nt.value = e.notes||'';
+      var ei= document.getElementById('payout-editing-id-'+w); if(ei) ei.value = e.id;
+      var sb = document.getElementById('payout-save-'+w);
+      var cb = document.getElementById('payout-cancel-'+w);
+      if(sb) sb.addEventListener('click', function() { window.savePayoutEntry(w); });
+      if(cb) cb.addEventListener('click', function() { window.cancelPayoutEntry(w); });
+    }, 0);
   };
 
   window.cancelPayoutEntry = function(w) {
@@ -1042,14 +1089,22 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     var cat      = document.getElementById('payout-cat-'+w).value;
     var amount   = parseFloat(document.getElementById('payout-amount-'+w).value)||0;
     var supplier = (document.getElementById('payout-supplier-'+w).value||'').trim();
-    var date     = document.getElementById('payout-date-'+w).value;
+    var date     = document.getElementById('payout-date-'+w).value || null;
     var notes    = (document.getElementById('payout-notes-'+w).value||'').trim();
-    if(!name) { alert('Please enter a name for this entry.'); return; }
+    var editingId= (document.getElementById('payout-editing-id-'+w).value||'').trim();
+    if(!name)   { alert('Please enter a name.'); return; }
     if(!amount) { alert('Please enter an amount.'); return; }
     var data = await _load();
-    if(!data.entries) data.entries=[];
-    data.entries.push({ id:_uid(), worker:w, cat:cat, name:name, supplier:supplier,
-      date:date||null, amount:amount, notes:notes, createdAt:new Date().toISOString() });
+    if(!data.entries) data.entries = [];
+    if(editingId) {
+      // Update existing
+      var idx = data.entries.findIndex(function(e){return e.id===editingId;});
+      if(idx !== -1) {
+        data.entries[idx] = Object.assign({}, data.entries[idx], {name,cat,amount,supplier,date,notes,updatedAt:new Date().toISOString()});
+      }
+    } else {
+      data.entries.push({id:_uid(),worker:w,cat,name,supplier,date,amount,notes,createdAt:new Date().toISOString()});
+    }
     await _save(data);
     renderPayoutTab();
   };
@@ -1078,13 +1133,12 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
   window.saveDistribution = async function(w) {
     var amount = parseFloat(document.getElementById('dist-amount-'+w).value)||0;
-    var date   = document.getElementById('dist-date-'+w).value;
+    var date   = document.getElementById('dist-date-'+w).value || null;
     var notes  = (document.getElementById('dist-notes-'+w).value||'').trim();
     if(!amount) { alert('Please enter an amount.'); return; }
     var data = await _load();
     if(!data.distributions) data.distributions=[];
-    data.distributions.push({ id:_uid(), worker:w, amount:amount, date:date||null,
-      notes:notes, createdAt:new Date().toISOString() });
+    data.distributions.push({id:_uid(),worker:w,amount,date,notes,createdAt:new Date().toISOString()});
     await _save(data);
     renderPayoutTab();
     alert('Distribution recorded!');
