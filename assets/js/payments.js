@@ -166,16 +166,21 @@ window.sortPaymentRows = function() {
 
 // -- Summary -----------------------------------------------------------
 function renderPaymentSummary() {
-  let projected=0, invAmt=0;
-  _paymentRows.forEach((r,i)=>{
+  let projected=0, invTotal=0, invJosh=0, invDev=0;
+  _paymentRows.forEach(r=>{
     const proj = r.projOverride!=null ? r.projOverride : (r.estHrs||0)*600;
     projected += proj;
-    invAmt += r.invoicedAmount||0;
+    const inv = r.invoicedAmount||0;
+    invTotal += inv;
+    if(r.worker==='josh') invJosh += inv;
+    else invDev += inv;
   });
   const fmt = n=>'$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
   const el = id=>document.getElementById(id);
-  if(el('pm-projected')) el('pm-projected').textContent = fmt(projected);
-  if(el('pm-invoiced'))  el('pm-invoiced').textContent  = fmt(invAmt);
+  if(el('pm-invoiced'))      el('pm-invoiced').textContent      = fmt(invTotal);
+  if(el('pm-invoiced-josh')) el('pm-invoiced-josh').textContent = fmt(invJosh);
+  if(el('pm-invoiced-dev'))  el('pm-invoiced-dev').textContent  = fmt(invDev);
+  if(el('pm-projected'))     el('pm-projected').textContent     = fmt(projected);
 }
 
 // -- Render rows -------------------------------------------------------
