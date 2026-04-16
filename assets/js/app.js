@@ -1949,8 +1949,8 @@ document.getElementById('lightbox').style.display='flex';
 window.closeLightbox=function(){document.getElementById('lightbox').style.display='none';};
 // -- REPORTS --
 function renderReports() {
-const devCases=cases.filter(c=>c.worker==='dev');
-const joshCases=cases.filter(c=>c.worker==='josh');
+const devCases=cases.filter(c=>c.worker==='dev'&&!c.draft);
+const joshCases=cases.filter(c=>c.worker==='josh'&&!c.draft);
 function buildCard(el,label,cs,color){
 const total=cs.reduce((s,c)=>s+c.total,0);
 const avg=cs.length?total/cs.length:0;
