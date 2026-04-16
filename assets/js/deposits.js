@@ -234,10 +234,7 @@ window.openDepositsModal = async function() {
         <input type="text" id="dep-firstname" placeholder="e.g. Sarah" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">
       </div>
 
-      <div>
-        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Stripe Payment Link</label>
-        <input type="url" id="dep-stripe-link" placeholder="${STRIPE_PAYMENT_LINK}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">
-      </div>
+
     </div>
     <div style="display:flex;gap:10px;align-items:center">
       <button id="dep-send-btn" style="padding:9px 20px;background:#1d3557;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">📧 Send Deposit Request</button>
@@ -290,7 +287,7 @@ window._depositSendNew = async function() {
   const email     = (document.getElementById('dep-email')?.value||'').trim();
   const firstName = (document.getElementById('dep-firstname')?.value||'').trim();
   const name   = (document.getElementById('dep-name')?.value||'').trim();
-  const link   = (document.getElementById('dep-stripe-link')?.value||'').trim() || STRIPE_PAYMENT_LINK;
+  const link   = STRIPE_PAYMENT_LINK;
   const status = document.getElementById('dep-send-status');
 
   if(!sel?.value)  { alert('Please select a case.'); return; }
