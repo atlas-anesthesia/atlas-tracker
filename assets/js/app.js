@@ -764,15 +764,9 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 (function() {
   async function _load() {
     try {
-      const [payoutSnap, paymentsSnap] = await Promise.all([
-        getDoc(doc(db, 'atlas', 'payouts')),
-        getDoc(doc(db, 'atlas', 'payments'))
-      ]);
-      const data = payoutSnap.exists() ? payoutSnap.data() : { entries: [], distributions: [] };
-      // Attach payment rows for revenue calculation
-      data._paymentRows = paymentsSnap.exists() ? (paymentsSnap.data().rows||[]) : [];
-      return data;
-    } catch(e) { return { entries: [], distributions: [], _paymentRows: [] }; }
+      const snap = await getDoc(doc(db, 'atlas', 'payouts'));
+      return snap.exists() ? snap.data() : { entries: [], distributions: [] };
+    } catch(e) { return { entries: [], distributions: [] }; }
   }
   async function _save(data) {
     setSyncing(true);
@@ -787,6 +781,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   const CAT_META = {
     expense:           { label:'EXPENSE',            color:'var(--warn)',  bg:'rgba(239,68,68,0.1)',   isExpense:true  },
     income:            { label:'INCOME',             color:'#2d6a4f',     bg:'rgba(45,106,79,0.1)',    isExpense:false },
+    'case-income':     { label:'CASE INVOICE',       color:'#0369a1',     bg:'rgba(3,105,161,0.1)',    isExpense:false },
     'initial-invest':  { label:'INITIAL INVESTMENT', color:'var(--info)', bg:'rgba(29,83,198,0.1)',   isExpense:false },
   };
   function _meta(cat) { return CAT_META[cat] || CAT_META.expense; }
@@ -802,7 +797,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     // Track how much of invest has been paid back incrementally via distributions
     const totalInvestPaid = dists.reduce((s,d)=>s+(d.investPaid||0),0);
     const investOwed     = Math.max(0, totalInvest - totalInvestPaid);
-    const rev = (data._paymentRows||[]).filter(r=>r.worker===worker&&(r.invoicedAmount||0)>0).reduce((s,r)=>s+(r.invoicedAmount||0),0);
+    // Revenue = sum of auto-synced case-income entries (from invoiced payments)
+    const rev = entries.filter(e=>e.cat==='case-income').reduce((s,e)=>s+(e.amount||0),0);
     const revSuggested   = Math.max(0, rev + totalIn - totalOut - totalDist);
     return { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, revSuggested, investOwed };
   }
@@ -863,7 +859,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px';
     [
-      ['Case Revenue',       _fmt(rev),           'var(--accent)'],
+      ['Invoiced Revenue',   _fmt(rev),           'var(--accent)'],
       ['Expenses',           _fmt(totalOut),      'var(--warn)'],
       ['Suggested Payout',   _fmt(revSuggested),  '#2d6a4f'],
       ['Investment Owed Back', _fmt(investOwed),  'var(--info)'],
@@ -968,7 +964,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         const left = document.createElement('div');
         left.style.minWidth = '0';
         const pill = '<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.3px;margin-right:5px;background:'+meta.bg+';color:'+meta.color+'">'+meta.label+'</span>';
-        left.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+pill+(e.name||'-')+'</div>'
+        const autoTag = e.cat==='case-income' ? '<span style="font-size:9px;color:var(--text-faint);margin-left:4px;font-style:italic">auto</span>' : '';
+        left.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+pill+(e.name||'-')+autoTag+'</div>'
           +(e.supplier?'<div style="font-size:11px;color:var(--text-muted)">'+e.supplier+'</div>':'')
           +(e.notes?'<div style="font-size:11px;color:var(--text-faint);font-style:italic">'+e.notes+'</div>':'')
           +(e.date?'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(e.date)+'</div>':'');
@@ -976,7 +973,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         // Action buttons (edit + delete)
         const actions = document.createElement('div');
         actions.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-right:10px';
-        if(canEdit) {
+        if(canEdit && e.cat !== 'case-income') {
           const editBtn = document.createElement('button');
           editBtn.textContent = 'Edit';
           editBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--info);padding:1px 0';
