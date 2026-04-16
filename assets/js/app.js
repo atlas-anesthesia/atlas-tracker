@@ -388,14 +388,14 @@ window.updatePreopCaseIdDisplay = function updatePreopCaseIdDisplay() {
 const surgeryDate = document.getElementById('po-surgeryDate')?.value;
 const display = document.getElementById('po-caseId-display');
 const input = document.getElementById('po-caseId');
-if(!surgeryDate) {
-// Don't generate until surgery date is entered
-if(display) display.textContent = 'Enter date of surgery to generate ID';
-if(input) input.value = '';
-return;
+// Generate using surgery date if available, otherwise today's date as preview
+const dateToUse = surgeryDate || new Date().toISOString().split('T')[0];
+const id = generateCaseId(currentWorker, dateToUse);
+if(display) {
+  display.textContent = id;
+  display.style.opacity = surgeryDate ? '1' : '0.5';
+  display.title = surgeryDate ? '' : 'Preview — will update when surgery date is selected';
 }
-const id = generateCaseId(currentWorker, surgeryDate);
-if(display) display.textContent = id;
 if(input) input.value = id;
 }
 // -- WORKER / TAB --
