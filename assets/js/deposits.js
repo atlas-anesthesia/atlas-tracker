@@ -51,8 +51,8 @@ function _statusPill(record) {
 function _buildDepositEmailHTML(opts) {
   const { patientName, provider, surgDate, isReminder } = opts;
   const greeting = isReminder
-    ? `<p>Hi${patientName ? ' ' + patientName : ''},</p><p>We wanted to follow up regarding your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. We noticed your initial deposit of <strong>$500</strong> has not yet been received.</p>`
-    : `<p>Hi${patientName ? ' ' + patientName : ''},</p><p>Thank you so much for speaking with us today about your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. It was a pleasure connecting with you, and we look forward to providing you with exceptional anesthesia care.</p><p>To secure your appointment, we kindly ask for an initial deposit of <strong>$500</strong>, which can be submitted securely online using the link below.</p>`;
+    ? `<p>Hi,</p><p>We wanted to follow up regarding your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. We noticed your initial deposit of <strong>$500</strong> has not yet been received.</p>`
+    : `<p>Hi,</p><p>Thank you so much for speaking with us today about your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. It was a pleasure connecting with you, and we look forward to providing you with exceptional anesthesia care.</p><p>To secure your appointment, we kindly ask for an initial deposit of <strong>$500</strong>, which can be submitted securely online using the link below.</p>`;
 
   return `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#000">
@@ -81,8 +81,7 @@ function _buildDepositEmailHTML(opts) {
 // -- Send deposit email -------------------------------------------------------
 async function _sendDepositEmail(record, isReminder) {
   const html = _buildDepositEmailHTML({
-    patientName: record.patientName,
-    provider: record.provider,
+        provider: record.provider,
     surgDate: _fmtDate(record.surgDate),
     stripeLink: record.stripeLink || STRIPE_PAYMENT_LINK,
     isReminder
@@ -94,8 +93,7 @@ async function _sendDepositEmail(record, isReminder) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: record.patientEmail,
-        patientName: record.patientName,
-        caseId: record.caseId,
+                caseId: record.caseId,
         provider: record.provider,
         stripeLink: record.stripeLink || STRIPE_PAYMENT_LINK,
         worker: record.worker || window.currentWorker || 'josh',
@@ -231,12 +229,9 @@ window.openDepositsModal = async function() {
         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Patient Email</label>
         <input type="email" id="dep-email" placeholder="patient@email.com" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">
       </div>
+
       <div>
-        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Patient Name</label>
-        <input type="text" id="dep-name" placeholder="First Last" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">
-      </div>
-      <div>
-        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Stripe Payment Link <span style="font-weight:400;font-style:italic">(optional override)</span></label>
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Stripe Payment Link</label>
         <input type="url" id="dep-stripe-link" placeholder="${STRIPE_PAYMENT_LINK}" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">
       </div>
     </div>
@@ -274,16 +269,15 @@ window.openDepositsModal = async function() {
 // -- Auto-fill from case selection --------------------------------------------
 window._depositCaseChanged = function() {
   const sel = document.getElementById('dep-case-select');
+  const emailEl = document.getElementById('dep-email');
+  // Always clear email first so switching cases never keeps a stale email
+  if(emailEl) emailEl.value = '';
   if(!sel || !sel.value) return;
   const preops = window._rawPreopRecords || [];
   const record = preops.find(r => r.id === sel.value);
   if(!record) return;
-  const emailEl = document.getElementById('dep-email');
-  const nameEl  = document.getElementById('dep-name');
-  if(emailEl && record['po-patientEmail']) emailEl.value = record['po-patientEmail'];
-  // Try to get patient name from preop record
-  const name = record['po-patientName'] || record['po-patient'] || '';
-  if(nameEl && name) nameEl.value = name;
+  // Only populate if this case has an email on file
+  if(emailEl) emailEl.value = record['po-patientEmail'] || '';
 };
 
 // -- Send new deposit request -------------------------------------------------
@@ -310,7 +304,6 @@ window._depositSendNew = async function() {
     caseId:      preop['po-caseId'] || '',
     preopId:     preop.id,
     patientEmail: email,
-    patientName:  name,
     provider:    preop['po-provider'] || '',
     surgDate:    preop['po-surgeryDate'] || '',
     worker:      window.currentWorker || 'josh',
