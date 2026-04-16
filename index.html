@@ -383,6 +383,7 @@ Connect Google Calendar
         </div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:10px">
+        <button onclick="clearFaxFields()" style="background:var(--surface);color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer">✕ Clear Fields</button>
         <button onclick="previewFax()" style="background:var(--surface);color:var(--info);border:2px solid var(--info);border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer">👁 Update Preview</button>
         <button id="fax-send-btn" onclick="confirmAndSendFax()" style="background:#1d3557;color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer">📠 Confirm &amp; Send Fax</button>
       </div>
