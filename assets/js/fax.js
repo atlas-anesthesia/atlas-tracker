@@ -118,12 +118,22 @@ window.confirmAndSendFax = async function() {
   }
 };
 
+window.clearFaxFields = function() {
+  document.getElementById('fax-destination').value = '+1';
+  document.getElementById('fax-to').value = '';
+  document.getElementById('fax-attn').value = '';
+  document.getElementById('fax-patient-name').value = '';
+  document.getElementById('fax-dob').value = '';
+  document.getElementById('fax-pages').value = '';
+  previewFax();
+};
+
 function buildFaxHTML(r) {
   const now = new Date();
   const today = now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
   const worker = (typeof window.currentWorker !== 'undefined' ? window.currentWorker : null) || r.worker || 'dev';
-  const providerName = worker === 'josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
+  const providerName = worker === 'josh' ? 'Josh Condado, CRNA' : 'Dev Murthy, CRNA';
   const providerCreds = 'CRNA, Anesthesiology';
   const phone = worker === 'josh' ? '7154996858' : '2625739095';
   const patientName = document.getElementById('fax-patient-name')?.value.trim()
