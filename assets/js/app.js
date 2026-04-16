@@ -785,16 +785,18 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   function _isExp(cat) { return _meta(cat).isExpense; }
 
   function _totals(worker, data) {
-    const entries   = (data.entries||[]).filter(e=>e.worker===worker);
-    const dists     = (data.distributions||[]).filter(d=>d.worker===worker);
-    const totalOut  = entries.filter(e=>e.cat==='expense').reduce((s,e)=>s+(e.amount||0),0);
-    const totalIn   = entries.filter(e=>e.cat==='income').reduce((s,e)=>s+(e.amount||0),0);
+    const entries     = (data.entries||[]).filter(e=>e.worker===worker);
+    const dists       = (data.distributions||[]).filter(d=>d.worker===worker);
+    const totalOut    = entries.filter(e=>e.cat==='expense').reduce((s,e)=>s+(e.amount||0),0);
+    const totalIn     = entries.filter(e=>e.cat==='income').reduce((s,e)=>s+(e.amount||0),0);
     const totalInvest = entries.filter(e=>e.cat==='initial-invest').reduce((s,e)=>s+(e.amount||0),0);
-    const totalDist = dists.reduce((s,d)=>s+(d.amount||0),0);
+    const totalDist   = dists.reduce((s,d)=>s+(d.amount||0),0);
     const rev = (window.cases||[]).filter(c=>c.worker===worker&&!c.draft).reduce((s,c)=>s+(c.total||0),0);
-    // Suggested = revenue + other income + owed-back investments - expenses - already distributed
-    const suggested = Math.max(0, rev + totalIn + totalInvest - totalOut - totalDist);
-    return { entries, dists, totalIn, totalOut, totalInvest, totalDist, rev, suggested };
+    // Phase 1: Suggested payout from revenue only (initial investments paid back later)
+    const revSuggested = Math.max(0, rev + totalIn - totalOut - totalDist);
+    // Phase 2: Investment owed back — separate, paid once bank has enough
+    const investOwed = totalInvest;
+    return { entries, dists, totalIn, totalOut, totalInvest, totalDist, rev, revSuggested, investOwed };
   }
 
   function _lbl(text, optional) {
@@ -836,7 +838,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   function _buildSection(worker, canEdit, data, container) {
     const wname  = worker==='dev'?'Devarsh':'Josh';
     const wcolor = worker==='dev'?'var(--dev)':'var(--josh)';
-    const { entries, dists, totalIn, totalOut, totalInvest, totalDist, rev, suggested } = _totals(worker, data);
+    const { entries, dists, totalIn, totalOut, totalInvest, totalDist, rev, revSuggested, investOwed } = _totals(worker, data);
     const sorted  = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const sortedD = [...dists].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -853,10 +855,10 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px';
     [
-      ['Case Revenue',       _fmt(rev),          'var(--accent)'],
-      ['Expenses',           _fmt(totalOut),     'var(--warn)'],
-      ['Investment Owed Back', _fmt(totalInvest),'var(--info)'],
-      ['Suggested Payout',   _fmt(suggested),    '#2d6a4f'],
+      ['Case Revenue',       _fmt(rev),           'var(--accent)'],
+      ['Expenses',           _fmt(totalOut),      'var(--warn)'],
+      ['Suggested Payout',   _fmt(revSuggested),  '#2d6a4f'],
+      ['Investment Owed Back', _fmt(investOwed),  'var(--info)'],
     ].forEach(function(item, i) {
       const card = document.createElement('div');
       card.className = 'metric-card';
@@ -896,12 +898,15 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     distForm.style.cssText = 'display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px';
     distForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Record Distribution</div>'
       +'<div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">'
+        +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px">Phase 1 — Revenue Distribution</div>'
         +'<div>Case Revenue: <strong>'+_fmt(rev)+'</strong></div>'
-        +'<div>+ Other Income: <strong style="color:var(--info)">'+_fmt(totalIn)+'</strong></div>'
-        +'<div>+ Investment Owed Back: <strong style="color:var(--info)">'+_fmt(totalInvest)+'</strong></div>'
+        +(totalIn?'<div>+ Other Income: <strong style="color:var(--info)">'+_fmt(totalIn)+'</strong></div>':'')
         +'<div>- Expenses: <strong style="color:var(--warn)">'+_fmt(totalOut)+'</strong></div>'
         +'<div>- Already Distributed: <strong style="color:#2d6a4f">'+_fmt(totalDist)+'</strong></div>'
-        +'<div style="border-top:1px solid #b8cfe8;padding-top:8px;margin-top:6px;font-weight:700;color:var(--info)">Suggested: '+_fmt(suggested)+'</div>'
+        +'<div style="font-weight:700;color:#2d6a4f;margin-top:4px">Suggested Payout: '+_fmt(revSuggested)+'</div>'
+        +(investOwed?'<div style="border-top:1px solid #b8cfe8;margin-top:8px;padding-top:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Phase 2 — Investment Payback</div>'
+          +'<div style="color:var(--info)">Investment Owed Back: <strong>'+_fmt(investOwed)+'</strong></div>'
+          +'<div style="font-size:11px;color:var(--text-faint);font-style:italic">Paid back once Atlas bank account has sufficient funds</div>':'')
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
         +'<div>'+_lbl('Amount')+_field('dist-amount-'+worker,'number','0.00')+'</div>'
