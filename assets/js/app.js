@@ -1205,10 +1205,20 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     var investPaid = Math.min(investPaybackAmt, investOwed); // cap at remaining balance
 
     if(!data.distributions) data.distributions=[];
+    const distId = _uid();
+    const distRefNum = 'DIST-'+distId.toUpperCase();
     data.distributions.push({
-      id:_uid(), worker:w, amount, date, notes,
+      id: distId,
+      refNum: distRefNum,
+      worker: w, amount, date, notes,
       investPaid: investPaid > 0 ? investPaid : undefined,
-      createdAt:new Date().toISOString()
+      // Store snapshot of breakdown for PDF regeneration
+      pdfData: {
+        invoicedRev: rev, otherIncome: totalIn,
+        expenses: totalOut, prevDist: totalDist,
+        investOwed: totalInvest, investPaid
+      },
+      createdAt: new Date().toISOString()
     });
 
     // Track investment payback — archive entries only when fully paid off
@@ -1236,7 +1246,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         worker: w, amount, date, notes,
         invoicedRev: rev, otherIncome: totalIn,
         expenses: totalOut, prevDist,
-        investOwed: totalInvest, investPaid
+        investOwed: totalInvest, investPaid,
+        refNum: distRefNum
       });
     }
 
@@ -1251,6 +1262,27 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     await _save(data);
     renderPayoutTab();
   };
+  window.redownloadDistributionPDF = function(dist, worker) {
+    if(typeof window.generateDistributionPDF !== 'function') {
+      alert('PDF generator not loaded yet — please try again in a moment.');
+      return;
+    }
+    const pd = dist.pdfData || {};
+    window.generateDistributionPDF({
+      worker: worker,
+      amount: dist.amount,
+      date:   dist.date,
+      notes:  dist.notes,
+      invoicedRev: pd.invoicedRev || 0,
+      otherIncome: pd.otherIncome || 0,
+      expenses:    pd.expenses    || 0,
+      prevDist:    pd.prevDist    || 0,
+      investOwed:  pd.investOwed  || 0,
+      investPaid:  dist.investPaid || pd.investPaid || 0,
+      refNum:      dist.refNum
+    });
+  };
+
 })();
 
 // -- ITEM SELECT --
