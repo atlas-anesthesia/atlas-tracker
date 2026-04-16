@@ -551,7 +551,7 @@ const workerColors = {
 };
 const workerKey = e.worker === 'josh' ? 'josh' : 'dev';
 const typeStyle = workerColors[workerKey][e.type] || (workerKey==='josh' ? 'background:#fff1f0;color:#b91c1c;' : 'background:#eff6ff;color:#1d4ed8;');
-ev.style.cssText = `font-size:10px;font-weight:500;padding:2px 5px;border-radius:3px;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${typeStyle}`;
+ev.style.cssText = `font-size:10px;font-weight:500;padding:3px 6px;border-radius:3px;margin-bottom:2px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;display:block;width:100%;box-sizing:border-box;${typeStyle}`;
 ev.textContent = e.label;
 ev.title = e.detail || e.label;
 ev.onclick = () => { try { showCalDetail(e); } catch(err) { console.warn(err); } };
