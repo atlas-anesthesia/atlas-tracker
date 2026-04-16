@@ -2059,6 +2059,8 @@ if(el('provider')) el('provider').value = c.provider || '';
 if(el('caseDate')) el('caseDate').value = c.date || new Date().toISOString().split('T')[0];
 if(el('caseNotes')) el('caseNotes').value = c.notes || '';
 if(el('caseComments')) el('caseComments').value = c.caseComments || '';
+if(el('caseStartTime')) el('caseStartTime').value = c.startTime || '';
+if(el('caseEndTime'))   el('caseEndTime').value   = c.endTime   || '';
 // Set worker to match the draft
 setWorker(c.worker || currentWorker);
 // Pre-load saved items
@@ -3775,6 +3777,10 @@ drafts = drafts.filter(d => d.worker === midCaseFilter);
 }
 // Match pre-ops to drafts by caseId
 const draftIds = new Set(drafts.map(d => d.caseId));
+// IDs of already-finalized cases — exclude these from Mid-Case entirely
+const finalizedIds = new Set(cases.filter(c => !c.draft).map(c => c.caseId).filter(Boolean));
+// Only show pre-ops that don't have a finalized case yet
+preopRecords = preopRecords.filter(r => !finalizedIds.has(r['po-caseId']));
 // Combine: show all pre-ops, with draft status if applicable
 const allPreops = preopRecords.sort((a,b) => (a['po-surgeryDate']||'').localeCompare(b['po-surgeryDate']||''));
 if(!allPreops.length && !drafts.length) {
@@ -4019,32 +4025,31 @@ const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records||[]) : [];
 const r = records.find(x => x.id === preopId);
 if(!r) { alert('Pre-op record not found.'); return; }
+const caseId = r['po-caseId'] || '';
 // Check if a draft already exists for this caseId
-const existingDraft = cases.find(c => c.draft && c.caseId === r['po-caseId']);
+const existingDraft = cases.find(c => c.draft && c.caseId === caseId);
 if(existingDraft) {
-// Just resume the existing draft
-resumeCase(existingDraft.id);
-return;
+  resumeCase(existingDraft.id);
+  return;
 }
 // Create a new draft case from pre-op data
 const newDraft = {
-id: uid(),
-caseId: r['po-caseId'] || '',
-procedure: '',
-provider: r['po-provider'] || '',
-date: r['po-surgeryDate'] || new Date().toISOString().split('T')[0],
-notes: '',
-caseComments: '',
-worker: r.worker || currentWorker,
-surgeryCenter: r['po-surgery-center'] || '',
-items: [],
-total: 0,
-draft: true,
-imageData: null
+  id: uid(),
+  caseId,
+  procedure: '',
+  provider: r['po-provider'] || '',
+  date: r['po-surgeryDate'] || new Date().toISOString().split('T')[0],
+  notes: '',
+  caseComments: '',
+  worker: r.worker || currentWorker,
+  surgeryCenter: r['po-surgery-center'] || '',
+  items: [],
+  total: 0,
+  draft: true,
+  imageData: null
 };
 cases.unshift(newDraft);
 await saveCases();
-// Now resume it so it loads into Finalize Case
 resumeCase(newDraft.id);
 } catch(e) {
 console.error(e);
