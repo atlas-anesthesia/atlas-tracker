@@ -1759,13 +1759,13 @@ const invHtml = inv
 ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✓ INVOICED</span><span style="font-size:11px;color:var(--text-faint)">${inv.invoiceNum} · $${inv.total.toFixed(2)}</span><button onclick="event.stopPropagation();window.redownloadInvoice('${inv.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px">⬇ PDF</button>`
 : c.manuallyInvoiced
 ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✓ INVOICED</span><span style="font-size:11px;color:var(--text-faint)">${c.manuallyInvoicedNote||'Manual'}</span><button onclick="event.stopPropagation();window.unmarkCaseInvoiced('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--warn)">✕ Undo</button>`
-: `<span style="background:#fef3cd;color:#92400e;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">⚠ NOT INVOICED</span><button onclick="event.stopPropagation();window.markCaseInvoiced('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent)">✓ Mark Invoiced</button>`;
+: `<span style="background:#fef3cd;color:#92400e;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">⚠ NOT INVOICED</span>`;
 const preopRec = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===c.caseId);
 const ds = c.depositStatus || preopRec?.['po-depositStatus'] || 'not-paid';
 const pn = c.paymentNotes || preopRec?.['po-paymentNotes'] || '';
 const paidHtml = ds === 'paid'
 ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✓ DEPOSIT PAID</span>${pn?`<span style="font-size:10px;color:var(--text-faint)">${pn}</span>`:''}<button onclick="event.stopPropagation();window.unmarkCaseDepositPaid('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--warn)">✕ Undo</button>`
-: `<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✗ DEPOSIT NOT PAID</span><button onclick="event.stopPropagation();window.markCaseDepositPaid('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;color:var(--accent)">✓ Mark Paid</button>`;
+: `<span style="background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">✗ DEPOSIT NOT PAID</span>`;
 return `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${invHtml}</div><div style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${paidHtml}</div>`;
 })()}
 </div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="case-cost">${c.draft?'In Progress':'$'+getCaseTotal(c).toFixed(2)}</div>
