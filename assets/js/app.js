@@ -762,9 +762,15 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 (function() {
   async function _load() {
     try {
-      const snap = await getDoc(doc(db, 'atlas', 'payouts'));
-      return snap.exists() ? snap.data() : { entries: [], distributions: [] };
-    } catch(e) { return { entries: [], distributions: [] }; }
+      const [payoutSnap, paymentsSnap] = await Promise.all([
+        getDoc(doc(db, 'atlas', 'payouts')),
+        getDoc(doc(db, 'atlas', 'payments'))
+      ]);
+      const data = payoutSnap.exists() ? payoutSnap.data() : { entries: [], distributions: [] };
+      // Attach payment rows for revenue calculation
+      data._paymentRows = paymentsSnap.exists() ? (paymentsSnap.data().rows||[]) : [];
+      return data;
+    } catch(e) { return { entries: [], distributions: [], _paymentRows: [] }; }
   }
   async function _save(data) {
     setSyncing(true);
@@ -791,7 +797,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     const totalIn     = entries.filter(e=>e.cat==='income').reduce((s,e)=>s+(e.amount||0),0);
     const totalInvest = entries.filter(e=>e.cat==='initial-invest').reduce((s,e)=>s+(e.amount||0),0);
     const totalDist   = dists.reduce((s,d)=>s+(d.amount||0),0);
-    const rev = (window.cases||[]).filter(c=>c.worker===worker&&!c.draft).reduce((s,c)=>s+(c.total||0),0);
+    const rev = (data._paymentRows||[]).filter(r=>r.worker===worker&&(r.invoicedAmount||0)>0).reduce((s,r)=>s+(r.invoicedAmount||0),0);
     // Phase 1: Suggested payout from revenue only (initial investments paid back later)
     const revSuggested = Math.max(0, rev + totalIn - totalOut - totalDist);
     // Phase 2: Investment owed back — separate, paid once bank has enough
@@ -913,8 +919,14 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         +'<div>'+_lbl('Date',true)+_field('dist-date-'+worker,'date','')+'</div>'
       +'</div>'
       +'<div style="margin-bottom:10px">'+_lbl('Notes',true)+_field('dist-notes-'+worker,'text','')+'</div>'
+      +(investOwed>0 ? '<div style="margin-bottom:10px;padding:10px;background:rgba(29,83,198,0.08);border-radius:6px;border:1px solid rgba(29,83,198,0.2)">'
+        +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--info)">'
+        +'<input type="checkbox" id="dist-payback-invest-'+worker+'" style="width:15px;height:15px">'
+        +'Include investment payback <strong>('+_fmt(investOwed)+')</strong></label>'
+        +'<div style="font-size:11px;color:var(--text-faint);margin-top:4px;margin-left:23px">Investments will be archived and removed from the owed balance</div>'
+        +'</div>' : '')
       +'<div style="display:flex;gap:8px">'
-        +'<button class="btn btn-primary btn-sm" id="dist-save-'+worker+'">Save</button>'
+        +'<button class="btn btn-primary btn-sm" id="dist-save-'+worker+'">Save &amp; Download PDF</button>'
         +'<button class="btn btn-ghost btn-sm" id="dist-cancel-'+worker+'">Cancel</button>'
       +'</div>';
     wrap.appendChild(distForm);
@@ -1143,13 +1155,51 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     var amount = parseFloat(document.getElementById('dist-amount-'+w).value)||0;
     var date   = document.getElementById('dist-date-'+w).value || null;
     var notes  = (document.getElementById('dist-notes-'+w).value||'').trim();
+    var paybackInvest = document.getElementById('dist-payback-invest-'+w)?.checked || false;
     if(!amount) { alert('Please enter an amount.'); return; }
+
     var data = await _load();
+    const { totalIn, totalOut, totalInvest, totalDist, rev } = _totals(w, data);
+
+    // Check if this distribution covers the investment too
+    var investPaid = 0;
+    if(paybackInvest && totalInvest > 0) {
+      investPaid = totalInvest;
+    }
+
     if(!data.distributions) data.distributions=[];
-    data.distributions.push({id:_uid(),worker:w,amount,date,notes,createdAt:new Date().toISOString()});
+    data.distributions.push({
+      id:_uid(), worker:w, amount, date, notes,
+      investPaid: investPaid > 0 ? investPaid : undefined,
+      createdAt:new Date().toISOString()
+    });
+
+    // If paying back investments, archive them
+    if(investPaid > 0) {
+      if(!data.investHistory) data.investHistory = [];
+      const investEntries = (data.entries||[]).filter(e=>e.worker===w&&e.cat==='initial-invest');
+      data.investHistory.push({
+        id: _uid(), worker:w, amountPaid:investPaid,
+        entries: investEntries, paidBackAt: new Date().toISOString()
+      });
+      data.entries = (data.entries||[]).filter(e=>!(e.worker===w&&e.cat==='initial-invest'));
+    }
+
     await _save(data);
+
+    // Generate distribution PDF
+    if(typeof window.generateDistributionPDF === 'function') {
+      var prevDist = totalDist; // before this distribution
+      window.generateDistributionPDF({
+        worker: w, amount, date, notes,
+        invoicedRev: rev, otherIncome: totalIn,
+        expenses: totalOut, prevDist,
+        investOwed: totalInvest, investPaid
+      });
+    }
+
     renderPayoutTab();
-    alert('Distribution recorded!');
+    alert('Distribution recorded! PDF downloaded.');
   };
 
   window.deleteDistribution = async function(id, w) {
