@@ -2904,7 +2904,7 @@ closeWitnessModal();
 window.openCSProviderModal = function(entryIdx) {
 currentCSEntry = entryIdx;
 document.getElementById('csProviderModal').style.display = 'flex';
-clearProviderCanvas();
+clearCSProviderCanvas();
 setupProviderCanvas();
 };
 window.closeCSProviderModal = function() {
@@ -2961,7 +2961,6 @@ window.updateCSEntry(currentCSEntry, 'providerSignature', dataUrl);
 }
 window.closeCSProviderModal();
 };
-;
 // -- SAVE CS ENTRIES WITH CASE --
 async function saveCSEntriesWithCase(caseId, caseDate, provider) {
 if(!csEntries.length) return;
