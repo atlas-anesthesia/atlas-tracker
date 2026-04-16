@@ -708,6 +708,94 @@ reminders:{useDefault:false,overrides:[{method:'email',minutes:24*60},{method:'p
 });
 if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'Failed'); }
 }
+
+// ── CS Signature Pad Modal ────────────────────────────────────────────────────
+function _openSigModal(entryIdx, type) {
+  const existing = document.getElementById('cs-sig-modal');
+  if(existing) existing.remove();
+
+  const isWitness = type === 'witness';
+  const title     = isWitness ? 'Witness Signature' : 'Provider Signature';
+  const color     = isWitness ? 'var(--warn)' : 'var(--info)';
+
+  const modal = document.createElement('div');
+  modal.id = 'cs-sig-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+      <div style="background:#1d3557;padding:16px 20px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:#fff">${title}</div>
+          <div style="font-size:11px;color:rgba(255,255,255,.65);margin-top:2px">Sign with your finger or stylus</div>
+        </div>
+        <button id="cs-sig-close" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:14px">✕</button>
+      </div>
+      <div style="padding:20px">
+        <div style="border:2px solid ${color};border-radius:8px;overflow:hidden;background:#fff;touch-action:none">
+          <canvas id="cs-sig-canvas" width="460" height="180" style="display:block;width:100%;touch-action:none;cursor:crosshair"></canvas>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;justify-content:flex-end">
+          <button id="cs-sig-clear" style="padding:8px 18px;border:1px solid var(--border);background:none;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text-muted)">Clear</button>
+          <button id="cs-sig-save" style="padding:8px 20px;background:#1d3557;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Save Signature</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+
+  // ── Canvas drawing logic ───────────────────────────────────────────────────
+  const canvas  = document.getElementById('cs-sig-canvas');
+  const ctx     = canvas.getContext('2d');
+  ctx.strokeStyle = '#1d3557';
+  ctx.lineWidth   = 2.5;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  let drawing = false;
+  let hasDrawn = false;
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const src = e.touches ? e.touches[0] : e;
+    return {
+      x: (src.clientX - rect.left) * scaleX,
+      y: (src.clientY - rect.top)  * scaleY
+    };
+  }
+
+  function startDraw(e) { e.preventDefault(); drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
+  function draw(e)       { e.preventDefault(); if(!drawing) return; hasDrawn = true; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }
+  function stopDraw(e)   { e.preventDefault(); drawing = false; }
+
+  canvas.addEventListener('mousedown',  startDraw);
+  canvas.addEventListener('mousemove',  draw);
+  canvas.addEventListener('mouseup',    stopDraw);
+  canvas.addEventListener('mouseleave', stopDraw);
+  canvas.addEventListener('touchstart', startDraw, { passive: false });
+  canvas.addEventListener('touchmove',  draw,      { passive: false });
+  canvas.addEventListener('touchend',   stopDraw,  { passive: false });
+
+  document.getElementById('cs-sig-clear').addEventListener('click', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasDrawn = false;
+  });
+
+  document.getElementById('cs-sig-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', e => { if(e.target === modal) modal.remove(); });
+
+  document.getElementById('cs-sig-save').addEventListener('click', () => {
+    if(!hasDrawn) { alert('Please sign before saving.'); return; }
+    const dataUrl = canvas.toDataURL('image/png');
+    const field   = isWitness ? 'witnessSignature' : 'providerSignature';
+    window.updateCSEntry(entryIdx, field, dataUrl);
+    modal.remove();
+  });
+}
+
+window.openWitnessModal      = function(idx) { _openSigModal(idx, 'witness'); };
+window.openCSProviderModal   = function(idx) { _openSigModal(idx, 'provider'); };
 window.showTab = function(tab, pushState=true) {
 try { localStorage.setItem('atlas_active_tab', tab); } catch(e) {}
 if(pushState) {
