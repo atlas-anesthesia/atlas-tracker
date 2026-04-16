@@ -1,647 +1,151 @@
-// -- payments.js — Payments tab, invoice modal, saved PDFs ------------------
-// Depends on: app.js (db, window.cases, surgeryCenters, window.currentWorker, uid, setSyncing)
+// payout-pdf.js -- Distribution PDF generator + investment payback history
+// Depends on: app.js (db, currentWorker, uid, setSyncing)
 
-let _paymentRows = [];
-let _invoiceModalRowIdx = null;
+// ── Generate a PDF receipt when a distribution is recorded ───────────────────
+window.generateDistributionPDF = function(opts) {
+  // opts: { worker, amount, date, notes, invoicedRev, expenses, investOwed, investPaid }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+  const W = 612, M = 50;
+  const worker    = opts.worker || 'josh';
+  const name      = worker === 'josh' ? 'Josh Condado' : 'Dr. Dev Murthy';
+  const dateStr   = opts.date ? new Date(opts.date+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const refNum    = opts.refNum || ('DIST-'+Date.now().toString(36).toUpperCase());
+  const fmt       = n => '$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 
-// ════════════════════════════════════════════════════════════════════
-// PAYMENTS TAB — complete implementation
-// ════════════════════════════════════════════════════════════════════
+  // ── Header ─────────────────────────────────────────────────────────────────
+  doc.setFillColor(29,53,87);
+  doc.rect(0, 0, W, 70, 'F');
+  doc.setFont('Helvetica','bold');
+  doc.setFontSize(18); doc.setTextColor(255,255,255);
+  doc.text('Atlas Anesthesia', M, 30);
+  doc.setFontSize(10); doc.setFont('Helvetica','normal');
+  doc.text('Distribution Receipt', M, 46);
+  doc.setFontSize(9);
+  doc.text(refNum, W-M, 30, {align:'right'});
+  doc.text(dateStr, W-M, 46, {align:'right'});
 
-// -- Daily backup -----------------------------------------------------
-async function runDailyPaymentBackup() {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const metaSnap = await window.getDoc(window.doc(window.db,'atlas','payments_meta'));
-    if(metaSnap.exists() && metaSnap.data().lastBackup === today) return;
-    const snap = await window.getDoc(window.doc(window.db,'atlas','payments'));
-    if(snap.exists()) {
-      await window.setDoc(window.doc(window.db,'atlas','payments_backup_'+today), { rows: snap.data().rows||[], backedUpAt: new Date().toISOString() });
-      await window.setDoc(window.doc(window.db,'atlas','payments_meta'), { lastBackup: today });
-      console.log('✓ Daily payment backup:', today);
+  let y = 95;
+
+  // ── Recipient ──────────────────────────────────────────────────────────────
+  doc.setTextColor(0,0,0);
+  doc.setFont('Helvetica','bold'); doc.setFontSize(11);
+  doc.text('Distribution To:', M, y); y += 16;
+  doc.setFont('Helvetica','normal'); doc.setFontSize(10);
+  doc.text(name, M, y); y += 13;
+  doc.text('Atlas Anesthesia', M, y); y += 24;
+
+  // ── Divider ────────────────────────────────────────────────────────────────
+  doc.setDrawColor(200,200,200); doc.setLineWidth(0.5);
+  doc.line(M, y, W-M, y); y += 18;
+
+  // ── Breakdown table ────────────────────────────────────────────────────────
+  doc.setFont('Helvetica','bold'); doc.setFontSize(10);
+  doc.text('Breakdown', M, y); y += 14;
+
+  const rows = [
+    ['Invoiced Revenue',          fmt(opts.invoicedRev||0),  [0,0,0]],
+    ['Other Income',              fmt(opts.otherIncome||0),   [0,0,0]],
+    ['Expenses',                  '- '+fmt(opts.expenses||0), [200,60,60]],
+    ['Previous Distributions',   '- '+fmt(opts.prevDist||0), [200,60,60]],
+  ];
+  if(opts.investPaid > 0) {
+    rows.push(['Initial Investment Payback', fmt(opts.investPaid||0), [29,83,198]]);
+  }
+  rows.push(['__separator__', '', []]);
+  rows.push(['Total Distribution', fmt(opts.amount||0), [45,106,79]]);
+
+  const colX = [M, W-M-120, W-M];
+  rows.forEach(row => {
+    if(row[0] === '__separator__') {
+      doc.setDrawColor(220,220,220); doc.line(M, y-3, W-M, y-3); y += 6;
+      return;
     }
-  } catch(e) { console.warn('Backup failed:', e); }
-}
+    const [label, val, color] = row;
+    const isBold = label === 'Total Distribution';
+    doc.setFont('Helvetica', isBold ? 'bold' : 'normal');
+    doc.setFontSize(isBold ? 11 : 10);
+    doc.setTextColor(color[0]||0, color[1]||0, color[2]||0);
+    doc.text(label, colX[0], y);
+    doc.text(val, colX[2], y, {align:'right'});
+    y += isBold ? 16 : 14;
+  });
 
-// -- Sync from window.cases/preop ---------------------------------------------
-function syncPaymentRowsFromCases() {
-  const finalized = (window.cases||[]).filter(c => !c.draft);
-  let changed = false;
-  finalized.forEach(c => {
-    const rowIdx = _paymentRows.findIndex(r => r.caseId === c.caseId);
-    if(rowIdx !== -1) {
-      if(_paymentRows[rowIdx].caseDate !== c.date) { _paymentRows[rowIdx].caseDate = c.date||''; changed=true; }
-      if(_paymentRows[rowIdx].worker !== c.worker) { _paymentRows[rowIdx].worker = c.worker; changed=true; }
-      if(c.total && _paymentRows[rowIdx].caseCost !== c.total) { _paymentRows[rowIdx].caseCost = c.total; changed=true; }
-    } else {
-      const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId']===c.caseId);
-      const sc = preop?.['po-surgery-center']||'';
-      const center = (window.surgeryCenters||[]).find(x=>x.id===sc);
-      _paymentRows.push({ id:window.uid(), caseId:c.caseId, name:c.caseId||'', worker:c.worker||'josh',
-        caseDate:c.date||preop?.['po-surgeryDate']||'',
-        callDate:preop?.['po-callDateTime']?.split('T')[0]||'',
-        depositDate:'', paidDate:'', dep500Paid:false, paid:false, invoiceSent:false,
-        invoicedAmount:0, projOverride:null, caseCost:c.total||0,
-        estHrs:parseFloat(preop?.['po-est-hours'])||0,
-        surgeryCenter:sc, surgeryCenterName:center?.name||'' });
-      changed=true;
-    }
-  });
-  (window._rawPreopRecords||[]).forEach(r => {
-    const rowIdx = _paymentRows.findIndex(pr => pr.caseId===r['po-caseId']);
-    if(rowIdx===-1) return;
-    const callDate = r['po-callDateTime']?.split('T')[0]||'';
-    const estHrs = parseFloat(r['po-est-hours'])||0;
-    const sc = r['po-surgery-center']||'';
-    const center = (window.surgeryCenters||[]).find(x=>x.id===sc);
-    const caseDate = r['po-surgeryDate']||'';
-    if(_paymentRows[rowIdx].callDate!==callDate){_paymentRows[rowIdx].callDate=callDate;changed=true;}
-    if(_paymentRows[rowIdx].estHrs!==estHrs){_paymentRows[rowIdx].estHrs=estHrs;changed=true;}
-    if(_paymentRows[rowIdx].surgeryCenter!==sc){_paymentRows[rowIdx].surgeryCenter=sc;_paymentRows[rowIdx].surgeryCenterName=center?.name||'';changed=true;}
-    if(caseDate&&_paymentRows[rowIdx].caseDate!==caseDate){_paymentRows[rowIdx].caseDate=caseDate;changed=true;}
-  });
-  if(changed) {
-    window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
-    if(document.getElementById('tab-payments')?.classList.contains('active')) renderPaymentRows();
+  y += 10;
+  doc.setDrawColor(200,200,200); doc.line(M, y, W-M, y); y += 18;
+
+  // ── Amount box ─────────────────────────────────────────────────────────────
+  doc.setFillColor(240,247,240);
+  doc.setDrawColor(45,106,79); doc.setLineWidth(1);
+  doc.roundedRect(M, y, W-2*M, 44, 4, 4, 'FD');
+  doc.setFont('Helvetica','bold'); doc.setFontSize(11);
+  doc.setTextColor(80,80,80);
+  doc.text('AMOUNT DISTRIBUTED', W/2, y+14, {align:'center'});
+  doc.setFontSize(20); doc.setTextColor(45,106,79);
+  doc.text(fmt(opts.amount||0), W/2, y+34, {align:'center'});
+  y += 62;
+
+  // ── Notes ──────────────────────────────────────────────────────────────────
+  if(opts.notes) {
+    doc.setFont('Helvetica','bold'); doc.setFontSize(9);
+    doc.setTextColor(100,100,100);
+    doc.text('Notes:', M, y); y += 12;
+    doc.setFont('Helvetica','normal');
+    const noteLines = doc.splitTextToSize(opts.notes, W-2*M);
+    noteLines.forEach(l => { doc.text(l, M, y); y += 12; });
+    y += 6;
   }
-}
 
-// -- Load -------------------------------------------------------------
-window.loadPaymentRows = async function loadPaymentRows() {
+  // ── Investment payback note ────────────────────────────────────────────────
+  if(opts.investPaid > 0) {
+    doc.setFillColor(235,242,255);
+    doc.setDrawColor(29,83,198); doc.setLineWidth(0.5);
+    doc.roundedRect(M, y, W-2*M, 38, 3, 3, 'FD');
+    doc.setFont('Helvetica','bold'); doc.setFontSize(9);
+    doc.setTextColor(29,83,198);
+    doc.text('Initial Investment Repayment: '+fmt(opts.investPaid), M+10, y+14);
+    doc.setFont('Helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80);
+    doc.text('This distribution includes repayment of personal funds invested in Atlas Anesthesia.', M+10, y+28);
+    y += 50;
+  }
+
+  // ── Footer ─────────────────────────────────────────────────────────────────
+  doc.setFont('Helvetica','normal'); doc.setFontSize(8);
+  doc.setTextColor(160,160,160);
+  doc.text('Atlas Anesthesia  ·  Distribution Record  ·  '+refNum+'  ·  '+dateStr, W/2, 760, {align:'center'});
+  doc.text('This document is for internal accounting purposes only.', W/2, 772, {align:'center'});
+
+  doc.save('Distribution_'+name.replace(' ','_')+'_'+refNum+'.pdf');
+  return refNum;
+};
+
+// ── Record investment payback: archive invested entries, log in history ────────
+window.recordInvestmentPayback = async function(worker, amountPaid) {
   try {
-  runDailyPaymentBackup();
-  const [paymentsSnap, casesSnap, preopSnap, scSnap] = await Promise.all([
-    window.getDoc(window.doc(window.db,'atlas','payments')),
-    window.getDoc(window.doc(window.db,'atlas','cases')),
-    window.getDoc(window.doc(window.db,'atlas','preop')),
-    window.getDoc(window.doc(window.db,'atlas','surgerycenters'))
-  ]);
-  _paymentRows = paymentsSnap.exists() ? (paymentsSnap.data().rows||[]) : [];
-  const freshCases = casesSnap.exists() ? (casesSnap.data().cases||[]) : (window.cases||[]);
-  const freshPreop = preopSnap.exists() ? (preopSnap.data().records||[]) : [];
-  const freshCenters = scSnap.exists() ? (scSnap.data().centers||[]) : (window.surgeryCenters||[]);
-  window._rawPreopRecords = freshPreop;
-  if(freshCenters.length) window.surgeryCenters = freshCenters;
-  const finalized = freshCases.filter(c=>!c.draft);
-  finalized.forEach(c => {
-    const preop = freshPreop.find(r=>r['po-caseId']===c.caseId);
-    const sc = preop?.['po-surgery-center']||'';
-    const center = freshCenters.find(x=>x.id===sc);
-    const callDate = preop?.['po-callDateTime']?.split('T')[0]||'';
-    const caseDate = preop?.['po-surgeryDate']||c.date||'';
-    const estHrs = parseFloat(preop?.['po-est-hours'])||0;
-    const existIdx = _paymentRows.findIndex(r=>r.caseId===c.caseId);
-    if(existIdx===-1) {
-      _paymentRows.push({ id:window.uid(), caseId:c.caseId, name:c.caseId||'', worker:c.worker||'josh',
-        caseDate, callDate, depositDate:'', paidDate:'', dep500Paid:false, paid:false,
-        invoiceSent:false, invoicedAmount:0, projOverride:null, caseCost:c.total||0,
-        estHrs, surgeryCenter:sc, surgeryCenterName:center?.name||'' });
-    } else {
-      _paymentRows[existIdx] = { ..._paymentRows[existIdx],
-        name: c.caseId||_paymentRows[existIdx].name,
-        worker: c.worker||_paymentRows[existIdx].worker,
-        caseDate: caseDate||_paymentRows[existIdx].caseDate,
-        callDate: callDate||_paymentRows[existIdx].callDate,
-        caseCost: c.total||_paymentRows[existIdx].caseCost,
-        estHrs: estHrs||_paymentRows[existIdx].estHrs,
-        surgeryCenter: sc||_paymentRows[existIdx].surgeryCenter,
-        surgeryCenterName: center?.name||_paymentRows[existIdx].surgeryCenterName||'' };
-    }
-  });
-  _paymentRows.sort((a,b)=>(a.caseDate||'9999').localeCompare(b.caseDate||'9999'));
-  renderPaymentRows();
-  } catch(e) { console.error('loadPaymentRows error:', e); const body=document.getElementById('payments-table-body'); if(body) body.innerHTML='<div style="padding:32px;color:red;font-size:13px">Error loading payments: '+e.message+'<br><small>'+e.stack+'</small></div>'; }
-}
+    setSyncing(true);
+    const snap = await getDoc(doc(db, 'atlas', 'payouts'));
+    const data = snap.exists() ? snap.data() : { entries:[], distributions:[], investHistory:[] };
 
-// -- Save (only editable fields) ---------------------------------------
-window.savePaymentRows = async function() {
-  _paymentRows = _paymentRows.map((row,i) => ({
-    ...row,
-    depositDate: document.getElementById('pr-depositDate'+i)?.value||row.depositDate||'',
-    paidDate:    document.getElementById('pr-paidDate'+i)?.value||row.paidDate||'',
-    dep500Paid:  document.getElementById('pr-dep500'+i)?.checked??row.dep500Paid??false,
-    paid:        document.getElementById('pr-paid'+i)?.checked??row.paid,
-    invoiceSent: document.getElementById('pr-inv'+i)?.checked??row.invoiceSent,
-  }));
-  try {
-    window.setSyncing(true);
-    await window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows});
-    window.setSyncing(false);
-    renderPaymentSummary();
-    const btn = document.querySelector('[onclick="savePaymentRows()"]');
-    if(btn){const o=btn.textContent;btn.textContent='✓ Saved';setTimeout(()=>btn.textContent=o,1500);}
-  } catch(e){window.setSyncing(false);alert('Error: '+e.message);}
+    // Find all initial-invest entries for this worker
+    const investEntries = (data.entries||[]).filter(e => e.worker===worker && e.cat==='initial-invest');
+    const totalInvest   = investEntries.reduce((s,e) => s+(e.amount||0), 0);
+
+    if(!investEntries.length) return;
+
+    // Archive them in investHistory
+    if(!data.investHistory) data.investHistory = [];
+    data.investHistory.push({
+      id: window.uid ? window.uid() : Date.now().toString(36),
+      worker, amountPaid, totalInvest,
+      entries: investEntries,
+      paidBackAt: new Date().toISOString()
+    });
+
+    // Remove from active entries
+    data.entries = (data.entries||[]).filter(e => !(e.worker===worker && e.cat==='initial-invest'));
+
+    await setDoc(doc(db, 'atlas', 'payouts'), data);
+    setSyncing(false);
+    console.log('Investment payback archived for', worker);
+  } catch(e) { setSyncing(false); console.error('recordInvestmentPayback error:', e); }
 };
-
-// -- Auto-save (debounced) ---------------------------------------------
-let _paymentSaveTimer = null;
-function autoSavePayments() {
-  clearTimeout(_paymentSaveTimer);
-  _paymentSaveTimer = setTimeout(()=>window.savePaymentRows().catch(()=>{}), 900);
-}
-
-// -- Delete ------------------------------------------------------------
-window.deletePaymentRow = async function(idx) {
-  if(!confirm('Delete this payment row?\n\nThis cannot be undone.')) return;
-  _paymentRows.splice(idx,1);
-  window.setSyncing(true);
-  await window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows});
-  window.setSyncing(false);
-  renderPaymentRows();
-};
-
-// -- Sort --------------------------------------------------------------
-window.sortPaymentRows = function() {
-  const mode = document.getElementById('pm-sort')?.value||'date-asc';
-  _paymentRows.sort((a,b)=>{
-    if(mode==='date-asc')  return (a.caseDate||'9999').localeCompare(b.caseDate||'9999');
-    if(mode==='date-desc') return (b.caseDate||'').localeCompare(a.caseDate||'');
-    if(mode==='who')       return (a.worker||'').localeCompare(b.worker||'');
-    if(mode==='center')    return (a.surgeryCenterName||'').localeCompare(b.surgeryCenterName||'');
-    if(mode==='inv')       return (b.invoiceSent?1:0)-(a.invoiceSent?1:0);
-    return 0;
-  });
-  renderPaymentRows();
-};
-
-// -- Summary -----------------------------------------------------------
-function renderPaymentSummary() {
-  let projected=0, invTotal=0, invJosh=0, invDev=0;
-  _paymentRows.forEach(r=>{
-    const proj = r.projOverride!=null ? r.projOverride : (r.estHrs||0)*600;
-    projected += proj;
-    const inv = r.invoicedAmount||0;
-    invTotal += inv;
-    if(r.worker==='josh') invJosh += inv;
-    else invDev += inv;
-  });
-  const fmt = n=>'$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
-  const el = id=>document.getElementById(id);
-  if(el('pm-invoiced'))      el('pm-invoiced').textContent      = fmt(invTotal);
-  if(el('pm-invoiced-josh')) el('pm-invoiced-josh').textContent = fmt(invJosh);
-  if(el('pm-invoiced-dev'))  el('pm-invoiced-dev').textContent  = fmt(invDev);
-  if(el('pm-projected'))     el('pm-projected').textContent     = fmt(projected);
-}
-
-// -- Render rows -------------------------------------------------------
-function renderPaymentRows() {
-  const body = document.getElementById('payments-table-body');
-  if(!body) return;
-  if(!_paymentRows.length) {
-    body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-faint);font-size:13px">No window.cases yet — save a Pre-Op record to auto-populate window.cases here</div>';
-    renderPaymentSummary(); return;
-  }
-
-  const dateInp = (id,val) => {
-    const empty=!val;
-    const bdr=empty?'1px solid #fca5a5':'1px solid var(--border)';
-    const bgc=empty?'rgba(239,68,68,0.06)':'var(--bg)';
-    return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:4px 3px;font-size:11px;border:${bdr};border-radius:4px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary();autoSavePayments()">`;
-  };
-  const ro = (val,color)=>`<span style="font-size:11px;color:${color||'var(--text-muted)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${val||'<span style="color:#fca5a5;font-size:10px">—</span>'}</span>`;
-  const wcolor = w=>w==='dev'?'var(--dev)':'var(--josh)';
-  const COLS = '160px 50px 1fr 44px 68px 88px 88px 86px 32px 86px 38px 76px 38px 46px 30px';
-
-  body.innerHTML = _paymentRows.map((r,i)=>{
-    const complete = r.depositDate&&r.paidDate&&r.dep500Paid&&r.paid&&r.invoiceSent;
-    const bg = complete?'rgba(45,106,79,0.08)':i%2===0?'var(--bg)':'var(--surface2)';
-    const bl = complete?'3px solid var(--accent)':'3px solid transparent';
-    const proj = r.projOverride!=null ? '$'+Number(r.projOverride).toFixed(0) : r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'—';
-    const projColor = r.projOverride!=null?'var(--info)':'var(--accent)';
-    const center = (window.surgeryCenters||[]).find(c=>c.id===r.surgeryCenter);
-    const scName = center?.name||r.surgeryCenterName||'';
-    const caseFmt = r.caseDate?new Date(r.caseDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
-    const callFmt = r.callDate?new Date(r.callDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
-    const invAmt = r.invoicedAmount>0?`<span style="font-size:11px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$${Number(r.invoicedAmount).toFixed(2)}</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`:`<span style="color:var(--text-faint);font-size:11px">—</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`;
-    const projCell = `<span style="font-size:11px;font-weight:600;color:${projColor};font-family:DM Mono,monospace">${proj}</span><button onclick="editPaymentField('proj',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`;
-    return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${bl};align-items:center;min-height:40px">
-      <div style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>
-      <div style="padding:4px 3px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${r.worker==='dev'?'Dev':'Josh'}</div>
-      <div style="padding:4px 3px;font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${scName}">${scName||'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
-      <div style="padding:4px 3px;font-size:11px;font-weight:600;color:var(--accent);text-align:right">${r.estHrs>0?r.estHrs+'h':'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
-      <div style="padding:4px 3px;display:flex;align-items:center;justify-content:flex-end;gap:2px">${projCell}</div>
-      <div style="padding:4px 3px">${ro(caseFmt)}</div>
-      <div style="padding:4px 3px">${ro(callFmt)}</div>
-      <div style="padding:4px 3px">${dateInp('pr-depositDate'+i,r.depositDate)}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
-      <div style="padding:4px 3px">${dateInp('pr-paidDate'+i,r.paidDate)}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
-      <div style="padding:4px 3px;display:flex;align-items:center;justify-content:flex-end;gap:2px">${invAmt}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
-      <div style="padding:4px 3px"><button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button></div>
-      <div style="padding:4px 8px;display:flex;align-items:center;justify-content:flex-end"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete">🗑</button></div>
-    </div>`;
-  }).join('');
-  renderPaymentSummary();
-}
-
-// -- Edit popup (proj / invamt) -----------------------------------------
-window.editPaymentField = function(field, rowIdx) {
-  const old = document.getElementById('payment-edit-popup');
-  if(old) old.remove();
-  const isProj = field==='proj';
-  const currentVal = isProj
-    ? (_paymentRows[rowIdx]?.projOverride!=null?_paymentRows[rowIdx].projOverride:(_paymentRows[rowIdx]?.estHrs||0)*600)
-    : (_paymentRows[rowIdx]?.invoicedAmount||0);
-  const overlay = document.createElement('div');
-  overlay.id = 'payment-edit-popup';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
-  const box = document.createElement('div');
-  box.style.cssText = 'background:var(--surface);border-radius:12px;padding:28px 32px;width:320px;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center';
-  box.innerHTML = `<div style="font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px">Edit ${isProj?'Projected Income':'Invoiced Amount'}</div>
-    <div style="font-size:11px;color:var(--text-faint);margin-bottom:16px">${isProj?'Overrides Hrs × $600':'Overrides invoice modal amount'}</div>`;
-  const inp = document.createElement('input');
-  inp.type='number'; inp.step='0.01'; inp.min='0'; inp.value=currentVal.toFixed(2);
-  inp.style.cssText='width:100%;padding:12px 14px;font-size:22px;font-weight:700;font-family:DM Mono,monospace;border:2px solid var(--info);border-radius:8px;background:var(--bg);color:var(--text);text-align:center;outline:none;box-sizing:border-box';
-  const btns = document.createElement('div');
-  btns.style.cssText='display:flex;gap:10px;margin-top:18px';
-  const cancel=document.createElement('button'); cancel.textContent='Cancel';
-  cancel.style.cssText='flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit';
-  const save=document.createElement('button'); save.textContent='Save Amount';
-  save.style.cssText='flex:2;padding:10px;border:none;border-radius:8px;background:var(--info);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
-  const doSave=()=>{commitPaymentField(field,rowIdx,parseFloat(inp.value)||0);overlay.remove();};
-  const doCancel=()=>overlay.remove();
-  save.onclick=doSave; cancel.onclick=doCancel;
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter')doSave();if(e.key==='Escape')doCancel();});
-  overlay.addEventListener('click',e=>{if(e.target===overlay)doCancel();});
-  btns.appendChild(cancel); btns.appendChild(save);
-  box.appendChild(inp); box.appendChild(btns);
-  overlay.appendChild(box); document.body.appendChild(overlay);
-  requestAnimationFrame(()=>{inp.focus();inp.select();});
-};
-
-window.commitPaymentField = function(field, idx, val) {
-  if(field==='proj') { _paymentRows[idx].projOverride=val; }
-  else { _paymentRows[idx].invoicedAmount=val; }
-  window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
-  renderPaymentRows(); renderPaymentSummary();
-};
-
-// -- Saved PDFs ---------------------------------------------------------
-let _savedPDFs = [];
-
-window.loadSavedPDFs = async function loadSavedPDFs() {
-  try {
-    const snap = await window.getDoc(window.doc(window.db,'atlas','saved_pdfs'));
-    _savedPDFs = snap.exists()?(snap.data().pdfs||[]):[];
-  } catch(e){_savedPDFs=[];}
-  renderSavedPDFs();
-}
-async function savePDFRecord(record) {
-  try {
-    const snap = await window.getDoc(window.doc(window.db,'atlas','saved_pdfs'));
-    const existing = snap.exists()?(snap.data().pdfs||[]):[];
-    existing.unshift(record);
-    await window.setDoc(window.doc(window.db,'atlas','saved_pdfs'),{pdfs:existing});
-    _savedPDFs = existing; renderSavedPDFs();
-  } catch(e){console.error('savePDFRecord error:',e);}
-}
-function renderSavedPDFs() {
-  const el = document.getElementById('saved-pdfs-list');
-  if(!el) return;
-  if(!_savedPDFs.length){el.innerHTML='<div class="empty-state" style="font-size:13px">No saved invoices yet</div>';return;}
-  el.innerHTML = _savedPDFs.map(p=>{
-    const pill = p.worker==='dev'?'pill-dev':'pill-josh';
-    const wname = p.worker==='dev'?'Dev':'Josh';
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div><div style="font-size:13px;font-weight:500">${p.invoiceNum||'Invoice'}</div>
-      <div style="font-size:11px;color:var(--text-faint)">${p.date||''} · ${p.location||''} · <span class="worker-pill ${pill}">${wname}</span></div></div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <span style="font-size:16px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$${Number(p.total||0).toFixed(2)}</span>
-        ${p.emailed?'<span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:10px;font-weight:600">📧 Sent</span>':''}
-      </div></div>`;
-  }).join('');
-}
-
-// -- Invoice modal -----------------------------------------------------
-window.openInvoiceModal = function(rowIdx) {
-  _invoiceModalRowIdx = rowIdx!==undefined?rowIdx:null;
-  const r = rowIdx!==undefined?_paymentRows[rowIdx]:null;
-  const caseEl=document.getElementById('inv-modal-case');
-  if(caseEl) caseEl.value=r?.caseId||'';
-  ['inv-modal-provider','inv-modal-email','inv-modal-fhr','inv-modal-p15'].forEach(id=>{
-    const el=document.getElementById(id);if(el){el.value='';el.readOnly=false;el.style.background='';el.style.color='';}
-  });
-  ['inv-modal-date','inv-modal-start','inv-modal-end','inv-modal-location'].forEach(id=>{
-    const el=document.getElementById(id);if(el)el.value='';
-  });
-  const locInput=document.getElementById('inv-modal-location');
-  if(locInput)locInput.style.display='none';
-  if(typeof setInvModalBilling==='function')setInvModalBilling('hourly');
-  populateInvModalCenterDropdown(r?.surgeryCenter||'');
-  if(r?.caseDate){const dt=document.getElementById('inv-modal-date');if(dt)dt.value=r.caseDate;}
-  const prov=document.getElementById('inv-modal-provider');
-  if(prov)prov.value=(r?.worker||window.currentWorker||'josh')==='dev'?'Dr. Dev Murthy':'Josh Condado';
-  if(r?.surgeryCenter){
-    onInvModalCenterChange();
-    const scSel=document.getElementById('inv-modal-sc-select');
-    if(scSel){scSel.disabled=true;scSel.style.background='var(--surface2)';scSel.style.color='var(--text-muted)';scSel.title='Linked from Pre-Op';}
-  }
-  document.getElementById('invoiceModal').style.display='flex';
-  calcInvModal();
-};
-
-window.closeInvoiceModal = function() {
-  const scSel=document.getElementById('inv-modal-sc-select');
-  if(scSel){scSel.disabled=false;scSel.style.background='';scSel.style.color='';scSel.title='';}
-  document.getElementById('invoiceModal').style.display='none';
-  _invoiceModalRowIdx=null;
-};
-
-function populateInvModalCenterDropdown(preselect) {
-  const sel=document.getElementById('inv-modal-sc-select');
-  if(!sel)return;
-  const centers=window.surgeryCenters||[];
-  sel.innerHTML='<option value="">— Select surgery center —</option>'
-    +centers.map(c=>`<option value="${c.id}" ${c.id===preselect?'selected':''}>${c.name}</option>`).join('')
-    +'<option value="__custom__">✏ Custom...</option>';
-  if(preselect)onInvModalCenterChange();
-}
-
-window.onInvModalCenterChange = function() {
-  const sel=document.getElementById('inv-modal-sc-select');
-  const locInput=document.getElementById('inv-modal-location');
-  const fhr=document.getElementById('inv-modal-fhr');
-  const p15=document.getElementById('inv-modal-p15');
-  const emailEl=document.getElementById('inv-modal-email');
-  const val=sel?.value;
-  if(emailEl){emailEl.readOnly=false;emailEl.style.background='';emailEl.style.color='';emailEl.removeAttribute('title');}
-  if(val==='__custom__'){
-    if(locInput){locInput.style.display='';locInput.value='';locInput.focus();}
-    return;
-  }
-  if(!val){if(locInput){locInput.style.display='none';locInput.value='';}return;}
-  const center=(window.surgeryCenters||[]).find(c=>c.id===val);
-  if(!center)return;
-  if(locInput){locInput.style.display='none';locInput.value=center.name||'';}
-  if(fhr)fhr.value=center.firstHour!=null?Number(center.firstHour).toFixed(2):'';
-  if(p15)p15.value=center.per15!=null?Number(center.per15).toFixed(2):'';
-  if(emailEl&&center.invoiceEmail){
-    emailEl.value=center.invoiceEmail;emailEl.readOnly=true;
-    emailEl.style.background='var(--surface2)';emailEl.style.color='var(--text-muted)';
-    emailEl.title='From Surgery Centers tab';
-  }
-  const frs=center.flatRates||[];
-  const procSel=document.getElementById('inv-modal-flat-proc-select');
-  if(procSel){
-    procSel.innerHTML='<option value="">— Select procedure —</option>'
-      +frs.map(fr=>`<option value="${fr.id}" data-amount="${fr.amount}">${fr.procedure} — $${Number(fr.amount).toFixed(2)}</option>`).join('')
-      +'<option value="__custom__">✏ Custom procedure...</option>';
-  }
-  calcInvModal();
-};
-
-window.onInvModalFlatProcSelect = function() {
-  const sel=document.getElementById('inv-modal-flat-proc-select');
-  const customInput=document.getElementById('inv-modal-flat-proc');
-  const amtInput=document.getElementById('inv-modal-flat-amt');
-  const val=sel?.value;
-  if(val==='__custom__'){
-    if(customInput){customInput.style.display='';customInput.value='';customInput.focus();}
-    if(amtInput)amtInput.value='';
-  } else if(val) {
-    const opt=sel.options[sel.selectedIndex];
-    const amount=parseFloat(opt?.getAttribute('data-amount'))||0;
-    if(customInput)customInput.style.display='none';
-    if(amtInput&&amount>0){amtInput.value=amount.toFixed(2);calcInvModalFlat();}
-  } else {
-    if(customInput)customInput.style.display='none';
-    if(amtInput)amtInput.value='';
-  }
-};
-
-window.setInvModalBilling = function(type) {
-  document.getElementById('inv-modal-billing-type').value=type;
-  const btnH=document.getElementById('inv-modal-btn-hourly');
-  const btnF=document.getElementById('inv-modal-btn-flat');
-  const ACTIVE='2px solid var(--info)', IDLE='2px solid var(--border)';
-  if(type==='flat'){
-    if(btnH){btnH.style.border=IDLE;btnH.style.background='var(--surface)';btnH.style.color='var(--text-muted)';btnH.style.fontWeight='500';}
-    if(btnF){btnF.style.border=ACTIVE;btnF.style.background='var(--info-light)';btnF.style.color='var(--info)';btnF.style.fontWeight='600';}
-    document.getElementById('inv-modal-hourly-fields').style.display='none';
-    document.getElementById('inv-modal-flat-fields').style.display='';
-    document.getElementById('inv-modal-flat-amt-wrap').style.display='';
-    onInvModalCenterChange();
-    calcInvModalFlat();
-  } else {
-    if(btnH){btnH.style.border=ACTIVE;btnH.style.background='var(--info-light)';btnH.style.color='var(--info)';btnH.style.fontWeight='600';}
-    if(btnF){btnF.style.border=IDLE;btnF.style.background='var(--surface)';btnF.style.color='var(--text-muted)';btnF.style.fontWeight='500';}
-    document.getElementById('inv-modal-hourly-fields').style.display='contents';
-    document.getElementById('inv-modal-flat-fields').style.display='none';
-    document.getElementById('inv-modal-flat-amt-wrap').style.display='none';
-  }
-};
-
-window.calcInvModal = function() {
-  if(document.getElementById('inv-modal-billing-type')?.value==='flat'){calcInvModalFlat();return window._invModalCalc||null;}
-  const start=document.getElementById('inv-modal-start')?.value;
-  const end=document.getElementById('inv-modal-end')?.value;
-  const fhr=parseFloat(document.getElementById('inv-modal-fhr')?.value)||0;
-  const p15=parseFloat(document.getElementById('inv-modal-p15')?.value)||0;
-  const summEl=document.getElementById('inv-modal-summary');
-  const totEl=document.getElementById('inv-modal-total');
-  if(!start||!end||!fhr){if(totEl)totEl.textContent='$0.00';return null;}
-  const [sh,sm]=start.split(':').map(Number);
-  const [eh,em]=end.split(':').map(Number);
-  const totalMins=(eh*60+em)-(sh*60+sm);
-  if(totalMins<=0){if(totEl)totEl.textContent='$0.00';return null;}
-  const roundedMins=totalMins<=60?60:60+Math.ceil((totalMins-60)/15)*15;
-  let total=fhr;
-  if(roundedMins>60)total+=((roundedMins-60)/15)*p15;
-  const billedStr=`${Math.floor(roundedMins/60)}h${roundedMins%60>0?' '+roundedMins%60+'m':''}`;
-  if(summEl)summEl.textContent=`Billed: ${billedStr}`;
-  if(totEl)totEl.textContent='$'+total.toFixed(2);
-  window._invModalCalc={total,roundedMins,billedStr,start,end,fhr,p15,flat:false};
-  return window._invModalCalc;
-};
-
-window.calcInvModalFlat = function() {
-  const procSel=document.getElementById('inv-modal-flat-proc-select');
-  const procCustom=document.getElementById('inv-modal-flat-proc');
-  const proc=(procSel?.value==='__custom__'||!procSel?.value)?(procCustom?.value?.trim()||'')
-    :procSel.options[procSel.selectedIndex]?.text.split(' — ')[0]||'';
-  const amt=parseFloat(document.getElementById('inv-modal-flat-amt')?.value)||0;
-  const summEl=document.getElementById('inv-modal-summary');
-  const totEl=document.getElementById('inv-modal-total');
-  if(amt>0){
-    if(summEl)summEl.textContent=(proc?proc+' — ':'')+'Flat Rate';
-    if(totEl)totEl.textContent='$'+amt.toFixed(2);
-    window._invModalCalc={total:amt,billedStr:'Flat Rate',flat:true,proc};
-  } else {
-    if(summEl)summEl.textContent='Enter flat rate amount';
-    if(totEl)totEl.textContent='$0.00';
-    window._invModalCalc=null;
-  }
-};
-
-function _getInvoiceHeader() {
-  const w=(typeof window.currentWorker!=='undefined'?window.currentWorker:'josh');
-  const provider=document.getElementById('inv-modal-provider')?.value||(w==='josh'?'Josh Condado':'Dr. Dev Murthy');
-  const phone=w==='josh'?'715-499-6858':'262-573-9095';
-  const scSel=document.getElementById('inv-modal-sc-select');
-  const center=(window.surgeryCenters||[]).find(c=>c.id===scSel?.value);
-  const locInput=document.getElementById('inv-modal-location');
-  const location=(scSel?.value==='__custom__'||!center)?(locInput?.value||'—'):(center?.name||'—');
-  const date=document.getElementById('inv-modal-date')?.value||'';
-  const formattedDate=date?new Date(date+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}):'—';
-  const invoiceNum='ATL-INV-'+(date||new Date().toISOString().split('T')[0]).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
-  window._currentInvoiceNum=invoiceNum;
-  return {provider,phone,location,date,formattedDate,invoiceNum,w};
-}
-
-function buildInvoiceModalHTML() {
-  return document.getElementById('inv-modal-billing-type')?.value==='flat'?buildFlatRateInvoiceHTML():buildHourlyInvoiceHTML();
-}
-
-function buildHourlyInvoiceHTML() {
-  const {provider,phone,location,formattedDate,invoiceNum}=_getInvoiceHeader();
-  const calc=window._invModalCalc||{};
-  const total=calc.total||0;
-  const fmt12=t=>{if(!t)return '—';const[h,m]=t.split(':').map(Number);return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}`;};
-  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.5">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr>
-      <td style="vertical-align:top"><div style="font-size:17px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div>
-      <div style="font-size:10px;color:#444">${provider} | CRNA, Anesthesiology · ${phone}</div></td>
-      <td style="text-align:right;vertical-align:top"><div style="font-size:20px;font-weight:bold;color:#1d3557">INVOICE</div>
-      <div style="font-size:9px;color:#666">${invoiceNum}</div><div style="font-size:9px;color:#666">${formattedDate}</div></td>
-    </tr></table>
-    <hr style="border:none;border-top:2px solid #1d3557;margin:4px 0 10px">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px">
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:110px">BILLED TO:</td><td style="padding:4px 8px;border:1px solid #bbb;font-weight:500">${location}</td></tr>
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:4px 8px;border:1px solid #bbb">${provider} — Atlas Anesthesia</td></tr>
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TIME:</td><td style="padding:4px 8px;border:1px solid #bbb">${fmt12(calc.start)} → ${fmt12(calc.end)} · Billed: ${calc.billedStr||'—'}</td></tr>
-    </table>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">
-      <tr style="background:#1d3557;color:#fff"><td style="padding:5px 8px;font-weight:bold">Description</td><td style="padding:5px 8px;font-weight:bold;text-align:center">Time</td><td style="padding:5px 8px;font-weight:bold;text-align:right">Amount</td></tr>
-      <tr style="background:#f0efe9"><td style="padding:5px 8px;border:1px solid #bbb">Anesthesia Services — First Hour</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:center">60 min</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:right;font-family:monospace">$${(calc.fhr||0).toFixed(2)}</td></tr>
-      ${(calc.roundedMins||0)>60?`<tr><td style="padding:5px 8px;border:1px solid #bbb">Additional Time</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:center">${(calc.roundedMins||0)-60} min</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:right;font-family:monospace">$${(((calc.roundedMins||0)-60)/15*(calc.p15||0)).toFixed(2)}</td></tr>`:''}
-      <tr style="background:#1d3557;color:#fff"><td style="padding:6px 8px;font-weight:bold;font-size:13px" colspan="2">TOTAL DUE</td><td style="padding:6px 8px;font-weight:bold;font-size:15px;text-align:right;font-family:monospace">$${total.toFixed(2)}</td></tr>
-    </table>
-    <div style="font-size:9px;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px">Thank you for choosing Atlas Anesthesia · Mobile Anesthesia Services</div></div>`;
-}
-
-function buildFlatRateInvoiceHTML() {
-  const {provider,phone,location,formattedDate,invoiceNum}=_getInvoiceHeader();
-  const procSel=document.getElementById('inv-modal-flat-proc-select');
-  const procCustom=document.getElementById('inv-modal-flat-proc');
-  const proc=(procSel?.value==='__custom__'||!procSel?.value)?(procCustom?.value||'Anesthesia Services')
-    :procSel.options[procSel.selectedIndex]?.text.split(' — ')[0]||'Anesthesia Services';
-  const amt=parseFloat(document.getElementById('inv-modal-flat-amt')?.value)||0;
-  return `<div style="font-family:Arial,sans-serif;font-size:12px;color:#000;line-height:1.5">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr>
-      <td style="vertical-align:top"><div style="font-size:17px;font-weight:bold;color:#1d3557">Atlas Anesthesia</div>
-      <div style="font-size:10px;color:#444">${provider} | CRNA, Anesthesiology · ${phone}</div></td>
-      <td style="text-align:right;vertical-align:top"><div style="font-size:20px;font-weight:bold;color:#1d3557">INVOICE</div>
-      <div style="font-size:9px;color:#666">${invoiceNum}</div><div style="font-size:9px;color:#666">${formattedDate}</div></td>
-    </tr></table>
-    <hr style="border:none;border-top:2px solid #1d3557;margin:4px 0 10px">
-    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:11px">
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:110px">BILLED TO:</td><td style="padding:4px 8px;border:1px solid #bbb;font-weight:500">${location}</td></tr>
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:4px 8px;border:1px solid #bbb">${provider} — Atlas Anesthesia</td></tr>
-      <tr><td style="padding:4px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">TYPE:</td><td style="padding:4px 8px;border:1px solid #bbb">Flat Rate Procedure</td></tr>
-    </table>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px">
-      <tr style="background:#1d3557;color:#fff"><td style="padding:5px 8px;font-weight:bold">Procedure</td><td style="padding:5px 8px;font-weight:bold;text-align:right">Flat Rate Amount</td></tr>
-      <tr style="background:#f0efe9"><td style="padding:8px 8px;border:1px solid #bbb;font-size:13px;font-weight:500">${proc}</td><td style="padding:8px 8px;border:1px solid #bbb;text-align:right;font-family:monospace;font-size:13px;font-weight:600">$${amt.toFixed(2)}</td></tr>
-      <tr style="background:#1d3557;color:#fff"><td style="padding:6px 8px;font-weight:bold;font-size:13px">TOTAL DUE</td><td style="padding:6px 8px;font-weight:bold;font-size:15px;text-align:right;font-family:monospace">$${amt.toFixed(2)}</td></tr>
-    </table>
-    <div style="font-size:9px;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px">Thank you for choosing Atlas Anesthesia · Mobile Anesthesia Services</div></div>`;
-}
-
-window.previewInvoiceModal = function() {
-  calcInvModal();
-  const preview=document.getElementById('inv-modal-preview');
-  if(preview)preview.innerHTML=buildInvoiceModalHTML();
-};
-
-window.downloadInvoiceModal = async function() {
-  const caseId=document.getElementById('inv-modal-case')?.value;
-  if(!caseId){alert('Please select a case first.');return;}
-  const scSel=document.getElementById('inv-modal-sc-select');
-  const center=(window.surgeryCenters||[]).find(c=>c.id===scSel?.value);
-  const locInput=document.getElementById('inv-modal-location');
-  const location=(scSel?.value==='__custom__'||!center)?(locInput?.value||''):(center?.name||'');
-  const date=document.getElementById('inv-modal-date')?.value||'';
-  const billingType=document.getElementById('inv-modal-billing-type')?.value||'hourly';
-  const invoiceNum='ATL-INV-'+(date||new Date().toISOString().split('T')[0]).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
-  if(!location||!date){alert('Please fill in surgery center and date.');return;}
-  if(billingType==='flat'){
-    const amt=parseFloat(document.getElementById('inv-modal-flat-amt')?.value)||0;
-    if(amt<=0){alert('Please enter a flat rate amount.');return;}
-    const proc=document.getElementById('inv-modal-flat-proc-select')?.value==='__custom__'
-      ?(document.getElementById('inv-modal-flat-proc')?.value||'Anesthesia Services')
-      :(document.getElementById('inv-modal-flat-proc-select')?.options[document.getElementById('inv-modal-flat-proc-select')?.selectedIndex]?.text.split(' — ')[0]||'Anesthesia Services');
-    window._invModalCalc={total:amt,billedStr:'Flat Rate',flat:true,proc};
-    window._generateFlatRateInvoicePDF(location,date,document.getElementById('inv-modal-provider')?.value||'',proc,amt);
-    await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider:document.getElementById('inv-modal-provider')?.value||'',total:amt,caseId,worker:window.currentWorker,emailed:false,savedAt:new Date().toISOString()});
-    if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){_paymentRows[_invoiceModalRowIdx].invoicedAmount=amt;renderPaymentRows();}
-  } else {
-    const calc=calcInvModal();
-    if(!calc){alert('Please fill in times and rates.');return;}
-    window._generateFlatRateInvoicePDF(location,date,document.getElementById('inv-modal-provider')?.value||'','Anesthesia Services',calc.total);
-    await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider:document.getElementById('inv-modal-provider')?.value||'',total:calc.total,caseId,worker:window.currentWorker,emailed:false,savedAt:new Date().toISOString()});
-    if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){_paymentRows[_invoiceModalRowIdx].invoicedAmount=calc.total;renderPaymentRows();}
-  }
-};
-
-window.sendInvoiceEmail = async function() {
-  const email=document.getElementById('inv-modal-email')?.value?.trim();
-  const caseId=document.getElementById('inv-modal-case')?.value;
-  const scSel=document.getElementById('inv-modal-sc-select');
-  const center=(window.surgeryCenters||[]).find(c=>c.id===scSel?.value);
-  const locInput=document.getElementById('inv-modal-location');
-  const location=(scSel?.value==='__custom__'||!center)?(locInput?.value||''):(center?.name||'');
-  const date=document.getElementById('inv-modal-date')?.value||'';
-  const billingType=document.getElementById('inv-modal-billing-type')?.value||'hourly';
-  if(!email){alert('Please enter a recipient email.');return;}
-  if(!caseId){alert('Please select an associated case.');return;}
-  if(!location||!date){alert('Please fill in surgery center and date.');return;}
-  let total=0;
-  if(billingType==='flat'){
-    total=parseFloat(document.getElementById('inv-modal-flat-amt')?.value)||0;
-    if(total<=0){alert('Please enter a flat rate amount.');return;}
-    const proc=document.getElementById('inv-modal-flat-proc-select')?.value==='__custom__'
-      ?(document.getElementById('inv-modal-flat-proc')?.value||'Anesthesia Services')
-      :(document.getElementById('inv-modal-flat-proc-select')?.options[document.getElementById('inv-modal-flat-proc-select')?.selectedIndex]?.text.split(' — ')[0]||'Anesthesia Services');
-    window._invModalCalc={total,billedStr:'Flat Rate',flat:true,proc};
-  } else {
-    const calc=calcInvModal();
-    if(!calc){alert('Please fill in times and rates.');return;}
-    total=calc.total;
-  }
-  const btn=document.getElementById('inv-modal-send-btn');
-  btn.textContent='Sending...';btn.disabled=true;
-  previewInvoiceModal();
-  const invoiceHTML=buildInvoiceModalHTML();
-  const invoiceNum=window._currentInvoiceNum||'ATL-INV';
-  const provider=document.getElementById('inv-modal-provider')?.value||'';
-  try {
-    const res=await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/invoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:email,location,date,provider,total,invoiceNum,worker:window.currentWorker||'josh',html:invoiceHTML})});
-    const data=await res.json().catch(()=>({}));
-    if(res.ok&&data.success){alert('Invoice sent to '+email+'!');}
-    else{window.open('mailto:'+email+'?subject='+encodeURIComponent('Atlas Anesthesia Invoice '+invoiceNum));alert('Email client opened.');}
-    await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider,total,caseId,worker:window.currentWorker,emailed:true,savedAt:new Date().toISOString()});
-    if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){
-      _paymentRows[_invoiceModalRowIdx].invoiceSent=true;
-      _paymentRows[_invoiceModalRowIdx].invoicedAmount=total;
-    }
-    renderPaymentRows();
-    closeInvoiceModal();
-  } catch(e){
-    window.open('mailto:'+email+'?subject='+encodeURIComponent('Atlas Anesthesia Invoice'));
-    await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider,total,caseId,worker:window.currentWorker,emailed:false,savedAt:new Date().toISOString()}).catch(()=>{});
-  } finally {
-    btn.textContent='Send Invoice Email';btn.disabled=false;
-  }
-};
-
-// -- showTab hook — triggers load when tab is opened -------------------------
-(function() {
-  const _orig = window.showTab;
-  window.showTab = function(tab, pushState) {
-    if(pushState === undefined) pushState = true;
-    _orig(tab, pushState);
-    if(tab === 'payments')   loadPaymentRows();
-    if(tab === 'saved-pdfs') loadSavedPDFs();
-  };
-})();
