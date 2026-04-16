@@ -779,20 +779,22 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   const CAT_META = {
     expense:           { label:'EXPENSE',            color:'var(--warn)',  bg:'rgba(239,68,68,0.1)',   isExpense:true  },
     income:            { label:'INCOME',             color:'#2d6a4f',     bg:'rgba(45,106,79,0.1)',    isExpense:false },
-    'initial-invest':  { label:'INITIAL INVESTMENT', color:'var(--info)', bg:'rgba(29,83,198,0.1)',   isExpense:true  },
+    'initial-invest':  { label:'INITIAL INVESTMENT', color:'var(--info)', bg:'rgba(29,83,198,0.1)',   isExpense:false },
   };
   function _meta(cat) { return CAT_META[cat] || CAT_META.expense; }
   function _isExp(cat) { return _meta(cat).isExpense; }
 
   function _totals(worker, data) {
-    const entries  = (data.entries||[]).filter(e=>e.worker===worker);
-    const dists    = (data.distributions||[]).filter(d=>d.worker===worker);
-    const totalIn  = entries.filter(e=>!_isExp(e.cat)).reduce((s,e)=>s+(e.amount||0),0);
-    const totalOut = entries.filter(e=> _isExp(e.cat)).reduce((s,e)=>s+(e.amount||0),0);
+    const entries   = (data.entries||[]).filter(e=>e.worker===worker);
+    const dists     = (data.distributions||[]).filter(d=>d.worker===worker);
+    const totalOut  = entries.filter(e=>e.cat==='expense').reduce((s,e)=>s+(e.amount||0),0);
+    const totalIn   = entries.filter(e=>e.cat==='income').reduce((s,e)=>s+(e.amount||0),0);
+    const totalInvest = entries.filter(e=>e.cat==='initial-invest').reduce((s,e)=>s+(e.amount||0),0);
     const totalDist = dists.reduce((s,d)=>s+(d.amount||0),0);
     const rev = (window.cases||[]).filter(c=>c.worker===worker&&!c.draft).reduce((s,c)=>s+(c.total||0),0);
-    const suggested = Math.max(0, rev + totalIn - totalOut - totalDist);
-    return { entries, dists, totalIn, totalOut, totalDist, rev, suggested };
+    // Suggested = revenue + other income + owed-back investments - expenses - already distributed
+    const suggested = Math.max(0, rev + totalIn + totalInvest - totalOut - totalDist);
+    return { entries, dists, totalIn, totalOut, totalInvest, totalDist, rev, suggested };
   }
 
   function _lbl(text, optional) {
@@ -851,10 +853,10 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px';
     [
-      ['Case Revenue',     _fmt(rev),       'var(--accent)'],
-      ['Expenses',         _fmt(totalOut),  'var(--warn)'],
-      ['Other Income',     _fmt(totalIn),   'var(--info)'],
-      ['Suggested Payout', _fmt(suggested), '#2d6a4f'],
+      ['Case Revenue',       _fmt(rev),          'var(--accent)'],
+      ['Expenses',           _fmt(totalOut),     'var(--warn)'],
+      ['Investment Owed Back', _fmt(totalInvest),'var(--info)'],
+      ['Suggested Payout',   _fmt(suggested),    '#2d6a4f'],
     ].forEach(function(item, i) {
       const card = document.createElement('div');
       card.className = 'metric-card';
@@ -896,6 +898,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       +'<div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">'
         +'<div>Case Revenue: <strong>'+_fmt(rev)+'</strong></div>'
         +'<div>+ Other Income: <strong style="color:var(--info)">'+_fmt(totalIn)+'</strong></div>'
+        +'<div>+ Investment Owed Back: <strong style="color:var(--info)">'+_fmt(totalInvest)+'</strong></div>'
         +'<div>- Expenses: <strong style="color:var(--warn)">'+_fmt(totalOut)+'</strong></div>'
         +'<div>- Already Distributed: <strong style="color:#2d6a4f">'+_fmt(totalDist)+'</strong></div>'
         +'<div style="border-top:1px solid #b8cfe8;padding-top:8px;margin-top:6px;font-weight:700;color:var(--info)">Suggested: '+_fmt(suggested)+'</div>'
