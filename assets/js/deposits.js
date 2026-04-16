@@ -49,10 +49,10 @@ function _statusPill(record) {
 
 // -- Build email HTML ---------------------------------------------------------
 function _buildDepositEmailHTML(opts) {
-  const { patientName, provider, surgDate, isReminder } = opts;
+  const { firstName, provider, surgDate, isReminder } = opts;
   const greeting = isReminder
-    ? `<p>Hi,</p><p>We wanted to follow up regarding your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. We noticed your initial deposit of <strong>$500</strong> has not yet been received.</p>`
-    : `<p>Hi,</p><p>Thank you so much for speaking with us today about your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. It was a pleasure connecting with you, and we look forward to providing you with exceptional anesthesia care.</p><p>To secure your appointment, we kindly ask for an initial deposit of <strong>$500</strong>, which can be submitted securely online using the link below.</p>`;
+    ? `<p>Hi${firstName ? ' '+firstName : ''},</p><p>We wanted to follow up regarding your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. We noticed your initial deposit of <strong>$500</strong> has not yet been received.</p>`
+    : `<p>Hi${firstName ? ' '+firstName : ''},</p><p>Thank you so much for speaking with us today about your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. It was a pleasure connecting with you, and we look forward to providing you with exceptional anesthesia care.</p><p>To secure your appointment, we kindly ask for an initial deposit of <strong>$500</strong>, which can be submitted securely online using the link below.</p>`;
 
   return `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#000">
@@ -79,7 +79,7 @@ function _buildDepositEmailHTML(opts) {
 }
 
 // -- Send deposit email -------------------------------------------------------
-async function _sendDepositEmail(record, isReminder) {
+async function _sendDepositEmail(record, isReminder, firstName) {
   const html = _buildDepositEmailHTML({
         provider: record.provider,
     surgDate: _fmtDate(record.surgDate),
@@ -229,6 +229,10 @@ window.openDepositsModal = async function() {
         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Patient Email</label>
         <input type="email" id="dep-email" placeholder="patient@email.com" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">
       </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">First Name <span style="font-weight:400;text-transform:none;font-style:italic;color:var(--text-faint)">(for email only)</span></label>
+        <input type="text" id="dep-firstname" placeholder="e.g. Sarah" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">
+      </div>
 
       <div>
         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Stripe Payment Link</label>
@@ -283,7 +287,8 @@ window._depositCaseChanged = function() {
 // -- Send new deposit request -------------------------------------------------
 window._depositSendNew = async function() {
   const sel    = document.getElementById('dep-case-select');
-  const email  = (document.getElementById('dep-email')?.value||'').trim();
+  const email     = (document.getElementById('dep-email')?.value||'').trim();
+  const firstName = (document.getElementById('dep-firstname')?.value||'').trim();
   const name   = (document.getElementById('dep-name')?.value||'').trim();
   const link   = (document.getElementById('dep-stripe-link')?.value||'').trim() || STRIPE_PAYMENT_LINK;
   const status = document.getElementById('dep-send-status');
@@ -318,7 +323,7 @@ window._depositSendNew = async function() {
   records.unshift(newRecord);
   await _saveDeposits(records);
 
-  const sent = await _sendDepositEmail(newRecord, false);
+  const sent = await _sendDepositEmail(newRecord, false, firstName);
 
   btn.disabled = false; btn.textContent = '📧 Send Deposit Request';
   if(status) status.textContent = sent ? '✓ Email sent!' : '⚠ Opened mail client (worker unavailable)';
