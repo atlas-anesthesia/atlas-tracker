@@ -2754,7 +2754,6 @@ if(match) CS_DRUGS[key].invId = match.id;
 let csEntries = []; // current case CS entries being built
 let currentCSEntry = null; // entry awaiting witness sig
 let witnessDrawing = false;
-let providerDrawing = false;
 let witnessLastX = 0, witnessLastY = 0;
 let currentCSTab = 'ephedrine';
 window.addCSEntry = function() {
@@ -2901,66 +2900,6 @@ renderCSEntries();
 closeWitnessModal();
 }
 
-window.openCSProviderModal = function(entryIdx) {
-currentCSEntry = entryIdx;
-document.getElementById('csProviderModal').style.display = 'flex';
-clearCSProviderCanvas();
-setupProviderCanvas();
-};
-window.closeCSProviderModal = function() {
-document.getElementById('csProviderModal').style.display = 'none';
-currentCSEntry = null;
-};
-window.clearCSProviderCanvas = function() {
-const canvas = document.getElementById('csProviderCanvas');
-if(!canvas) return;
-const ctx = canvas.getContext('2d');
-ctx.clearRect(0, 0, canvas.width, canvas.height);
-providerDrawing = false;
-};
-function setupProviderCanvas() {
-const canvas = document.getElementById('csProviderCanvas');
-if(!canvas) return;
-const ctx = canvas.getContext('2d');
-ctx.strokeStyle = '#0369a1';
-ctx.lineWidth = 2.5;
-ctx.lineCap = 'round';
-ctx.lineJoin = 'round';
-function getPos(e) {
-const rect = canvas.getBoundingClientRect();
-const scaleX = canvas.width / rect.width;
-const scaleY = canvas.height / rect.height;
-const src = e.touches ? e.touches[0] : e;
-return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
-}
-canvas.onmousedown = canvas.ontouchstart = function(e) {
-e.preventDefault();
-providerDrawing = true;
-const p = getPos(e);
-ctx.beginPath();
-ctx.moveTo(p.x, p.y);
-};
-canvas.onmousemove = canvas.ontouchmove = function(e) {
-e.preventDefault();
-if(!providerDrawing) return;
-const p = getPos(e);
-ctx.lineTo(p.x, p.y);
-ctx.stroke();
-};
-canvas.onmouseup = canvas.ontouchend = function(e) {
-e.preventDefault();
-providerDrawing = false;
-};
-}
-window.saveCSProviderSig = function() {
-const canvas = document.getElementById('csProviderCanvas');
-if(!canvas) return;
-const dataUrl = canvas.toDataURL('image/png');
-if(currentCSEntry !== null && currentCSEntry !== undefined) {
-window.updateCSEntry(currentCSEntry, 'providerSignature', dataUrl);
-}
-window.closeCSProviderModal();
-};
 // -- SAVE CS ENTRIES WITH CASE --
 async function saveCSEntriesWithCase(caseId, caseDate, provider) {
 if(!csEntries.length) return;
