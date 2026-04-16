@@ -836,7 +836,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   function _buildSection(worker, canEdit, data, container) {
     const wname  = worker==='dev'?'Devarsh':'Josh';
     const wcolor = worker==='dev'?'var(--dev)':'var(--josh)';
-    const { entries, dists, totalIn, totalOut, totalDist, rev, suggested } = _totals(worker, data);
+    const { entries, dists, totalIn, totalOut, totalInvest, totalDist, rev, suggested } = _totals(worker, data);
     const sorted  = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const sortedD = [...dists].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
