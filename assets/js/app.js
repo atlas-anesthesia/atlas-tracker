@@ -927,7 +927,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     } else {
       // Column header
       const colHdr = document.createElement('div');
-      colHdr.style.cssText = 'display:grid;grid-template-columns:1fr 72px 1px 80px;gap:0;align-items:center;padding:4px 0 4px 0;border-bottom:2px solid var(--border)';
+      colHdr.style.cssText = 'display:grid;grid-template-columns:1fr 52px 1px 90px;gap:0;align-items:center;padding:4px 0 4px 0;border-bottom:2px solid var(--border)';
       colHdr.innerHTML = '<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Entry</span>'
         +'<span></span><span></span>'
         +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);text-align:right">Amount</span>';
@@ -937,7 +937,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         const meta = _meta(e.cat);
         const row = document.createElement('div');
         // 4-column grid: info | actions | divider | amount
-        row.style.cssText = 'display:grid;grid-template-columns:1fr 72px 1px 80px;gap:0;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)';
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 52px 1px 90px;gap:0;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)';
 
         // Left: pill + name + details
         const left = document.createElement('div');
@@ -969,7 +969,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
         // Divider line
         const divider = document.createElement('div');
-        divider.style.cssText = 'width:1px;background:var(--border);align-self:stretch;margin:4px 0';
+        divider.style.cssText = 'width:1px;background:var(--border);align-self:stretch';
 
         // Amount column — right-aligned, fixed width
         const amtCol = document.createElement('div');
@@ -996,7 +996,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     } else {
       sortedD.forEach(function(d) {
         const row = document.createElement('div');
-        row.style.cssText = 'display:grid;grid-template-columns:1fr 72px 1px 80px;gap:0;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)';
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 52px 1px 90px;gap:0;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)';
         const left = document.createElement('div');
         left.innerHTML = '<div style="font-size:13px;font-weight:600;color:#2d6a4f">Distribution</div>'
           +(d.date?'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(d.date)+'</div>':'')
@@ -1011,10 +1011,10 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           actions.appendChild(dBtn);
         }
         const divider = document.createElement('div');
-        divider.style.cssText = 'width:1px;background:var(--border);align-self:stretch;margin:4px 0';
+        divider.style.cssText = 'width:1px;background:var(--border);align-self:stretch';
         const amtCol = document.createElement('div');
-        amtCol.style.cssText = 'text-align:right;padding-left:12px';
-        amtCol.innerHTML = '<span style="font-size:13px;font-weight:700;color:#2d6a4f;font-family:DM Mono,monospace">'+_fmt(d.amount)+'</span>';
+        amtCol.style.cssText = 'text-align:right;padding-left:10px;padding-right:4px';
+        amtCol.innerHTML = '<span style="font-size:12px;font-weight:700;color:#2d6a4f;font-family:DM Mono,monospace;white-space:nowrap">'+_fmt(d.amount)+'</span>';
         row.appendChild(left); row.appendChild(actions); row.appendChild(divider); row.appendChild(amtCol);
         wrap.appendChild(row);
       });
