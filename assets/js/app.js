@@ -795,14 +795,14 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     const dists       = (data.distributions||[]).filter(d=>d.worker===worker);
     const totalOut    = entries.filter(e=>e.cat==='expense').reduce((s,e)=>s+(e.amount||0),0);
     const totalIn     = entries.filter(e=>e.cat==='income').reduce((s,e)=>s+(e.amount||0),0);
-    const totalInvest = entries.filter(e=>e.cat==='initial-invest').reduce((s,e)=>s+(e.amount||0),0);
-    const totalDist   = dists.reduce((s,d)=>s+(d.amount||0),0);
+    const totalInvest    = entries.filter(e=>e.cat==='initial-invest').reduce((s,e)=>s+(e.amount||0),0);
+    const totalDist      = dists.reduce((s,d)=>s+(d.amount||0),0);
+    // Track how much of invest has been paid back incrementally via distributions
+    const totalInvestPaid = dists.reduce((s,d)=>s+(d.investPaid||0),0);
+    const investOwed     = Math.max(0, totalInvest - totalInvestPaid);
     const rev = (data._paymentRows||[]).filter(r=>r.worker===worker&&(r.invoicedAmount||0)>0).reduce((s,r)=>s+(r.invoicedAmount||0),0);
-    // Phase 1: Suggested payout from revenue only (initial investments paid back later)
-    const revSuggested = Math.max(0, rev + totalIn - totalOut - totalDist);
-    // Phase 2: Investment owed back — separate, paid once bank has enough
-    const investOwed = totalInvest;
-    return { entries, dists, totalIn, totalOut, totalInvest, totalDist, rev, revSuggested, investOwed };
+    const revSuggested   = Math.max(0, rev + totalIn - totalOut - totalDist);
+    return { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, revSuggested, investOwed };
   }
 
   function _lbl(text, optional) {
@@ -844,7 +844,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   function _buildSection(worker, canEdit, data, container) {
     const wname  = worker==='dev'?'Devarsh':'Josh';
     const wcolor = worker==='dev'?'var(--dev)':'var(--josh)';
-    const { entries, dists, totalIn, totalOut, totalInvest, totalDist, rev, revSuggested, investOwed } = _totals(worker, data);
+    const { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, revSuggested, investOwed } = _totals(worker, data);
     const sorted  = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const sortedD = [...dists].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -904,26 +904,32 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     distForm.style.cssText = 'display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px';
     distForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Record Distribution</div>'
       +'<div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">'
-        +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px">Phase 1 — Revenue Distribution</div>'
-        +'<div>Case Revenue: <strong>'+_fmt(rev)+'</strong></div>'
+        +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px">Revenue</div>'
+        +'<div>Invoiced Revenue: <strong>'+_fmt(rev)+'</strong></div>'
         +(totalIn?'<div>+ Other Income: <strong style="color:var(--info)">'+_fmt(totalIn)+'</strong></div>':'')
-        +'<div>- Expenses: <strong style="color:var(--warn)">'+_fmt(totalOut)+'</strong></div>'
-        +'<div>- Already Distributed: <strong style="color:#2d6a4f">'+_fmt(totalDist)+'</strong></div>'
-        +'<div style="font-weight:700;color:#2d6a4f;margin-top:4px">Suggested Payout: '+_fmt(revSuggested)+'</div>'
-        +(investOwed?'<div style="border-top:1px solid #b8cfe8;margin-top:8px;padding-top:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Phase 2 — Investment Payback</div>'
-          +'<div style="color:var(--info)">Investment Owed Back: <strong>'+_fmt(investOwed)+'</strong></div>'
-          +'<div style="font-size:11px;color:var(--text-faint);font-style:italic">Paid back once Atlas bank account has sufficient funds</div>':'')
+        +'<div>- Expenses: <strong style="color:var(--warn)">- '+_fmt(totalOut)+'</strong></div>'
+        +'<div>- Already Distributed: <strong style="color:#888">- '+_fmt(totalDist)+'</strong></div>'
+        +'<div style="font-weight:700;color:#2d6a4f;margin-top:4px;padding-top:6px;border-top:1px solid #b8cfe8">Available to Distribute: '+_fmt(revSuggested)+'</div>'
+        +(totalInvest?'<div style="border-top:1px solid #b8cfe8;margin-top:8px;padding-top:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Investment Payback</div>'
+          +'<div>Total Invested: <strong>'+_fmt(totalInvest)+'</strong></div>'
+          +(totalInvestPaid?'<div>Paid Back So Far: <strong style="color:#2d6a4f">'+_fmt(totalInvestPaid)+'</strong></div>':'')
+          +'<div style="font-weight:700;color:var(--info)">Remaining Owed: '+_fmt(investOwed)+'</div>':'')
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
         +'<div>'+_lbl('Amount')+_field('dist-amount-'+worker,'number','0.00')+'</div>'
         +'<div>'+_lbl('Date',true)+_field('dist-date-'+worker,'date','')+'</div>'
       +'</div>'
       +'<div style="margin-bottom:10px">'+_lbl('Notes',true)+_field('dist-notes-'+worker,'text','')+'</div>'
-      +(investOwed>0 ? '<div style="margin-bottom:10px;padding:10px;background:rgba(29,83,198,0.08);border-radius:6px;border:1px solid rgba(29,83,198,0.2)">'
-        +'<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--info)">'
-        +'<input type="checkbox" id="dist-payback-invest-'+worker+'" style="width:15px;height:15px">'
-        +'Include investment payback <strong>('+_fmt(investOwed)+')</strong></label>'
-        +'<div style="font-size:11px;color:var(--text-faint);margin-top:4px;margin-left:23px">Investments will be archived and removed from the owed balance</div>'
+      +(investOwed>0 ? '<div style="margin-bottom:10px;padding:12px;background:rgba(29,83,198,0.06);border-radius:6px;border:1px solid rgba(29,83,198,0.2)">'
+        +'<div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:8px">Investment Payback <span style="font-weight:400;color:var(--text-faint)">('+_fmt(investOwed)+' remaining)</span></div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">'
+          +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Pay back amount</label>'
+          +'<input type="number" id="dist-payback-invest-'+worker+'" min="0" step="0.01" max="'+investOwed+'" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
+          +'</div>'
+          +'<div><button type="button" onclick="(function(){var el=document.getElementById('dist-payback-invest-'+worker+'');if(el)el.value=''+investOwed.toFixed(2)+''})()" '
+          +'style="width:100%;padding:8px;font-size:12px;font-weight:600;color:var(--info);background:rgba(29,83,198,0.1);border:1px solid rgba(29,83,198,0.3);border-radius:var(--radius-sm);cursor:pointer">Pay All ('+_fmt(investOwed)+')</button></div>'
+        +'</div>'
+        +'<div style="font-size:11px;color:var(--text-faint);margin-top:6px">Enter any amount up to the full balance. Paid amounts are tracked — full balance archived when completely paid off.</div>'
         +'</div>' : '')
       +'<div style="display:flex;gap:8px">'
         +'<button class="btn btn-primary btn-sm" id="dist-save-'+worker+'">Save &amp; Download PDF</button>'
@@ -1001,6 +1007,22 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     }
 
     // ── Distributions list ───────────────────────────────────────────────────
+    // Investment payback progress bar (if investments exist)
+    const investEntries = entries.filter(e=>e.cat==='initial-invest');
+    if(investEntries.length > 0 || totalInvestPaid > 0) {
+      const investBar = document.createElement('div');
+      investBar.style.cssText = 'margin:10px 0 14px;padding:10px 12px;background:rgba(29,83,198,0.06);border:1px solid rgba(29,83,198,0.2);border-radius:6px';
+      const pct = totalInvest > 0 ? Math.min(100, (totalInvestPaid/totalInvest)*100) : 0;
+      investBar.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--info);margin-bottom:6px">'
+        +'<span>Investment Payback Progress</span>'
+        +'<span>'+_fmt(totalInvestPaid)+' / '+_fmt(totalInvest)+'</span></div>'
+        +'<div style="background:rgba(29,83,198,0.15);border-radius:10px;height:8px;overflow:hidden">'
+          +'<div style="background:var(--info);height:100%;border-radius:10px;width:'+pct.toFixed(1)+'%;transition:width .3s"></div>'
+        +'</div>'
+        +'<div style="font-size:11px;color:var(--text-faint);margin-top:5px">'+_fmt(investOwed)+' remaining to pay back</div>';
+      wrap.appendChild(investBar);
+    }
+
     const dLabel = document.createElement('div');
     dLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin:14px 0 6px';
     dLabel.textContent = 'Distribution History';
@@ -1155,17 +1177,14 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     var amount = parseFloat(document.getElementById('dist-amount-'+w).value)||0;
     var date   = document.getElementById('dist-date-'+w).value || null;
     var notes  = (document.getElementById('dist-notes-'+w).value||'').trim();
-    var paybackInvest = document.getElementById('dist-payback-invest-'+w)?.checked || false;
+    var investPaybackAmt = parseFloat(document.getElementById('dist-payback-invest-'+w)?.value||0)||0;
     if(!amount) { alert('Please enter an amount.'); return; }
 
     var data = await _load();
     const { totalIn, totalOut, totalInvest, totalDist, rev } = _totals(w, data);
 
     // Check if this distribution covers the investment too
-    var investPaid = 0;
-    if(paybackInvest && totalInvest > 0) {
-      investPaid = totalInvest;
-    }
+    var investPaid = Math.min(investPaybackAmt, investOwed); // cap at remaining balance
 
     if(!data.distributions) data.distributions=[];
     data.distributions.push({
@@ -1174,15 +1193,20 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       createdAt:new Date().toISOString()
     });
 
-    // If paying back investments, archive them
+    // Track investment payback — archive entries only when fully paid off
     if(investPaid > 0) {
       if(!data.investHistory) data.investHistory = [];
-      const investEntries = (data.entries||[]).filter(e=>e.worker===w&&e.cat==='initial-invest');
+      // Log this payment
       data.investHistory.push({
         id: _uid(), worker:w, amountPaid:investPaid,
-        entries: investEntries, paidBackAt: new Date().toISOString()
+        paidBackAt: new Date().toISOString(), partial: investPaid < investOwed
       });
-      data.entries = (data.entries||[]).filter(e=>!(e.worker===w&&e.cat==='initial-invest'));
+      // If fully paid off, archive the investment entries
+      if(investPaid >= investOwed) {
+        const investEntries = (data.entries||[]).filter(e=>e.worker===w&&e.cat==='initial-invest');
+        data.investHistory[data.investHistory.length-1].entries = investEntries;
+        data.entries = (data.entries||[]).filter(e=>!(e.worker===w&&e.cat==='initial-invest'));
+      }
     }
 
     await _save(data);
