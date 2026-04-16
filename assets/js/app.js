@@ -926,7 +926,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Pay back amount</label>'
           +'<input type="number" id="dist-payback-invest-'+worker+'" min="0" step="0.01" max="'+investOwed+'" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
           +'</div>'
-          +'<div><button type="button" onclick="(function(){var el=document.getElementById('dist-payback-invest-'+worker+'');if(el)el.value=''+investOwed.toFixed(2)+''})()" '
+          +'<div><button type="button" id="dist-payall-'+worker+'" data-max="'+investOwed+'" data-target="dist-payback-invest-'+worker+'" '
           +'style="width:100%;padding:8px;font-size:12px;font-weight:600;color:var(--info);background:rgba(29,83,198,0.1);border:1px solid rgba(29,83,198,0.3);border-radius:var(--radius-sm);cursor:pointer">Pay All ('+_fmt(investOwed)+')</button></div>'
         +'</div>'
         +'<div style="font-size:11px;color:var(--text-faint);margin-top:6px">Enter any amount up to the full balance. Paid amounts are tracked — full balance archived when completely paid off.</div>'
@@ -1066,10 +1066,15 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       var cancelBtn  = document.getElementById('payout-cancel-'+worker);
       var dSaveBtn   = document.getElementById('dist-save-'+worker);
       var dCancelBtn = document.getElementById('dist-cancel-'+worker);
+      var payAllBtn  = document.getElementById('dist-payall-'+worker);
       if(saveBtn)    saveBtn.addEventListener('click', function() { window.savePayoutEntry(worker); });
       if(cancelBtn)  cancelBtn.addEventListener('click', function() { window.cancelPayoutEntry(worker); });
       if(dSaveBtn)   dSaveBtn.addEventListener('click', function() { window.saveDistribution(worker); });
       if(dCancelBtn) dCancelBtn.addEventListener('click', function() { window.cancelDistribution(worker); });
+      if(payAllBtn)  payAllBtn.addEventListener('click', function() {
+        var inp = document.getElementById(payAllBtn.getAttribute('data-target'));
+        if(inp) inp.value = payAllBtn.getAttribute('data-max');
+      });
     }, 0);
   }
 
