@@ -1765,7 +1765,7 @@ const paidHtml = ds === 'paid'
 : ``;
 return `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${invHtml}</div><div style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${paidHtml}</div>`;
 })()}
-</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="case-cost">${c.draft?'In Progress':'$'+getCaseTotal(c).toFixed(2)}</div>
+</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="case-cost">${c.draft?'Not Finalized':'$'+getCaseTotal(c).toFixed(2)}</div>
 <div style="position:relative;display:inline-block"><button onclick="event.stopPropagation();toggleHistoryDropdown('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">Actions ▾</button><div id="history-menu-${c.id}" style="display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;min-width:160px;overflow:hidden">${c.draft
 ? `<button onclick="event.stopPropagation();toggleHistoryDropdown('${c.id}');resumeCase('${c.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">Resume Case →</button>`
 : `<button onclick="event.stopPropagation();toggleHistoryDropdown('${c.id}');editFinalizedCase('${c.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">✏ Edit Case</button>`
