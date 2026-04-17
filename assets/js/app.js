@@ -1163,8 +1163,13 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
   // ── Public API ─────────────────────────────────────────────────────────────
   window.renderPayoutTab = async function() {
-    // Ensure formula is loaded and personal income is calculated
+    // Load formula if needed
     if(!window._atlasFormulaData) await loadAtlasFormula();
+    // Always recalculate personal income (cases may have loaded since last render)
+    window._personalIncome = {
+      josh: calcPersonalIncome('josh'),
+      dev:  calcPersonalIncome('dev')
+    };
     if(typeof _renderPICards === 'function') _renderPICards();
     const data = await _load();
     const me = currentUser ? (EMAIL_WORKER_MAP[currentUser.email.toLowerCase()]||'dev') : 'dev';
