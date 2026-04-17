@@ -1165,7 +1165,21 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   window.renderPayoutTab = async function() {
     // Load formula if needed
     if(!window._atlasFormulaData) await loadAtlasFormula();
-    // Always recalculate personal income (cases may have loaded since last render)
+    // Load cases directly if not yet populated by onSnapshot
+    if(!window.cases || !window.cases.length) {
+      try {
+        const cSnap = await getDoc(doc(db,'atlas','cases'));
+        if(cSnap.exists()) window.cases = (cSnap.data().cases||[]);
+      } catch(e) {}
+    }
+    // Load preop records if not yet populated (needed for surgery center lookup)
+    if(!window._rawPreopRecords || !window._rawPreopRecords.length) {
+      try {
+        const pSnap = await getDoc(doc(db,'atlas','preop'));
+        if(pSnap.exists()) window._rawPreopRecords = (pSnap.data().records||[]);
+      } catch(e) {}
+    }
+    // Recalculate personal income fresh
     window._personalIncome = {
       josh: calcPersonalIncome('josh'),
       dev:  calcPersonalIncome('dev')
