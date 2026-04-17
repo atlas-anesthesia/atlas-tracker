@@ -888,11 +888,29 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     // Metric cards
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px';
-    // Personal income from PI formula (shared rates from payments tab)
+    // Personal income from PI formula — calculate inline using Firestore formula
     var piIncome = 0;
     try {
-      if(window._calcPersonalIncome) piIncome = window._calcPersonalIncome(worker);
-    } catch(e) {}
+      const piFormula = window._piFormula_get ? window._piFormula_get() : null;
+      if(piFormula && piFormula.centers && piFormula.centers.length) {
+        const finalized = (window.cases||[]).filter(c => !c.draft && c.worker === worker);
+        finalized.forEach(c => {
+          const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
+          const centerId = preop?.['po-surgery-center'] || c.surgeryCenter || '';
+          const rule = piFormula.centers.find(f => f.id === centerId);
+          if(rule) {
+            if(rule.type === 'flat') {
+              piIncome += parseFloat(rule.rate) || 0;
+            } else if(rule.type === 'hourly') {
+              const hrs = c.endTime && c.startTime
+                ? Math.max(0, ((function(){const[eh,em]=c.endTime.split(':').map(Number);const[sh,sm]=c.startTime.split(':').map(Number);return(eh*60+em)-(sh*60+sm);})())/60)
+                : (parseFloat(preop?.['po-est-hours'])||0);
+              piIncome += hrs * (parseFloat(rule.rate)||0);
+            }
+          }
+        });
+      }
+    } catch(e) { console.warn('PI calc error:', e); }
     const piSuggested = Math.max(0, piIncome + totalIn - totalOut - totalDist);
     [
       ['Invoiced Revenue',     _fmt(rev),          'var(--accent)'],
@@ -1129,6 +1147,16 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
   // ── Public API ─────────────────────────────────────────────────────────────
   window.renderPayoutTab = async function() {
+    // Load PI formula if not already loaded by payments tab
+    if(!window._piFormula_get || !window._piFormula_get()?.centers?.length) {
+      try {
+        const pfSnap = await getDoc(doc(db, 'atlas', 'personal_income_formula'));
+        if(pfSnap.exists()) {
+          window._piFormulaData = pfSnap.data();
+          window._piFormula_get = () => window._piFormulaData;
+        }
+      } catch(e) {}
+    }
     const data = await _load();
     const me = currentUser ? (EMAIL_WORKER_MAP[currentUser.email.toLowerCase()]||'dev') : 'dev';
     const el = document.getElementById('payout-sections');
