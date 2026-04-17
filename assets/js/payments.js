@@ -776,7 +776,10 @@ window.openPersonalIncomeModal = async function() {
       _piFormula.centers.push({ id: centerId, type, rate });
     });
     await _savePIFormula();
-    _renderPICards();
+    // Sync to global store so E&D tab picks it up immediately
+    window._atlasFormulaData = _piFormula;
+    if(typeof _renderPICards === 'function') _renderPICards();
+    if(typeof renderPayoutTab === 'function') renderPayoutTab();
     modal.remove();
     alert('✓ Personal income formula saved!');
   });
