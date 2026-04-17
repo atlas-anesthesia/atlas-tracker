@@ -621,12 +621,16 @@ window._manualSyncToPayouts = async function() {
 // Stored in Firestore: atlas/personal_income_formula
 // Structure per worker: { centers: [ { id, name, type:'hourly'|'flat', rate } ] }
 
-let _piFormula = { josh: { centers: [] }, dev: { centers: [] } };
+let _piFormula = { centers: [] }; // shared formula for both workers
 
 async function _loadPIFormula() {
   try {
     const snap = await window.getDoc(window.doc(window.db, 'atlas', 'personal_income_formula'));
-    if(snap.exists()) _piFormula = snap.data();
+    if(snap.exists()) {
+      const d = snap.data();
+      // Migrate old per-worker format if needed
+      _piFormula = d.centers ? d : { centers: d.josh?.centers || [] };
+    }
   } catch(e) {}
 }
 
@@ -635,7 +639,7 @@ async function _savePIFormula() {
 }
 
 function _calcPersonalIncome(worker) {
-  const formula = _piFormula[worker] || { centers: [] };
+  const formula = _piFormula; // shared formula
   const finalized = (window.cases || []).filter(c => !c.draft && c.worker === worker);
   let total = 0;
   finalized.forEach(c => {
@@ -676,27 +680,28 @@ window.openPersonalIncomeModal = async function() {
   modal.id = 'pi-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
 
-  function buildWorkerRows(worker) {
-    const formula = _piFormula[worker] || { centers: [] };
+
+
+  function buildRows() {
     return centers.map(c => {
-      const rule = formula.centers.find(f => f.id === c.id) || { id: c.id, type: 'none', rate: 0 };
+      const rule = _piFormula.centers.find(f => f.id === c.id) || { id: c.id, type: 'none', rate: 0 };
       return `<tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:8px 12px;font-size:13px;font-weight:500">${c.name}</td>
-        <td style="padding:8px 12px">
-          <select data-worker="${worker}" data-center="${c.id}" data-field="type"
+        <td style="padding:9px 12px;font-size:13px;font-weight:500">${c.name}</td>
+        <td style="padding:9px 12px">
+          <select data-center="${c.id}" data-field="type"
             style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
             <option value="none" ${rule.type==='none'?'selected':''}>Not Used</option>
             <option value="hourly" ${rule.type==='hourly'?'selected':''}>Hourly Rate</option>
             <option value="flat" ${rule.type==='flat'?'selected':''}>Flat Rate / Day</option>
           </select>
         </td>
-        <td style="padding:8px 12px">
+        <td style="padding:9px 12px">
           <div style="display:flex;align-items:center;gap:4px">
             <span style="font-size:13px;color:var(--text-muted)">$</span>
-            <input type="number" min="0" step="1" value="${rule.rate||0}"
-              data-worker="${worker}" data-center="${c.id}" data-field="rate"
+            <input type="number" min="0" step="1" value="${rule.rate||''}"
+              data-center="${c.id}" data-field="rate"
               placeholder="0" style="width:80px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
-            <span style="font-size:11px;color:var(--text-faint)" id="pi-unit-${worker}-${c.id}">${rule.type==='hourly'?'/hr':rule.type==='flat'?'/day':''}</span>
+            <span style="font-size:11px;color:var(--text-faint)" id="pi-unit-${c.id}">${rule.type==='hourly'?'/hr':rule.type==='flat'?'/day':''}</span>
           </div>
         </td>
       </tr>`;
@@ -704,34 +709,26 @@ window.openPersonalIncomeModal = async function() {
   }
 
   modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:680px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:600px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="background:#1d3557;padding:18px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:1">
         <div>
-          <div style="font-size:16px;font-weight:600;color:#fff">Personal Income Formula</div>
-          <div style="font-size:12px;color:rgba(255,255,255,.65);margin-top:2px">Set hourly or flat rates per surgery center for each provider</div>
+          <div style="font-size:16px;font-weight:600;color:#fff">⚙️ Personal Income Formula</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.65);margin-top:2px">Shared rates apply to both Josh and Dev</div>
         </div>
         <button id="pi-close" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">✕ Close</button>
       </div>
       <div style="padding:20px 24px">
-        ${['josh','dev'].map(worker => `
-          <div style="margin-bottom:24px">
-            <div style="font-size:14px;font-weight:700;color:var(--${worker});margin-bottom:10px;display:flex;align-items:center;gap:8px">
-              <span style="background:var(--${worker});color:#fff;font-size:11px;padding:2px 8px;border-radius:10px">${worker==='josh'?'Josh':'Dev'}</span>
-              Personal Income Formula
-            </div>
-            ${centers.length ? `
-            <table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-              <thead><tr style="background:var(--surface2)">
-                <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);text-align:left">Surgery Center</th>
-                <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);text-align:left">Billing Type</th>
-                <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);text-align:left">Rate</th>
-              </tr></thead>
-              <tbody id="pi-rows-${worker}">${buildWorkerRows(worker)}</tbody>
-            </table>` : '<div style="font-size:13px;color:var(--text-faint);padding:12px 0">No surgery centers found. Add them in Surgery Centers tab first.</div>'}
-          </div>
-        `).join('')}
-        <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:12px;border-top:1px solid var(--border)">
-          <button id="pi-save" style="background:#1d3557;color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:14px;font-weight:600;cursor:pointer">Save Formula</button>
+        ${centers.length ? `
+        <table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <thead><tr style="background:var(--surface2)">
+            <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);text-align:left">Surgery Center</th>
+            <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);text-align:left">Billing Type</th>
+            <th style="padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);text-align:left">Rate</th>
+          </tr></thead>
+          <tbody id="pi-rows">${buildRows()}</tbody>
+        </table>` : '<div style="font-size:13px;color:var(--text-faint);padding:12px 0">No surgery centers found. Add them in Surgery Centers tab first.</div>'}
+        <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border);margin-top:16px">
+          <button id="pi-save" style="background:#1d3557;color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:14px;font-weight:600;cursor:pointer">✓ Save Formula</button>
         </div>
       </div>
     </div>`;
@@ -742,7 +739,7 @@ window.openPersonalIncomeModal = async function() {
   modal.addEventListener('change', e => {
     const el = e.target;
     if(el.dataset.field === 'type') {
-      const unitEl = document.getElementById(`pi-unit-${el.dataset.worker}-${el.dataset.center}`);
+      const unitEl = document.getElementById(`pi-unit-${el.dataset.center}`);
       if(unitEl) unitEl.textContent = el.value==='hourly'?'/hr':el.value==='flat'?'/day':'';
     }
   });
@@ -751,16 +748,14 @@ window.openPersonalIncomeModal = async function() {
   modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
 
   document.getElementById('pi-save').addEventListener('click', async () => {
-    // Collect all inputs
-    _piFormula = { josh: { centers: [] }, dev: { centers: [] } };
+    _piFormula = { centers: [] };
     modal.querySelectorAll('select[data-field="type"]').forEach(sel => {
-      const worker = sel.dataset.worker;
       const centerId = sel.dataset.center;
       const type = sel.value;
       if(type === 'none') return;
-      const rateEl = modal.querySelector(`input[data-worker="${worker}"][data-center="${centerId}"][data-field="rate"]`);
+      const rateEl = modal.querySelector(`input[data-center="${centerId}"][data-field="rate"]`);
       const rate = parseFloat(rateEl?.value) || 0;
-      _piFormula[worker].centers.push({ id: centerId, type, rate });
+      _piFormula.centers.push({ id: centerId, type, rate });
     });
     await _savePIFormula();
     _renderPICards();
