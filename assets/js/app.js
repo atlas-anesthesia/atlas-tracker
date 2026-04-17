@@ -1163,27 +1163,19 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
   // ── Public API ─────────────────────────────────────────────────────────────
   window.renderPayoutTab = async function() {
-    // Load formula if needed
-    if(!window._atlasFormulaData) await loadAtlasFormula();
-    // Load cases directly if not yet populated by onSnapshot
+    // Load the exact same formula payments.js uses
+    if(typeof window._loadPIFormula === 'function') await window._loadPIFormula();
+    else await loadAtlasFormula();
+    // Load cases + preop if not yet available
     if(!window.cases || !window.cases.length) {
-      try {
-        const cSnap = await getDoc(doc(db,'atlas','cases'));
-        if(cSnap.exists()) window.cases = (cSnap.data().cases||[]);
-      } catch(e) {}
+      try { const s = await getDoc(doc(db,'atlas','cases')); if(s.exists()) window.cases = s.data().cases||[]; } catch(e) {}
     }
-    // Load preop records if not yet populated (needed for surgery center lookup)
     if(!window._rawPreopRecords || !window._rawPreopRecords.length) {
-      try {
-        const pSnap = await getDoc(doc(db,'atlas','preop'));
-        if(pSnap.exists()) window._rawPreopRecords = (pSnap.data().records||[]);
-      } catch(e) {}
+      try { const s = await getDoc(doc(db,'atlas','preop')); if(s.exists()) window._rawPreopRecords = s.data().records||[]; } catch(e) {}
     }
-    // Recalculate personal income fresh
-    window._personalIncome = {
-      josh: calcPersonalIncome('josh'),
-      dev:  calcPersonalIncome('dev')
-    };
+    // Use exact same calculator as payments tab
+    const _piCalc = window._calcPersonalIncome || calcPersonalIncome;
+    window._personalIncome = { josh: _piCalc('josh'), dev: _piCalc('dev') };
     if(typeof _renderPICards === 'function') _renderPICards();
     const data = await _load();
     const me = currentUser ? (EMAIL_WORKER_MAP[currentUser.email.toLowerCase()]||'dev') : 'dev';
