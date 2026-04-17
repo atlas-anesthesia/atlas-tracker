@@ -897,8 +897,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     [
       ['Invoiced Revenue',     _fmt(rev),          'var(--accent)'],
       ['Personal Income',      _fmt(piIncome),     '#0369a1'],
-      ['Expenses',             _fmt(totalOut),     'var(--warn)'],
       ['Suggested Payout',     _fmt(piSuggested),  '#2d6a4f'],
+      ['Expenses',             _fmt(totalOut),     'var(--warn)'],
       ['Investment Owed Back', _fmt(investOwed),   'var(--info)'],
     ].forEach(function(item, i) {
       const card = document.createElement('div');
