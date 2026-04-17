@@ -230,19 +230,14 @@ setTimeout(wireEKGDetection, 600);
 loadSurgeryCenters();
   // Run full daily backup
   runFullDailyBackup().catch(()=>{});
-// Restore last active tab — read hash immediately, then re-confirm after snapshots settle
-try {
-  const hashTab = window.location.hash.replace('#','').trim();
-  const storedTab = localStorage.getItem('atlas_active_tab');
-  const tabToRestore = hashTab || storedTab;
-  if(tabToRestore) showTab(tabToRestore, false);
-} catch(e) {}
-// Re-confirm after snapshots settle (in case a render overwrites it)
-const _tabToConfirm = window.location.hash.replace('#','').trim() || localStorage.getItem('atlas_active_tab');
-if(_tabToConfirm) {
-  setTimeout(() => showTab(_tabToConfirm, false), 800);
-  setTimeout(() => showTab(_tabToConfirm, false), 1600);
-}
+// Restore last active tab
+const _savedTab = window.location.hash.replace('#','').trim() || localStorage.getItem('atlas_active_tab') || 'preop';
+showTab(_savedTab, false);
+// Re-apply after data loads (onSnapshot can briefly re-render UI)
+[500, 1000, 2000].forEach(ms => setTimeout(() => {
+  const active = document.querySelector('.section.active');
+  if(active && active.id !== 'tab-' + _savedTab) showTab(_savedTab, false);
+}, ms));
 // Pre-warm calendar data
 setTimeout(() => {
 if(window.buildCalendar) window.buildCalendar();
@@ -904,8 +899,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     [
       ['Invoiced Revenue',     _fmt(rev),          'var(--accent)'],
       ['Personal Income',      _fmt(piIncome),     '#0369a1'],
-      ['Suggested Payout',     _fmt(piSuggested),  '#2d6a4f'],
       ['Expenses',             _fmt(totalOut),     'var(--warn)'],
+      ['Suggested Payout',     _fmt(piSuggested),  '#2d6a4f'],
       ['Investment Owed Back', _fmt(investOwed),   'var(--info)'],
     ].forEach(function(item, i) {
       const card = document.createElement('div');
