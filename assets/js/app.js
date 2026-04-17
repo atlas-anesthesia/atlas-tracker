@@ -574,7 +574,7 @@ window.renderCalendar = buildCalendar;
 window.buildCalendar = buildCalendar;
 function showCalDetail(e) {
 window._calDetailCaseId = e.caseId;
-const typeLabel = {surgery:'🔴 Surgery','preop-call':'📞 Pre-Op Call Due',deposit:'💰 Deposit Due'};
+const typeLabel = {surgery:'🔴 Surgery','preop-call':'📞 Pre-Op Call Due',deposit:'💰 Remaining Deposit Due'};
 const typeBg = {surgery:'#fee2e2','preop-call':'#dbeafe',deposit:'#dcfce7'};
 const typeColor = {surgery:'#b91c1c','preop-call':'#1d4ed8',deposit:'#166534'};
 let modal = document.getElementById('cal-detail-modal');
@@ -693,7 +693,7 @@ if(!gcalToken) { connectGoogleCalendar(); return; }
 try { await pushToGCal(e); alert(`✓ Added to Google Calendar!`); } catch(err) { alert('Error: '+err.message); }
 };
 async function pushToGCal(e) {
-const titles = {surgery:'Surgery','preop-call':'Pre-Op Call Due',deposit:'Deposit Due'};
+const titles = {surgery:'Surgery','preop-call':'Pre-Op Call Due',deposit:'Remaining Deposit Due'};
 const colorIds = {surgery:'11','preop-call':'9',deposit:'10'};
 const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
 method:'POST',
