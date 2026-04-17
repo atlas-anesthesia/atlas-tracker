@@ -344,8 +344,13 @@ window._depositMarkPaid = async function(id) {
   records[idx].paidAt = paidAt;
   await _saveDeposits(records);
 
-  // Update Payments tab: set depositDate + dep500Paid for matching caseId
-  await _syncDepositToPayments(records[idx]);
+  // Also check Stripe for remainder balance while we're at it
+  let stripeResult = null;
+  try {
+    stripeResult = await _checkStripePayment(records[idx]);
+  } catch(e) {}
+  // Update Payments tab: set depositDate + dep500Paid (and remainder if found)
+  await _syncDepositToPayments(records[idx], stripeResult);
 
   const tc = document.getElementById('deposits-table-container');
   if(tc) await _renderDepositsTable(tc);
@@ -380,7 +385,7 @@ window._depositDelete = async function(id) {
 };
 
 // -- Sync paid deposit → Payments tab ----------------------------------------
-async function _syncDepositToPayments(depositRecord) {
+async function _syncDepositToPayments(depositRecord, stripeResult) {
   try {
     const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payments'));
     if(!snap.exists()) return;
@@ -388,12 +393,24 @@ async function _syncDepositToPayments(depositRecord) {
     const rowIdx = rows.findIndex(r => r.caseId === depositRecord.caseId);
     if(rowIdx === -1) return;
 
-    const paidDate = depositRecord.paidAt
-      ? new Date(depositRecord.paidAt).toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0];
+    // $500 deposit
+    if(stripeResult?.paid || depositRecord.paid) {
+      const paidDate = (stripeResult?.paidAt || depositRecord.paidAt)
+        ? new Date(stripeResult?.paidAt || depositRecord.paidAt).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+      rows[rowIdx].depositDate = paidDate;
+      rows[rowIdx].dep500Paid  = true;
+    }
 
-    rows[rowIdx].depositDate = paidDate;
-    rows[rowIdx].dep500Paid  = true;
+    // Remainder balance — any Stripe payment over $500 from same email
+    if(stripeResult?.remainderPaid) {
+      const remDate = stripeResult.remainderPaidAt
+        ? new Date(stripeResult.remainderPaidAt).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+      rows[rowIdx].paidDate = remDate;
+      rows[rowIdx].paid     = true;
+      console.log('Remainder balance confirmed for', depositRecord.caseId, '$'+stripeResult.remainderAmount);
+    }
 
     await window.setDoc(window.doc(window.db, 'atlas', 'payments'), { rows });
     console.log('Payments tab updated for', depositRecord.caseId);
@@ -414,11 +431,13 @@ window._depositsCheckAll = async function() {
   let updated = 0;
   for(const record of unpaid) {
     const result = await _checkStripePayment(record);
-    if(result?.paid) {
+    if(result?.paid || result?.remainderPaid) {
       const idx = records.findIndex(r => r.id === record.id);
-      records[idx].paid   = true;
-      records[idx].paidAt = result.paidAt || new Date().toISOString();
-      await _syncDepositToPayments(records[idx]);
+      if(result?.paid) {
+        records[idx].paid   = true;
+        records[idx].paidAt = result.paidAt || new Date().toISOString();
+      }
+      await _syncDepositToPayments(records[idx], result);
       updated++;
     }
   }
@@ -458,5 +477,4 @@ window._depositsAutoReminder = async function() {
   }
 };
 
-// Run auto-reminder check 5 seconds after load (non-blocking)
-setTimeout(window._depositsAutoReminder, 5000);
+// Auto-reminder now runs via Cloudflare Cron (see worker-reminder-cron.js)
