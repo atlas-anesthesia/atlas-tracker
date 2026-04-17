@@ -230,15 +230,19 @@ setTimeout(wireEKGDetection, 600);
 loadSurgeryCenters();
   // Run full daily backup
   runFullDailyBackup().catch(()=>{});
-// Restore last active tab — read hash first, then localStorage
-setTimeout(() => {
-  try {
-    const hashTab = window.location.hash.replace('#','').trim();
-    const storedTab = localStorage.getItem('atlas_active_tab');
-    const tabToRestore = hashTab || storedTab;
-    if(tabToRestore && tabToRestore !== 'preop') showTab(tabToRestore, false);
-  } catch(e) {}
-}, 400);
+// Restore last active tab — read hash immediately, then re-confirm after snapshots settle
+try {
+  const hashTab = window.location.hash.replace('#','').trim();
+  const storedTab = localStorage.getItem('atlas_active_tab');
+  const tabToRestore = hashTab || storedTab;
+  if(tabToRestore) showTab(tabToRestore, false);
+} catch(e) {}
+// Re-confirm after snapshots settle (in case a render overwrites it)
+const _tabToConfirm = window.location.hash.replace('#','').trim() || localStorage.getItem('atlas_active_tab');
+if(_tabToConfirm) {
+  setTimeout(() => showTab(_tabToConfirm, false), 800);
+  setTimeout(() => showTab(_tabToConfirm, false), 1600);
+}
 // Pre-warm calendar data
 setTimeout(() => {
 if(window.buildCalendar) window.buildCalendar();
