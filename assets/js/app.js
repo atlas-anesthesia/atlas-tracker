@@ -4105,14 +4105,22 @@ if(negEl) {
     if(checkbox.checked && negEl) negEl.checked = false;
   }
 }
-// If this is a radio-group prefix (e.g. pupil), hide the other-row when non-other is selected
-const otherCb = document.getElementById(prefix + '-other-cb');
-const otherRow = document.getElementById(prefix + '-other-row');
-if(otherCb && otherRow && checkbox.id !== prefix + '-other-cb' && checkbox.checked) {
-  otherCb.checked = false;
-  otherRow.style.display = 'none';
-  const otherVal = document.getElementById(prefix + '-other-val');
-  if(otherVal) otherVal.value = '';
+// For pupil exam — enforce single selection (radio-like behavior)
+const PUPIL_IDS = ['po-pupil-normal','po-pupil-dilated','po-pupil-constricted','po-pupil-other-cb'];
+if(PUPIL_IDS.includes(checkbox.id) && checkbox.checked) {
+  PUPIL_IDS.forEach(id => {
+    if(id !== checkbox.id) {
+      const el = document.getElementById(id);
+      if(el) el.checked = false;
+    }
+  });
+  // Hide other-row if non-other selected
+  const otherRow = document.getElementById('po-pupil-other-row');
+  const otherVal = document.getElementById('po-pupil-other-val');
+  if(checkbox.id !== 'po-pupil-other-cb' && otherRow) {
+    otherRow.style.display = 'none';
+    if(otherVal) otherVal.value = '';
+  }
 }
 // Trigger EKG check in case a CV condition changed
 if(typeof checkEKGConditions === 'function') checkEKGConditions();
