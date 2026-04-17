@@ -682,6 +682,8 @@ function _renderPICards() {
   const fmt = n => '$' + Number(n||0).toLocaleString('en-US', {minimumFractionDigits:0,maximumFractionDigits:0});
   const jInc  = _calcPersonalIncome('josh');
   const dInc  = _calcPersonalIncome('dev');
+  // Store for E&D tab to use
+  window._personalIncome = { josh: jInc, dev: dInc };
   const jProj = _calcProjectedPersonalIncome('josh');
   const dProj = _calcProjectedPersonalIncome('dev');
   const el = id => document.getElementById(id);
