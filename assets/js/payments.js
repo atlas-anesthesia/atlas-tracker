@@ -110,6 +110,9 @@ window.loadPaymentRows = async function loadPaymentRows() {
   });
   _paymentRows.sort((a,b)=>(a.caseDate||'9999').localeCompare(b.caseDate||'9999'));
   renderPaymentRows();
+  renderPaymentSummary();
+  // Auto-sync all invoiced rows to Expenses & Distributions on every load
+  _syncAllInvoicedToPayouts(_paymentRows).catch(()=>{});
   } catch(e) { console.error('loadPaymentRows error:', e); const body=document.getElementById('payments-table-body'); if(body) body.innerHTML='<div style="padding:32px;color:red;font-size:13px">Error loading payments: '+e.message+'<br><small>'+e.stack+'</small></div>'; }
 }
 
@@ -637,8 +640,8 @@ async function _syncAllInvoicedToPayouts(paymentRows) {
         amount:    parseFloat(row.invoicedAmount) || 0,
         date:      row.caseDate || null,
         notes:     [
-          row.surgeryCenter ? 'Center: ' + row.surgeryCenter : '',
-          row.caseDate      ? 'Date: '   + row.caseDate      : ''
+          (row.surgeryCenterName||row.surgeryCenter) ? 'Center: ' + (row.surgeryCenterName||row.surgeryCenter) : '',
+          row.caseDate ? 'Date: ' + row.caseDate : ''
         ].filter(Boolean).join(' | '),
         caseId:    row.caseId,
         createdAt: existingIdx !== -1 ? data.entries[existingIdx].createdAt : new Date().toISOString()
