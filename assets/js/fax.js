@@ -94,8 +94,8 @@ window.confirmAndSendFax = async function() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: faxNumber,
-        caseId: _faxRecord['po-caseId'] || 'Unknown',
-        worker: _faxRecord.worker || 'dev',
+        caseId: document.getElementById('fax-to')?.value?.trim() || 'Atlas Anesthesia',
+        worker: _faxRecord.worker || window.currentWorker || 'dev',
         html: faxHtml
       })
     });
