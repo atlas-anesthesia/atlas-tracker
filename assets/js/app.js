@@ -20,10 +20,12 @@ window._atlasFormulaData = null;
 async function loadAtlasFormula() {
   try {
     const snap = await getDoc(doc(db, 'atlas', 'personal_income_formula'));
-    window._atlasFormulaData = snap.exists() ? snap.data() : { centers: [] };
+    const data = snap.exists() ? snap.data() : { centers: [] };
+    window._atlasFormulaData = data;
+    window._piFormula_get = () => data;
   } catch(e) { window._atlasFormulaData = { centers: [] }; }
 }
-function getAtlasFormula() { return window._atlasFormulaData || { centers: [] }; }
+function getAtlasFormula() { return window._atlasFormulaData || (window._piFormula_get && window._piFormula_get()) || { centers: [] }; }
 function calcPersonalIncome(worker) {
   const formula = getAtlasFormula();
   if(!formula.centers || !formula.centers.length) return 0;
