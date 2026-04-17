@@ -639,10 +639,7 @@ async function _syncAllInvoicedToPayouts(paymentRows) {
         name:      row.caseId || 'Unknown Case',
         amount:    parseFloat(row.invoicedAmount) || 0,
         date:      row.caseDate || null,
-        notes:     [
-          (row.surgeryCenterName||row.surgeryCenter) ? 'Center: ' + (row.surgeryCenterName||row.surgeryCenter) : '',
-          row.caseDate ? 'Date: ' + row.caseDate : ''
-        ].filter(Boolean).join(' | '),
+        notes:     (row.surgeryCenterName||row.surgeryCenter) ? 'Center: ' + (row.surgeryCenterName||row.surgeryCenter) : '',
         caseId:    row.caseId,
         createdAt: existingIdx !== -1 ? data.entries[existingIdx].createdAt : new Date().toISOString()
       };
