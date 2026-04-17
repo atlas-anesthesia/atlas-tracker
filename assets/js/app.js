@@ -228,18 +228,14 @@ loadSavedInvoices();
 setInvoiceProvider();
 setTimeout(wireEKGDetection, 600);
 loadSurgeryCenters();
-// Restore last active tab and lock for 4s
+// Restore last active tab
 const _savedTab = window.location.hash.replace('#','').trim() || localStorage.getItem('atlas_active_tab') || 'preop';
-console.log('[Atlas] Restoring tab:', _savedTab, '| hash:', window.location.hash, '| stored:', localStorage.getItem('atlas_active_tab'));
-if(_savedTab && _savedTab !== 'preop') {
-  window._tabRestoreLock = _savedTab;
-  window._tabRestoreLockExpiry = Date.now() + 4000;
-  showTab(_savedTab, false);
-  setTimeout(() => { 
-    window._tabRestoreLock = null; 
-    console.log('[Atlas] Tab restore lock released');
-  }, 4000);
-}
+showTab(_savedTab, false);
+// Re-apply after data loads (onSnapshot can briefly re-render UI)
+[500, 1000, 2000].forEach(ms => setTimeout(() => {
+  const active = document.querySelector('.section.active');
+  if(active && active.id !== 'tab-' + _savedTab) showTab(_savedTab, false);
+}, ms));
 // Pre-warm calendar data
 setTimeout(() => {
 if(window.buildCalendar) window.buildCalendar();
@@ -743,11 +739,6 @@ reminders:{useDefault:false,overrides:[{method:'email',minutes:24*60},{method:'p
 if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'Failed'); }
 }
 window.showTab = function(tab, pushState=true) {
-console.log('[Atlas] showTab called:', tab, '| lock:', window._tabRestoreLock, '| stack:', new Error().stack.split('\n')[2]?.trim());
-if(window._tabRestoreLock && window._tabRestoreLock !== tab && Date.now() < (window._tabRestoreLockExpiry || 0)) {
-  console.log('[Atlas] showTab BLOCKED by lock — keeping:', window._tabRestoreLock);
-  return;
-}
 try { localStorage.setItem('atlas_active_tab', tab); } catch(e) {}
 if(pushState) {
 try { history.pushState({ tab }, '', '#' + tab); } catch(e) {}
@@ -5676,8 +5667,7 @@ showTab(tab, false); // false = don't push another state
 });
 // Init: set state for current tab on load
 try {
-const existingHash = window.location.hash.replace('#','').trim();
-const initTab = existingHash || localStorage.getItem('atlas_active_tab') || 'preop';
+const initTab = localStorage.getItem('atlas_active_tab') || 'preop';
 history.replaceState({ tab: initTab }, '', '#' + initTab);
 } catch(e) {}
 // -- REPORTS DROPDOWN --
