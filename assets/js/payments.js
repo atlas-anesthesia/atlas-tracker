@@ -591,6 +591,29 @@ window.downloadInvoiceModal = async function() {
 };
 
 // Backfill: sync all already-invoiced cases to Expenses & Distributions
+window._manualSyncToPayouts = async function() {
+  try {
+    const btn = document.querySelector('[onclick="window._manualSyncToPayouts()"]');
+    if(btn) { btn.textContent = 'Syncing...'; btn.disabled = true; }
+    // First refresh _paymentRows from Firestore to get latest
+    const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payments'));
+    const rows = snap.exists() ? (snap.data().rows || []) : [];
+    const invoiced = rows.filter(r => r.invoiceSent && (r.invoicedAmount||0) > 0);
+    console.log('Manual sync: found', invoiced.length, 'invoiced rows:', invoiced.map(r => r.caseId + ' $' + r.invoicedAmount));
+    if(!invoiced.length) {
+      alert('No invoiced rows found with an amount. Make sure the Invoice ✓ checkbox is checked AND the invoice amount is filled in.');
+      if(btn) { btn.textContent = '↺ Sync to Expenses & Distributions'; btn.disabled = false; }
+      return;
+    }
+    await _syncAllInvoicedToPayouts(rows);
+    if(btn) { btn.textContent = '✓ Synced!'; btn.disabled = false; setTimeout(()=>{ btn.textContent='↺ Sync to Expenses & Distributions'; }, 2000); }
+    alert('✓ Synced ' + invoiced.length + ' invoiced case(s) to Expenses & Distributions!\n\n' + invoiced.map(r => r.caseId + ': $' + r.invoicedAmount).join('\n'));
+  } catch(e) {
+    console.error('Manual sync error:', e);
+    alert('Error: ' + e.message);
+  }
+};
+
 async function _backfillInvoicesToPayouts() {
   await _syncAllInvoicedToPayouts(_paymentRows);
 }
