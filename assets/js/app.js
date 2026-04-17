@@ -2339,7 +2339,9 @@ const allRecords = snap.exists() ? (snap.data().records || []) : [];
 window._rawPreopRecords = allRecords; // keep full cache in sync
 // Only show cases that are NOT yet finalized (i.e. no finalized case in Case History)
 const finalizedIds = new Set(cases.filter(c => !c.draft).map(c => c.caseId).filter(Boolean));
-const records = allRecords.filter(r => !finalizedIds.has(r['po-caseId']));
+const records = allRecords
+  .filter(r => !finalizedIds.has(r['po-caseId']))
+  .sort((a,b) => (a['po-surgeryDate']||'').localeCompare(b['po-surgeryDate']||''));
 if(!allRecords.length) { el.innerHTML='<div class="empty-state">No pre-op records saved yet</div>'; return; }
 if(!records.length) { el.innerHTML='<div class="empty-state">All pre-op records have been finalized</div>'; return; }
 el.innerHTML = records.map(r => {
