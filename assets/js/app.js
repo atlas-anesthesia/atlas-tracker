@@ -13,6 +13,33 @@ appId: "1:677020713040:web:07f52f77fd225c607a5155"
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// ── MANUAL BACKUP DOWNLOAD ─────────────────────────────────────────────────────
+window.downloadFullBackup = async function() {
+  const btn = document.getElementById('backup-download-btn');
+  if(btn) { btn.textContent = '⏳...'; btn.disabled = true; }
+  try {
+    const COLS = ['cases','preop','payments','deposits','payouts',
+      'surgerycenters','cslog','cstransfers','saved_pdfs','personal_income_formula'];
+    const backup = { exportedAt: new Date().toISOString(), version: 'atlas-1.0', data: {} };
+    for(const col of COLS) {
+      try {
+        const snap = await getDoc(doc(db, 'atlas', col));
+        if(snap.exists()) backup.data[col] = snap.data();
+      } catch(e) { console.warn('Skip:', col); }
+    }
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'atlas-backup-' + new Date().toISOString().split('T')[0] + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) { alert('Backup failed: ' + e.message); }
+  finally { if(btn) { btn.textContent = '⬇ Backup'; btn.disabled = false; } }
+};
+
+
+
 // -- STATE --
 let items = [];
 let cases = [];
