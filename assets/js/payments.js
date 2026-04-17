@@ -215,6 +215,8 @@ function renderPaymentRows() {
     const projColor = r.projOverride!=null?'var(--info)':'var(--accent)';
     const center = (window.surgeryCenters||[]).find(c=>c.id===r.surgeryCenter);
     const scName = center?.name||r.surgeryCenterName||'';
+    const centerPays = center ? center.billingType === 'center' : false;
+    const greyCell = 'background:rgba(0,0,0,0.06);border-radius:4px;opacity:0.4;pointer-events:none;user-select:none;display:flex;align-items:center;justify-content:center;height:32px';
     const caseFmt = r.caseDate?new Date(r.caseDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
     const callFmt = r.callDate?new Date(r.callDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
     const invAmt = r.invoicedAmount>0?`<span style="font-size:11px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$${Number(r.invoicedAmount).toFixed(2)}</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`:`<span style="color:var(--text-faint);font-size:11px">—</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`;
