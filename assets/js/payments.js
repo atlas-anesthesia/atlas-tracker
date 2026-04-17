@@ -788,9 +788,10 @@ window.openPersonalIncomeModal = async function() {
   });
 };
 
-// Expose _calcPersonalIncome globally for E&D tab
+// Expose PI formula loader and calculator globally
 window._calcPersonalIncome = _calcPersonalIncome;
 window._piFormula_get = () => _piFormula;
+window._loadPIFormula = _loadPIFormula;
 
 async function _backfillInvoicesToPayouts() {
   await _syncAllInvoicedToPayouts(_paymentRows);
