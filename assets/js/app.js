@@ -15,6 +15,37 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // ── MANUAL BACKUP DOWNLOAD ─────────────────────────────────────────────────────
+// ── PI FORMULA GLOBAL STORE ───────────────────────────────────────────────────
+window._atlasFormulaData = null;
+async function loadAtlasFormula() {
+  try {
+    const snap = await getDoc(doc(db, 'atlas', 'personal_income_formula'));
+    window._atlasFormulaData = snap.exists() ? snap.data() : { centers: [] };
+  } catch(e) { window._atlasFormulaData = { centers: [] }; }
+}
+function getAtlasFormula() { return window._atlasFormulaData || { centers: [] }; }
+function calcPersonalIncome(worker) {
+  const formula = getAtlasFormula();
+  if(!formula.centers || !formula.centers.length) return 0;
+  const finalized = (window.cases||[]).filter(c => !c.draft && c.worker === worker);
+  let total = 0;
+  finalized.forEach(c => {
+    const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
+    const centerId = preop?.['po-surgery-center'] || c.surgeryCenter || '';
+    const rule = formula.centers.find(f => f.id === centerId);
+    if(!rule) return;
+    if(rule.type === 'flat') {
+      total += parseFloat(rule.rate) || 0;
+    } else if(rule.type === 'hourly') {
+      const hrs = c.endTime && c.startTime
+        ? Math.max(0, ((function(){const[eh,em]=c.endTime.split(':').map(Number);const[sh,sm]=c.startTime.split(':').map(Number);return(eh*60+em)-(sh*60+sm);})())/60)
+        : (parseFloat(preop?.['po-est-hours'])||0);
+      total += hrs * (parseFloat(rule.rate)||0);
+    }
+  });
+  return total;
+}
+
 window.downloadFullBackup = async function() {
   const btn = document.getElementById('backup-download-btn');
   if(btn) { btn.textContent = '⏳...'; btn.disabled = true; }
@@ -228,6 +259,7 @@ loadSavedInvoices();
 setInvoiceProvider();
 setTimeout(wireEKGDetection, 600);
 loadSurgeryCenters();
+loadAtlasFormula(); // pre-load PI formula at startup
 // Restore last active tab
 const _savedTab = window.location.hash.replace('#','').trim() || localStorage.getItem('atlas_active_tab') || 'preop';
 showTab(_savedTab, false);
@@ -888,29 +920,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     // Metric cards
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px';
-    // Personal income from PI formula — calculate inline using Firestore formula
-    var piIncome = 0;
-    try {
-      const piFormula = window._piFormula_get ? window._piFormula_get() : null;
-      if(piFormula && piFormula.centers && piFormula.centers.length) {
-        const finalized = (window.cases||[]).filter(c => !c.draft && c.worker === worker);
-        finalized.forEach(c => {
-          const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
-          const centerId = preop?.['po-surgery-center'] || c.surgeryCenter || '';
-          const rule = piFormula.centers.find(f => f.id === centerId);
-          if(rule) {
-            if(rule.type === 'flat') {
-              piIncome += parseFloat(rule.rate) || 0;
-            } else if(rule.type === 'hourly') {
-              const hrs = c.endTime && c.startTime
-                ? Math.max(0, ((function(){const[eh,em]=c.endTime.split(':').map(Number);const[sh,sm]=c.startTime.split(':').map(Number);return(eh*60+em)-(sh*60+sm);})())/60)
-                : (parseFloat(preop?.['po-est-hours'])||0);
-              piIncome += hrs * (parseFloat(rule.rate)||0);
-            }
-          }
-        });
-      }
-    } catch(e) { console.warn('PI calc error:', e); }
+    // Personal income from PI formula
+    const piIncome = calcPersonalIncome(worker);
     const piSuggested = Math.max(0, piIncome + totalIn - totalOut - totalDist);
     [
       ['Invoiced Revenue',     _fmt(rev),          'var(--accent)'],
@@ -1147,16 +1158,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
   // ── Public API ─────────────────────────────────────────────────────────────
   window.renderPayoutTab = async function() {
-    // Load PI formula if not already loaded by payments tab
-    if(!window._piFormula_get || !window._piFormula_get()?.centers?.length) {
-      try {
-        const pfSnap = await getDoc(doc(db, 'atlas', 'personal_income_formula'));
-        if(pfSnap.exists()) {
-          window._piFormulaData = pfSnap.data();
-          window._piFormula_get = () => window._piFormulaData;
-        }
-      } catch(e) {}
-    }
+    // Ensure formula is loaded
+    if(!window._atlasFormulaData) await loadAtlasFormula();
     const data = await _load();
     const me = currentUser ? (EMAIL_WORKER_MAP[currentUser.email.toLowerCase()]||'dev') : 'dev';
     const el = document.getElementById('payout-sections');
