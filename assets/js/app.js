@@ -858,10 +858,17 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     // Metric cards
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px';
+    // Personal income from PI formula (shared rates from payments tab)
+    var piIncome = 0;
+    try {
+      if(window._calcPersonalIncome) piIncome = window._calcPersonalIncome(worker);
+    } catch(e) {}
+    const piSuggested = Math.max(0, piIncome + totalIn - totalOut - totalDist);
     [
       ['Invoiced Revenue',   _fmt(rev),           'var(--accent)'],
+      ['Personal Income',     _fmt(piIncome),      '#0369a1'],
       ['Expenses',           _fmt(totalOut),      'var(--warn)'],
-      ['Suggested Payout',   _fmt(revSuggested),  '#2d6a4f'],
+      ['Suggested Payout',   _fmt(piSuggested),  '#2d6a4f'],
       ['Investment Owed Back', _fmt(investOwed),  'var(--info)'],
     ].forEach(function(item, i) {
       const card = document.createElement('div');
@@ -903,7 +910,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     distForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Record Distribution</div>'
       +'<div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">'
         +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px">Revenue</div>'
-        +'<div>Invoiced Revenue: <strong>'+_fmt(rev)+'</strong></div>'
+        +'<div>Personal Income: <strong style="color:#0369a1">'+_fmt(piIncome)+'</strong></div>'
         +(totalIn?'<div>+ Other Income: <strong style="color:var(--info)">'+_fmt(totalIn)+'</strong></div>':'')
         +'<div>- Expenses: <strong style="color:var(--warn)">- '+_fmt(totalOut)+'</strong></div>'
         +'<div>- Already Distributed: <strong style="color:#888">- '+_fmt(totalDist)+'</strong></div>'
