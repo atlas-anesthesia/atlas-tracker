@@ -227,10 +227,10 @@ function renderPaymentRows() {
       <div style="padding:4px 3px;display:flex;align-items:center;justify-content:flex-end;gap:2px">${projCell}</div>
       <div style="padding:4px 3px">${ro(caseFmt)}</div>
       <div style="padding:4px 3px">${ro(callFmt)}</div>
-      <div style="padding:4px 3px">${dateInp('pr-depositDate'+i,r.depositDate)}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
-      <div style="padding:4px 3px">${dateInp('pr-paidDate'+i,r.paidDate)}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
+      <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-depositDate'+i,r.depositDate)}</div>
+      ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>`}
+      <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-paidDate'+i,r.paidDate)}</div>
+      ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>`}
       <div style="padding:4px 3px;display:flex;align-items:center;justify-content:flex-end;gap:2px">${invAmt}</div>
       <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
       <div style="padding:4px 3px"><button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button></div>
