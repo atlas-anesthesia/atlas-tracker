@@ -1955,9 +1955,10 @@ el.innerHTML=`<div class="card-title" style="color:${color}">${label}</div><div 
 }
 buildCard(document.getElementById('reportDev'),'Devarsh',devCases,'var(--dev)');
 buildCard(document.getElementById('reportJosh'),'Josh',joshCases,'var(--josh)');
-buildCard(document.getElementById('reportCombined'),'Combined',cases,'var(--info)');
+const allFinalized = cases.filter(c=>!c.draft);
+buildCard(document.getElementById('reportCombined'),'Combined',allFinalized,'var(--info)');
 const usage={};
-cases.forEach(c=>c.items.forEach(i=>{if(!usage[i.generic])usage[i.generic]={qty:0,cost:0};usage[i.generic].qty+=i.qty;usage[i.generic].cost+=i.lineTotal;}));
+allFinalized.forEach(c=>c.items.forEach(i=>{if(!usage[i.generic])usage[i.generic]={qty:0,cost:0};usage[i.generic].qty+=i.qty;usage[i.generic].cost+=i.lineTotal;}));
 const sorted=Object.entries(usage).sort((a,b)=>b[1].cost-a[1].cost).slice(0,10);
 const topCard=document.getElementById('topItemsCard');
 if(!sorted.length){topCard.innerHTML='<div class="empty-state">No usage data yet</div>';return;}
