@@ -5669,7 +5669,8 @@ showTab(tab, false); // false = don't push another state
 });
 // Init: set state for current tab on load
 try {
-const initTab = localStorage.getItem('atlas_active_tab') || 'preop';
+const existingHash = window.location.hash.replace('#','').trim();
+const initTab = existingHash || localStorage.getItem('atlas_active_tab') || 'preop';
 history.replaceState({ tab: initTab }, '', '#' + initTab);
 } catch(e) {}
 // -- REPORTS DROPDOWN --
