@@ -230,14 +230,14 @@ setTimeout(wireEKGDetection, 600);
 loadSurgeryCenters();
   // Run full daily backup
   runFullDailyBackup().catch(()=>{});
-// Restore last active tab
+// Restore last active tab and lock it for 3s
 const _savedTab = window.location.hash.replace('#','').trim() || localStorage.getItem('atlas_active_tab') || 'preop';
-showTab(_savedTab, false);
-// Re-apply after data loads (onSnapshot can briefly re-render UI)
-[500, 1000, 2000].forEach(ms => setTimeout(() => {
-  const active = document.querySelector('.section.active');
-  if(active && active.id !== 'tab-' + _savedTab) showTab(_savedTab, false);
-}, ms));
+if(_savedTab && _savedTab !== 'preop') {
+  window._tabRestoreLock = _savedTab;
+  window._tabRestoreLockExpiry = Date.now() + 3000;
+  showTab(_savedTab, false);
+  setTimeout(() => { window._tabRestoreLock = null; }, 3000);
+}
 // Pre-warm calendar data
 setTimeout(() => {
 if(window.buildCalendar) window.buildCalendar();
@@ -741,6 +741,10 @@ reminders:{useDefault:false,overrides:[{method:'email',minutes:24*60},{method:'p
 if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'Failed'); }
 }
 window.showTab = function(tab, pushState=true) {
+// If a restore lock is active and something tries to show a different tab, block it
+if(window._tabRestoreLock && window._tabRestoreLock !== tab && Date.now() < (window._tabRestoreLockExpiry || 0)) {
+  return; // blocked — restore lock is active
+}
 try { localStorage.setItem('atlas_active_tab', tab); } catch(e) {}
 if(pushState) {
 try { history.pushState({ tab }, '', '#' + tab); } catch(e) {}
@@ -5669,8 +5673,7 @@ showTab(tab, false); // false = don't push another state
 });
 // Init: set state for current tab on load
 try {
-const existingHash = window.location.hash.replace('#','').trim();
-const initTab = existingHash || localStorage.getItem('atlas_active_tab') || 'preop';
+const initTab = localStorage.getItem('atlas_active_tab') || 'preop';
 history.replaceState({ tab: initTab }, '', '#' + initTab);
 } catch(e) {}
 // -- REPORTS DROPDOWN --
