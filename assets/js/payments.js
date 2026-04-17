@@ -123,12 +123,8 @@ window.savePaymentRows = async function() {
     paid:        document.getElementById('pr-paid'+i)?.checked??row.paid,
     invoiceSent: document.getElementById('pr-inv'+i)?.checked??row.invoiceSent,
   }));
-  // Sync any newly-invoiced rows to Expenses & Distributions
-  _paymentRows.forEach(row => {
-    if(row.invoiceSent && (row.invoicedAmount||0) > 0) {
-      _syncInvoiceToPayouts(row, row.invoicedAmount).catch(()=>{});
-    }
-  });
+  // Sync all invoiced rows to Expenses & Distributions in one batch write
+  _syncAllInvoicedToPayouts(_paymentRows).catch(()=>{});
   try {
     window.setSyncing(true);
     await window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows});
@@ -596,75 +592,44 @@ window.downloadInvoiceModal = async function() {
 
 // Backfill: sync all already-invoiced cases to Expenses & Distributions
 async function _backfillInvoicesToPayouts() {
-  try {
-    const invoiced = _paymentRows.filter(r => r.invoiceSent && (r.invoicedAmount||0) > 0);
-    if(!invoiced.length) return;
-    const snap = await window.getDoc(window.doc(window.db,'atlas','payouts'));
-    const data = snap.exists() ? snap.data() : { entries:[], distributions:[] };
-    if(!data.entries) data.entries = [];
-    // Upsert: update existing or add new
-    const toAdd = invoiced;
-    if(!toAdd.length) return;
-    toAdd.forEach(row => {
-      const existingIdx = data.entries.findIndex(e => e.cat==='case-income' && e.caseId === row.caseId);
-      if(existingIdx !== -1) {
-        data.entries[existingIdx].amount = row.invoicedAmount;
-        return;
-      }
-      // New entry
-      data.entries.push({
-        id:        window.uid ? window.uid() : Date.now().toString(36)+Math.random().toString(36).slice(2,5),
-        worker:    row.worker || 'josh',
-        cat:       'case-income',
-        name:      row.caseId || 'Unknown Case',
-        amount:    row.invoicedAmount,
-        date:      row.caseDate || null,
-        notes:     [
-          row.surgeryCenter ? 'Center: '+row.surgeryCenter : '',
-          row.caseDate      ? 'Date: '  +row.caseDate      : ''
-        ].filter(Boolean).join(' | '),
-        caseId:    row.caseId,
-        createdAt: new Date().toISOString()
-      });
-    });
-    await window.setDoc(window.doc(window.db,'atlas','payouts'), data);
-    console.log('Backfilled', toAdd.length, 'invoice income entry/entries to Expenses & Distributions');
-  } catch(e) { console.warn('Backfill failed:', e); }
+  await _syncAllInvoicedToPayouts(_paymentRows);
 }
 
 // Auto-sync invoiced payment → Income entry in Expenses & Distributions
-async function _syncInvoiceToPayouts(row, total) {
-  if(!total || total <= 0) return;
+async function _syncAllInvoicedToPayouts(paymentRows) {
   try {
+    const invoiced = paymentRows.filter(r => r.invoiceSent && (r.invoicedAmount||0) > 0);
+    if(!invoiced.length) return;
     const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payouts'));
     const data = snap.exists() ? snap.data() : { entries: [], distributions: [] };
     if(!data.entries) data.entries = [];
-    // Check if entry already exists for this caseId
-    const existing = data.entries.findIndex(e => e.caseId === row.caseId && e.cat === 'case-income');
-    const entry = {
-      id: existing !== -1 ? data.entries[existing].id : (window.uid ? window.uid() : Date.now().toString(36)),
-      worker:    row.worker || 'josh',
-      cat:       'case-income',
-      name:      row.caseId || 'Unknown Case',
-      amount:    total,
-      date:      row.caseDate || null,
-      notes:     [
-        row.surgeryCenter ? 'Center: ' + row.surgeryCenter : '',
-        row.caseDate      ? 'Date: '   + row.caseDate      : '',
-        row.provider      ? 'Provider: '+ row.provider      : ''
-      ].filter(Boolean).join(' | '),
-      caseId:    row.caseId,
-      createdAt: new Date().toISOString()
-    };
-    if(existing !== -1) {
-      data.entries[existing] = entry;
-    } else {
-      data.entries.push(entry);
-    }
+    // Upsert each invoiced row as a case-income entry
+    invoiced.forEach(row => {
+      const existingIdx = data.entries.findIndex(e => e.cat === 'case-income' && e.caseId === row.caseId);
+      const entry = {
+        id:        existingIdx !== -1 ? data.entries[existingIdx].id : (window.uid ? window.uid() : Date.now().toString(36) + Math.random().toString(36).slice(2,5)),
+        worker:    row.worker || 'josh',
+        cat:       'case-income',
+        name:      row.caseId || 'Unknown Case',
+        amount:    parseFloat(row.invoicedAmount) || 0,
+        date:      row.caseDate || null,
+        notes:     [
+          row.surgeryCenter ? 'Center: ' + row.surgeryCenter : '',
+          row.caseDate      ? 'Date: '   + row.caseDate      : ''
+        ].filter(Boolean).join(' | '),
+        caseId:    row.caseId,
+        createdAt: existingIdx !== -1 ? data.entries[existingIdx].createdAt : new Date().toISOString()
+      };
+      if(existingIdx !== -1) data.entries[existingIdx] = entry;
+      else data.entries.push(entry);
+    });
+    // Remove case-income entries for rows that are no longer invoiced
+    const invoicedIds = new Set(invoiced.map(r => r.caseId));
+    data.entries = data.entries.filter(e => e.cat !== 'case-income' || invoicedIds.has(e.caseId));
     await window.setDoc(window.doc(window.db, 'atlas', 'payouts'), data);
-    console.log('Synced invoice income entry for', row.caseId);
+    console.log('Synced', invoiced.length, 'invoice income entries to Expenses & Distributions');
   } catch(e) {
-    console.warn('Could not sync invoice to payouts:', e);
+    console.warn('Could not sync invoices to payouts:', e);
   }
 }
 
