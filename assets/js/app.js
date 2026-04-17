@@ -4094,17 +4094,25 @@ if(bmiVal) bmiVal.value = bmi;
 // -- H&P AUTO-UNCHECK NEG --
 window.onHPCheck = function(checkbox, prefix) {
 const negEl = document.getElementById(prefix + '-neg');
-if(!negEl) return;
-if(checkbox.id === prefix + '-neg') {
-// NEG was clicked — if checked, uncheck everything else in this section
-if(checkbox.checked) {
-document.querySelectorAll(`[id^="${prefix}-"]`).forEach(el => {
-if(el.type === 'checkbox' && el.id !== prefix + '-neg') el.checked = false;
-});
+if(negEl) {
+  if(checkbox.id === prefix + '-neg') {
+    if(checkbox.checked) {
+      document.querySelectorAll(`[id^="${prefix}-"]`).forEach(el => {
+        if(el.type === 'checkbox' && el.id !== prefix + '-neg') el.checked = false;
+      });
+    }
+  } else {
+    if(checkbox.checked && negEl) negEl.checked = false;
+  }
 }
-} else {
-// Something else was clicked — if checked, uncheck NEG
-if(checkbox.checked && negEl) negEl.checked = false;
+// If this is a radio-group prefix (e.g. pupil), hide the other-row when non-other is selected
+const otherCb = document.getElementById(prefix + '-other-cb');
+const otherRow = document.getElementById(prefix + '-other-row');
+if(otherCb && otherRow && checkbox.id !== prefix + '-other-cb' && checkbox.checked) {
+  otherCb.checked = false;
+  otherRow.style.display = 'none';
+  const otherVal = document.getElementById(prefix + '-other-val');
+  if(otherVal) otherVal.value = '';
 }
 // Trigger EKG check in case a CV condition changed
 if(typeof checkEKGConditions === 'function') checkEKGConditions();
