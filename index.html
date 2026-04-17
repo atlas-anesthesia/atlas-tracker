@@ -239,7 +239,7 @@ Connect Google Calendar
       </div>
       <button onclick="window._manualSyncToPayouts()" style="font-size:12px;padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--text-muted);cursor:pointer">↺ Sync to Expenses &amp; Distributions</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px" id="payments-summary">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px" id="payments-summary">
       <div class="metric-card" style="border-left:3px solid var(--accent)">
         <div class="metric-label">Total Invoiced</div>
         <div class="metric-value" id="pm-invoiced">$0</div>
@@ -252,9 +252,13 @@ Connect Google Calendar
         <div class="metric-label">Dev Personal Income</div>
         <div class="metric-value" style="color:var(--dev)" id="pm-income-dev">$0</div>
       </div>
-      <div class="metric-card">
-        <div class="metric-label">Projected Income</div>
-        <div class="metric-value" id="pm-projected">$0</div>
+      <div class="metric-card" style="border-left:3px solid var(--josh)">
+        <div class="metric-label">Josh Projected</div>
+        <div class="metric-value" style="color:var(--josh)" id="pm-proj-josh">$0</div>
+      </div>
+      <div class="metric-card" style="border-left:3px solid var(--dev)">
+        <div class="metric-label">Dev Projected</div>
+        <div class="metric-value" style="color:var(--dev)" id="pm-proj-dev">$0</div>
       </div>
     </div>
 
