@@ -123,6 +123,12 @@ window.savePaymentRows = async function() {
     paid:        document.getElementById('pr-paid'+i)?.checked??row.paid,
     invoiceSent: document.getElementById('pr-inv'+i)?.checked??row.invoiceSent,
   }));
+  // Sync any newly-invoiced rows to Expenses & Distributions
+  _paymentRows.forEach(row => {
+    if(row.invoiceSent && (row.invoicedAmount||0) > 0) {
+      _syncInvoiceToPayouts(row, row.invoicedAmount).catch(()=>{});
+    }
+  });
   try {
     window.setSyncing(true);
     await window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows});
@@ -596,10 +602,16 @@ async function _backfillInvoicesToPayouts() {
     const snap = await window.getDoc(window.doc(window.db,'atlas','payouts'));
     const data = snap.exists() ? snap.data() : { entries:[], distributions:[] };
     if(!data.entries) data.entries = [];
-    const existingCaseIds = new Set(data.entries.filter(e=>e.cat==='case-income').map(e=>e.caseId));
-    const toAdd = invoiced.filter(r => !existingCaseIds.has(r.caseId));
+    // Upsert: update existing or add new
+    const toAdd = invoiced;
     if(!toAdd.length) return;
     toAdd.forEach(row => {
+      const existingIdx = data.entries.findIndex(e => e.cat==='case-income' && e.caseId === row.caseId);
+      if(existingIdx !== -1) {
+        data.entries[existingIdx].amount = row.invoicedAmount;
+        return;
+      }
+      // New entry
       data.entries.push({
         id:        window.uid ? window.uid() : Date.now().toString(36)+Math.random().toString(36).slice(2,5),
         worker:    row.worker || 'josh',
