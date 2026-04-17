@@ -2335,9 +2335,13 @@ const el = document.getElementById('preopHistoryList');
 el.innerHTML = '<div class="empty-state">Loading...</div>';
 try {
 const snap = await getDoc(doc(db,'atlas','preop'));
-const records = snap.exists() ? (snap.data().records || []) : [];
-window._rawPreopRecords = records; // keep cache in sync
-if(!records.length) { el.innerHTML='<div class="empty-state">No pre-op records saved yet</div>'; return; }
+const allRecords = snap.exists() ? (snap.data().records || []) : [];
+window._rawPreopRecords = allRecords; // keep full cache in sync
+// Only show cases that are NOT yet finalized (i.e. no finalized case in Case History)
+const finalizedIds = new Set(cases.filter(c => !c.draft).map(c => c.caseId).filter(Boolean));
+const records = allRecords.filter(r => !finalizedIds.has(r['po-caseId']));
+if(!allRecords.length) { el.innerHTML='<div class="empty-state">No pre-op records saved yet</div>'; return; }
+if(!records.length) { el.innerHTML='<div class="empty-state">All pre-op records have been finalized</div>'; return; }
 el.innerHTML = records.map(r => {
 const pill = r.worker==='dev' ? 'pill-dev' : 'pill-josh';
 const wname = r.worker==='dev' ? 'Devarsh' : 'Josh';
