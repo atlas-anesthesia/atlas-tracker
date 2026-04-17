@@ -230,11 +230,13 @@ setTimeout(wireEKGDetection, 600);
 loadSurgeryCenters();
   // Run full daily backup
   runFullDailyBackup().catch(()=>{});
-// Restore last active tab
-try {
-const lastTab = localStorage.getItem('atlas_active_tab');
-if(lastTab && lastTab !== 'preop') showTab(lastTab);
-} catch(e) {}
+// Restore last active tab — delayed so async loads don't overwrite it
+setTimeout(() => {
+  try {
+    const lastTab = localStorage.getItem('atlas_active_tab');
+    if(lastTab) showTab(lastTab, false);
+  } catch(e) {}
+}, 400);
 // Pre-warm calendar data
 setTimeout(() => {
 if(window.buildCalendar) window.buildCalendar();
