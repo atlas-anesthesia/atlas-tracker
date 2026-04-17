@@ -232,7 +232,7 @@ Connect Google Calendar
     </div>
 
     <!-- Analytics summary -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px" id="payments-summary">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button onclick="window._manualSyncToPayouts()" style="font-size:12px;padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--text-muted);cursor:pointer">↺ Sync to Expenses & Distributions</button></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px" id="payments-summary">
       <div class="metric-card" style="border-left:3px solid var(--accent)">
         <div class="metric-label">Total Invoiced</div>
         <div class="metric-value" id="pm-invoiced">$0</div>
