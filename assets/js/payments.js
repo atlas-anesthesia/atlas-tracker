@@ -692,7 +692,42 @@ window.sendInvoiceEmail = async function() {
   try {
     const res=await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/invoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:email,location,date,provider,total,invoiceNum,worker:window.currentWorker||'josh',html:invoiceHTML})});
     const data=await res.json().catch(()=>({}));
-    if(res.ok&&data.success){alert('Invoice sent to '+email+'!');}
+    if(res.ok&&data.success){
+      // Send confirmation to the logged-in provider
+      const providerEmail = window.currentWorker==='dev' ? 'murthy.devarsh@gmail.com' : 'jxcondado@gmail.com';
+      const providerName  = window.currentWorker==='dev' ? 'Dev' : 'Josh';
+      const sentAt = new Date().toLocaleString('en-US',{timeZone:'America/Chicago',dateStyle:'medium',timeStyle:'short'});
+      const confirmHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);">
+  <tr><td style="background:#1d3557;padding:24px 32px;">
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:6px;">Atlas Anesthesia &middot; Invoice Confirmation</div>
+    <div style="font-size:22px;font-weight:700;color:#fff;">Invoice Sent Successfully</div>
+    <div style="font-size:14px;color:#a8c4e0;margin-top:4px;">${sentAt}</div>
+  </td></tr>
+  <tr><td style="padding:24px 32px;">
+    <p style="font-size:15px;color:#1e293b;margin:0 0 20px">Hi ${providerName}, your invoice was sent successfully.</p>
+    <table cellpadding="0" cellspacing="0" width="100%" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
+      <tr style="background:#f8fafc"><td style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;color:#64748b;width:140px">Invoice #</td><td style="padding:10px 16px;font-size:14px;color:#1e293b;font-family:monospace">${invoiceNum||'—'}</td></tr>
+      <tr style="border-top:1px solid #e2e8f0"><td style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;color:#64748b">Sent To</td><td style="padding:10px 16px;font-size:14px;color:#1e293b;font-family:monospace">${email}</td></tr>
+      <tr style="border-top:1px solid #e2e8f0"><td style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;color:#64748b">Case</td><td style="padding:10px 16px;font-size:14px;color:#1e293b;font-family:monospace">${caseId||'—'}</td></tr>
+      <tr style="border-top:1px solid #e2e8f0"><td style="padding:10px 16px;font-size:12px;font-weight:700;text-transform:uppercase;color:#64748b">Status</td><td style="padding:10px 16px"><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:#dcfce7;color:#166534">SENT</span></td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;">
+    <div style="font-size:12px;color:#94a3b8;text-align:center;">Atlas Anesthesia &middot; Invoice sent via Resend</div>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+      fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/invoice',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({to:providerEmail, invoiceNum:'Confirmation — '+invoiceNum, html:confirmHtml})
+      }).catch(()=>{});
+      alert('Invoice sent to '+email+'!');
+    }
     else{window.open('mailto:'+email+'?subject='+encodeURIComponent('Atlas Anesthesia Invoice '+invoiceNum));alert('Email client opened.');}
     await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider,total,caseId,worker:window.currentWorker,emailed:true,savedAt:new Date().toISOString()});
     if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){
