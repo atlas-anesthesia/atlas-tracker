@@ -172,17 +172,12 @@ window.sortPaymentRows = function() {
 
 // -- Summary -----------------------------------------------------------
 function renderPaymentSummary() {
-  let projected=0, invTotal=0;
-  _paymentRows.forEach(r=>{
-    const proj = r.projOverride!=null ? r.projOverride : (r.estHrs||0)*600;
-    projected += proj;
-    invTotal += r.invoicedAmount||0;
-  });
+  let invTotal=0;
+  _paymentRows.forEach(r=>{ invTotal += r.invoicedAmount||0; });
   const fmt = n=>'$'+(n||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
   const el = id=>document.getElementById(id);
-  if(el('pm-invoiced'))  el('pm-invoiced').textContent  = fmt(invTotal);
-  if(el('pm-projected')) el('pm-projected').textContent = fmt(projected);
-  // Render personal income cards
+  if(el('pm-invoiced')) el('pm-invoiced').textContent = fmt(invTotal);
+  // Render personal income + projected cards
   if(typeof _renderPICards === 'function') _renderPICards();
 }
 
@@ -664,13 +659,36 @@ function _calcPersonalIncome(worker) {
   return total;
 }
 
+function _calcProjectedPersonalIncome(worker) {
+  // Projected = PI formula applied to not-yet-finalized cases (drafts + preop-only)
+  const formula = _piFormula;
+  const pending = (_paymentRows || []).filter(r => r.worker === worker && !(r.invoiceSent));
+  let total = 0;
+  pending.forEach(r => {
+    const rule = formula.centers.find(f => f.id === r.surgeryCenter);
+    if(rule) {
+      if(rule.type === 'flat') {
+        total += parseFloat(rule.rate) || 0;
+      } else if(rule.type === 'hourly') {
+        const hrs = parseFloat(r.estHrs) || 0;
+        total += hrs * (parseFloat(rule.rate) || 0);
+      }
+    }
+  });
+  return total;
+}
+
 function _renderPICards() {
-  const jInc = _calcPersonalIncome('josh');
-  const dInc = _calcPersonalIncome('dev');
-  const jEl = document.getElementById('pm-income-josh');
-  const dEl = document.getElementById('pm-income-dev');
-  if(jEl) jEl.textContent = '$' + jInc.toLocaleString('en-US', {minimumFractionDigits:0,maximumFractionDigits:0});
-  if(dEl) dEl.textContent = '$' + dInc.toLocaleString('en-US', {minimumFractionDigits:0,maximumFractionDigits:0});
+  const fmt = n => '$' + Number(n||0).toLocaleString('en-US', {minimumFractionDigits:0,maximumFractionDigits:0});
+  const jInc  = _calcPersonalIncome('josh');
+  const dInc  = _calcPersonalIncome('dev');
+  const jProj = _calcProjectedPersonalIncome('josh');
+  const dProj = _calcProjectedPersonalIncome('dev');
+  const el = id => document.getElementById(id);
+  if(el('pm-income-josh'))  el('pm-income-josh').textContent  = fmt(jInc);
+  if(el('pm-income-dev'))   el('pm-income-dev').textContent   = fmt(dInc);
+  if(el('pm-proj-josh'))    el('pm-proj-josh').textContent    = fmt(jProj);
+  if(el('pm-proj-dev'))     el('pm-proj-dev').textContent     = fmt(dProj);
 }
 
 window.openPersonalIncomeModal = async function() {
@@ -763,6 +781,10 @@ window.openPersonalIncomeModal = async function() {
     alert('✓ Personal income formula saved!');
   });
 };
+
+// Expose _calcPersonalIncome globally for E&D tab
+window._calcPersonalIncome = _calcPersonalIncome;
+window._piFormula_get = () => _piFormula;
 
 async function _backfillInvoicesToPayouts() {
   await _syncAllInvoicedToPayouts(_paymentRows);
