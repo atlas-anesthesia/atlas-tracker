@@ -4566,6 +4566,9 @@ window.editCenter = function(id) {
   document.getElementById('sc-per-15').value = c.per15;
   document.getElementById('sc-provider').value = c.provider || '';
   document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
+  document.getElementById('sc-fax-number') && (document.getElementById('sc-fax-number').value = c.faxNumber || '');
+  const billingRadio = document.querySelector(`input[name="sc-billing-type"][value="${c.billingType||'patient'}"]`);
+  if(billingRadio) billingRadio.checked = true;
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
   document.getElementById('add-center-form').style.display = 'block';
@@ -4595,7 +4598,10 @@ el.innerHTML = `
 ${surgeryCenters.map(c => {
   const frs = c.flatRates||[];
   const frBadge = frs.length ? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px">${frs.length} flat rate${frs.length>1?'s':''}</span>` : '';
-  return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center"><div><div style="font-size:14px;font-weight:500;display:flex;align-items:center">${c.name}${frBadge}</div>
+  const billingBadge = c.billingType==='center'
+    ? `<span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px">Center Pays</span>`
+    : `<span style="background:#e0f2fe;color:#0369a1;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px">Patient Pays</span>`;
+  return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center"><div><div style="font-size:14px;font-weight:500;display:flex;align-items:center">${c.name}${frBadge}${billingBadge}</div>
 ${c.provider?`<div style="font-size:11px;color:var(--text-faint)">👤 ${c.provider}</div>`:''}
 ${c.invoiceEmail?`<div style="font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace">📧 ${c.invoiceEmail}</div>`:''}
 </div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.firstHour.toFixed(2)}</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.per15.toFixed(2)}</div><div style="display:flex;gap:6px"><button onclick="editCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="deleteCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑</button></div></div>`;
