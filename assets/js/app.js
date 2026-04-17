@@ -926,9 +926,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     // Metric cards
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px';
-    // Personal income from PI formula
-    const piIncome = calcPersonalIncome(worker);
-    console.log('[Atlas E&D] worker:', worker, 'piIncome:', piIncome, 'formula centers:', getAtlasFormula().centers?.length, 'cases:', (window.cases||[]).filter(c=>!c.draft&&c.worker===worker).length);
+    // Personal income — read from payments.js calculation (same number shown in Payments tab)
+    const piIncome = (window._personalIncome && window._personalIncome[worker]) || 0;
     const piSuggested = Math.max(0, piIncome + totalIn - totalOut - totalDist);
     [
       ['Invoiced Revenue',     _fmt(rev),          'var(--accent)'],
@@ -1164,8 +1163,9 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
   // ── Public API ─────────────────────────────────────────────────────────────
   window.renderPayoutTab = async function() {
-    // Ensure formula is loaded
+    // Ensure formula is loaded and personal income is calculated
     if(!window._atlasFormulaData) await loadAtlasFormula();
+    if(typeof _renderPICards === 'function') _renderPICards();
     const data = await _load();
     const me = currentUser ? (EMAIL_WORKER_MAP[currentUser.email.toLowerCase()]||'dev') : 'dev';
     const el = document.getElementById('payout-sections');
