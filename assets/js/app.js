@@ -201,6 +201,8 @@ loadSavedInvoices();
 setInvoiceProvider();
 setTimeout(wireEKGDetection, 600);
 loadSurgeryCenters();
+  // Run full daily backup
+  runFullDailyBackup().catch(()=>{});
 // Restore last active tab
 try {
 const lastTab = localStorage.getItem('atlas_active_tab');
