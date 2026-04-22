@@ -239,7 +239,8 @@ window.openDepositsModal = async function() {
 
 
     </div>
-    <div style="display:flex;gap:10px;align-items:center">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button id="dep-preview-btn" style="padding:9px 18px;background:none;color:#1d3557;border:1px solid #1d3557;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">👁 Preview Email</button>
       <button id="dep-send-btn" style="padding:9px 20px;background:#1d3557;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">📧 Send Deposit Request</button>
       <span id="dep-send-status" style="font-size:12px;color:var(--text-faint)"></span>
     </div>`;
@@ -268,6 +269,28 @@ window.openDepositsModal = async function() {
 
   // Wire send button
   document.getElementById('dep-send-btn').addEventListener('click', window._depositSendNew);
+  document.getElementById('dep-preview-btn').addEventListener('click', function() {
+    const firstName = (document.getElementById('dep-patient-name')?.value||'').split(' ')[0];
+    const surgDate  = document.getElementById('dep-surg-date')?.value || '';
+    const worker    = document.getElementById('dep-worker')?.value || window.currentWorker || 'josh';
+    const provider  = worker === 'josh' ? 'Josh Condado, CRNA' : 'Devarsh Murthy, CRNA';
+    const patEmail  = document.getElementById('dep-patient-email')?.value || '—';
+    const html = _buildDepositEmailHTML({ firstName, provider, surgDate, isReminder: false });
+    const old = document.getElementById('deposit-preview-modal');
+    if(old) old.remove();
+    const m = document.createElement('div');
+    m.id = 'deposit-preview-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'background:#fff;border-radius:12px;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)';
+    inner.innerHTML = '<div style="background:#1d3557;padding:16px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:1"><div style="color:#fff;font-size:15px;font-weight:600">👁 Email Preview</div><button id="dep-prev-close" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px">✕ Close</button></div>'
+      + '<div style="background:#f8fafc;padding:12px 20px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#64748b"><strong>To:</strong> ' + patEmail + ' &nbsp;&nbsp;<strong>Subject:</strong> Atlas Anesthesia — Deposit Information</div>'
+      + '<div style="padding:20px">' + html + '</div>';
+    m.appendChild(inner);
+    document.body.appendChild(m);
+    document.getElementById('dep-prev-close').addEventListener('click', () => m.remove());
+    m.addEventListener('click', e => { if(e.target===m) m.remove(); });
+  });
 };
 
 // -- Auto-fill from case selection --------------------------------------------
