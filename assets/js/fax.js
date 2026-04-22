@@ -11,6 +11,54 @@ window.previewFax = function() {
   const record = window._faxRecord || {};
   if(preview) preview.innerHTML = buildFaxHTML(record);
 };
+
+// -- Surgery center dropdown helpers -----------------------------------------
+window._populateFaxCenterDropdown = function() {
+  try {
+    const sel = document.getElementById('fax-to-select');
+    if(!sel) return;
+    const centers = window.surgeryCenters || [];
+    sel.innerHTML = '<option value="">— Select surgery center —</option>'
+      + centers.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+      + '<option value="__custom__">✏ Custom / New center...</option>';
+  } catch(e) { console.warn('populateFaxCenterDropdown:', e); }
+};
+
+window.onFaxCenterChange = function() {
+  try {
+    const sel = document.getElementById('fax-to-select');
+    const customInput = document.getElementById('fax-to-custom');
+    const hiddenTo = document.getElementById('fax-to');
+    const destEl = document.getElementById('fax-destination');
+    const val = sel?.value;
+
+    if(val === '__custom__') {
+      if(customInput) { customInput.style.display=''; customInput.value=''; customInput.focus(); }
+      if(hiddenTo) hiddenTo.value = '';
+      if(destEl) { destEl.value='+1'; destEl.readOnly=false; destEl.style.background=''; destEl.style.color=''; destEl.removeAttribute('title'); }
+      return;
+    }
+    if(customInput) { customInput.style.display='none'; customInput.value=''; }
+    if(!val) {
+      if(hiddenTo) hiddenTo.value='';
+      if(destEl) { destEl.value='+1'; destEl.readOnly=false; destEl.style.background=''; destEl.style.color=''; }
+      return;
+    }
+    const center = (window.surgeryCenters||[]).find(c => c.id === val);
+    if(hiddenTo) hiddenTo.value = center?.name || '';
+    if(destEl) {
+      if(center?.faxNumber) {
+        destEl.value=center.faxNumber; destEl.readOnly=true;
+        destEl.style.background='var(--surface2)'; destEl.style.color='var(--text-muted)';
+        destEl.title='From Surgery Centers tab';
+      } else {
+        destEl.value='+1'; destEl.readOnly=false;
+        destEl.style.background=''; destEl.style.color=''; destEl.removeAttribute('title');
+      }
+    }
+  } catch(e) { console.warn('onFaxCenterChange:', e); }
+};
+
 window.openFaxModalFromForm = function() {
   window._populateFaxCenterDropdown();
   // Read all form fields directly — no save, no clear, nothing changes
@@ -30,11 +78,29 @@ window.openFaxModalFromForm = function() {
 
   _faxRecord = r;
 
-  // Auto-fill fax number from surgery center if one is saved
+  // Pre-select surgery center in dropdown + auto-fill fax number
   const centerId = document.getElementById('po-surgery-center')?.value;
-  const center = surgeryCenters.find(c => c.id === centerId);
+  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === centerId);
+  const faxSel = document.getElementById('fax-to-select');
+  if(faxSel && centerId) {
+    faxSel.value = centerId;
+    const hiddenTo = document.getElementById('fax-to');
+    if(hiddenTo) hiddenTo.value = center?.name || '';
+  }
   const faxInput = document.getElementById('fax-destination');
-  if(faxInput) faxInput.value = center?.faxNumber || '+1';
+  if(faxInput) {
+    if(center?.faxNumber) {
+      faxInput.value = center.faxNumber;
+      faxInput.readOnly = true;
+      faxInput.style.background = 'var(--surface2)';
+      faxInput.style.color = 'var(--text-muted)';
+    } else {
+      faxInput.value = '+1';
+      faxInput.readOnly = false;
+      faxInput.style.background = '';
+      faxInput.style.color = '';
+    }
+  }
 
   // Build preview and show modal
   document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
@@ -58,9 +124,33 @@ window.openFaxModal = async function(id) {
     if(!r) { alert('Record not found. ID: ' + id + '\nCache size: ' + records.length); return; }
     _faxRecord = r;
 
-    const center = (window.surgeryCenters||window.surgeryCenters||[]).find(c => c.id === r['po-surgery-center']);
+    const centerId = r['po-surgery-center'] || '';
+    const center = (window.surgeryCenters||[]).find(c => c.id === centerId);
+
+    // Pre-select surgery center in dropdown
+    const faxSel = document.getElementById('fax-to-select');
+    if(faxSel && centerId) {
+      faxSel.value = centerId;
+      // Set hidden fax-to to center name
+      const hiddenTo = document.getElementById('fax-to');
+      if(hiddenTo) hiddenTo.value = center?.name || '';
+    }
+
+    // Auto-fill fax number
     const faxInput = document.getElementById('fax-destination');
-    if(faxInput) faxInput.value = center?.faxNumber || '+1';
+    if(faxInput) {
+      if(center?.faxNumber) {
+        faxInput.value = center.faxNumber;
+        faxInput.readOnly = true;
+        faxInput.style.background = 'var(--surface2)';
+        faxInput.style.color = 'var(--text-muted)';
+      } else {
+        faxInput.value = '+1';
+        faxInput.readOnly = false;
+        faxInput.style.background = '';
+        faxInput.style.color = '';
+      }
+    }
 
     const modal = document.getElementById('faxModal');
     if(!modal) { alert('Fax modal not found in DOM.'); return; }
