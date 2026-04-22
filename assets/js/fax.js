@@ -193,10 +193,6 @@ window.confirmAndSendFax = async function() {
     });
     const data = await res.json();
     if(res.ok && data.success) {
-      // Save the pre-op record silently if we're on the assessment form
-      if(document.getElementById('tab-preop')?.classList.contains('active')) {
-        try { await savePreop(); } catch(e) {}
-      }
       alert('✅ Fax sent to ' + faxNumber + '! SID: ' + (data.sid || 'N/A'));
       closeFaxModal();
     } else {
