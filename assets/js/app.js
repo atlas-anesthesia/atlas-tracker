@@ -2838,9 +2838,9 @@ if(parts.length !== 3) return dateStr;
 return `${parts[1]}/${parts[2]}/${parts[0]}`;
 }
 const CS_DRUGS = {
-ephedrine: { label: 'Ephedrine', invId: '70700-0249-25', keywords: ['ephedrine'], vialML: 1 },
-ketamine: { label: 'Ketamine', invId: '0143-9509-10', keywords: ['ketamine'], vialML: 5 },
-versed: { label: 'Versed (Midazolam)', invId: null, keywords: ['versed','midazolam'], vialML: 2 }
+ephedrine: { label: 'Ephedrine', invId: '70700-0249-25', keywords: ['ephedrine'], vialML: 1, vialMG: 50 },
+ketamine:  { label: 'Ketamine',  invId: '0143-9509-10',  keywords: ['ketamine'],  vialML: 5, vialMG: 500 },
+versed:    { label: 'Versed (Midazolam)', invId: null,   keywords: ['versed','midazolam'], vialML: 2, vialMG: 2 }
 };
 // Returns cost per mg for a CS drug based on vial size
 function getCostPerMG(drugKey) {
@@ -2850,8 +2850,10 @@ linkCSInvIds();
 const invId = drug.invId;
 if(!invId) return 0;
 const invItem = items.find(i => i.id === invId);
-if(!invItem || !drug.vialML) return 0;
-return invItem.costPerUnit / drug.vialML; // cost per mg
+if(!invItem) return 0;
+// Use vialMG (total mg per vial) for accurate cost per mg
+const totalMG = drug.vialMG || drug.vialML; // fallback to vialML if vialMG not set
+return invItem.costPerUnit / totalMG;
 }
 // Legacy alias — use getCostPerMG going forward
 function getCostPerML(drugKey) { return getCostPerMG(drugKey); }
@@ -3090,7 +3092,9 @@ const snap = await getDoc(doc(db,'atlas','cslog'));
 const all = snap.exists() ? (snap.data().entries || []) : [];
 const fromDate = document.getElementById('cs-date-from')?.value || '';
 const toDate = document.getElementById('cs-date-to')?.value || '';
-let entries = all.filter(e => e.drug === currentCSTab);
+// Only show entries for cases that still exist as finalized cases
+const finalizedCaseIds = new Set(cases.filter(c => !c.draft).map(c => c.caseId).filter(Boolean));
+let entries = all.filter(e => e.drug === currentCSTab && (!e.caseId || finalizedCaseIds.has(e.caseId)));
 if(fromDate) entries = entries.filter(e => e.date >= fromDate);
 if(toDate) entries = entries.filter(e => e.date <= toDate);
 entries.sort((a,b) => new Date(b.date) - new Date(a.date));
