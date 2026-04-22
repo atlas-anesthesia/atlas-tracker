@@ -2848,8 +2848,15 @@ const now = new Date();
 return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
 });
 const monthTotal = thisMonth.reduce((s,c) => s+c.total, 0);
+// Total unique days worked
+const uniqueDays = new Set(workerCases.map(c => c.date)).size;
+// Avg cost per case
+const avgCost = workerCases.length ? (total / workerCases.length) : 0;
 document.getElementById('cl-metrics-'+worker).innerHTML = `
-<div class="metric-card"><div class="metric-label">Total Cases</div><div class="metric-value">${workerCases.length}</div></div><div class="metric-card"><div class="metric-label">This Month</div><div class="metric-value">${thisMonth.length}</div></div>
+<div class="metric-card"><div class="metric-label">Total Cases</div><div class="metric-value">${workerCases.length}</div></div>
+<div class="metric-card"><div class="metric-label">Total Days</div><div class="metric-value">${uniqueDays}</div></div>
+<div class="metric-card"><div class="metric-label">This Month</div><div class="metric-value">${thisMonth.length}</div></div>
+<div class="metric-card"><div class="metric-label">Avg Cost / Case</div><div class="metric-value">$${avgCost.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>
 `;
 // Table
 const tableEl = document.getElementById('cl-table-'+worker);
