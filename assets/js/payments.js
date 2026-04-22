@@ -380,10 +380,16 @@ window.onInvModalCenterChange = function() {
   if(locInput){locInput.style.display='none';locInput.value=center.name||'';}
   if(fhr)fhr.value=center.firstHour!=null?Number(center.firstHour).toFixed(2):'';
   if(p15)p15.value=center.per15!=null?Number(center.per15).toFixed(2):'';
-  if(emailEl&&center.invoiceEmail){
-    emailEl.value=center.invoiceEmail;emailEl.readOnly=true;
-    emailEl.style.background='var(--surface2)';emailEl.style.color='var(--text-muted)';
-    emailEl.title='From Surgery Centers tab';
+  if(emailEl){
+    if(center.invoiceEmail){
+      emailEl.value=center.invoiceEmail;emailEl.readOnly=true;
+      emailEl.style.background='var(--surface2)';emailEl.style.color='var(--text-muted)';
+      emailEl.title='From Surgery Centers tab';
+    } else {
+      emailEl.value='';emailEl.readOnly=false;
+      emailEl.style.background='';emailEl.style.color='';
+      emailEl.removeAttribute('title');
+    }
   }
   const frs=center.flatRates||[];
   const procSel=document.getElementById('inv-modal-flat-proc-select');
