@@ -12,6 +12,7 @@ window.previewFax = function() {
   if(preview) preview.innerHTML = buildFaxHTML(record);
 };
 window.openFaxModalFromForm = function() {
+  window._populateFaxCenterDropdown();
   // Read all form fields directly — no save, no clear, nothing changes
   const r = {};
   document.querySelectorAll('#tab-preop input, #tab-preop select, #tab-preop textarea').forEach(el => {
@@ -42,6 +43,7 @@ window.openFaxModalFromForm = function() {
 
 // Called from the 📠 Fax button on a saved pre-op record in the history list
 window.openFaxModal = async function(id) {
+  window._populateFaxCenterDropdown();
   try {
     // Try cached records first, fall back to Firestore
     let records = window._rawPreopRecords || [];
