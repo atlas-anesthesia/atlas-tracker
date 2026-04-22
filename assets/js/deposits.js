@@ -454,39 +454,6 @@ window._depositsCheckAll = async function() {
   );
 };
 
-// -- Preview deposit email ----------------------------------------------------
-window._depositPreviewEmail = async function(id) {
-  const records = await _loadDeposits();
-  const record = records.find(r => r.id === id);
-  if(!record) return;
-  const preops = window._rawPreopRecords || [];
-  const preop = preops.find(p => p['po-caseId'] === record.caseId) || {};
-  const firstName = (record.patientName || '').split(' ')[0];
-  const surgDate = preop['po-surgeryDate'] || record.surgDate || '';
-  const html = _buildDepositEmailHTML({ firstName, provider: record.providerName || 'Your CRNA', surgDate, isReminder: false });
-
-  // Show in a modal
-  const old = document.getElementById('deposit-preview-modal');
-  if(old) old.remove();
-  const modal = document.createElement('div');
-  modal.id = 'deposit-preview-modal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:12px;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)">
-      <div style="background:#1d3557;padding:16px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:1">
-        <div style="color:#fff;font-size:15px;font-weight:600">📧 Email Preview — ${record.patientName||'Patient'}</div>
-        <button onclick="document.getElementById('deposit-preview-modal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px">✕ Close</button>
-      </div>
-      <div style="padding:0">
-        <div style="background:#f8fafc;padding:12px 20px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#64748b">
-          <strong>To:</strong> ${record.patientEmail||'—'} &nbsp;&nbsp; <strong>Subject:</strong> Atlas Anesthesia — Deposit Information
-        </div>
-        <div style="padding:20px">${html}</div>
-      </div>
-    </div>`;
-  document.body.appendChild(modal);
-  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
-};
 
 // -- Auto-reminder check (runs on load) --------------------------------------
 window._depositsAutoReminder = async function() {
