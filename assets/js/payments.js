@@ -126,6 +126,7 @@ window.savePaymentRows = async function() {
     dep500Paid:  document.getElementById('pr-dep500'+i)?.checked??row.dep500Paid??false,
     paid:        document.getElementById('pr-paid'+i)?.checked??row.paid,
     invoiceSent: document.getElementById('pr-inv'+i)?.checked??row.invoiceSent,
+  received: document.getElementById('pr-rcvd'+i)?.checked??row.received,
   }));
   // Sync all invoiced rows to Expenses & Distributions in one batch write
   _syncAllInvoicedToPayouts(_paymentRows).catch(()=>{});
@@ -229,6 +230,7 @@ function renderPaymentRows() {
       <div style="padding:4px 3px;display:flex;align-items:center;justify-content:flex-end;gap:2px">${invAmt}</div>
       <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
       <div style="padding:4px 3px"><button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button></div>
+      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-rcvd${i}" ${r.received?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="autoSavePayments()" title="Payment received"></div>
       <div style="padding:4px 8px;display:flex;align-items:center;justify-content:flex-end"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete">🗑</button></div>
     </div>`;
   }).join('');
