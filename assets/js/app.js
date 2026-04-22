@@ -1985,6 +1985,41 @@ const linkedCaseId = caseBeingDeleted?.caseId;
 cases = cases.filter(c => c.id !== id && !(c.draft && linkedCaseId && c.caseId === linkedCaseId));
 setSyncing(true);
 await saveCases();
+// Clean up CS log entries for this case
+if(linkedCaseId) {
+  try {
+    const csSnap = await getDoc(doc(db,'atlas','cslog'));
+    if(csSnap.exists()) {
+      const csEntries = csSnap.data().entries || [];
+      const updatedCS = csEntries.filter(e => e.caseId !== linkedCaseId);
+      if(updatedCS.length !== csEntries.length) {
+        await setDoc(doc(db,'atlas','cslog'), { entries: updatedCS });
+        console.log('Cleaned', csEntries.length - updatedCS.length, 'CS log entries for', linkedCaseId);
+      }
+    }
+  } catch(csErr) { console.warn('CS log cleanup skipped:', csErr); }
+  // Also clean up payments row
+  try {
+    if(typeof _paymentRows !== 'undefined') {
+      const before = _paymentRows.length;
+      _paymentRows = _paymentRows.filter(r => r.caseId !== linkedCaseId);
+      if(_paymentRows.length !== before) {
+        await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows }).catch(()=>{});
+      }
+    }
+  } catch(e) {}
+  // Also clean up saved PDFs
+  try {
+    const pdfSnap = await getDoc(doc(db,'atlas','saved_pdfs'));
+    if(pdfSnap.exists()) {
+      const pdfs = pdfSnap.data().records || [];
+      const updatedPdfs = pdfs.filter(p => p.caseId !== linkedCaseId);
+      if(updatedPdfs.length !== pdfs.length) {
+        await setDoc(doc(db,'atlas','saved_pdfs'), { records: updatedPdfs });
+      }
+    }
+  } catch(e) {}
+}
 setSyncing(false);
 // Re-render everything that shows cases
 renderHistory();
@@ -1992,6 +2027,7 @@ renderReports();
 renderCaseLog();
 renderMidCase();
 refreshDraftPicker();
+if(typeof renderCSLog === 'function') renderCSLog();
 if(document.getElementById('tab-calendar')?.classList.contains('active')) {
 window._cachedPreopRecords = null;
 renderCalendar();
