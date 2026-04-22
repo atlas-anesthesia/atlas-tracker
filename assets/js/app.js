@@ -1620,6 +1620,9 @@ window.clearCase=function(){
 // Don't clear if actively editing a case
 if(window._editingCaseId) return;
 caseItems=[];
+// Clear controlled substance entries
+csEntries=[];
+renderCSEntries();
 ['caseId','procedure','provider','caseNotes','caseComments'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
 const preopSummary = document.getElementById('finalize-preop-summary');
 if(preopSummary) preopSummary.style.display = 'none';
