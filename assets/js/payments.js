@@ -199,7 +199,7 @@ function renderPaymentRows() {
   };
   const ro = (val,color)=>`<span style="font-size:11px;color:${color||'var(--text-muted)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${val||'<span style="color:#fca5a5;font-size:10px">—</span>'}</span>`;
   const wcolor = w=>w==='dev'?'var(--dev)':'var(--josh)';
-  const COLS = '160px 50px 1fr 44px 68px 88px 88px 86px 32px 86px 38px 76px 38px 46px 30px';
+  const COLS = '148px 44px 1fr 38px 58px 72px 72px 80px 28px 80px 30px 68px 30px 34px 28px 30px';
 
   body.innerHTML = _paymentRows.map((r,i)=>{
     const complete = r.depositDate&&r.paidDate&&r.dep500Paid&&r.paid&&r.invoiceSent;
