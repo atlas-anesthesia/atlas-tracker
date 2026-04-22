@@ -172,7 +172,7 @@ async function _renderDepositsTable(containerEl) {
       <div style="text-align:center">${_statusPill(r)}</div>
       <div style="text-align:center;font-size:11px;color:#2d6a4f;font-weight:600">${r.paidAt ? _fmtDate(r.paidAt) : '-'}</div>
       <div style="text-align:right;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
-        ${!r.paid ? `<button onclick="window._depositMarkPaid('${r.id}')" style="font-size:10px;padding:3px 8px;border:1px solid #2d6a4f;background:rgba(45,106,79,0.08);color:#2d6a4f;border-radius:4px;cursor:pointer;font-weight:600">✓ Mark Paid</button>` : ''}
+
         ${!r.paid ? `<button onclick="window._depositSendReminder('${r.id}')" style="font-size:10px;padding:3px 8px;border:1px solid var(--border);background:none;color:var(--text-muted);border-radius:4px;cursor:pointer">Remind</button>` : ''}
         <button onclick="window._depositDelete('${r.id}')" style="font-size:10px;padding:3px 8px;border:none;background:none;color:var(--text-faint);cursor:pointer">✕</button>
       </div>
