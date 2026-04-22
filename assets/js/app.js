@@ -2019,6 +2019,18 @@ if(linkedCaseId) {
       }
     }
   } catch(e) {}
+  // Also clean up payouts (Expenses & Distributions case-income entries)
+  try {
+    const payoutSnap = await getDoc(doc(db,'atlas','payouts'));
+    if(payoutSnap.exists()) {
+      const pdata = payoutSnap.data();
+      const entries = pdata.entries || [];
+      const updatedEntries = entries.filter(e => e.caseId !== linkedCaseId);
+      if(updatedEntries.length !== entries.length) {
+        await setDoc(doc(db,'atlas','payouts'), { ...pdata, entries: updatedEntries });
+      }
+    }
+  } catch(e) {}
 }
 setSyncing(false);
 // Re-render everything that shows cases
