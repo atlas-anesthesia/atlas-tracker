@@ -2272,7 +2272,7 @@ data['mallampati'] = mall ? mall.value : '';
 return data;
 }
 function getPreopTextFields() {
-const fields = ['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
+const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
 const data = {};
@@ -2480,11 +2480,9 @@ const records = allRecords
   .sort((a,b) => {
   const dateA = a['po-surgeryDate']||'', dateB = b['po-surgeryDate']||'';
   if(dateA !== dateB) return dateA.localeCompare(dateB);
-  // Same date — sort by start time from linked draft case, fallback to caseId (creation order)
-  const caseA = cases.find(c => c.caseId === a['po-caseId']);
-  const caseB = cases.find(c => c.caseId === b['po-caseId']);
-  const timeA = caseA?.startTime || '99:99';
-  const timeB = caseB?.startTime || '99:99';
+  // Same date — sort by po-startTime from preop record (earliest first)
+  const timeA = a['po-startTime'] || '99:99';
+  const timeB = b['po-startTime'] || '99:99';
   if(timeA !== timeB) return timeA.localeCompare(timeB);
   return (a['po-caseId']||'').localeCompare(b['po-caseId']||'');
 });
