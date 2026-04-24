@@ -382,6 +382,8 @@ setSyncing(false);
 function deduplicateCases() {
   const seen = new Map();
   cases.forEach(c => {
+    // Use caseId as key — cases with same caseId AND different startTime
+    // are truly different cases, so include startTime in the key
     const key = c.caseId;
     if(!key) return;
     if(!seen.has(key)) {
@@ -403,8 +405,33 @@ function deduplicateCases() {
     cases = deduped;
   }
 }
+function _resequenceSameDayCases() {
+  const groups = {};
+  cases.forEach(c => {
+    if(c.draft) return;
+    const key = (c.worker||'') + '_' + (c.date||'');
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  });
+  Object.values(groups).forEach(group => {
+    if(group.length < 2) return;
+    group.sort((a,b) => (a.startTime||'99:99').localeCompare(b.startTime||'99:99'));
+    group.forEach((c, idx) => {
+      const oldId = c.caseId || '';
+      const dash = oldId.lastIndexOf('-');
+      if(dash === -1) return;
+      const prefix = oldId.substring(0, dash+1);
+      const newId = prefix + String(idx+1).padStart(3,'0');
+      if(newId !== oldId) {
+        console.log('Resequenced:', oldId, '->', newId, '(start:', c.startTime||'none', ')');
+        c.caseId = newId;
+      }
+    });
+  });
+}
 async function saveCases() {
 deduplicateCases();
+_resequenceSameDayCases();
 setSyncing(true);
 await setDoc(doc(db,'atlas','cases'),{cases});
 setSyncing(false);
@@ -425,7 +452,7 @@ const prefix = `ATL-${w}-${d}-`;
 // Only count unique finalized (non-draft) cases for this prefix
 // Exclude the currently-being-edited case to avoid incrementing on edit
 const existingNums = cases
-.filter(c => !c.draft && (c.caseId||'').startsWith(prefix) && c.id !== window._editingCaseId && c.id !== window._activeDraftId)
+.filter(c => (c.caseId||'').startsWith(prefix) && c.id !== window._editingCaseId && c.id !== window._activeDraftId)
 .map(c => parseInt((c.caseId||'').replace(prefix,'')) || 0);
 // Also count pre-op records for this date/worker
 const preopNums = (window._cachedPreopRecords||[])
