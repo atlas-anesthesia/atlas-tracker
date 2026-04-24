@@ -220,6 +220,33 @@ window.confirmAndSendFax = async function() {
   }
 };
 
+
+// -- Download fax as PDF ------------------------------------------------------
+window.downloadFaxPDF = async function() {
+  const faxHtml = buildFaxHTML(_faxRecord || {});
+  // Use print-to-PDF via a hidden iframe
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:800px;height:1100px;border:none';
+  document.body.appendChild(iframe);
+  const iDoc = iframe.contentDocument || iframe.contentWindow.document;
+  iDoc.open();
+  iDoc.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Atlas Fax Cover Sheet</title>
+    <style>
+      body { margin: 0; padding: 20px; font-family: Arial, sans-serif; }
+      @media print {
+        @page { size: letter; margin: 0.75in; }
+        body { margin: 0; padding: 0; }
+      }
+    </style>
+  </head><body>${faxHtml}</body></html>`);
+  iDoc.close();
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(() => document.body.removeChild(iframe), 2000);
+  }, 500);
+};
 window.clearFaxFields = function() {
   document.getElementById('fax-destination').value = '+1';
   document.getElementById('fax-to').value = '';
