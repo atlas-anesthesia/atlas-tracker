@@ -2345,15 +2345,8 @@ console.error(e);
 return;
 }
 }
-// Check if a pre-op already exists for this date+worker — reuse its ID
-const snap0 = await getDoc(doc(db,'atlas','preop'));
-const existingRecs = snap0.exists() ? (snap0.data().records||[]) : [];
-const w0 = currentWorker==='dev'?'DEV':'JOSH';
-const d0 = surgeryDate.replace(/-/g,'');
-const existingMatch = existingRecs.find(r =>
-(r['po-caseId']||'').startsWith(`ATL-${w0}-${d0}-`) && r.worker === currentWorker
-);
-const generatedId = existingMatch ? existingMatch['po-caseId'] : generateCaseId(currentWorker, surgeryDate);
+// Always generate a fresh unique case ID — multiple cases on same day are allowed
+const generatedId = generateCaseId(currentWorker, surgeryDate);
 textData['po-caseId'] = generatedId;
 // Update the display too
 const display = document.getElementById('po-caseId-display');
