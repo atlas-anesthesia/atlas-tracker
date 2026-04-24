@@ -194,6 +194,14 @@ window.confirmAndSendFax = async function() {
     const data = await res.json();
     if(res.ok && data.success) {
       alert('✅ Fax sent to ' + faxNumber + '! SID: ' + (data.sid || 'N/A'));
+      // Clear all fields for the next fax
+      if(typeof window.clearFaxFields === 'function') window.clearFaxFields();
+      const faxSelEl = document.getElementById('fax-to-select');
+      if(faxSelEl) faxSelEl.value = '';
+      const faxCustomEl = document.getElementById('fax-to-custom');
+      if(faxCustomEl) { faxCustomEl.style.display='none'; faxCustomEl.value=''; }
+      const destEl = document.getElementById('fax-destination');
+      if(destEl) { destEl.readOnly=false; destEl.style.background=''; destEl.style.color=''; destEl.value='+1'; }
       closeFaxModal();
     } else {
       alert('❌ Fax failed: ' + (data.error || 'Unknown error'));
