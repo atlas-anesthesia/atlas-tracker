@@ -2434,9 +2434,11 @@ function prefillNewCase(preopRecord) {
 const caseIdEl = document.getElementById('caseId');
 const providerEl = document.getElementById('provider');
 const caseDateEl = document.getElementById('caseDate');
+const procedureEl = document.getElementById('procedure');
 if(caseIdEl) caseIdEl.value = preopRecord['po-caseId'] || '';
 if(providerEl) providerEl.value = preopRecord['po-provider'] || '';
 if(caseDateEl) caseDateEl.value = preopRecord['po-surgeryDate'] || new Date().toISOString().split('T')[0];
+if(procedureEl) procedureEl.value = preopRecord['po-procedureType'] || '';
 }
 window.clearPreop = function() {
 // Clear text fields
