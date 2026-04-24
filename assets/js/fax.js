@@ -186,7 +186,13 @@ window.confirmAndSendFax = async function() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: faxNumber,
-        caseId: document.getElementById('fax-to')?.value?.trim() || 'Atlas Anesthesia',
+        caseId: (function() {
+          const sel = document.getElementById('fax-to-select');
+          const custom = document.getElementById('fax-to-custom');
+          const hidden = document.getElementById('fax-to');
+          if(sel && sel.value === '__custom__') return custom?.value?.trim() || 'Custom Center';
+          return hidden?.value?.trim() || sel?.options[sel?.selectedIndex]?.text || 'Atlas Anesthesia';
+        })(),
         worker: _faxRecord.worker || window.currentWorker || 'dev',
         html: faxHtml
       })
