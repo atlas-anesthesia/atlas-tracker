@@ -2451,9 +2451,9 @@ getDoc(doc(db,'atlas','preop')).then(ps => {
   window._cachedPreopRecords = [...(window._rawPreopRecords||[])];
   _globalRefresh();
 }).catch(()=>{});
-alert('✓ Pre-Op saved! New Case has been pre-filled — head to New Case to finish logging supplies.');
+alert('✓ Pre-Op record saved!');
 clearPreop();
-showTab('new-case');
+showTab('mid-case');
 };
 function prefillNewCase(preopRecord) {
 const caseIdEl = document.getElementById('caseId');
