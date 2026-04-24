@@ -2345,6 +2345,9 @@ console.error(e);
 return;
 }
 }
+// Fetch existing pre-op records for duplicate check
+const snap0 = await getDoc(doc(db,'atlas','preop'));
+const existingRecs = snap0.exists() ? (snap0.data().records||[]) : [];
 // Always generate a fresh unique case ID — multiple cases on same day are allowed
 const generatedId = generateCaseId(currentWorker, surgeryDate);
 textData['po-caseId'] = generatedId;
