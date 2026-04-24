@@ -117,7 +117,8 @@ async function _sendDepositEmail(record, isReminder, firstName) {
 
 // -- Check Stripe payment status ----------------------------------------------
 async function _checkStripePayment(record) {
-  if(!record.stripeSessionId && !record.stripePaymentLinkId) return null;
+  // Only need patientEmail to check Stripe — no session/link ID required
+  if(!record.patientEmail) return null;
   try {
     const res = await fetch(WORKER_URL + '/stripe-check', {
       method: 'POST',
