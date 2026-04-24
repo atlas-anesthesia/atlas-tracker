@@ -83,7 +83,7 @@ window.loadPaymentRows = async function loadPaymentRows() {
   const freshCenters = scSnap.exists() ? (scSnap.data().centers||[]) : (window.surgeryCenters||[]);
   window._rawPreopRecords = freshPreop;
   if(freshCenters.length) window.surgeryCenters = freshCenters;
-  const finalized = freshCases.filter(c=>!c.draft);
+  const finalized = freshCases; // show all cases including mid-case drafts
   finalized.forEach(c => {
     const preop = freshPreop.find(r=>r['po-caseId']===c.caseId);
     const sc = preop?.['po-surgery-center']||'';
