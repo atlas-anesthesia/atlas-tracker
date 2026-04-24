@@ -400,7 +400,7 @@ Connect Google Calendar
       <div style="display:flex;justify-content:flex-end;gap:10px">
         <button onclick="clearFaxFields()" style="background:var(--surface);color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer">✕ Clear Fields</button>
         <button onclick="previewFax()" style="background:var(--surface);color:var(--info);border:2px solid var(--info);border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer">👁 Update Preview</button>
-        <button id="fax-send-btn" onclick="confirmAndSendFax()" style="background:#1d3557;color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer">📠 Confirm &amp; Send Fax</button>
+        <button onclick="window.downloadFaxPDF()" style="background:none;color:#1d3557;border:1px solid #1d3557;border-radius:var(--radius-sm);padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer">⬇ Save PDF</button><button id="fax-send-btn" onclick="confirmAndSendFax()" style="background:#1d3557;color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer">📠 Confirm &amp; Send Fax</button>
       </div>
     </div>
     <div style="padding:20px 24px;background:#f4f4f4">
@@ -412,12 +412,12 @@ Connect Google Calendar
 
 
 
-  <script type="module" src="assets/js/app.js?v=20260424130558"></script>
-  <script type="module" src="assets/js/fax.js?v=20260424130558"></script>
-  <script type="module" src="assets/js/payments.js?v=20260424130558"></script>
-  <script type="module" src="assets/js/anesthesia.js?v=20260424130558"></script>
-  <script type="module" src="assets/js/payout-pdf.js?v=20260424130558"></script>
-  <script type="module" src="assets/js/deposits.js?v=20260424130558"></script>
+  <script type="module" src="assets/js/app.js?v=20260424132309"></script>
+  <script type="module" src="assets/js/fax.js?v=20260424132309"></script>
+  <script type="module" src="assets/js/payments.js?v=20260424132309"></script>
+  <script type="module" src="assets/js/anesthesia.js?v=20260424132309"></script>
+  <script type="module" src="assets/js/payout-pdf.js?v=20260424132309"></script>
+  <script type="module" src="assets/js/deposits.js?v=20260424132309"></script>
 </div><div id="witnessModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center"><div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="font-size:16px;font-weight:500;margin-bottom:6px">Witness Signature</div><div style="font-size:13px;color:var(--text-faint);margin-bottom:16px">Sign below using your finger or mouse</div><canvas id="witnessCanvas" width="450" height="160"
 style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100%;touch-action:none;background:#fff;cursor:crosshair;display:block"></canvas><div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="clearWitnessCanvas()">Clear</button><div style="display:flex;gap:10px"><button class="btn btn-ghost" onclick="closeWitnessModal()">Cancel</button><button class="btn btn-success" onclick="saveWitnessSignature()">✓ Save Signature</button></div></div></div></div>
 <div id="csProviderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center"><div style="background:var(--surface);border-radius:var(--radius);padding:24px;width:90%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><div style="font-size:16px;font-weight:500;margin-bottom:6px">Provider Signature</div><div style="font-size:13px;color:var(--text-faint);margin-bottom:16px">Sign below using your finger or mouse</div><canvas id="csProviderCanvas" width="450" height="160"
