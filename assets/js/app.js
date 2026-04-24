@@ -452,7 +452,7 @@ const prefix = `ATL-${w}-${d}-`;
 // Only count unique finalized (non-draft) cases for this prefix
 // Exclude the currently-being-edited case to avoid incrementing on edit
 const existingNums = cases
-.filter(c => (c.caseId||'').startsWith(prefix) && c.id !== window._editingCaseId && c.id !== window._activeDraftId)
+.filter(c => (c.caseId||'').startsWith(prefix) && c.id !== window._editingCaseId)
 .map(c => parseInt((c.caseId||'').replace(prefix,'')) || 0);
 // Also count pre-op records for this date/worker
 const preopNums = (window._cachedPreopRecords||[])
