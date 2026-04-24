@@ -3941,7 +3941,14 @@ const finalizedIds = new Set(cases.filter(c => !c.draft).map(c => c.caseId).filt
 // Only show pre-ops that don't have a finalized case yet
 preopRecords = preopRecords.filter(r => !finalizedIds.has(r['po-caseId']));
 // Combine: show all pre-ops, with draft status if applicable
-const allPreops = preopRecords.sort((a,b) => (a['po-surgeryDate']||'').localeCompare(b['po-surgeryDate']||''));
+const allPreops = preopRecords.sort((a,b) => {
+  const dateA = a['po-surgeryDate']||'', dateB = b['po-surgeryDate']||'';
+  if(dateA !== dateB) return dateA.localeCompare(dateB);
+  const timeA = a['po-startTime'] || '99:99';
+  const timeB = b['po-startTime'] || '99:99';
+  if(timeA !== timeB) return timeA.localeCompare(timeB);
+  return (a['po-caseId']||'').localeCompare(b['po-caseId']||'');
+});
 if(!allPreops.length && !drafts.length) {
 el.innerHTML = '<div class="empty-state">No mid-case records yet. Save a Pre-Op to get started.</div>';
 return;
@@ -4006,7 +4013,12 @@ ${draft.items.map(i=>`<div class="case-item-row"><span>${i.generic} × ${i.qty}<
 </div></div>`;
 }).join('');
 // Also show drafts that have no matching pre-op
-const orphanDrafts = drafts.filter(d => !preopRecords.find(r => r['po-caseId'] === d.caseId));
+const orphanDrafts = drafts
+  .filter(d => !preopRecords.find(r => r['po-caseId'] === d.caseId))
+  .sort((a,b) => {
+    if((a.date||'') !== (b.date||'')) return (a.date||'').localeCompare(b.date||'');
+    return (a.startTime||'99:99').localeCompare(b.startTime||'99:99');
+  });
 const orphanHtml = orphanDrafts.map(d => {
 const pill = d.worker==='dev' ? 'pill-dev' : 'pill-josh';
 const wname = d.worker==='dev' ? 'Devarsh' : 'Josh';
