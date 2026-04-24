@@ -405,33 +405,8 @@ function deduplicateCases() {
     cases = deduped;
   }
 }
-function _resequenceSameDayCases() {
-  const groups = {};
-  cases.forEach(c => {
-    if(c.draft) return;
-    const key = (c.worker||'') + '_' + (c.date||'');
-    if(!groups[key]) groups[key] = [];
-    groups[key].push(c);
-  });
-  Object.values(groups).forEach(group => {
-    if(group.length < 2) return;
-    group.sort((a,b) => (a.startTime||'99:99').localeCompare(b.startTime||'99:99'));
-    group.forEach((c, idx) => {
-      const oldId = c.caseId || '';
-      const dash = oldId.lastIndexOf('-');
-      if(dash === -1) return;
-      const prefix = oldId.substring(0, dash+1);
-      const newId = prefix + String(idx+1).padStart(3,'0');
-      if(newId !== oldId) {
-        console.log('Resequenced:', oldId, '->', newId, '(start:', c.startTime||'none', ')');
-        c.caseId = newId;
-      }
-    });
-  });
-}
 async function saveCases() {
 deduplicateCases();
-_resequenceSameDayCases();
 setSyncing(true);
 await setDoc(doc(db,'atlas','cases'),{cases});
 setSyncing(false);
@@ -2500,7 +2475,17 @@ window._rawPreopRecords = allRecords; // keep full cache in sync
 const finalizedIds = new Set(cases.filter(c => !c.draft).map(c => c.caseId).filter(Boolean));
 const records = allRecords
   .filter(r => !finalizedIds.has(r['po-caseId']))
-  .sort((a,b) => (a['po-surgeryDate']||'').localeCompare(b['po-surgeryDate']||''));
+  .sort((a,b) => {
+  const dateA = a['po-surgeryDate']||'', dateB = b['po-surgeryDate']||'';
+  if(dateA !== dateB) return dateA.localeCompare(dateB);
+  // Same date — sort by start time from linked draft case, fallback to caseId (creation order)
+  const caseA = cases.find(c => c.caseId === a['po-caseId']);
+  const caseB = cases.find(c => c.caseId === b['po-caseId']);
+  const timeA = caseA?.startTime || '99:99';
+  const timeB = caseB?.startTime || '99:99';
+  if(timeA !== timeB) return timeA.localeCompare(timeB);
+  return (a['po-caseId']||'').localeCompare(b['po-caseId']||'');
+});
 if(!allRecords.length) { el.innerHTML='<div class="empty-state">No pre-op records saved yet</div>'; return; }
 if(!records.length) { el.innerHTML='<div class="empty-state">All pre-op records have been finalized</div>'; return; }
 el.innerHTML = records.map(r => {
