@@ -529,6 +529,9 @@ function buildHourlyInvoiceHTML() {
       ${(calc.roundedMins||0)>60?`<tr><td style="padding:5px 8px;border:1px solid #bbb">Additional Time</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:center">${(calc.roundedMins||0)-60} min</td><td style="padding:5px 8px;border:1px solid #bbb;text-align:right;font-family:monospace">$${(((calc.roundedMins||0)-60)/15*(calc.p15||0)).toFixed(2)}</td></tr>`:''}
       <tr style="background:#1d3557;color:#fff"><td style="padding:6px 8px;font-weight:bold;font-size:13px" colspan="2">TOTAL DUE</td><td style="padding:6px 8px;font-weight:bold;font-size:15px;text-align:right;font-family:monospace">$${total.toFixed(2)}</td></tr>
     </table>
+    <div style="text-align:center;margin:16px 0 8px">
+      <a href="https://buy.stripe.com/9B69AS25x9ZH7mc56VejK02" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:10px 28px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:.3px">💳 Pay Invoice Online</a>
+    </div>
     <div style="font-size:9px;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px">Thank you for choosing Atlas Anesthesia · Mobile Anesthesia Services</div></div>`;
 }
 
@@ -557,6 +560,9 @@ function buildFlatRateInvoiceHTML() {
       <tr style="background:#f0efe9"><td style="padding:8px 8px;border:1px solid #bbb;font-size:13px;font-weight:500">${proc}</td><td style="padding:8px 8px;border:1px solid #bbb;text-align:right;font-family:monospace;font-size:13px;font-weight:600">$${amt.toFixed(2)}</td></tr>
       <tr style="background:#1d3557;color:#fff"><td style="padding:6px 8px;font-weight:bold;font-size:13px">TOTAL DUE</td><td style="padding:6px 8px;font-weight:bold;font-size:15px;text-align:right;font-family:monospace">$${amt.toFixed(2)}</td></tr>
     </table>
+    <div style="text-align:center;margin:16px 0 8px">
+      <a href="https://buy.stripe.com/9B69AS25x9ZH7mc56VejK02" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:10px 28px;border-radius:6px;font-size:12px;font-weight:700;letter-spacing:.3px">💳 Pay Invoice Online</a>
+    </div>
     <div style="font-size:9px;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px">Thank you for choosing Atlas Anesthesia · Mobile Anesthesia Services</div></div>`;
 }
 
