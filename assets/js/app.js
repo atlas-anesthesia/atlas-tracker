@@ -1707,22 +1707,92 @@ setStock(item,w,getStock(item,w)+qty);
 await saveInventory();input.value='';
 }
 };
-window.editItem = async function(id) {
-const item=items.find(i=>i.id===id);if(!item)return;
-const w = currentWorker;
-// Each user can only edit their own stock count
-if(w === 'dev') {
-const nD=parseInt(prompt(`Your stock for ${item.generic}:`,item.stockDev));
-if(!isNaN(nD)&&nD>=0) item.stockDev=nD;
-} else {
-const nJ=parseInt(prompt(`Your stock for ${item.generic}:`,item.stockJosh));
-if(!isNaN(nJ)&&nJ>=0) item.stockJosh=nJ;
-}
-const nC=parseFloat(prompt(`Unit cost for ${item.generic}:`,item.costPerUnit));
-if(!isNaN(nC)&&nC>=0) item.costPerUnit=nC;
-const nA=parseInt(prompt('Restock alert level (per person):',item.alert));
-if(!isNaN(nA)&&nA>=0) item.alert=nA;
-await saveInventory();
+window.editItem = function(id) {
+const item = items.find(i => i.id === id);
+if(!item) return;
+
+// Collect unique categories for dropdown
+const cats = [...new Set(items.map(i => i.category||'').filter(Boolean))].sort();
+const catOptions = cats.map(c => `<option value="${c}" ${c===item.category?'selected':''}>${c}</option>`).join('');
+
+const old = document.getElementById('edit-item-modal');
+if(old) old.remove();
+const modal = document.createElement('div');
+modal.id = 'edit-item-modal';
+modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+modal.innerHTML = `
+  <div style="background:var(--surface);border-radius:12px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="background:#1d3557;padding:16px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:1">
+      <div style="color:#fff;font-size:15px;font-weight:600">Edit Item</div>
+      <button id="ei-close" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px">✕</button>
+    </div>
+    <div style="padding:20px 24px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div style="grid-column:1/-1"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Generic Name</label>
+        <input id="ei-generic" type="text" value="${item.generic||''}" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </div>
+      <div style="grid-column:1/-1"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Brand / Full Name</label>
+        <input id="ei-name" type="text" value="${item.name||''}" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </div>
+      <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Category</label>
+        <select id="ei-category" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+          ${catOptions}
+          <option value="__custom__">+ New category...</option>
+        </select>
+        <input id="ei-category-custom" type="text" placeholder="New category name" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);margin-top:6px;display:none">
+      </div>
+      <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Item Code / ID</label>
+        <input id="ei-code" type="text" value="${item.code||item.id||''}" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </div>
+      <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Unit Cost ($)</label>
+        <input id="ei-cost" type="number" min="0" step="0.01" value="${item.costPerUnit||0}" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </div>
+      <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Low Stock Alert</label>
+        <input id="ei-alert" type="number" min="0" step="1" value="${item.alert||0}" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </div>
+      <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Josh Stock</label>
+        <input id="ei-stock-josh" type="number" min="0" step="1" value="${item.stockJosh||0}" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </div>
+      <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Dev Stock</label>
+        <input id="ei-stock-dev" type="number" min="0" step="1" value="${item.stockDev||0}" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </div>
+      <div style="grid-column:1/-1;display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border);margin-top:4px">
+        <button id="ei-delete" style="background:rgba(239,68,68,.1);color:var(--warn);border:1px solid var(--warn);border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer">🗑 Delete Item</button>
+        <button id="ei-save" style="background:#1d3557;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-size:14px;font-weight:600;cursor:pointer">✓ Save Changes</button>
+      </div>
+    </div>
+  </div>`;
+document.body.appendChild(modal);
+
+// Category custom input toggle
+document.getElementById('ei-category').addEventListener('change', e => {
+  document.getElementById('ei-category-custom').style.display = e.target.value === '__custom__' ? '' : 'none';
+});
+
+document.getElementById('ei-close').addEventListener('click', () => modal.remove());
+modal.addEventListener('click', e => { if(e.target === modal) modal.remove(); });
+
+document.getElementById('ei-delete').addEventListener('click', async () => {
+  if(!confirm(`Delete "${item.generic||item.name}"? This cannot be undone.`)) return;
+  items = items.filter(i => i.id !== id);
+  setSyncing(true); await saveInventory(); setSyncing(false);
+  renderInventory(); modal.remove();
+});
+
+document.getElementById('ei-save').addEventListener('click', async () => {
+  const catSel = document.getElementById('ei-category').value;
+  const catCustom = document.getElementById('ei-category-custom').value.trim();
+  const category = catSel === '__custom__' ? catCustom : catSel;
+  item.generic      = document.getElementById('ei-generic').value.trim() || item.generic;
+  item.name         = document.getElementById('ei-name').value.trim() || item.name;
+  item.category     = category || item.category;
+  item.code         = document.getElementById('ei-code').value.trim() || item.code;
+  item.costPerUnit  = parseFloat(document.getElementById('ei-cost').value) || 0;
+  item.alert        = parseInt(document.getElementById('ei-alert').value) || 0;
+  item.stockJosh    = parseInt(document.getElementById('ei-stock-josh').value) || 0;
+  item.stockDev     = parseInt(document.getElementById('ei-stock-dev').value) || 0;
+  setSyncing(true); await saveInventory(); setSyncing(false);
+  renderInventory(); modal.remove();
+});
 };
 window.deleteItem = async function(id) {
 if(!confirm('Delete this item?'))return;
