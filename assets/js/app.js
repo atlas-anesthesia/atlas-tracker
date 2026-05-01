@@ -1736,6 +1736,75 @@ f.style.display=f.style.display==='none'?'block':'none';
 const qa=document.getElementById('quickAddForm');
 if(qa&&qa.style.display!=='none') { qa.style.display='none'; }
 };
+
+// ── QUICK ADJUST ─────────────────────────────────────────────────────────────
+window.toggleQuickAdjust = function() {
+  const qa = document.getElementById('quickAdjustForm');
+  if(!qa) return;
+  const isOpen = qa.style.display !== 'none';
+  qa.style.display = isOpen ? 'none' : 'block';
+  // Close other panels
+  const addForm = document.getElementById('addItemForm');
+  if(addForm && addForm.style.display !== 'none') addForm.style.display = 'none';
+  const quickAdd = document.getElementById('quickAddForm');
+  if(quickAdd && quickAdd.style.display !== 'none') quickAdd.style.display = 'none';
+  if(!isOpen) {
+    const list = document.getElementById('quickAdjustList');
+    if(!list) return;
+    const sorted = [...items].sort((a,b) => {
+      const cat = (a.category||'').localeCompare(b.category||'');
+      return cat !== 0 ? cat : (a.generic||a.name||'').localeCompare(b.generic||b.name||'');
+    });
+    const byCategory = {};
+    sorted.forEach(item => {
+      const cat = item.category || 'Other';
+      if(!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(item);
+    });
+    let html = '';
+    Object.entries(byCategory).sort((a,b) => a[0].localeCompare(b[0])).forEach(([cat, catItems]) => {
+      html += `<div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);padding:6px 0 2px;border-top:1px solid var(--border);margin-top:4px">${cat}</div>`;
+      catItems.forEach(item => {
+        const stock = getStock(item, currentWorker);
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.generic||item.name}</div>
+            <div style="font-size:11px;color:var(--text-faint)">Current: <span id="qadj-stock-${item.id}" style="font-family:monospace;font-weight:600">${stock}</span></div>
+          </div>
+          <input type="number" id="qadj-qty-${item.id}" min="0" step="1" value="${stock}" style="width:64px;text-align:center;padding:5px 6px;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">
+        </div>`;
+      });
+    });
+    list.innerHTML = html;
+  }
+};
+
+window.saveAllQuickAdjust = async function() {
+  const updates = [];
+  items.forEach(item => {
+    const input = document.getElementById('qadj-qty-' + item.id);
+    if(!input) return;
+    const newQty = parseInt(input.value);
+    if(isNaN(newQty) || newQty < 0) return;
+    const currentQty = getStock(item, currentWorker);
+    if(newQty !== currentQty) updates.push({ item, newQty });
+  });
+  if(!updates.length) { alert('No changes made — quantities are the same.'); return; }
+  updates.forEach(({ item, newQty }) => {
+    setStock(item, currentWorker, newQty);
+  });
+  setSyncing(true);
+  await saveInventory();
+  setSyncing(false);
+  renderInventory();
+  updates.forEach(({ item, newQty }) => {
+    const stockEl = document.getElementById('qadj-stock-' + item.id);
+    const input   = document.getElementById('qadj-qty-' + item.id);
+    if(stockEl) stockEl.textContent = newQty;
+    if(input) { input.style.background = '#dcfce7'; setTimeout(() => { input.style.background = ''; }, 600); }
+  });
+  alert('✓ ' + updates.length + ' item(s) adjusted!');
+};
 window.toggleQuickAdd=function(){
 const qa=document.getElementById('quickAddForm');
 if(!qa) return;
