@@ -1670,7 +1670,10 @@ itms.sort((a,b)=>a.generic.localeCompare(b.generic)).forEach(item=>{
 const tot=item.stockDev+item.stockJosh;
 const scD=item.stockDev===0?'stock-critical':item.stockDev<=item.alert?'stock-low':'stock-ok';
 const scJ=item.stockJosh===0?'stock-critical':item.stockJosh<=item.alert?'stock-low':'stock-ok';
-html+=`<div style="display:grid;grid-template-columns:2fr 80px 80px 80px 70px 70px 80px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div><div style="font-size:13px;font-weight:500">${item.generic}</div><div style="font-size:11px;color:var(--text-faint)">${item.name}</div></div><div style="font-family:'DM Mono',monospace;font-size:13px;${(!item.costPerUnit||item.costPerUnit===0)?'color:#b5451b;font-weight:700':''}" >$${item.costPerUnit.toFixed(2)}</div><div><span class="stock-badge ${scD}">${item.stockDev}</span></div><div><span class="stock-badge ${scJ}">${item.stockJosh}</span></div><div style="font-size:13px;font-weight:500;font-family:'DM Mono',monospace">${tot}</div><div style="font-size:13px;color:var(--text-muted)">${item.alert}</div><div><button onclick="editItem('${item.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">Edit</button></div></div>`;
+html+=`<div style="display:grid;grid-template-columns:2fr 80px 80px 80px 70px 70px 80px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)"><div><div style="font-size:13px;font-weight:500">${item.generic}</div><div style="font-size:11px;color:var(--text-faint)">${item.name}</div></div>`+(item.costPerUnit===0||!item.costPerUnit
+  ? `<div style="font-family:'DM Mono',monospace;font-size:13px;color:#b5451b;font-weight:700">$${item.costPerUnit.toFixed(2)}</div>`
+  : `<div style="font-family:'DM Mono',monospace;font-size:13px">$${item.costPerUnit.toFixed(2)}</div>`
+)+`<div><span class="stock-badge ${scD}">${item.stockDev}</span></div><div><span class="stock-badge ${scJ}">${item.stockJosh}</span></div><div style="font-size:13px;font-weight:500;font-family:'DM Mono',monospace">${tot}</div><div style="font-size:13px;color:var(--text-muted)">${item.alert}</div><div><button onclick="editItem('${item.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">Edit</button></div></div>`;
 });
 });
 } else {
