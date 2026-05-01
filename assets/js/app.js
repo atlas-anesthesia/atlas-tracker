@@ -778,7 +778,7 @@ reminders:{useDefault:false,overrides:[{method:'email',minutes:24*60},{method:'p
 });
 if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'Failed'); }
 }
-window.showTab = function(tab, pushState=true) {
+window.showTab = function(tab, pushState) { if(pushState===undefined) pushState=true;
 try { localStorage.setItem('atlas_active_tab', tab); } catch(e) {}
 if(pushState) {
 try { history.pushState({ tab }, '', '#' + tab); } catch(e) {}
@@ -1434,7 +1434,7 @@ document.getElementById('caseTotalDisplay').textContent='$'+grandTotal.toFixed(2
 if(lowList.length) warnings.innerHTML=`<div class="alert alert-warn">⚠ Low stock after this case: ${lowList.join(', ')}</div>`;
 renderLiveSummary(total, csTotal);
 }
-function renderLiveSummary(total, csTotal=0) {
+function renderLiveSummary(total, csTotal) { if(csTotal===undefined) csTotal=0;
 const el=document.getElementById('liveSummary');
 const grandTotal = total + csTotal;
 if(!caseItems.length && csTotal===0){el.innerHTML='<div class="empty-state">Add supplies below to see cost summary</div>';return;}
@@ -1739,69 +1739,92 @@ if(qa&&qa.style.display!=='none') { qa.style.display='none'; }
 
 
 // ── QUICK ADJUST LOW STOCK ALERTS ────────────────────────────────────────────
-window.toggleQuickAdjust = function() {
+let _quickAdjustMode = 'alert'; // 'alert' or 'stock'
+window.toggleQuickAdjust = function(mode) {
   const qa = document.getElementById('quickAdjustForm');
   if(!qa) return;
-  const isOpen = qa.style.display !== 'none';
-  qa.style.display = isOpen ? 'none' : 'block';
+  const isOpen = qa.style.display !== 'none' && _quickAdjustMode === mode;
+  // Always close if open with same mode
+  if(isOpen) { qa.style.display = 'none'; return; }
+  _quickAdjustMode = mode || 'alert';
+  qa.style.display = 'block';
   const addForm = document.getElementById('addItemForm');
   if(addForm && addForm.style.display !== 'none') addForm.style.display = 'none';
   const quickAdd = document.getElementById('quickAddForm');
   if(quickAdd && quickAdd.style.display !== 'none') quickAdd.style.display = 'none';
-  if(!isOpen) {
-    const list = document.getElementById('quickAdjustList');
-    if(!list) return;
-    const sorted = [...items].sort((a,b) => {
-      const cat = (a.category||'').localeCompare(b.category||'');
-      return cat !== 0 ? cat : (a.generic||a.name||'').localeCompare(b.generic||b.name||'');
-    });
-    const byCategory = {};
-    sorted.forEach(item => {
-      const cat = item.category || 'Other';
-      if(!byCategory[cat]) byCategory[cat] = [];
-      byCategory[cat].push(item);
-    });
-    let html = '';
-    Object.entries(byCategory).sort((a,b) => a[0].localeCompare(b[0])).forEach(([cat, catItems]) => {
-      html += `<div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);padding:6px 0 2px;border-top:1px solid var(--border);margin-top:4px">${cat}</div>`;
-      catItems.forEach(item => {
-        const stock = getStock(item, currentWorker);
-        const alert = item.alert || 0;
-        const isLow = stock <= alert;
-        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:${isLow?'rgba(181,69,27,0.06)':'var(--surface2)'};border-radius:var(--radius-sm);border:1px solid ${isLow?'var(--warn)':'var(--border)'}">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.generic||item.name}</div>
-            <div style="font-size:11px;color:var(--text-faint)">Stock: <span style="font-family:monospace;font-weight:600;color:${isLow?'var(--warn)':'inherit'}">${stock}</span></div>
-          </div>
-          <div style="text-align:center">
-            <div style="font-size:9px;color:var(--text-faint);margin-bottom:2px">Alert at</div>
-            <input type="number" id="qadj-alert-${item.id}" min="0" step="1" value="${alert}" style="width:56px;text-align:center;padding:5px 6px;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">
-          </div>
-        </div>`;
-      });
-    });
-    list.innerHTML = html;
+  // Update title/description/button
+  const titleEl = document.getElementById('quickAdjustTitle');
+  const descEl  = document.getElementById('quickAdjustDesc');
+  const saveEl  = document.getElementById('quickAdjustSaveLabel');
+  if(mode === 'stock') {
+    if(titleEl) titleEl.textContent = '📦 Quick Adjust Stock';
+    if(descEl)  descEl.textContent  = 'Set exact stock quantities for each item — replaces current values.';
+    if(saveEl)  saveEl.textContent  = '✓ Apply Stock Changes';
+  } else {
+    if(titleEl) titleEl.textContent = '🔔 Quick Adjust Alert Thresholds';
+    if(descEl)  descEl.textContent  = 'Set the low stock alert threshold. Items at or below this number trigger a warning.';
+    if(saveEl)  saveEl.textContent  = '✓ Apply Alert Changes';
   }
+  const list = document.getElementById('quickAdjustList');
+  if(!list) return;
+  const sorted = [...items].sort((a,b) => {
+    const cat = (a.category||'').localeCompare(b.category||'');
+    return cat !== 0 ? cat : (a.generic||a.name||'').localeCompare(b.generic||b.name||'');
+  });
+  const byCategory = {};
+  sorted.forEach(item => {
+    const cat = item.category || 'Other';
+    if(!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(item);
+  });
+  let html = '';
+  Object.entries(byCategory).sort((a,b) => a[0].localeCompare(b[0])).forEach(([cat, catItems]) => {
+    html += `<div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);padding:6px 0 2px;border-top:1px solid var(--border);margin-top:4px">${cat}</div>`;
+    catItems.forEach(item => {
+      const stock = getStock(item, currentWorker);
+      const alertVal = item.alert || 0;
+      const isLow = stock <= alertVal;
+      const val   = mode === 'stock' ? stock : alertVal;
+      const label = mode === 'stock' ? 'Qty' : 'Alert at';
+      const inputId = mode === 'stock' ? `qadj-stock-${item.id}` : `qadj-alert-${item.id}`;
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:${isLow&&mode==='alert'?'rgba(181,69,27,0.06)':'var(--surface2)'};border-radius:var(--radius-sm);border:1px solid ${isLow&&mode==='alert'?'var(--warn)':'var(--border)'}">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.generic||item.name}</div>
+          <div style="font-size:11px;color:var(--text-faint)">${mode==='stock'?`Alert: <span style="font-family:monospace">${alertVal}</span>`:`Stock: <span style="font-family:monospace;color:${isLow?'var(--warn)':'inherit'}">${stock}</span>`}</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:9px;color:var(--text-faint);margin-bottom:2px">${label}</div>
+          <input type="number" id="${inputId}" min="0" step="1" value="${val}" style="width:56px;text-align:center;padding:5px 6px;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">
+        </div>
+      </div>`;
+    });
+  });
+  list.innerHTML = html;
 };
 
 window.saveAllQuickAdjust = async function() {
   let changed = 0;
   items.forEach(item => {
-    const input = document.getElementById('qadj-alert-' + item.id);
+    const inputId = _quickAdjustMode === 'stock' ? `qadj-stock-${item.id}` : `qadj-alert-${item.id}`;
+    const input = document.getElementById(inputId);
     if(!input) return;
-    const newAlert = parseInt(input.value);
-    if(!isNaN(newAlert) && newAlert >= 0 && newAlert !== (item.alert||0)) {
-      item.alert = newAlert;
-      changed++;
+    const newVal = parseInt(input.value);
+    if(isNaN(newVal) || newVal < 0) return;
+    if(_quickAdjustMode === 'stock') {
+      const current = getStock(item, currentWorker);
+      if(newVal !== current) { setStock(item, currentWorker, newVal); changed++; }
+    } else {
+      if(newVal !== (item.alert||0)) { item.alert = newVal; changed++; }
     }
   });
-  if(!changed) { alert('No changes made.'); return; }
+  if(!changed) { alert('No changes made — all values are the same.'); return; }
   setSyncing(true);
   await saveInventory();
   setSyncing(false);
   renderInventory();
   document.getElementById('quickAdjustForm').style.display = 'none';
-  alert('✓ ' + changed + ' low stock alert threshold(s) updated!');
+  const label = _quickAdjustMode === 'stock' ? 'stock quantity(ies)' : 'alert threshold(s)';
+  alert('✓ ' + changed + ' ' + label + ' updated!');
 };
 
 window.toggleQuickAdd=function(){
