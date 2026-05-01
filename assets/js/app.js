@@ -1813,9 +1813,10 @@ let _quickAdjustMode = 'alert'; // 'alert' or 'stock'
 window.toggleQuickAdjust = function(mode) {
   const qa = document.getElementById('quickAdjustForm');
   if(!qa) return;
-  const isOpen = qa.style.display !== 'none' && _quickAdjustMode === mode;
-  // Always close if open with same mode
-  if(isOpen) { qa.style.display = 'none'; return; }
+  const isOpen = qa.style.display !== 'none';
+  // If already open in same mode, just close
+  if(isOpen && _quickAdjustMode === mode) { qa.style.display = 'none'; return; }
+  // If switching modes while open, just re-render (don't close then reopen)
   _quickAdjustMode = mode || 'alert';
   qa.style.display = 'block';
   const addForm = document.getElementById('addItemForm');
