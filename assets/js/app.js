@@ -1737,8 +1737,73 @@ const qa=document.getElementById('quickAddForm');
 if(qa&&qa.style.display!=='none') { qa.style.display='none'; }
 };
 
-// ── QUICK ADJUST ─────────────────────────────────────────────────────────────
+
+// ── QUICK ADJUST LOW STOCK ALERTS ────────────────────────────────────────────
 window.toggleQuickAdjust = function() {
+  const qa = document.getElementById('quickAdjustForm');
+  if(!qa) return;
+  const isOpen = qa.style.display !== 'none';
+  qa.style.display = isOpen ? 'none' : 'block';
+  const addForm = document.getElementById('addItemForm');
+  if(addForm && addForm.style.display !== 'none') addForm.style.display = 'none';
+  const quickAdd = document.getElementById('quickAddForm');
+  if(quickAdd && quickAdd.style.display !== 'none') quickAdd.style.display = 'none';
+  if(!isOpen) {
+    const list = document.getElementById('quickAdjustList');
+    if(!list) return;
+    const sorted = [...items].sort((a,b) => {
+      const cat = (a.category||'').localeCompare(b.category||'');
+      return cat !== 0 ? cat : (a.generic||a.name||'').localeCompare(b.generic||b.name||'');
+    });
+    const byCategory = {};
+    sorted.forEach(item => {
+      const cat = item.category || 'Other';
+      if(!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(item);
+    });
+    let html = '';
+    Object.entries(byCategory).sort((a,b) => a[0].localeCompare(b[0])).forEach(([cat, catItems]) => {
+      html += `<div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);padding:6px 0 2px;border-top:1px solid var(--border);margin-top:4px">${cat}</div>`;
+      catItems.forEach(item => {
+        const stock = getStock(item, currentWorker);
+        const alert = item.alert || 0;
+        const isLow = stock <= alert;
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:${isLow?'rgba(181,69,27,0.06)':'var(--surface2)'};border-radius:var(--radius-sm);border:1px solid ${isLow?'var(--warn)':'var(--border)'}">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.generic||item.name}</div>
+            <div style="font-size:11px;color:var(--text-faint)">Stock: <span style="font-family:monospace;font-weight:600;color:${isLow?'var(--warn)':'inherit'}">${stock}</span></div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:9px;color:var(--text-faint);margin-bottom:2px">Alert at</div>
+            <input type="number" id="qadj-alert-${item.id}" min="0" step="1" value="${alert}" style="width:56px;text-align:center;padding:5px 6px;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">
+          </div>
+        </div>`;
+      });
+    });
+    list.innerHTML = html;
+  }
+};
+
+window.saveAllQuickAdjust = async function() {
+  let changed = 0;
+  items.forEach(item => {
+    const input = document.getElementById('qadj-alert-' + item.id);
+    if(!input) return;
+    const newAlert = parseInt(input.value);
+    if(!isNaN(newAlert) && newAlert >= 0 && newAlert !== (item.alert||0)) {
+      item.alert = newAlert;
+      changed++;
+    }
+  });
+  if(!changed) { alert('No changes made.'); return; }
+  setSyncing(true);
+  await saveInventory();
+  setSyncing(false);
+  renderInventory();
+  document.getElementById('quickAdjustForm').style.display = 'none';
+  alert('✓ ' + changed + ' low stock alert threshold(s) updated!');
+};
+ = function() {
   const qa = document.getElementById('quickAdjustForm');
   if(!qa) return;
   const isOpen = qa.style.display !== 'none';
