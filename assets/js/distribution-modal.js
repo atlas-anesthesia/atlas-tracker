@@ -647,47 +647,80 @@
 
     // Itemized sections
     const sections = [
-      { title:'Case Invoices (Personal Income)', filter: function(it) { return it.type === 'case-income'; }, color:'#0369a1' },
-      { title:'Other Income',                    filter: function(it) { return it.type === 'other-income'; }, color:'#2d6a4f' },
-      { title:'Expenses & Supplies',             filter: function(it) { return it.type === 'supplies' || it.type === 'expense'; }, color:'#b91c1c' },
-      { title:'Initial Investment Payback',      filter: function(it) { return it.type === 'initial-invest'; }, color:'#1d3557' },
-      { title:'Custom Items',                    filter: function(it) { return it.type === 'custom'; }, color:'#525252' }
+      { title:'Case Invoices',              filter: function(it) { return it.type === 'case-income'; }, color:'#0369a1', isCases:true },
+      { title:'Other Income',               filter: function(it) { return it.type === 'other-income'; }, color:'#2d6a4f' },
+      { title:'Expenses & Supplies',        filter: function(it) { return it.type === 'supplies' || it.type === 'expense'; }, color:'#b91c1c' },
+      { title:'Initial Investment Payback', filter: function(it) { return it.type === 'initial-invest'; }, color:'#1d3557' },
+      { title:'Custom Items',               filter: function(it) { return it.type === 'custom'; }, color:'#525252' }
     ];
 
     sections.forEach(function(sec) {
       const secItems = items.filter(sec.filter);
       if(!secItems.length) return;
 
-      html += '<div style="margin-bottom:18px">' +
-        '<div style="font-size:10px;font-weight:700;color:' + sec.color + ';' +
-        'text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px;padding-bottom:5px;' +
-        'border-bottom:1px solid #ececec">' + _esc(sec.title) + '</div>';
+      // Section title — for the Case Invoices section we add Invoice / PI
+      // column labels on the right so the two-column row layout below is legible.
+      if(sec.isCases) {
+        html += '<div style="margin-bottom:18px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #ececec">' +
+            '<div style="font-size:10px;font-weight:700;color:' + sec.color + ';text-transform:uppercase;letter-spacing:.7px">' + _esc(sec.title) + '</div>' +
+            '<div style="display:flex;flex-shrink:0">' +
+              '<div style="font-size:9px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.5px;width:100px;text-align:right">Invoice</div>' +
+              '<div style="font-size:9px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.5px;width:120px;text-align:right;padding-left:10px">Personal Income</div>' +
+            '</div>' +
+          '</div>';
+      } else {
+        html += '<div style="margin-bottom:18px">' +
+          '<div style="font-size:10px;font-weight:700;color:' + sec.color + ';' +
+          'text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px;padding-bottom:5px;' +
+          'border-bottom:1px solid #ececec">' + _esc(sec.title) + '</div>';
+      }
 
       secItems.forEach(function(it) {
-        const c    = it.contribution;
-        const sign = c >= 0 ? '+' : '−';
-        const col  = c >= 0 ? sec.color : '#b91c1c';
-        const subParts = [];
-        if(it.type === 'case-income') subParts.push('PI of ' + _fmt(it.invoiceAmount) + ' invoice');
-        if(it.supplier) subParts.push(it.supplier);
-        let n = it.notes || '';
-        if(it.type === 'case-income' && n.indexOf('Center: ') === 0) n = n.slice(8);
-        if(n) subParts.push(n);
-        if(it.type === 'custom') {
-          const t = it.customType === 'expense' ? 'Expense'
-                  : it.customType === 'invest-payback' ? 'Investment Payback' : 'Income';
-          subParts.push(t);
-        }
+        if(it.type === 'case-income') {
+          // Two-column case row: name (left) | invoice (gray) | PI (blue, bold)
+          const subParts = [];
+          if(it.supplier) subParts.push(it.supplier);
+          let n = it.notes || '';
+          if(n.indexOf('Center: ') === 0) n = n.slice(8);
+          if(n) subParts.push(n);
 
-        html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0">' +
-          '<div style="flex:1;min-width:0;padding-right:14px">' +
-            '<div style="font-size:12px;color:#222;font-weight:500">' + _esc(it.name) + '</div>' +
-            (subParts.length ? '<div style="font-size:10px;color:#888;margin-top:2px">' +
-              subParts.map(_esc).join(' · ') + '</div>' : '') +
-          '</div>' +
-          '<div style="font-size:12px;font-weight:700;color:' + col + ';font-family:DM Mono,monospace;flex-shrink:0">' +
-            sign + _fmt(Math.abs(c)) + '</div>' +
-        '</div>';
+          html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0">' +
+            '<div style="flex:1;min-width:0;padding-right:14px">' +
+              '<div style="font-size:12px;color:#222;font-weight:500">' + _esc(it.name) + '</div>' +
+              (subParts.length ? '<div style="font-size:10px;color:#888;margin-top:2px">' +
+                subParts.map(_esc).join(' · ') + '</div>' : '') +
+            '</div>' +
+            '<div style="font-size:12px;font-weight:500;color:#666;font-family:DM Mono,monospace;flex-shrink:0;width:100px;text-align:right">' +
+              _fmt(it.invoiceAmount || it.amount || 0) + '</div>' +
+            '<div style="font-size:12px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace;flex-shrink:0;width:120px;text-align:right;padding-left:10px">' +
+              '+' + _fmt(it.personalIncome || 0) + '</div>' +
+          '</div>';
+        } else {
+          // Standard single-amount row (other-income / expenses / invest / custom)
+          const c    = it.contribution;
+          const sign = c >= 0 ? '+' : '−';
+          const col  = c >= 0 ? sec.color : '#b91c1c';
+          const subParts = [];
+          if(it.supplier) subParts.push(it.supplier);
+          let n = it.notes || '';
+          if(n) subParts.push(n);
+          if(it.type === 'custom') {
+            const t = it.customType === 'expense' ? 'Expense'
+                    : it.customType === 'invest-payback' ? 'Investment Payback' : 'Income';
+            subParts.push(t);
+          }
+
+          html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0">' +
+            '<div style="flex:1;min-width:0;padding-right:14px">' +
+              '<div style="font-size:12px;color:#222;font-weight:500">' + _esc(it.name) + '</div>' +
+              (subParts.length ? '<div style="font-size:10px;color:#888;margin-top:2px">' +
+                subParts.map(_esc).join(' · ') + '</div>' : '') +
+            '</div>' +
+            '<div style="font-size:12px;font-weight:700;color:' + col + ';font-family:DM Mono,monospace;flex-shrink:0">' +
+              sign + _fmt(Math.abs(c)) + '</div>' +
+          '</div>';
+        }
       });
 
       html += '</div>';
@@ -874,12 +907,16 @@
 
     // ── Itemized sections ────────────────────────────────────────────────────
     const sections = [
-      { title:'Case Invoices (Personal Income)', filter: function(it){return it.type==='case-income';},   color:[3,105,161]   },
-      { title:'Other Income',                    filter: function(it){return it.type==='other-income';},  color:[45,106,79]   },
-      { title:'Expenses & Supplies',             filter: function(it){return it.type==='supplies' || it.type==='expense';}, color:[185,28,28] },
-      { title:'Initial Investment Payback',      filter: function(it){return it.type==='initial-invest';}, color:[29,53,87]   },
-      { title:'Custom Items',                    filter: function(it){return it.type==='custom';},        color:[82,82,82]    }
+      { title:'Case Invoices',              filter: function(it){return it.type==='case-income';},   color:[3,105,161],   isCases:true },
+      { title:'Other Income',               filter: function(it){return it.type==='other-income';},  color:[45,106,79]   },
+      { title:'Expenses & Supplies',        filter: function(it){return it.type==='supplies' || it.type==='expense';}, color:[185,28,28] },
+      { title:'Initial Investment Payback', filter: function(it){return it.type==='initial-invest';}, color:[29,53,87]   },
+      { title:'Custom Items',               filter: function(it){return it.type==='custom';},        color:[82,82,82]    }
     ];
+
+    // Column anchors for the Case Invoices two-column layout (right-aligned x positions)
+    const COL_INVOICE = W - M - 130;   // right edge of invoice column
+    const COL_PI      = W - M;          // right edge of PI column
 
     sections.forEach(function(sec) {
       const secItems = items.filter(sec.filter);
@@ -887,46 +924,85 @@
 
       if(y > 700) { doc.addPage(); y = 50; }
 
+      // Section title — Case Invoices section also gets right-aligned column labels
       doc.setFont('Helvetica','bold'); doc.setFontSize(9);
       doc.setTextColor(sec.color[0], sec.color[1], sec.color[2]);
-      doc.text(sec.title.toUpperCase(), M, y); y += 4;
+      doc.text(sec.title.toUpperCase(), M, y);
+      if(sec.isCases) {
+        doc.setFont('Helvetica','bold'); doc.setFontSize(7);
+        doc.setTextColor(150,150,150);
+        doc.text('INVOICE',         COL_INVOICE, y, {align:'right'});
+        doc.text('PERSONAL INCOME', COL_PI,      y, {align:'right'});
+      }
+      y += 4;
       doc.setDrawColor(230,230,230);
       doc.line(M, y, W-M, y); y += 12;
 
       secItems.forEach(function(it) {
         if(y > 730) { doc.addPage(); y = 50; }
-        doc.setFont('Helvetica','normal'); doc.setFontSize(10);
-        doc.setTextColor(40,40,40);
-        const nameWidth = W - M - M - 110;
-        const nameLines = doc.splitTextToSize(it.name || '-', nameWidth);
-        doc.text(nameLines[0], M, y);
 
-        const c    = it.contribution || 0;
-        const sign = c >= 0 ? '+' : '-';
-        const col  = c >= 0 ? sec.color : [185,28,28];
-        doc.setFont('Helvetica','bold');
-        doc.setTextColor(col[0], col[1], col[2]);
-        doc.text(sign + fmt(Math.abs(c)), W-M, y, {align:'right'});
-        y += 13;
+        if(sec.isCases) {
+          // Two-column case row: name (left) | invoice (gray) | PI (blue, bold)
+          const nameWidth = COL_INVOICE - M - 110;   // leave room for both numeric columns
+          const nameLines = doc.splitTextToSize(it.name || '-', nameWidth);
+          doc.setFont('Helvetica','normal'); doc.setFontSize(10);
+          doc.setTextColor(40,40,40);
+          doc.text(nameLines[0], M, y);
 
-        // Sub-line
-        const subParts = [];
-        if(it.type === 'case-income') subParts.push('PI of ' + fmt(it.invoiceAmount || it.amount || 0) + ' invoice');
-        if(it.supplier) subParts.push(it.supplier);
-        let n = it.notes || '';
-        if(it.type === 'case-income' && n.indexOf('Center: ') === 0) n = n.slice(8);
-        if(n) subParts.push(n);
-        if(it.type === 'custom') {
-          const t = it.customType === 'expense' ? 'Expense'
-                  : it.customType === 'invest-payback' ? 'Investment Payback' : 'Income';
-          subParts.push(t);
-        }
-        if(subParts.length) {
-          doc.setFont('Helvetica','normal'); doc.setFontSize(8);
-          doc.setTextColor(140,140,140);
-          const subLine = subParts.join('  \u00B7  ');
-          const subLines = doc.splitTextToSize(subLine, nameWidth);
-          doc.text(subLines[0], M+10, y); y += 10;
+          // Invoice — subdued gray
+          doc.setFont('Helvetica','normal');
+          doc.setTextColor(110,110,110);
+          doc.text(fmt(it.invoiceAmount || it.amount || 0), COL_INVOICE, y, {align:'right'});
+
+          // PI — bold blue
+          doc.setFont('Helvetica','bold');
+          doc.setTextColor(3, 105, 161);
+          doc.text('+' + fmt(it.personalIncome || 0), COL_PI, y, {align:'right'});
+          y += 13;
+
+          // Sub-line (supplier · notes — drop "Center: " prefix on case-income notes)
+          const subParts = [];
+          if(it.supplier) subParts.push(it.supplier);
+          let n = it.notes || '';
+          if(n.indexOf('Center: ') === 0) n = n.slice(8);
+          if(n) subParts.push(n);
+          if(subParts.length) {
+            doc.setFont('Helvetica','normal'); doc.setFontSize(8);
+            doc.setTextColor(140,140,140);
+            const subLines = doc.splitTextToSize(subParts.join('  \u00B7  '), nameWidth);
+            doc.text(subLines[0], M+10, y); y += 10;
+          }
+        } else {
+          // Standard single-amount row (other-income / expenses / invest / custom)
+          const nameWidth = W - M - M - 110;
+          const nameLines = doc.splitTextToSize(it.name || '-', nameWidth);
+          doc.setFont('Helvetica','normal'); doc.setFontSize(10);
+          doc.setTextColor(40,40,40);
+          doc.text(nameLines[0], M, y);
+
+          const c    = it.contribution || 0;
+          const sign = c >= 0 ? '+' : '-';
+          const col  = c >= 0 ? sec.color : [185,28,28];
+          doc.setFont('Helvetica','bold');
+          doc.setTextColor(col[0], col[1], col[2]);
+          doc.text(sign + fmt(Math.abs(c)), W-M, y, {align:'right'});
+          y += 13;
+
+          const subParts = [];
+          if(it.supplier) subParts.push(it.supplier);
+          let n = it.notes || '';
+          if(n) subParts.push(n);
+          if(it.type === 'custom') {
+            const t = it.customType === 'expense' ? 'Expense'
+                    : it.customType === 'invest-payback' ? 'Investment Payback' : 'Income';
+            subParts.push(t);
+          }
+          if(subParts.length) {
+            doc.setFont('Helvetica','normal'); doc.setFontSize(8);
+            doc.setTextColor(140,140,140);
+            const subLines = doc.splitTextToSize(subParts.join('  \u00B7  '), nameWidth);
+            doc.text(subLines[0], M+10, y); y += 10;
+          }
         }
         y += 3;
       });
