@@ -908,10 +908,14 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     // Track how much of invest has been paid back incrementally via distributions
     const totalInvestPaid = dists.reduce((s,d)=>s+(d.investPaid||0),0);
     const investOwed     = Math.max(0, totalInvest - totalInvestPaid);
-    // Revenue = sum of auto-synced case-income entries (from invoiced payments)
-    const rev = entries.filter(e=>e.cat==='case-income').reduce((s,e)=>s+(e.amount||0),0);
-    const revSuggested   = Math.max(0, rev + totalIn - totalOut - totalDist);
-    return { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, revSuggested, investOwed };
+    // Revenue and PI both come from the case-income log entries themselves —
+    // NOT pulled live from Payments. This gives E&D its own source of truth.
+    // Mismatches with Payments surface as a red border on the metric card.
+    const caseIncomeEntries = entries.filter(e => e.cat === 'case-income');
+    const rev       = caseIncomeEntries.reduce((s,e) => s + (e.amount         || 0), 0);
+    const piFromLog = caseIncomeEntries.reduce((s,e) => s + (e.personalIncome || 0), 0);
+    const revSuggested   = Math.max(0, piFromLog + totalIn - totalOut - totalDist);
+    return { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, piFromLog, revSuggested, investOwed };
   }
 
   function _lbl(text, optional) {
@@ -953,7 +957,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   function _buildSection(worker, canEdit, data, container) {
     const wname  = worker==='dev'?'Devarsh':'Josh';
     const wcolor = worker==='dev'?'var(--dev)':'var(--josh)';
-    const { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, revSuggested, investOwed } = _totals(worker, data);
+    const { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, piFromLog, revSuggested, investOwed } = _totals(worker, data);
     const sorted  = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const sortedD = [...dists].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -966,25 +970,83 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     hdr.textContent = wname;
     wrap.appendChild(hdr);
 
-    // Metric cards
+    // Cross-tab reconciliation: compare E&D log totals vs Payments live totals.
+    // If they differ by more than a penny (rounding), highlight the affected
+    // metric card in red so the user knows to re-sync. The two stay decoupled
+    // by design — E&D shows what the log says; Payments shows the live calc.
+    const ref = (typeof window._getPaymentsTotalsForWorker === 'function')
+      ? window._getPaymentsTotalsForWorker(worker)
+      : { totalInvoiced: 0, personalIncome: (window._personalIncome && window._personalIncome[worker]) || 0 };
+    const piMismatch  = Math.abs(piFromLog - ref.personalIncome) > 0.01;
+    const revMismatch = Math.abs(rev       - ref.totalInvoiced)  > 0.01;
+    const anyMismatch = piMismatch || revMismatch;
+
+    // ── Metric cards: PI front-and-center, with invoice as caption ──────
     const grid = document.createElement('div');
-    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px';
-    // Personal income — read from payments.js calculation (same number shown in Payments tab)
-    const piIncome = (window._personalIncome && window._personalIncome[worker]) || 0;
-    const piSuggested = Math.max(0, piIncome + totalIn - totalOut - totalDist);
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:16px';
+
+    // Headline card: Personal Income (large) + Invoiced Revenue (small subtitle)
+    const piCard = document.createElement('div');
+    piCard.className = 'metric-card';
+    const piBorder = piMismatch ? 'border:2px solid var(--warn)' : '';
+    const revColor = revMismatch ? 'var(--warn)' : 'var(--text-faint)';
+    piCard.style.cssText = 'padding:14px 16px;' + piBorder;
+    piCard.innerHTML =
+      '<div class="metric-label" style="font-size:11px">Personal Income</div>'
+      + '<div class="metric-value" style="color:#0369a1;font-size:28px;line-height:1.1;margin-top:2px">'+_fmt(piFromLog)+'</div>'
+      + '<div style="font-size:11px;color:'+revColor+';margin-top:6px;font-weight:'+(revMismatch?'600':'500')+'">'
+        + 'from <span style="font-family:DM Mono,monospace">'+_fmt(rev)+'</span> in case invoices'
+        + (revMismatch ? ' <span title="Doesn’t match Payments tab — click Re-sync below">⚠</span>' : '')
+      + '</div>'
+      + (piMismatch ? '<div style="font-size:11px;color:var(--warn);margin-top:6px;font-weight:600">⚠ Doesn’t match Payments ('+_fmt(ref.personalIncome)+')</div>' : '');
+    grid.appendChild(piCard);
+
+    // Secondary row: Expenses + Investment Owed (unchanged from before)
+    const secRow = document.createElement('div');
+    secRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
     [
-      ['Invoiced Revenue',     _fmt(rev),          'var(--accent)'],
-      ['Personal Income',      _fmt(piIncome),     '#0369a1'],
-      ['Expenses',             _fmt(totalOut),     'var(--warn)'],
-      ['Investment Owed Back', _fmt(investOwed),   'var(--info)'],
-    ].forEach(function(item, i) {
+      ['Expenses',             _fmt(totalOut),   'var(--warn)'],
+      ['Investment Owed Back', _fmt(investOwed), 'var(--info)'],
+    ].forEach(function(item) {
       const card = document.createElement('div');
       card.className = 'metric-card';
-      
       card.innerHTML = '<div class="metric-label">'+item[0]+'</div><div class="metric-value" style="color:'+item[2]+'">'+item[1]+'</div>';
-      grid.appendChild(card);
+      secRow.appendChild(card);
     });
+    grid.appendChild(secRow);
+
     wrap.appendChild(grid);
+
+    // ── Mismatch banner with re-sync action ──
+    if(anyMismatch && canEdit) {
+      const banner = document.createElement('div');
+      banner.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;background:rgba(181,69,27,0.08);border:1px solid var(--warn);border-radius:var(--radius-sm);margin-bottom:14px';
+      banner.innerHTML =
+        '<div style="font-size:12px;color:var(--warn);font-weight:500">'
+          + '⚠ Log totals don’t match Payments tab. The log is authoritative for E&D, but you may want to re-sync from Payments.'
+        + '</div>';
+      const resyncBtn = document.createElement('button');
+      resyncBtn.className = 'btn btn-ghost btn-sm';
+      resyncBtn.style.cssText = 'background:var(--warn);color:#fff;border:none;flex-shrink:0';
+      resyncBtn.textContent = '🔄 Re-sync from Payments';
+      resyncBtn.addEventListener('click', async function() {
+        resyncBtn.disabled = true;
+        resyncBtn.textContent = 'Syncing…';
+        try {
+          if(typeof window._syncAllInvoicedToPayouts === 'function') {
+            await window._syncAllInvoicedToPayouts();
+          }
+          await renderPayoutTab();
+        } catch(err) {
+          console.error('Re-sync failed:', err);
+          alert('Re-sync failed: ' + (err.message || err));
+          resyncBtn.disabled = false;
+          resyncBtn.textContent = '🔄 Re-sync from Payments';
+        }
+      });
+      banner.appendChild(resyncBtn);
+      wrap.appendChild(banner);
+    }
 
     // Action buttons
     if(canEdit) {
@@ -1017,7 +1079,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     distForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Record Distribution</div>'
       +'<div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">'
         +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px">Revenue</div>'
-        +'<div>Personal Income: <strong style="color:#0369a1">'+_fmt(piIncome)+'</strong></div>'
+        +'<div>Personal Income: <strong style="color:#0369a1">'+_fmt(piFromLog)+'</strong></div>'
         +(totalIn?'<div>+ Other Income: <strong style="color:var(--info)">'+_fmt(totalIn)+'</strong></div>':'')
         +'<div>- Expenses: <strong style="color:var(--warn)">- '+_fmt(totalOut)+'</strong></div>'
         +'<div>- Already Distributed: <strong style="color:#888">- '+_fmt(totalDist)+'</strong></div>'
@@ -1110,9 +1172,19 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         // Amount column — right-aligned, fixed width
         const amtCol = document.createElement('div');
         amtCol.style.cssText = 'text-align:right;padding-left:12px';
-        const sign = _isExp(e.cat) ? '-' : '+';
-        const amtColor = e.cat==='initial-invest' ? 'var(--info)' : (_isExp(e.cat) ? 'var(--warn)' : '#2d6a4f');
-        amtCol.innerHTML = '<span style="font-size:13px;font-weight:700;color:'+amtColor+';font-family:DM Mono,monospace">'+sign+_fmt(e.amount)+'</span>';
+        if(e.cat === 'case-income') {
+          // Case-income rows lead with PI (the practitioner's actual cut) and
+          // show the underlying invoice amount as a smaller caption beneath.
+          // PI is what matters for personal accounting; invoice is context.
+          const piVal = e.personalIncome || 0;
+          amtCol.innerHTML =
+            '<div style="font-size:14px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace">+'+_fmt(piVal)+'</div>'
+            + '<div style="font-size:10px;color:var(--text-faint);margin-top:1px;font-family:DM Mono,monospace">of '+_fmt(e.amount)+' inv.</div>';
+        } else {
+          const sign = _isExp(e.cat) ? '-' : '+';
+          const amtColor = e.cat==='initial-invest' ? 'var(--info)' : (_isExp(e.cat) ? 'var(--warn)' : '#2d6a4f');
+          amtCol.innerHTML = '<span style="font-size:13px;font-weight:700;color:'+amtColor+';font-family:DM Mono,monospace">'+sign+_fmt(e.amount)+'</span>';
+        }
 
         row.appendChild(left); row.appendChild(actions); row.appendChild(divider); row.appendChild(amtCol);
         wrap.appendChild(row);
