@@ -352,6 +352,125 @@
   };
 
   // ── QUICK ADD CONTROLLED SUBSTANCES MODAL ───────────────────────────────────
+  // Temp store for signatures captured DURING the QA modal session, before Apply.
+  // Keyed by drug: { ephedrine: { witness: 'data:...', provider: 'data:...' }, ... }
+  let _qaSigs = {};
+  // Active sig-target while a canvas signature modal is open from inside the QA modal.
+  // null when canvas modal was opened from a real csEntries row instead.
+  let _qaSigTarget = null; // { drug: 'ephedrine', kind: 'witness' | 'provider' }
+
+  // Wrap the existing save handlers so that signatures drawn while the QA modal is open
+  // are routed into _qaSigs instead of (or in addition to) csEntries.
+  // The wrappers must be installed AFTER app.js has set them on window — we install on first use.
+  let _wrappersInstalled = false;
+  function installSigWrappersOnce() {
+    if(_wrappersInstalled) return;
+    if(typeof window.saveWitnessSignature !== 'function' || typeof window.saveCSProviderSig !== 'function') return;
+    _wrappersInstalled = true;
+
+    const _origSaveWitness = window.saveWitnessSignature;
+    window.saveWitnessSignature = function() {
+      if(_qaSigTarget && _qaSigTarget.kind === 'witness') {
+        const canvas = document.getElementById('witnessCanvas');
+        if(canvas) {
+          const sigData = canvas.toDataURL('image/png');
+          const drug = _qaSigTarget.drug;
+          if(!_qaSigs[drug]) _qaSigs[drug] = {};
+          _qaSigs[drug].witness = sigData;
+        }
+        _qaSigTarget = null;
+        if(typeof window.closeWitnessModal === 'function') window.closeWitnessModal();
+        // Re-render the QA modal so the new sig thumbnail appears
+        rerenderCSQuickAddPreservingInputs();
+        return;
+      }
+      return _origSaveWitness.apply(this, arguments);
+    };
+
+    const _origSaveProvider = window.saveCSProviderSig;
+    window.saveCSProviderSig = function() {
+      if(_qaSigTarget && _qaSigTarget.kind === 'provider') {
+        const canvas = document.getElementById('csProviderCanvas');
+        if(canvas) {
+          const sigData = canvas.toDataURL('image/png');
+          const drug = _qaSigTarget.drug;
+          if(!_qaSigs[drug]) _qaSigs[drug] = {};
+          _qaSigs[drug].provider = sigData;
+        }
+        _qaSigTarget = null;
+        if(typeof window.closeCSProviderModal === 'function') window.closeCSProviderModal();
+        rerenderCSQuickAddPreservingInputs();
+        return;
+      }
+      return _origSaveProvider.apply(this, arguments);
+    };
+
+    // If user closes the canvas modal without signing while in QA mode, clear the target.
+    const _origCloseWitness = window.closeWitnessModal;
+    window.closeWitnessModal = function() {
+      if(_qaSigTarget && _qaSigTarget.kind === 'witness') _qaSigTarget = null;
+      if(_origCloseWitness) return _origCloseWitness.apply(this, arguments);
+    };
+    const _origCloseProvider = window.closeCSProviderModal;
+    window.closeCSProviderModal = function() {
+      if(_qaSigTarget && _qaSigTarget.kind === 'provider') _qaSigTarget = null;
+      if(_origCloseProvider) return _origCloseProvider.apply(this, arguments);
+    };
+  }
+
+  // Re-render CS QA modal but preserve any in-progress input values the user has typed
+  function rerenderCSQuickAddPreservingInputs() {
+    const drugMap = {};
+    document.querySelectorAll('#csQuickAddModal .csqa-input').forEach(input => {
+      const drug = input.dataset.drug, field = input.dataset.field;
+      if(!drug || !field) return;
+      if(!drugMap[drug]) drugMap[drug] = {};
+      drugMap[drug][field] = input.type === 'checkbox' ? input.checked : input.value;
+    });
+    // Merge with existing csEntries data
+    const existing = {};
+    (window.csEntries || []).forEach(e => { if(e.drug && !existing[e.drug]) existing[e.drug] = {...e}; });
+    Object.entries(drugMap).forEach(([drug, fields]) => {
+      if(!existing[drug]) existing[drug] = { drug };
+      Object.assign(existing[drug], fields);
+    });
+    renderCSQuickAddModal(existing);
+  }
+
+  window.qa_openWitnessSig = function(drug) {
+    installSigWrappersOnce();
+    if(typeof window.openWitnessModal !== 'function') {
+      alert('Signature modal not ready. Please try again.');
+      return;
+    }
+    _qaSigTarget = { drug, kind: 'witness' };
+    // Bump z-index so canvas modal sits above the QA modal
+    const wm = document.getElementById('witnessModal');
+    if(wm) wm.style.zIndex = '10001';
+    window.openWitnessModal(-1); // -1 sentinel: existing handler will be intercepted by our wrapper
+  };
+
+  window.qa_openProviderSig = function(drug) {
+    installSigWrappersOnce();
+    if(typeof window.openCSProviderModal !== 'function') {
+      alert('Signature modal not ready. Please try again.');
+      return;
+    }
+    _qaSigTarget = { drug, kind: 'provider' };
+    const pm = document.getElementById('csProviderModal');
+    if(pm) pm.style.zIndex = '10001';
+    window.openCSProviderModal(-1);
+  };
+
+  window.qa_clearWitnessSig = function(drug) {
+    if(_qaSigs[drug]) delete _qaSigs[drug].witness;
+    rerenderCSQuickAddPreservingInputs();
+  };
+  window.qa_clearProviderSig = function(drug) {
+    if(_qaSigs[drug]) delete _qaSigs[drug].provider;
+    rerenderCSQuickAddPreservingInputs();
+  };
+
   window.openCSQuickAddModal = function() {
     const modal = document.getElementById('csQuickAddModal');
     if(!modal) return;
@@ -359,6 +478,10 @@
       alert('CS data still loading. Try again in a moment.');
       return;
     }
+    installSigWrappersOnce();
+    // Reset temp sigs each time the modal opens — we always start from the live csEntries state
+    _qaSigs = {};
+    _qaSigTarget = null;
     const existing = {};
     (window.csEntries || []).forEach(e => {
       if(e.drug && !existing[e.drug]) existing[e.drug] = e;
@@ -370,6 +493,7 @@
   window.closeCSQuickAddModal = function() {
     const modal = document.getElementById('csQuickAddModal');
     if(modal) modal.style.display = 'none';
+    _qaSigTarget = null;
   };
 
   function renderCSQuickAddModal(existingByDrug) {
@@ -386,13 +510,17 @@
       const drug = drugs[key];
       const ex = (existingByDrug && existingByDrug[key]) || {};
       const cpm = (window.getCostPerMG && window.getCostPerMG(key)) || 0;
-      const hasSig = ex.witnessSignature || ex.providerSignature;
+      // Resolve sigs: temp QA sigs (just drawn) override saved ones from existing csEntries
+      const temp = _qaSigs[key] || {};
+      const witnessSig = temp.witness || ex.witnessSignature || '';
+      const providerSig = temp.provider || ex.providerSignature || '';
+      const sigCount = (witnessSig ? 1 : 0) + (providerSig ? 1 : 0);
       html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px">
           <div style="font-size:14px;font-weight:600">${escapeHtml(drug.label || key)}</div>
           <div style="font-size:11px;color:var(--text-faint)">
             ${cpm > 0 ? '$'+cpm.toFixed(4)+'/mg' : ''}
-            ${hasSig ? ' &middot; <span style="color:var(--accent)">✓ signed</span>' : ''}
+            ${sigCount === 2 ? ' &middot; <span style="color:var(--accent)">✓ both signed</span>' : sigCount === 1 ? ' &middot; <span style="color:var(--warn)">1 of 2 signed</span>' : ''}
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
@@ -415,13 +543,33 @@
               style="width:100%;padding:8px 10px;text-align:center;font-size:14px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">
           </div>
         </div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0;font-weight:400">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0 0 12px 0;font-weight:400">
           <input type="checkbox" class="csqa-input" data-drug="${escapeHtml(key)}" data-field="newBottle" ${ex.newBottle?'checked':''} style="width:16px;height:16px">
           New Bottle Opened
         </label>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;padding-top:10px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--text-faint);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Witness:</span>
+            ${witnessSig
+              ? `<img src="${witnessSig}" style="height:30px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px">
+                 <button onclick="window.qa_openWitnessSig('${escapeHtml(key)}')" class="btn btn-ghost btn-sm" style="font-size:11px">Re-sign</button>
+                 <button onclick="window.qa_clearWitnessSig('${escapeHtml(key)}')" title="Clear signature" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:16px;line-height:1;padding:0 2px">×</button>`
+              : `<button onclick="window.qa_openWitnessSig('${escapeHtml(key)}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);border-color:var(--warn)">✍ Witness Sign</button>`
+            }
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--text-faint);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Provider:</span>
+            ${providerSig
+              ? `<img src="${providerSig}" style="height:30px;border:1px solid var(--border);border-radius:4px;background:#fff;padding:2px">
+                 <button onclick="window.qa_openProviderSig('${escapeHtml(key)}')" class="btn btn-ghost btn-sm" style="font-size:11px">Re-sign</button>
+                 <button onclick="window.qa_clearProviderSig('${escapeHtml(key)}')" title="Clear signature" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:16px;line-height:1;padding:0 2px">×</button>`
+              : `<button onclick="window.qa_openProviderSig('${escapeHtml(key)}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">✍ Provider Sign</button>`
+            }
+          </div>
+        </div>
       </div>`;
     });
-    html += `<div style="font-size:12px;color:var(--text-faint);font-style:italic;margin-top:6px">Tip: leave a drug blank to skip it. Witness/provider signatures are added on each entry's row after closing.</div>`;
+    html += `<div style="font-size:12px;color:var(--text-faint);font-style:italic;margin-top:6px">Tip: leave a drug blank to skip it. Signatures are saved to the case when you click Apply.</div>`;
     body.innerHTML = html;
   }
 
@@ -434,17 +582,22 @@
       if(!drugMap[drug]) drugMap[drug] = {};
       drugMap[drug][field] = input.type === 'checkbox' ? input.checked : input.value;
     });
-    // Preserve existing IDs and signatures by drug
+    // Preserve existing IDs and signatures by drug (from any previously-saved csEntries)
     const oldByDrug = {};
     (window.csEntries || []).forEach(e => { if(!oldByDrug[e.drug]) oldByDrug[e.drug] = e; });
     const newEntries = [];
-    Object.entries(drugMap).forEach(([drug, fields]) => {
-      const hasAny = (parseFloat(fields.amountGiven) || 0) > 0
-                  || (parseFloat(fields.leftInVial) || 0) > 0
-                  || (parseFloat(fields.wastedAmt) || 0) > 0
-                  || !!fields.newBottle;
-      if(!hasAny) return;
+    // Include any drug that has either amounts OR a freshly-drawn signature
+    const allDrugs = new Set([...Object.keys(drugMap), ...Object.keys(_qaSigs)]);
+    allDrugs.forEach(drug => {
+      const fields = drugMap[drug] || {};
+      const tempSig = _qaSigs[drug] || {};
       const old = oldByDrug[drug];
+      const hasAmount = (parseFloat(fields.amountGiven) || 0) > 0
+                     || (parseFloat(fields.leftInVial) || 0) > 0
+                     || (parseFloat(fields.wastedAmt) || 0) > 0
+                     || !!fields.newBottle;
+      // Skip drugs with no amounts AND no signatures (truly empty)
+      if(!hasAmount && !tempSig.witness && !tempSig.provider && !old) return;
       newEntries.push({
         id: (old && old.id) || (window.uid ? window.uid() : Date.now().toString(36)),
         drug,
@@ -453,11 +606,13 @@
         wasted: false,
         wastedAmt: fields.wastedAmt || '',
         newBottle: !!fields.newBottle,
-        witnessSignature: (old && old.witnessSignature) || '',
-        providerSignature: (old && old.providerSignature) || ''
+        // Freshly-drawn sigs override saved ones; otherwise keep saved
+        witnessSignature: tempSig.witness || (old && old.witnessSignature) || '',
+        providerSignature: tempSig.provider || (old && old.providerSignature) || ''
       });
     });
     window.csEntries = newEntries;
+    _qaSigs = {};
     window.closeCSQuickAddModal();
     if(typeof window.renderCSEntries === 'function') window.renderCSEntries();
     if(typeof window.renderCaseSupplies === 'function') window.renderCaseSupplies();
