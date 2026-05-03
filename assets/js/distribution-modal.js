@@ -48,6 +48,21 @@
       return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
     });
   };
+  // Recursively strip `undefined` values from a payload before handing it to
+  // Firestore's setDoc, which rejects undefined with "Unsupported field value".
+  // Keeps nulls, zeroes, empty strings, empty arrays/objects — only undefined
+  // is removed. Used as a safety net around the distribution save.
+  function _scrubUndefined(v) {
+    if(Array.isArray(v)) return v.map(_scrubUndefined);
+    if(v && typeof v === 'object') {
+      const out = {};
+      Object.keys(v).forEach(function(k) {
+        if(v[k] !== undefined) out[k] = _scrubUndefined(v[k]);
+      });
+      return out;
+    }
+    return v;
+  }
 
   // ── PUBLIC: openDistributionModal ──────────────────────────────────────────
   window.openDistributionModal = async function(worker) {
@@ -878,21 +893,24 @@
     }
     if(!_meta.date) { alert('Please pick a date.'); return; }
 
-    // Build distribution record
+    // Build distribution record. We build the object without any undefined
+    // fields up-front (Firestore rejects undefined) and then run the entire
+    // payload through _scrubUndefined() before setDoc as a safety net for any
+    // stray undefined that snuck in from older legacy data in the doc.
     const distId  = _uidFn();
     const refNum  = (_meta.refNum || '').trim() || ('DIST-' + distId.toUpperCase().slice(0,8));
     const distRec = {
       id: distId,
       refNum: refNum,
       worker: _worker,
-      date:   _meta.date,
+      date:   _meta.date || '',
       notes:  (_meta.notes || '').trim(),
-      amount: totals.total,                                        // top-line total — read by app.js _totals
-      investPaid: totals.investPaid > 0 ? totals.investPaid : undefined,  // also read by _totals
+      amount: totals.total,                  // top-line total — read by app.js _totals
       lineItems: lineItems,
       totals: totals,
       createdAt: new Date().toISOString()
     };
+    if(totals.investPaid > 0) distRec.investPaid = totals.investPaid;  // read by _totals when paying back
 
     // Save to Firestore
     try {
@@ -923,7 +941,7 @@
         });
       }
 
-      await window.setDoc(window.doc(window.db, 'atlas', 'payouts'), data);
+      await window.setDoc(window.doc(window.db, 'atlas', 'payouts'), _scrubUndefined(data));
       window.setSyncing && window.setSyncing(false);
     } catch(e) {
       console.error('Distribution save failed:', e);
