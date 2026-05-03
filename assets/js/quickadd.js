@@ -41,9 +41,21 @@
     _bundleListenerStarted = true;
     try {
       window.onSnapshot(window.doc(window.db, 'atlas', 'bundles'), (snap) => {
-        bundles = snap.exists() ? (snap.data().bundles || []) : [];
+        const raw = snap.exists() ? (snap.data().bundles || []) : [];
+        bundles = raw.map(normalizeBundle).filter(Boolean);
         const modal = document.getElementById('suppliesQuickAddModal');
         if(modal && modal.style.display === 'flex') renderBundlesBar();
+        // If an active bundle was deleted on another tab, deactivate locally
+        if(_activeBundleId && !bundles.find(b => b.id === _activeBundleId)) {
+          _activeBundleId = null;
+          if(modal && modal.style.display === 'flex') renderSuppliesQuickAddModal();
+        }
+        // If the bundle manager is open, refresh its list
+        const mgr = document.getElementById('bundleManagerModal');
+        if(mgr && mgr.style.display === 'flex' &&
+           document.getElementById('bundleManagerListView')?.style.display !== 'none') {
+          renderBundleManagerList();
+        }
       });
     } catch(e) { console.warn('quickadd: bundles init failed:', e); }
   }
@@ -68,143 +80,274 @@
   }
 
   // ── BUNDLES UI ──────────────────────────────────────────────────────────────
+  // A bundle is a saved list of item IDs. Selecting one in the supplies modal
+  // pins those items at the top of the list — quantities are still entered per
+  // case in the modal. Manage / create / edit happens in a dedicated modal.
+
+  let _activeBundleId = null;       // the bundle whose items are currently pinned (or null)
+  let _editingBundleId = null;      // bundle being edited in manager modal (null = creating new)
+  let _editCheckedIds = null;       // Set<itemId> for the in-progress edit form
+
+  // Migrate old-format bundles ({items:[{itemId,qty}], itemsOnly}) to {itemIds:[]}
+  function normalizeBundle(b) {
+    if(!b || typeof b !== 'object') return null;
+    if(Array.isArray(b.itemIds)) return b;
+    if(Array.isArray(b.items)) {
+      const itemIds = b.items
+        .map(i => typeof i === 'string' ? i : (i && i.itemId))
+        .filter(Boolean);
+      const cleaned = { ...b, itemIds };
+      delete cleaned.items;
+      delete cleaned.itemsOnly;
+      return cleaned;
+    }
+    return { ...b, itemIds: [] };
+  }
+
+  function getBundleById(id) { return bundles.find(b => b.id === id); }
+  function getActiveBundle() { return _activeBundleId ? getBundleById(_activeBundleId) : null; }
+
   function renderBundlesBar() {
     const bar = document.getElementById('quickAddBundlesBar');
     if(!bar) return;
     let html = '';
     if(!bundles.length) {
-      html = '<div style="font-size:12px;color:var(--text-faint);font-style:italic;padding:4px 0;flex:1">No bundles yet — set quantities below, then click one of the save buttons to create a bundle.</div>';
+      html = '<div style="font-size:12px;color:var(--text-faint);font-style:italic;padding:4px 0;flex:1">No bundles yet — click "Manage Bundles" to create one.</div>';
     } else {
       bundles.forEach(b => {
-        const itemCount = (b.items || []).length;
-        const itemsOnly = !!b.itemsOnly;
-        const tag = itemsOnly ? '<span style="font-size:9px;font-weight:600;letter-spacing:.4px;background:rgba(29,53,87,.18);color:var(--info);padding:1px 5px;border-radius:8px;margin-right:4px">LIST</span>' : '';
-        html += `<div style="display:inline-flex;align-items:stretch;background:var(--info-light);border:1px solid var(--info);border-radius:20px;overflow:hidden;font-size:12px;font-weight:500">
-          <button onclick="window.qa_applyBundle('${b.id}')" title="Click to apply this bundle" style="background:none;border:none;color:var(--info);padding:5px 4px 5px 10px;cursor:pointer;font:inherit;font-weight:600;display:inline-flex;align-items:center">${tag}${escapeHtml(b.name)}</button>
-          <span style="font-size:10px;color:var(--info);opacity:.65;align-self:center;padding:0 6px">${itemCount}</span>
-          <button onclick="window.qa_bundleMenu('${b.id}',event)" title="Bundle options" style="background:rgba(29,53,87,.08);border:none;border-left:1px solid rgba(29,53,87,.2);color:var(--info);padding:0 9px;cursor:pointer;font:inherit;font-size:14px">⋯</button>
-        </div>`;
+        const itemCount = (b.itemIds || []).length;
+        const isActive = b.id === _activeBundleId;
+        const bg = isActive ? 'var(--info)' : 'var(--info-light)';
+        const fg = isActive ? '#fff' : 'var(--info)';
+        html += `<button onclick="window.qa_toggleBundleActive('${b.id}')" title="${isActive ? 'Selected — click to deselect' : 'Click to pin these items at the top'}" style="display:inline-flex;align-items:center;gap:6px;background:${bg};border:1px solid var(--info);color:${fg};border-radius:20px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit">
+          ${isActive ? '<span style="font-size:11px;line-height:1">✓</span>' : ''}
+          <span>${escapeHtml(b.name)}</span>
+          <span style="font-size:10px;opacity:.75;font-weight:500">(${itemCount})</span>
+        </button>`;
       });
     }
-    html += `<div style="display:inline-flex;gap:6px;margin-left:auto">
-      <button onclick="window.qa_saveCurrentAsBundle(false)" class="btn btn-ghost btn-sm" title="Save current items + their quantities as a reusable bundle" style="font-size:11px;padding:4px 10px">+ Save with quantities</button>
-      <button onclick="window.qa_saveCurrentAsBundle(true)" class="btn btn-ghost btn-sm" title="Save just the list of items (no quantities) — apply later and fill in quantities per case" style="font-size:11px;padding:4px 10px">+ Save items only</button>
-    </div>`;
+    html += `<button onclick="window.qa_openBundleManager()" class="btn btn-ghost btn-sm" title="Create, edit, or delete bundles" style="font-size:11px;padding:4px 10px;margin-left:auto">✏ Manage Bundles</button>`;
     bar.innerHTML = html;
   }
 
-  window.qa_applyBundle = function(bundleId) {
-    const b = bundles.find(x => x.id === bundleId);
-    if(!b) return;
-    let appliedCount = 0, missing = [];
-    (b.items || []).forEach(bi => {
-      const input = document.querySelector(`#suppliesQuickAddModal .qa-qty-input[data-item-id="${cssEscape(bi.itemId)}"]`);
-      if(input) {
-        // qty 0 (items-only bundle) → seed with 1 so the item is visible/counted; user adjusts.
-        // qty > 0 → use the bundle's stored quantity directly.
-        input.value = (bi.qty > 0) ? bi.qty : 1;
-        appliedCount++;
-      } else {
-        missing.push(bi.itemId);
-      }
+  // Capture qty values typed into supplies-modal inputs back into _qaInitial
+  // so re-renders (e.g., toggling a bundle pin) preserve user input.
+  function captureCurrentInputs() {
+    if(!window._qaInitial) window._qaInitial = {};
+    document.querySelectorAll('#suppliesQuickAddModal .qa-qty-input').forEach(input => {
+      const id = input.dataset.itemId;
+      if(!id) return;
+      const v = parseFloat(input.value);
+      if(v > 0) window._qaInitial[id] = v;
+      else delete window._qaInitial[id];
     });
-    updateQuickAddTotal();
-    if(missing.length) {
-      console.warn(`Bundle "${b.name}": ${missing.length} item(s) no longer in inventory and were skipped:`, missing);
-    }
-  };
-
-  function cssEscape(s) {
-    // Escape for use in CSS selector — covers most cases. Modern browsers have CSS.escape.
-    if(typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(String(s));
-    return String(s).replace(/(["\\\]])/g, '\\$1');
   }
 
-  window.qa_bundleMenu = function(bundleId, event) {
-    event.stopPropagation();
-    const b = bundles.find(x => x.id === bundleId);
-    if(!b) return;
-    const action = (prompt(
-      `Bundle: "${b.name}" (${(b.items||[]).length} item(s))\n\n` +
-      `Type a letter:\n` +
-      `  R = Rename\n` +
-      `  U = Update with current modal quantities\n` +
-      `  D = Delete\n\n` +
-      `(Leave blank to cancel)`
-    ) || '').trim().toLowerCase();
-    if(action === 'r') return qa_renameBundle(bundleId);
-    if(action === 'u') return qa_updateBundleWithCurrent(bundleId);
-    if(action === 'd') return qa_deleteBundle(bundleId);
+  window.qa_toggleBundleActive = function(bundleId) {
+    captureCurrentInputs();
+    _activeBundleId = (_activeBundleId === bundleId) ? null : bundleId;
+    renderSuppliesQuickAddModal();
   };
 
-  async function qa_renameBundle(bundleId) {
-    const b = bundles.find(x => x.id === bundleId);
-    if(!b) return;
-    const newName = prompt('Rename bundle:', b.name);
-    if(!newName || !newName.trim() || newName.trim() === b.name) return;
-    b.name = newName.trim();
-    b.savedAt = new Date().toISOString();
-    if(await saveBundles()) renderBundlesBar();
-  }
-
-  async function qa_updateBundleWithCurrent(bundleId) {
-    const b = bundles.find(x => x.id === bundleId);
-    if(!b) return;
-    const items = readQuickAddItemQuantities();
-    if(!items.length) {
-      alert('No quantities set in the modal — set qty ≥ 1 on the items you want to include, then update.');
+  // ── BUNDLE MANAGER MODAL ────────────────────────────────────────────────────
+  window.qa_openBundleManager = function() {
+    const modal = document.getElementById('bundleManagerModal');
+    if(!modal) return;
+    if(!window.items || !window.items.length) {
+      alert('Inventory is still loading. Try again in a moment.');
       return;
     }
-    const typeLabel = b.itemsOnly ? 'items-only' : 'with quantities';
-    if(!confirm(`Replace items in "${b.name}" (${typeLabel}) with the current ${items.length} item(s)?`)) return;
-    // Preserve the bundle's type — items-only stays items-only, with-quantities stays with-quantities
-    b.items = b.itemsOnly
-      ? items.map(({itemId}) => ({itemId, qty: 0}))
-      : items;
-    b.savedAt = new Date().toISOString();
-    if(await saveBundles()) {
-      renderBundlesBar();
-      alert(`Bundle "${b.name}" updated with ${items.length} item(s).`);
+    modal.style.display = 'flex';
+    qa_showBundleList();
+  };
+
+  window.qa_closeBundleManager = function() {
+    const modal = document.getElementById('bundleManagerModal');
+    if(modal) modal.style.display = 'none';
+    _editingBundleId = null;
+    _editCheckedIds = null;
+  };
+
+  function qa_showBundleList() {
+    const lv = document.getElementById('bundleManagerListView');
+    const ev = document.getElementById('bundleManagerEditView');
+    const lf = document.getElementById('bundleManagerListFooter');
+    if(lv) lv.style.display = 'block';
+    if(ev) ev.style.display = 'none';
+    if(lf) lf.style.display = 'flex';
+    renderBundleManagerList();
+  }
+
+  function renderBundleManagerList() {
+    const container = document.getElementById('bundleManagerList');
+    if(!container) return;
+    if(!bundles.length) {
+      container.innerHTML = '<div style="text-align:center;color:var(--text-faint);padding:24px;font-size:13px;font-style:italic">No bundles yet. Click "+ Create New Bundle" below to make your first one.</div>';
+      return;
+    }
+    container.innerHTML = bundles.map(b => {
+      const count = (b.itemIds || []).length;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:8px;gap:10px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:14px;font-weight:600">${escapeHtml(b.name)}</div>
+          <div style="font-size:11px;color:var(--text-faint)">${count} item${count !== 1 ? 's' : ''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button onclick="window.qa_editBundle('${b.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">✏ Edit</button>
+          <button onclick="window.qa_deleteBundleFromManager('${b.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);border-color:var(--warn)">🗑 Delete</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  window.qa_startNewBundle = function() {
+    _editingBundleId = null;
+    _editCheckedIds = new Set();
+    const titleEl = document.getElementById('bundleEditTitle');
+    if(titleEl) titleEl.textContent = '+ Create New Bundle';
+    const nameEl = document.getElementById('bundleEditName');
+    if(nameEl) nameEl.value = '';
+    const searchEl = document.getElementById('bundleEditSearch');
+    if(searchEl) searchEl.value = '';
+    document.getElementById('bundleManagerListView').style.display = 'none';
+    document.getElementById('bundleManagerEditView').style.display = 'flex';
+    const lf = document.getElementById('bundleManagerListFooter');
+    if(lf) lf.style.display = 'none';
+    renderBundleEditItems();
+    setTimeout(() => nameEl?.focus(), 50);
+  };
+
+  window.qa_editBundle = function(bundleId) {
+    const b = getBundleById(bundleId);
+    if(!b) return;
+    _editingBundleId = bundleId;
+    _editCheckedIds = new Set(b.itemIds || []);
+    const titleEl = document.getElementById('bundleEditTitle');
+    if(titleEl) titleEl.textContent = `✏ Edit: ${b.name}`;
+    document.getElementById('bundleEditName').value = b.name;
+    document.getElementById('bundleEditSearch').value = '';
+    document.getElementById('bundleManagerListView').style.display = 'none';
+    document.getElementById('bundleManagerEditView').style.display = 'flex';
+    const lf = document.getElementById('bundleManagerListFooter');
+    if(lf) lf.style.display = 'none';
+    renderBundleEditItems();
+  };
+
+  window.qa_cancelBundleEdit = function() {
+    _editingBundleId = null;
+    _editCheckedIds = null;
+    qa_showBundleList();
+  };
+
+  window.renderBundleEditItems = function() {
+    const container = document.getElementById('bundleEditItems');
+    if(!container) return;
+    const allItems = window.items || [];
+    if(typeof window.linkCSInvIds === 'function') window.linkCSInvIds();
+    const isCS = window.isCSItem || (() => false);
+    const filterText = (document.getElementById('bundleEditSearch')?.value || '').toLowerCase().trim();
+    let validItems = allItems.filter(i => i && !isCS(i));
+    if(filterText) {
+      validItems = validItems.filter(i =>
+        ((i.generic||'') + ' ' + (i.name||'') + ' ' + (i.code||'') + ' ' + (i.category||''))
+          .toLowerCase().includes(filterText)
+      );
+    }
+    const byCategory = {};
+    validItems.forEach(item => {
+      const cat = item.category || 'Other';
+      if(!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(item);
+    });
+    const sortedCats = Object.keys(byCategory).sort();
+    const checkedIds = _editCheckedIds || new Set();
+    let html = '';
+    if(!sortedCats.length) {
+      html = '<div style="text-align:center;color:var(--text-faint);padding:20px;font-size:13px">No matching items.</div>';
+    } else {
+      sortedCats.forEach(cat => {
+        html += `<div style="margin-bottom:10px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--info);padding:5px 0;border-bottom:1px solid var(--border)">${escapeHtml(cat)}</div>`;
+        byCategory[cat]
+          .sort((a,b) => (a.generic||'').localeCompare(b.generic||''))
+          .forEach(item => {
+            const checked = checkedIds.has(item.id);
+            html += `<label style="display:flex;align-items:center;gap:10px;padding:7px 4px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--surface2)">
+              <input type="checkbox" ${checked?'checked':''} onchange="window.qa_toggleBundleEditItem('${escapeHtml(item.id)}', this.checked)" style="width:16px;height:16px;flex-shrink:0;cursor:pointer">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.generic||item.name||'?')}</div>
+                <div style="font-size:11px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.name||'')}</div>
+              </div>
+            </label>`;
+          });
+        html += `</div>`;
+      });
+    }
+    container.innerHTML = html;
+    updateBundleEditCount();
+  };
+
+  window.qa_toggleBundleEditItem = function(itemId, checked) {
+    if(!_editCheckedIds) _editCheckedIds = new Set();
+    if(checked) _editCheckedIds.add(itemId);
+    else _editCheckedIds.delete(itemId);
+    updateBundleEditCount();
+  };
+
+  function updateBundleEditCount() {
+    const el = document.getElementById('bundleEditCount');
+    if(el) {
+      const n = _editCheckedIds ? _editCheckedIds.size : 0;
+      el.textContent = `${n} item${n !== 1 ? 's' : ''} selected`;
     }
   }
 
-  async function qa_deleteBundle(bundleId) {
-    const b = bundles.find(x => x.id === bundleId);
+  window.qa_saveBundleFromManager = async function() {
+    const nameInput = document.getElementById('bundleEditName');
+    const name = (nameInput?.value || '').trim();
+    if(!name) {
+      alert('Please enter a bundle name.');
+      nameInput?.focus();
+      return;
+    }
+    const itemIds = [...(_editCheckedIds || [])];
+    if(!itemIds.length) {
+      alert('Please check at least one item to include in the bundle.');
+      return;
+    }
+    if(_editingBundleId) {
+      const b = getBundleById(_editingBundleId);
+      if(b) {
+        b.name = name;
+        b.itemIds = itemIds;
+        b.savedAt = new Date().toISOString();
+      }
+    } else {
+      bundles.push({
+        id: window.uid ? window.uid() : (Date.now().toString(36)),
+        name,
+        itemIds,
+        createdAt: new Date().toISOString(),
+        savedAt: new Date().toISOString()
+      });
+    }
+    if(await saveBundles()) {
+      _editingBundleId = null;
+      _editCheckedIds = null;
+      qa_showBundleList();
+      renderBundlesBar();
+    }
+  };
+
+  window.qa_deleteBundleFromManager = async function(bundleId) {
+    const b = getBundleById(bundleId);
     if(!b) return;
     if(!confirm(`Delete bundle "${b.name}"? This cannot be undone.`)) return;
     bundles = bundles.filter(x => x.id !== bundleId);
-    if(await saveBundles()) renderBundlesBar();
-  }
-
-  window.qa_saveCurrentAsBundle = async function(itemsOnly) {
-    const items = readQuickAddItemQuantities();
-    if(!items.length) {
-      alert(itemsOnly
-        ? 'No items selected. Set qty ≥ 1 on the items you want to include in the bundle, then click "Save items only".'
-        : 'No quantities set. Fill in some quantities first, then click "Save with quantities".'
-      );
-      return;
-    }
-    const promptLabel = itemsOnly
-      ? `Bundle name (items only — quantities will be set per case):\n\nIncludes ${items.length} item(s).`
-      : `Bundle name (with current quantities):\n\nIncludes ${items.length} item(s).`;
-    const name = prompt(promptLabel);
-    if(!name || !name.trim()) return;
-    // For items-only, store qty=0 so apply() knows to seed with 1 instead of using the saved qty
-    const bundleItems = itemsOnly
-      ? items.map(({itemId}) => ({itemId, qty: 0}))
-      : items;
-    bundles.push({
-      id: window.uid ? window.uid() : (Date.now().toString(36)),
-      name: name.trim(),
-      items: bundleItems,
-      itemsOnly: !!itemsOnly,
-      createdAt: new Date().toISOString(),
-      savedAt: new Date().toISOString()
-    });
+    if(_activeBundleId === bundleId) _activeBundleId = null;
     if(await saveBundles()) {
+      renderBundleManagerList();
       renderBundlesBar();
-      alert(`Bundle "${name.trim()}" saved with ${bundleItems.length} item(s)${itemsOnly ? ' (items only)' : ''}.`);
     }
   };
 
@@ -243,44 +386,78 @@
           .toLowerCase().includes(filterText)
       );
     }
-    // Group by category
+    const worker = window.currentWorker || 'dev';
+    const getStock = window.getStock || (() => 0);
+
+    // If a bundle is active, split items into pinned vs. remaining
+    const activeBundle = getActiveBundle();
+    const pinnedIds = activeBundle ? new Set(activeBundle.itemIds || []) : null;
+    const pinnedItems = activeBundle
+      ? (activeBundle.itemIds || [])
+          .map(id => validItems.find(i => i.id === id))
+          .filter(Boolean)
+      : [];
+    const remainingItems = pinnedIds
+      ? validItems.filter(i => !pinnedIds.has(i.id))
+      : validItems;
+
+    // Group remaining items by category
     const byCategory = {};
-    validItems.forEach(item => {
+    remainingItems.forEach(item => {
       const cat = item.category || 'Other';
       if(!byCategory[cat]) byCategory[cat] = [];
       byCategory[cat].push(item);
     });
     const sortedCats = Object.keys(byCategory).sort();
-    const worker = window.currentWorker || 'dev';
-    const getStock = window.getStock || (() => 0);
+
+    function renderItemRow(item) {
+      const stock = getStock(item, worker);
+      const initialQty = (window._qaInitial && window._qaInitial[item.id]) || 0;
+      const lowStock = stock <= (item.alert || 0);
+      const cost = item.costPerUnit || 0;
+      return `<div style="display:grid;grid-template-columns:1fr 70px 50px 80px;gap:10px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--surface2);font-size:13px">
+        <div style="min-width:0">
+          <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.generic||item.name||'?')}</div>
+          <div style="font-size:11px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.name||'')}</div>
+        </div>
+        <div style="font-family:'DM Mono',monospace;color:var(--text-muted);font-size:12px;text-align:right">$${cost.toFixed(2)}</div>
+        <div style="text-align:center"><span class="stock-badge ${lowStock?'stock-low':'stock-ok'}" style="font-size:10px">${stock}</span></div>
+        <input type="number" min="0" step="0.5" value="${initialQty || ''}" placeholder="0"
+          data-item-id="${escapeHtml(item.id)}" class="qa-qty-input"
+          oninput="window.qa_updateTotal()"
+          style="width:100%;padding:6px 8px;text-align:center;font-size:14px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">
+      </div>`;
+    }
 
     let html = '';
-    if(!sortedCats.length) {
-      html = '<div style="text-align:center;color:var(--text-faint);padding:30px;font-size:14px">No matching items.</div>';
+
+    // 1. Pinned bundle section (if a bundle is active)
+    if(activeBundle) {
+      if(pinnedItems.length) {
+        html += `<div style="margin-bottom:18px;background:var(--info-light);border:1px solid var(--info);border-radius:var(--radius-sm);padding:10px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--info);padding:0 0 8px 0;border-bottom:1px solid rgba(29,53,87,.2);margin-bottom:6px">
+            <span>📌 ${escapeHtml(activeBundle.name)}</span>
+            <span style="font-size:10px;font-weight:500;text-transform:none;letter-spacing:0;opacity:.75">${pinnedItems.length} pinned · enter quantities below</span>
+          </div>`;
+        pinnedItems.forEach(item => { html += renderItemRow(item); });
+        html += `</div>`;
+      } else {
+        html += `<div style="margin-bottom:14px;background:var(--info-light);border:1px solid var(--info);border-radius:var(--radius-sm);padding:14px;font-size:13px;color:var(--info)">
+          📌 <strong>${escapeHtml(activeBundle.name)}</strong> is selected, but its items don't match your current search.
+        </div>`;
+      }
+    }
+
+    // 2. Remaining items grouped by category
+    if(!sortedCats.length && !pinnedItems.length) {
+      html += '<div style="text-align:center;color:var(--text-faint);padding:30px;font-size:14px">No matching items.</div>';
     } else {
       sortedCats.forEach(cat => {
         html += `<div style="margin-bottom:14px">
           <div style="position:sticky;top:0;background:var(--surface);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--info);padding:6px 0;border-bottom:1px solid var(--border);z-index:1">${escapeHtml(cat)}</div>`;
         byCategory[cat]
           .sort((a,b) => (a.generic||'').localeCompare(b.generic||''))
-          .forEach(item => {
-            const stock = getStock(item, worker);
-            const initialQty = (window._qaInitial && window._qaInitial[item.id]) || 0;
-            const lowStock = stock <= (item.alert || 0);
-            const cost = item.costPerUnit || 0;
-            html += `<div style="display:grid;grid-template-columns:1fr 70px 50px 80px;gap:10px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--surface2);font-size:13px">
-              <div style="min-width:0">
-                <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.generic||item.name||'?')}</div>
-                <div style="font-size:11px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.name||'')}</div>
-              </div>
-              <div style="font-family:'DM Mono',monospace;color:var(--text-muted);font-size:12px;text-align:right">$${cost.toFixed(2)}</div>
-              <div style="text-align:center"><span class="stock-badge ${lowStock?'stock-low':'stock-ok'}" style="font-size:10px">${stock}</span></div>
-              <input type="number" min="0" step="0.5" value="${initialQty || ''}" placeholder="0"
-                data-item-id="${escapeHtml(item.id)}" class="qa-qty-input"
-                oninput="window.qa_updateTotal()"
-                style="width:100%;padding:6px 8px;text-align:center;font-size:14px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">
-            </div>`;
-          });
+          .forEach(item => { html += renderItemRow(item); });
         html += `</div>`;
       });
     }
