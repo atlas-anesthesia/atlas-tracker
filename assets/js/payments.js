@@ -329,7 +329,10 @@ function renderPaymentRows() {
     return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${bl};align-items:center;min-height:40px">
       <div style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>
       <div style="padding:4px 3px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${r.worker==='dev'?'Dev':'Josh'}</div>
-      <div style="padding:4px 3px;font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${scName}">${scName||'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
+      <div style="padding:4px 6px;display:flex;align-items:center;gap:5px;min-width:0" title="${scName}${center ? (centerPays?' — Surgery center is billed':' — Patient is billed directly') : ''}">
+        ${center ? `<span style="font-size:9px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:1px 5px;border-radius:3px;flex-shrink:0;${centerPays?'background:#dbeafe;color:#1e40af':'background:#fef3c7;color:#92400e'}">${centerPays?'Surgery':'Patient'}</span>` : ''}
+        <span style="font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${scName||'<span style="color:#fca5a5">—</span>'}</span>
+      </div>
       <div style="padding:4px 3px">${ro(caseFmt)}</div>
       <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-depositDate'+i,r.depositDate)}</div>
       ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>`}
