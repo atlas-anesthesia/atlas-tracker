@@ -25,9 +25,10 @@
   let _data        = null;         // raw atlas/payouts doc
   let _entries     = [];           // entries filtered to _worker
   let _selectedIds = new Set();    // entry IDs included in this distribution
-  let _customItems = [];           // [{name, amount, type}]
+  let _customItems = [];           // [{name, invoiced, actual, type}]
   let _meta        = { date: '', refNum: '', notes: '' };
   let _previewMode = false;
+  let _distributedIds = new Set(); // entries already included in any past distribution
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const _fmt = function(n) {
@@ -72,6 +73,18 @@
     }
 
     _entries = (_data.entries || []).filter(function(e) { return e.worker === _worker; });
+
+    // Set of entry IDs that already appear in some prior distribution for this
+    // worker — used to render a "DISTRIBUTED" tag on those rows so the user
+    // doesn't unwittingly include an item that's already been paid out.
+    _distributedIds = new Set();
+    (_data.distributions || []).forEach(function(d) {
+      if(d.worker !== _worker) return;
+      (d.lineItems || []).forEach(function(li) {
+        if(li.sourceId) _distributedIds.add(li.sourceId);
+      });
+    });
+
     _renderModal();
   };
 
@@ -300,6 +313,10 @@
     const bgStyle = future ? 'opacity:.5;cursor:not-allowed'
                   : (checked ? 'background:rgba(29,83,198,0.05);cursor:pointer' : 'cursor:pointer');
 
+    const distTag = _distributedIds.has(it.id)
+      ? '<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(45,106,79,0.12);color:#2d6a4f;margin-left:7px;vertical-align:middle">✓ DISTRIBUTED</span>'
+      : '';
+
     return '<label style="display:flex;align-items:flex-start;gap:11px;padding:10px 14px;' +
       'border-bottom:1px solid var(--border);transition:background .12s;' + bgStyle + '">' +
       '<input type="checkbox" data-id="' + _esc(it.id) + '" class="dist-item-cb"' +
@@ -307,7 +324,7 @@
         ' style="margin-top:2px;flex-shrink:0;cursor:' + (future ? 'not-allowed' : 'pointer') + '">' +
       '<div style="flex:1;min-width:0">' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;' +
-        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(it.name||'-') + '</div>' +
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(it.name||'-') + distTag + '</div>' +
         metaLine +
       '</div>' +
       rightCol +
@@ -315,23 +332,49 @@
   }
 
   // ── Section: Custom items ──────────────────────────────────────────────────
+  // Custom rows have two numeric inputs:
+  //   - "Invoiced": optional, contextual (rendered alongside actual on the
+  //     PDF/preview as a second column, mirroring how case-income shows
+  //     Invoice + PI). Doesn't affect totals.
+  //   - "Actual Pay": the amount that contributes to the distribution total.
+  //     Sign comes from `type` (income/+, expense/−, invest-payback/+).
+  // Columns: name | invoiced | actual | type | delete
+  // Grid template: 1fr 92px 92px 132px 30px = name flex + 4 fixed columns.
   function _customInner() {
+    const colTemplate = '1fr 92px 92px 132px 30px';
+
     let rows;
     if(_customItems.length === 0) {
       rows = '<div style="padding:18px;text-align:center;color:var(--text-faint);font-size:12px">' +
         'No custom items yet — click <strong>+ Add Custom</strong> to add line items not in the log' +
       '</div>';
     } else {
-      rows = _customItems.map(function(c, idx) {
-        return '<div style="display:grid;grid-template-columns:1fr 110px 150px 36px;gap:8px;' +
+      // Column-label header row — only shown when there's at least one item
+      const headerRow =
+        '<div style="display:grid;grid-template-columns:' + colTemplate + ';gap:8px;' +
+          'padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);' +
+          'font-size:9px;font-weight:700;text-transform:uppercase;color:var(--text-faint);letter-spacing:.5px">' +
+          '<div>Description</div>' +
+          '<div style="text-align:right">Invoiced</div>' +
+          '<div style="text-align:right">Actual Pay</div>' +
+          '<div>Type</div>' +
+          '<div></div>' +
+        '</div>';
+
+      const itemRows = _customItems.map(function(c, idx) {
+        return '<div style="display:grid;grid-template-columns:' + colTemplate + ';gap:8px;' +
           'padding:9px 14px;border-bottom:1px solid var(--border);align-items:center">' +
           '<input type="text" class="dist-cu-name" data-idx="' + idx + '" value="' + _esc(c.name) + '" ' +
             'placeholder="Description" style="padding:7px 10px;border:1px solid var(--border);' +
             'border-radius:5px;font-size:12px;background:var(--bg);color:var(--text);font-family:inherit;box-sizing:border-box">' +
-          '<input type="number" step="0.01" class="dist-cu-amt" data-idx="' + idx + '" value="' + _esc(c.amount) + '" ' +
-            'placeholder="0.00" style="padding:7px 10px;border:1px solid var(--border);' +
-            'border-radius:5px;font-size:12px;background:var(--bg);color:var(--text);' +
-            'font-family:DM Mono,monospace;text-align:right;box-sizing:border-box">' +
+          '<input type="number" step="0.01" class="dist-cu-invoiced" data-idx="' + idx + '" value="' + _esc(c.invoiced) + '" ' +
+            'placeholder="0.00" title="Invoiced amount (optional, contextual)" ' +
+            'style="padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:12px;' +
+            'background:var(--bg);color:var(--text-muted);font-family:DM Mono,monospace;text-align:right;box-sizing:border-box">' +
+          '<input type="number" step="0.01" class="dist-cu-actual" data-idx="' + idx + '" value="' + _esc(c.actual) + '" ' +
+            'placeholder="0.00" title="Actual amount applied to total" ' +
+            'style="padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:12px;' +
+            'background:var(--bg);color:var(--text);font-family:DM Mono,monospace;text-align:right;box-sizing:border-box;font-weight:600">' +
           '<select class="dist-cu-type" data-idx="' + idx + '" ' +
             'style="padding:7px 8px;border:1px solid var(--border);border-radius:5px;' +
             'font-size:12px;background:var(--bg);color:var(--text);font-family:inherit;box-sizing:border-box">' +
@@ -344,6 +387,8 @@
             'font-size:14px;padding:4px 8px;border-radius:4px;line-height:1">✕</button>' +
         '</div>';
       }).join('');
+
+      rows = headerRow + itemRows;
     }
 
     return '<div style="margin-bottom:22px">' +
@@ -417,9 +462,10 @@
     });
 
     _customItems.forEach(function(c) {
-      const amt = parseFloat(c.amount) || 0;
-      if(c.type === 'expense')       custom -= amt;
-      else                            custom += amt;
+      // Contribution comes from the "actual pay" field; "invoiced" is contextual only.
+      const actual = parseFloat(c.actual) || 0;
+      if(c.type === 'expense')       custom -= actual;
+      else                            custom += actual;
     });
 
     const total = pi + otherIncome - expenses + investPaid + custom;
@@ -452,15 +498,18 @@
       items.push(item);
     });
     _customItems.forEach(function(c) {
-      const amt  = parseFloat(c.amount) || 0;
-      if(amt === 0 && !(c.name||'').trim()) return; // skip empty
+      const invoiced = parseFloat(c.invoiced) || 0;
+      const actual   = parseFloat(c.actual)   || 0;
+      if(actual === 0 && invoiced === 0 && !(c.name||'').trim()) return; // skip empty
       const sign = c.type === 'expense' ? -1 : 1;
       items.push({
-        type:       'custom',
-        customType: c.type,
-        name:       c.name || 'Custom item',
-        amount:     amt,
-        contribution: amt * sign
+        type:         'custom',
+        customType:   c.type,
+        name:         c.name || 'Custom item',
+        invoiced:     invoiced,
+        actual:       actual,
+        amount:       actual,            // legacy compat — older readers use `amount`
+        contribution: actual * sign
       });
     });
     return items;
@@ -531,7 +580,7 @@
   function _wireCustom() {
     const addBtn = document.getElementById('dist-add-custom');
     if(addBtn) addBtn.addEventListener('click', function() {
-      _customItems.push({ name:'', amount:'', type:'income' });
+      _customItems.push({ name:'', invoiced:'', actual:'', type:'income' });
       _refreshCustom();
       // focus the new row's name input
       const idx = _customItems.length - 1;
@@ -555,11 +604,21 @@
       });
     });
 
-    document.querySelectorAll('.dist-cu-amt').forEach(function(inp) {
+    document.querySelectorAll('.dist-cu-invoiced').forEach(function(inp) {
       inp.addEventListener('input', function(e) {
         const idx = parseInt(e.target.getAttribute('data-idx'));
         if(_customItems[idx]) {
-          _customItems[idx].amount = e.target.value;
+          _customItems[idx].invoiced = e.target.value;
+          // Invoiced is contextual only — doesn't change totals
+        }
+      });
+    });
+
+    document.querySelectorAll('.dist-cu-actual').forEach(function(inp) {
+      inp.addEventListener('input', function(e) {
+        const idx = parseInt(e.target.getAttribute('data-idx'));
+        if(_customItems[idx]) {
+          _customItems[idx].actual = e.target.value;
           _refreshTotals();
         }
       });
@@ -651,22 +710,28 @@
       { title:'Other Income',               filter: function(it) { return it.type === 'other-income'; }, color:'#2d6a4f' },
       { title:'Expenses & Supplies',        filter: function(it) { return it.type === 'supplies' || it.type === 'expense'; }, color:'#b91c1c' },
       { title:'Initial Investment Payback', filter: function(it) { return it.type === 'initial-invest'; }, color:'#1d3557' },
-      { title:'Custom Items',               filter: function(it) { return it.type === 'custom'; }, color:'#525252' }
+      { title:'Custom Items',               filter: function(it) { return it.type === 'custom'; }, color:'#525252', isCustom:true }
     ];
 
     sections.forEach(function(sec) {
       const secItems = items.filter(sec.filter);
       if(!secItems.length) return;
 
-      // Section title — for the Case Invoices section we add Invoice / PI
-      // column labels on the right so the two-column row layout below is legible.
-      if(sec.isCases) {
+      // Two-column layout fires for case-income (always) and for the custom
+      // section when at least one item has an invoiced amount entered.
+      const customHasInvoiced = sec.isCustom && secItems.some(function(it) { return (it.invoiced || 0) > 0; });
+      const isTwoCol  = sec.isCases || customHasInvoiced;
+      const leftLbl   = sec.isCases ? 'Invoice' : 'Invoiced';
+      const rightLbl  = sec.isCases ? 'Personal Income' : 'Actual Pay';
+
+      // Section title — for two-column sections we add right-aligned column labels
+      if(isTwoCol) {
         html += '<div style="margin-bottom:18px">' +
           '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #ececec">' +
             '<div style="font-size:10px;font-weight:700;color:' + sec.color + ';text-transform:uppercase;letter-spacing:.7px">' + _esc(sec.title) + '</div>' +
             '<div style="display:flex;flex-shrink:0">' +
-              '<div style="font-size:9px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.5px;width:100px;text-align:right">Invoice</div>' +
-              '<div style="font-size:9px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.5px;width:120px;text-align:right;padding-left:10px">Personal Income</div>' +
+              '<div style="font-size:9px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.5px;width:100px;text-align:right">' + leftLbl + '</div>' +
+              '<div style="font-size:9px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.5px;width:120px;text-align:right;padding-left:10px">' + rightLbl + '</div>' +
             '</div>' +
           '</div>';
       } else {
@@ -677,13 +742,38 @@
       }
 
       secItems.forEach(function(it) {
-        if(it.type === 'case-income') {
-          // Two-column case row: name (left) | invoice (gray) | PI (blue, bold)
-          const subParts = [];
-          if(it.supplier) subParts.push(it.supplier);
-          let n = it.notes || '';
-          if(n.indexOf('Center: ') === 0) n = n.slice(8);
-          if(n) subParts.push(n);
+        // Decide layout: case rows always two-col, custom rows two-col when
+        // either the item itself OR a sibling custom item has invoiced filled
+        // (so the columns align across the whole custom section).
+        const itemIsTwoCol = sec.isCases || (sec.isCustom && customHasInvoiced);
+
+        if(itemIsTwoCol) {
+          let leftAmt, rightAmt, rightSign, rightColor;
+          let subParts = [];
+          if(sec.isCases) {
+            leftAmt    = it.invoiceAmount || it.amount || 0;
+            rightAmt   = it.personalIncome || 0;
+            rightSign  = '+';
+            rightColor = '#0369a1';
+            if(it.supplier) subParts.push(it.supplier);
+            let n = it.notes || '';
+            if(n.indexOf('Center: ') === 0) n = n.slice(8);
+            if(n) subParts.push(n);
+          } else {
+            // Custom item in two-col mode
+            leftAmt    = it.invoiced || 0;
+            rightAmt   = it.actual || 0;
+            const isExp = it.customType === 'expense';
+            rightSign  = isExp ? '−' : '+';
+            rightColor = isExp ? '#b91c1c' : (it.customType === 'invest-payback' ? '#1d3557' : '#2d6a4f');
+            const t = it.customType === 'expense' ? 'Expense'
+                    : it.customType === 'invest-payback' ? 'Investment Payback' : 'Income';
+            subParts.push(t);
+          }
+          // Only render the left amount cell text if there's something to show
+          const leftCell = leftAmt > 0
+            ? _fmt(leftAmt)
+            : '<span style="color:#ccc">—</span>';
 
           html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0">' +
             '<div style="flex:1;min-width:0;padding-right:14px">' +
@@ -692,12 +782,12 @@
                 subParts.map(_esc).join(' · ') + '</div>' : '') +
             '</div>' +
             '<div style="font-size:12px;font-weight:500;color:#666;font-family:DM Mono,monospace;flex-shrink:0;width:100px;text-align:right">' +
-              _fmt(it.invoiceAmount || it.amount || 0) + '</div>' +
-            '<div style="font-size:12px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace;flex-shrink:0;width:120px;text-align:right;padding-left:10px">' +
-              '+' + _fmt(it.personalIncome || 0) + '</div>' +
+              leftCell + '</div>' +
+            '<div style="font-size:12px;font-weight:700;color:' + rightColor + ';font-family:DM Mono,monospace;flex-shrink:0;width:120px;text-align:right;padding-left:10px">' +
+              (rightAmt !== 0 ? rightSign + _fmt(Math.abs(rightAmt)) : '<span style="color:#ccc">—</span>') + '</div>' +
           '</div>';
         } else {
-          // Standard single-amount row (other-income / expenses / invest / custom)
+          // Standard single-amount row (other-income / expenses / invest / no-invoiced custom)
           const c    = it.contribution;
           const sign = c >= 0 ? '+' : '−';
           const col  = c >= 0 ? sec.color : '#b91c1c';
@@ -911,12 +1001,12 @@
       { title:'Other Income',               filter: function(it){return it.type==='other-income';},  color:[45,106,79]   },
       { title:'Expenses & Supplies',        filter: function(it){return it.type==='supplies' || it.type==='expense';}, color:[185,28,28] },
       { title:'Initial Investment Payback', filter: function(it){return it.type==='initial-invest';}, color:[29,53,87]   },
-      { title:'Custom Items',               filter: function(it){return it.type==='custom';},        color:[82,82,82]    }
+      { title:'Custom Items',               filter: function(it){return it.type==='custom';},        color:[82,82,82],    isCustom:true }
     ];
 
-    // Column anchors for the Case Invoices two-column layout (right-aligned x positions)
-    const COL_INVOICE = W - M - 130;   // right edge of invoice column
-    const COL_PI      = W - M;          // right edge of PI column
+    // Column anchors for the two-column layout (right-aligned x positions)
+    const COL_INVOICE = W - M - 130;   // right edge of left amount column
+    const COL_PI      = W - M;          // right edge of right amount column
 
     sections.forEach(function(sec) {
       const secItems = items.filter(sec.filter);
@@ -924,15 +1014,20 @@
 
       if(y > 700) { doc.addPage(); y = 50; }
 
-      // Section title — Case Invoices section also gets right-aligned column labels
+      const customHasInvoiced = sec.isCustom && secItems.some(function(it) { return (it.invoiced || 0) > 0; });
+      const isTwoCol  = sec.isCases || customHasInvoiced;
+      const leftLbl   = sec.isCases ? 'INVOICE' : 'INVOICED';
+      const rightLbl  = sec.isCases ? 'PERSONAL INCOME' : 'ACTUAL PAY';
+
+      // Section title — two-column sections also get right-aligned column labels
       doc.setFont('Helvetica','bold'); doc.setFontSize(9);
       doc.setTextColor(sec.color[0], sec.color[1], sec.color[2]);
       doc.text(sec.title.toUpperCase(), M, y);
-      if(sec.isCases) {
+      if(isTwoCol) {
         doc.setFont('Helvetica','bold'); doc.setFontSize(7);
         doc.setTextColor(150,150,150);
-        doc.text('INVOICE',         COL_INVOICE, y, {align:'right'});
-        doc.text('PERSONAL INCOME', COL_PI,      y, {align:'right'});
+        doc.text(leftLbl,  COL_INVOICE, y, {align:'right'});
+        doc.text(rightLbl, COL_PI,      y, {align:'right'});
       }
       y += 4;
       doc.setDrawColor(230,230,230);
@@ -941,31 +1036,47 @@
       secItems.forEach(function(it) {
         if(y > 730) { doc.addPage(); y = 50; }
 
-        if(sec.isCases) {
-          // Two-column case row: name (left) | invoice (gray) | PI (blue, bold)
-          const nameWidth = COL_INVOICE - M - 110;   // leave room for both numeric columns
+        if(isTwoCol) {
+          // Two-column row used by case-income and (when invoiced is filled) custom items
+          let leftAmt, rightAmt, rightSign, rightColor;
+          let subParts = [];
+          if(sec.isCases) {
+            leftAmt    = it.invoiceAmount || it.amount || 0;
+            rightAmt   = it.personalIncome || 0;
+            rightSign  = '+';
+            rightColor = [3, 105, 161];
+            if(it.supplier) subParts.push(it.supplier);
+            let n = it.notes || '';
+            if(n.indexOf('Center: ') === 0) n = n.slice(8);
+            if(n) subParts.push(n);
+          } else {
+            leftAmt    = it.invoiced || 0;
+            rightAmt   = it.actual   || 0;
+            const isExp = it.customType === 'expense';
+            rightSign  = isExp ? '-' : '+';
+            rightColor = isExp ? [185,28,28] : (it.customType === 'invest-payback' ? [29,53,87] : [45,106,79]);
+            const t = it.customType === 'expense' ? 'Expense'
+                    : it.customType === 'invest-payback' ? 'Investment Payback' : 'Income';
+            subParts.push(t);
+          }
+
+          const nameWidth = COL_INVOICE - M - 110;
           const nameLines = doc.splitTextToSize(it.name || '-', nameWidth);
           doc.setFont('Helvetica','normal'); doc.setFontSize(10);
           doc.setTextColor(40,40,40);
           doc.text(nameLines[0], M, y);
 
-          // Invoice — subdued gray
+          // Left amount (subdued gray), or em-dash if blank
           doc.setFont('Helvetica','normal');
           doc.setTextColor(110,110,110);
-          doc.text(fmt(it.invoiceAmount || it.amount || 0), COL_INVOICE, y, {align:'right'});
+          doc.text(leftAmt > 0 ? fmt(leftAmt) : '\u2014', COL_INVOICE, y, {align:'right'});
 
-          // PI — bold blue
+          // Right amount (bold colored), or em-dash if zero
           doc.setFont('Helvetica','bold');
-          doc.setTextColor(3, 105, 161);
-          doc.text('+' + fmt(it.personalIncome || 0), COL_PI, y, {align:'right'});
+          doc.setTextColor(rightColor[0], rightColor[1], rightColor[2]);
+          doc.text(rightAmt !== 0 ? rightSign + fmt(Math.abs(rightAmt)) : '\u2014', COL_PI, y, {align:'right'});
           y += 13;
 
-          // Sub-line (supplier · notes — drop "Center: " prefix on case-income notes)
-          const subParts = [];
-          if(it.supplier) subParts.push(it.supplier);
-          let n = it.notes || '';
-          if(n.indexOf('Center: ') === 0) n = n.slice(8);
-          if(n) subParts.push(n);
           if(subParts.length) {
             doc.setFont('Helvetica','normal'); doc.setFontSize(8);
             doc.setTextColor(140,140,140);
@@ -973,7 +1084,7 @@
             doc.text(subLines[0], M+10, y); y += 10;
           }
         } else {
-          // Standard single-amount row (other-income / expenses / invest / custom)
+          // Standard single-amount row (other-income / expenses / invest / no-invoiced custom)
           const nameWidth = W - M - M - 110;
           const nameLines = doc.splitTextToSize(it.name || '-', nameWidth);
           doc.setFont('Helvetica','normal'); doc.setFontSize(10);
