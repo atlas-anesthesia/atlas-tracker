@@ -961,6 +961,18 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     const sorted  = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const sortedD = [...dists].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
+    // Build a Set of entry IDs that have been included in any distribution
+    // for this worker, so the entry list can show a "DISTRIBUTED" badge on
+    // those rows. Only new-format distributions (with lineItems referencing
+    // sourceId) can be cross-checked — pre-modal legacy distributions had no
+    // line items and so contribute nothing here, which is fine.
+    const distributedIds = new Set();
+    dists.forEach(function(d) {
+      (d.lineItems || []).forEach(function(li) {
+        if(li.sourceId) distributedIds.add(li.sourceId);
+      });
+    });
+
     const wrap = document.createElement('div');
     wrap.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px';
 
@@ -1111,6 +1123,12 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         const autoTag = e.cat==='case-income'
           ? '<span style="font-size:9px;color:var(--text-faint);margin-left:6px;font-style:italic;font-weight:400">auto</span>'
           : '';
+        // "Distributed" badge — shown on any entry that's appeared as a line
+        // item in a saved distribution. Subtle green pill with a checkmark so
+        // it visually echoes the existing "Sent" badge on Saved PDFs.
+        const distTag = distributedIds.has(e.id)
+          ? '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(45,106,79,0.12);color:#2d6a4f;margin-left:6px;vertical-align:middle">✓ DISTRIBUTED</span>'
+          : '';
         // Build dotted meta line: date · supplier · notes (with " · " separators)
         const metaParts = [];
         if(e.date) metaParts.push(_fmtD(e.date));
@@ -1126,7 +1144,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           ? '<div style="font-size:11px;color:var(--text-faint);margin-top:4px;line-height:1.4">'+metaParts.join('<span style="margin:0 6px;opacity:.5">·</span>')+'</div>'
           : '';
         left.innerHTML =
-          '<div style="font-size:13px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+pill+(e.name||'-')+autoTag+'</div>'
+          '<div style="font-size:13px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+pill+(e.name||'-')+autoTag+distTag+'</div>'
           + metaLine;
 
         // ── RIGHT: hover-only action icons, then amount block ──
