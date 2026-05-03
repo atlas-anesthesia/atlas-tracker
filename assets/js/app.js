@@ -1206,10 +1206,20 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           // Case-income rows lead with PI (the practitioner's actual cut) and
           // show the underlying invoice amount as a smaller caption beneath.
           // PI is what matters for personal accounting; invoice is context.
+          // For future-dated cases PI is 0 (work hasn't happened yet) — show
+          // a PENDING label instead of "+$0" so the row reads clearly.
           const piVal = e.personalIncome || 0;
-          amtCol.innerHTML =
-            '<div style="font-size:14px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace;line-height:1.2">+'+_fmt(piVal)+'</div>'
-            + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">of '+_fmt(e.amount)+' inv.</div>';
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const isFutureCase = e.date && e.date > todayStr;
+          if(isFutureCase && piVal === 0) {
+            amtCol.innerHTML =
+              '<div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.6px;line-height:1.2">PENDING</div>'
+              + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">'+_fmt(e.amount)+' invoiced</div>';
+          } else {
+            amtCol.innerHTML =
+              '<div style="font-size:14px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace;line-height:1.2">+'+_fmt(piVal)+'</div>'
+              + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">of '+_fmt(e.amount)+' inv.</div>';
+          }
         } else {
           const sign = _isExp(e.cat) ? '−' : '+';   // U+2212 minus for visual weight
           const amtColor = e.cat==='initial-invest' ? 'var(--info)' : (_isExp(e.cat) ? 'var(--warn)' : '#2d6a4f');
