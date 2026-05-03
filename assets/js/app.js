@@ -2221,10 +2221,10 @@ if(linkedCaseId) {
   try {
     const pdfSnap = await getDoc(doc(db,'atlas','saved_pdfs'));
     if(pdfSnap.exists()) {
-      const pdfs = pdfSnap.data().records || [];
+      const pdfs = pdfSnap.data().pdfs || [];
       const updatedPdfs = pdfs.filter(p => p.caseId !== linkedCaseId);
       if(updatedPdfs.length !== pdfs.length) {
-        await setDoc(doc(db,'atlas','saved_pdfs'), { records: updatedPdfs });
+        await setDoc(doc(db,'atlas','saved_pdfs'), { pdfs: updatedPdfs });
       }
     }
   } catch(e) {}
@@ -2883,10 +2883,10 @@ try {
     try {
       const pdfSnap = await getDoc(doc(db,'atlas','saved_pdfs'));
       if(pdfSnap.exists()) {
-        const pdfs = pdfSnap.data().records || [];
+        const pdfs = pdfSnap.data().pdfs || [];
         const updatedPdfs = pdfs.filter(p => p.caseId !== deletedCaseId);
         if(updatedPdfs.length !== pdfs.length) {
-          await setDoc(doc(db,'atlas','saved_pdfs'), { records: updatedPdfs });
+          await setDoc(doc(db,'atlas','saved_pdfs'), { pdfs: updatedPdfs });
         }
       }
     } catch(pdfErr) { console.warn('Saved PDFs cleanup skipped:', pdfErr); }
@@ -5759,8 +5759,8 @@ window.updateInvoiceTotalDisplay = function() {
 
 
 // -- FLAT RATE INVOICE PDF --
-function _generateFlatRateInvoicePDF(location, date, provider, procedure, total) {
-  const invoiceNum = (function() {
+function _generateFlatRateInvoicePDF(location, date, provider, procedure, total, invoiceNumOverride) {
+  const invoiceNum = invoiceNumOverride || (function() {
     const now = new Date();
     const d = now.toISOString().split('T')[0].replace(/-/g,'');
     return 'ATL-INV-'+d+'-'+String(Math.floor(Math.random()*900)+100);
