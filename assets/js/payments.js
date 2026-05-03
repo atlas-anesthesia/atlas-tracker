@@ -759,7 +759,17 @@ async function _savePIFormula() {
 
 function _calcPersonalIncome(worker) {
   const formula = _piFormula; // shared formula
-  const finalized = (window.cases || []).filter(c => !c.draft && c.worker === worker);
+  // Only count cases that have actually been invoiced (or marked invoiceSent
+  // by the Stripe sync for patient cases). Otherwise PI would include cases
+  // that were finalized but never billed, making PI exceed Total Invoiced.
+  const invoicedCaseIds = new Set(
+    (_paymentRows || [])
+      .filter(r => r.invoiceSent && r.caseId)
+      .map(r => r.caseId)
+  );
+  const finalized = (window.cases || []).filter(c =>
+    !c.draft && c.worker === worker && invoicedCaseIds.has(c.caseId)
+  );
   let total = 0;
   finalized.forEach(c => {
     const preop = (window._rawPreopRecords || []).find(r => r['po-caseId'] === c.caseId);
