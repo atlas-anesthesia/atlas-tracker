@@ -43,7 +43,8 @@ function syncPaymentRowsFromCases() {
         depositDate:'', paidDate:'', dep500Paid:false, paid:false, invoiceSent:false,
         invoicedAmount:0, projOverride:null, caseCost:c.total||0,
         estHrs:parseFloat(preop?.['po-est-hours'])||0,
-        surgeryCenter:sc, surgeryCenterName:center?.name||'' });
+        surgeryCenter:sc, surgeryCenterName:center?.name||'',
+        patientEmail: preop?.['po-patientEmail']||'' });
       changed=true;
     }
   });
@@ -55,10 +56,12 @@ function syncPaymentRowsFromCases() {
     const sc = r['po-surgery-center']||'';
     const center = (window.surgeryCenters||[]).find(x=>x.id===sc);
     const caseDate = r['po-surgeryDate']||'';
+    const patientEmail = r['po-patientEmail']||'';
     if(_paymentRows[rowIdx].callDate!==callDate){_paymentRows[rowIdx].callDate=callDate;changed=true;}
     if(_paymentRows[rowIdx].estHrs!==estHrs){_paymentRows[rowIdx].estHrs=estHrs;changed=true;}
     if(_paymentRows[rowIdx].surgeryCenter!==sc){_paymentRows[rowIdx].surgeryCenter=sc;_paymentRows[rowIdx].surgeryCenterName=center?.name||'';changed=true;}
     if(caseDate&&_paymentRows[rowIdx].caseDate!==caseDate){_paymentRows[rowIdx].caseDate=caseDate;changed=true;}
+    if(patientEmail && _paymentRows[rowIdx].patientEmail!==patientEmail){_paymentRows[rowIdx].patientEmail=patientEmail;changed=true;}
   });
   if(changed) {
     window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
@@ -96,7 +99,8 @@ window.loadPaymentRows = async function loadPaymentRows() {
       _paymentRows.push({ id:window.uid(), caseId:c.caseId, name:c.caseId||'', worker:c.worker||'josh',
         caseDate, callDate, depositDate:'', paidDate:'', dep500Paid:false, paid:false,
         invoiceSent:false, invoicedAmount:0, projOverride:null, caseCost:c.total||0,
-        estHrs, surgeryCenter:sc, surgeryCenterName:center?.name||'' });
+        estHrs, surgeryCenter:sc, surgeryCenterName:center?.name||'',
+        patientEmail: preop?.['po-patientEmail']||'' });
     } else {
       _paymentRows[existIdx] = { ..._paymentRows[existIdx],
         name: c.caseId||_paymentRows[existIdx].name,
@@ -106,7 +110,8 @@ window.loadPaymentRows = async function loadPaymentRows() {
         caseCost: c.total||_paymentRows[existIdx].caseCost,
         estHrs: estHrs||_paymentRows[existIdx].estHrs,
         surgeryCenter: sc||_paymentRows[existIdx].surgeryCenter,
-        surgeryCenterName: center?.name||_paymentRows[existIdx].surgeryCenterName||'' };
+        surgeryCenterName: center?.name||_paymentRows[existIdx].surgeryCenterName||'',
+        patientEmail: preop?.['po-patientEmail'] || _paymentRows[existIdx].patientEmail || '' };
     }
   });
   _paymentRows.sort((a,b)=>(a.caseDate||'9999').localeCompare(b.caseDate||'9999'));
@@ -114,8 +119,118 @@ window.loadPaymentRows = async function loadPaymentRows() {
   renderPaymentSummary();
   // Auto-sync all invoiced rows to Expenses & Distributions on every load
   _syncAllInvoicedToPayouts(_paymentRows).catch(()=>{});
+  // Auto-sync from Stripe for patient cases (silent — runs in background)
+  setTimeout(() => window.syncStripeToPayments(true).catch(()=>{}), 800);
   } catch(e) { console.error('loadPaymentRows error:', e); const body=document.getElementById('payments-table-body'); if(body) body.innerHTML='<div style="padding:32px;color:red;font-size:13px">Error loading payments: '+e.message+'<br><small>'+e.stack+'</small></div>'; }
 }
+
+// -- Stripe sync for patient cases ----------------------------------------
+// Calls the Cloudflare Worker's /stripe-check endpoint per patient-billed row
+// with a known patientEmail and auto-fills:
+//   • $500 deposit → depositDate + dep500Paid
+//   • Remainder    → paidDate + paid + invoicedAmount (=500+remainder) + received + invoiceSent
+// Non-destructive: only fills empty fields. User edits always win.
+const _STRIPE_WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
+
+function _isPatientBilled(row) {
+  const center = (window.surgeryCenters||[]).find(c => c.id === row.surgeryCenter);
+  // No center, or center.billingType !== 'center' → patient pays
+  return !center || center.billingType !== 'center';
+}
+
+async function _checkStripeForRow(row) {
+  if(!row.patientEmail) return false;
+  if(!_isPatientBilled(row)) return false;
+  // Skip if both dates already set (already synced or manually completed)
+  if(row.depositDate && row.paidDate) return false;
+  try {
+    const res = await fetch(_STRIPE_WORKER_URL + '/stripe-check', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ customerEmail: row.patientEmail, caseId: row.caseId })
+    });
+    if(!res.ok) return false;
+    const d = await res.json().catch(() => null);
+    if(!d || d.error) return false;
+    let changed = false;
+    // $500 deposit
+    if(d.paid && !row.depositDate) {
+      row.depositDate = d.paidAt ? d.paidAt.split('T')[0] : '';
+      row.dep500Paid = true;
+      changed = true;
+    }
+    // Remainder
+    if(d.remainderPaid && !row.paidDate) {
+      row.paidDate = d.remainderPaidAt ? d.remainderPaidAt.split('T')[0] : '';
+      row.paid = true;
+      changed = true;
+    }
+    // Invoice amount = $500 + remainder (only auto-fill if currently 0)
+    if(d.remainderPaid && (!row.invoicedAmount || row.invoicedAmount === 0)) {
+      row.invoicedAmount = 500 + (d.remainderAmount || 0);
+      changed = true;
+    }
+    // Mark complete fields when remainder paid
+    if(d.remainderPaid) {
+      if(!row.received)    { row.received = true;    changed = true; }
+      if(!row.invoiceSent) { row.invoiceSent = true; changed = true; }
+    }
+    return changed;
+  } catch(e) {
+    console.warn('Stripe sync failed for', row.caseId, e);
+    return false;
+  }
+}
+
+// Read current DOM state into _paymentRows so in-flight user edits aren't lost.
+function _readPaymentDOMIntoRows() {
+  _paymentRows = _paymentRows.map((row,i) => ({
+    ...row,
+    depositDate: document.getElementById('pr-depositDate'+i)?.value ?? row.depositDate ?? '',
+    paidDate:    document.getElementById('pr-paidDate'+i)?.value    ?? row.paidDate    ?? '',
+    dep500Paid:  document.getElementById('pr-dep500'+i)?.checked    ?? row.dep500Paid  ?? false,
+    paid:        document.getElementById('pr-paid'+i)?.checked      ?? row.paid        ?? false,
+    invoiceSent: document.getElementById('pr-inv'+i)?.checked       ?? row.invoiceSent ?? false,
+    received:    document.getElementById('pr-rcvd'+i)?.checked      ?? row.received    ?? false,
+  }));
+}
+
+window.syncStripeToPayments = async function(silent) {
+  // Snapshot DOM so user's pending toggles aren't overwritten
+  _readPaymentDOMIntoRows();
+  // Pick rows worth checking
+  const candidates = _paymentRows.filter(r =>
+    r.patientEmail && _isPatientBilled(r) && !(r.depositDate && r.paidDate)
+  );
+  if(!candidates.length) {
+    if(!silent) alert('All patient cases are up to date — nothing to sync.');
+    return;
+  }
+  let changedCount = 0;
+  for(const row of candidates) {
+    const changed = await _checkStripeForRow(row);
+    if(changed) changedCount++;
+  }
+  if(changedCount > 0) {
+    try {
+      window.setSyncing(true);
+      await window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows});
+      window.setSyncing(false);
+      renderPaymentRows();
+      renderPaymentSummary();
+    } catch(e) {
+      window.setSyncing(false);
+      console.error('Stripe sync save failed:', e);
+    }
+  }
+  if(!silent) {
+    if(changedCount > 0) {
+      alert(`✓ Stripe sync complete — ${changedCount} row${changedCount !== 1 ? 's' : ''} updated.`);
+    } else {
+      alert(`Checked ${candidates.length} patient case${candidates.length !== 1 ? 's' : ''} — no new Stripe payments found.`);
+    }
+  }
+};
 
 // -- Save (only editable fields) ---------------------------------------
 window.savePaymentRows = async function() {
@@ -224,7 +339,9 @@ function renderPaymentRows() {
       ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>`}
       <div style="padding:4px 3px;display:flex;align-items:center;justify-content:flex-end;gap:2px">${invAmt}</div>
       <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
-      <div style="padding:4px 3px"><button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button></div>
+      ${centerPays
+        ? `<div style="padding:4px 3px"><button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button></div>`
+        : `<div style="padding:4px 3px"><div style="${greyCell}" title="Patient case — no invoice PDF needed"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div></div>`}
       <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-rcvd${i}" ${r.received?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="autoSavePayments()" title="Payment received"></div>
       <div style="padding:4px 8px;display:flex;align-items:center;justify-content:flex-end"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete">🗑</button></div>
     </div>`;
