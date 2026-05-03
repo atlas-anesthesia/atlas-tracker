@@ -314,7 +314,7 @@ function renderPaymentRows() {
   };
   const ro = (val,color)=>`<span style="font-size:11px;color:${color||'var(--text-muted)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${val||'<span style="color:#fca5a5;font-size:10px">—</span>'}</span>`;
   const wcolor = w=>w==='dev'?'var(--dev)':'var(--josh)';
-  const COLS = '220px 48px 1fr 82px 92px 34px 92px 34px 78px 34px 38px 34px 34px';
+  const COLS = '220px 48px minmax(120px,200px) 82px 108px 34px 108px 34px 78px 34px 38px 34px 34px';
 
   body.innerHTML = _paymentRows.map((r,i)=>{
     const complete = r.depositDate&&r.paidDate&&r.dep500Paid&&r.paid&&r.invoiceSent;
