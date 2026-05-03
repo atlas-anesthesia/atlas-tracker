@@ -407,7 +407,26 @@ async function savePDFRecord(record) {
   try {
     const snap = await window.getDoc(window.doc(window.db,'atlas','saved_pdfs'));
     const existing = snap.exists()?(snap.data().pdfs||[]):[];
-    existing.unshift(record);
+    // Dedupe by caseId. Each case should have at most one saved-PDF record;
+    // re-generating or re-sending an invoice updates the existing entry instead
+    // of piling on duplicates. We never downgrade emailed: true → false.
+    const dupeIdx = record.caseId ? existing.findIndex(p => p.caseId === record.caseId) : -1;
+    if(dupeIdx >= 0) {
+      const prev = existing[dupeIdx];
+      const merged = {
+        ...prev,
+        ...record,
+        // Preserve email-sent status: once an invoice has been emailed, keep
+        // that flag even if a later "Download PDF" call passes emailed: false.
+        emailed: prev.emailed === true || record.emailed === true,
+        // Keep original savedAt unless the new record was emailed (in which case bump it)
+        savedAt: record.emailed === true ? record.savedAt : (prev.savedAt || record.savedAt),
+      };
+      existing.splice(dupeIdx, 1);
+      existing.unshift(merged); // bring updated entry to top of list
+    } else {
+      existing.unshift(record);
+    }
     await window.setDoc(window.doc(window.db,'atlas','saved_pdfs'),{pdfs:existing});
     _savedPDFs = existing; renderSavedPDFs();
   } catch(e){console.error('savePDFRecord error:',e);}
@@ -416,18 +435,62 @@ function renderSavedPDFs() {
   const el = document.getElementById('saved-pdfs-list');
   if(!el) return;
   if(!_savedPDFs.length){el.innerHTML='<div class="empty-state" style="font-size:13px">No saved invoices yet</div>';return;}
-  el.innerHTML = _savedPDFs.map(p=>{
+  el.innerHTML = _savedPDFs.map((p, i)=>{
     const pill = p.worker==='dev'?'pill-dev':'pill-josh';
     const wname = p.worker==='dev'?'Dev':'Josh';
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div><div style="font-size:13px;font-weight:500">${p.invoiceNum||'Invoice'}</div>
+      <div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:500">${p.invoiceNum||'Invoice'}</div>
       <div style="font-size:11px;color:var(--text-faint)">${p.date||''} · ${p.location||''} · <span class="worker-pill ${pill}">${wname}</span></div></div>
-      <div style="display:flex;align-items:center;gap:12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
         <span style="font-size:16px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$${Number(p.total||0).toFixed(2)}</span>
         ${p.emailed?'<span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:10px;font-weight:600">📧 Sent</span>':''}
+        <button onclick="redownloadSavedPDF(${i})" title="Re-download this invoice as PDF" style="background:var(--info);color:#fff;border:none;border-radius:4px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">📄 PDF</button>
+        <button onclick="deleteSavedPDF(${i})" title="Remove from list (does not affect any sent emails)" style="background:none;border:1px solid var(--border);color:var(--text-faint);border-radius:4px;padding:5px 8px;font-size:11px;cursor:pointer;font-family:inherit">🗑</button>
       </div></div>`;
   }).join('');
 }
+
+// Re-generate the PDF for a saved invoice using its stored metadata.
+// The PDF blob itself isn't stored in Firestore (only the metadata), so we
+// regenerate via the same generator the modal uses. Procedure isn't tracked
+// per-record so it falls back to "Anesthesia Services" (the standard default).
+window.redownloadSavedPDF = function(idx) {
+  const p = _savedPDFs[idx];
+  if(!p) return;
+  if(typeof window._generateFlatRateInvoicePDF !== 'function') {
+    alert('PDF generator not available — try refreshing the page.');
+    return;
+  }
+  try {
+    window._generateFlatRateInvoicePDF(
+      p.location || '',
+      p.date || '',
+      p.provider || '',
+      'Anesthesia Services',
+      Number(p.total) || 0,
+      p.invoiceNum || null            // 6th arg: re-use original invoice # if generator supports it
+    );
+  } catch(e) {
+    console.error('redownloadSavedPDF failed:', e);
+    alert('Could not regenerate PDF: ' + e.message);
+  }
+};
+
+// Remove a saved-PDF record from the list. Doesn't undo any sent emails.
+window.deleteSavedPDF = async function(idx) {
+  const p = _savedPDFs[idx];
+  if(!p) return;
+  if(!confirm(`Remove ${p.invoiceNum || 'this invoice'} from the saved list?\n\nThis only deletes the record. Any emails already sent are unaffected.`)) return;
+  _savedPDFs.splice(idx, 1);
+  try {
+    await window.setDoc(window.doc(window.db,'atlas','saved_pdfs'), {pdfs: _savedPDFs});
+  } catch(e) {
+    console.error('deleteSavedPDF failed:', e);
+    alert('Failed to delete: ' + e.message);
+    return;
+  }
+  renderSavedPDFs();
+};
 
 // -- Invoice modal -----------------------------------------------------
 window.openInvoiceModal = function(rowIdx) {
