@@ -199,14 +199,12 @@ function renderPaymentRows() {
   };
   const ro = (val,color)=>`<span style="font-size:11px;color:${color||'var(--text-muted)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${val||'<span style="color:#fca5a5;font-size:10px">—</span>'}</span>`;
   const wcolor = w=>w==='dev'?'var(--dev)':'var(--josh)';
-  const COLS = '155px 48px 1fr 44px 66px 82px 82px 92px 34px 92px 34px 78px 34px 38px 34px 34px';
+  const COLS = '220px 48px 1fr 82px 82px 92px 34px 92px 34px 78px 34px 38px 34px 34px';
 
   body.innerHTML = _paymentRows.map((r,i)=>{
     const complete = r.depositDate&&r.paidDate&&r.dep500Paid&&r.paid&&r.invoiceSent;
     const bg = complete?'rgba(45,106,79,0.08)':i%2===0?'var(--bg)':'var(--surface2)';
     const bl = complete?'3px solid var(--accent)':'3px solid transparent';
-    const proj = r.projOverride!=null ? '$'+Number(r.projOverride).toFixed(0) : r.estHrs>0?'$'+(r.estHrs*600).toFixed(0):'—';
-    const projColor = r.projOverride!=null?'var(--info)':'var(--accent)';
     const center = (window.surgeryCenters||[]).find(c=>c.id===r.surgeryCenter);
     const scName = center?.name||r.surgeryCenterName||'';
     const centerPays = center ? center.billingType === 'center' : false;
@@ -214,13 +212,10 @@ function renderPaymentRows() {
     const caseFmt = r.caseDate?new Date(r.caseDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
     const callFmt = r.callDate?new Date(r.callDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
     const invAmt = r.invoicedAmount>0?`<span style="font-size:11px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$${Number(r.invoicedAmount).toFixed(2)}</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`:`<span style="color:var(--text-faint);font-size:11px">—</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`;
-    const projCell = `<span style="font-size:11px;font-weight:600;color:${projColor};font-family:DM Mono,monospace">${proj}</span><button onclick="editPaymentField('proj',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`;
     return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${bl};align-items:center;min-height:40px">
       <div style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>
       <div style="padding:4px 3px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${r.worker==='dev'?'Dev':'Josh'}</div>
       <div style="padding:4px 3px;font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${scName}">${scName||'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
-      <div style="padding:4px 3px;font-size:11px;font-weight:600;color:var(--accent);text-align:right">${r.estHrs>0?r.estHrs+'h':'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
-      <div style="padding:4px 3px;display:flex;align-items:center;justify-content:flex-end;gap:2px">${projCell}</div>
       <div style="padding:4px 3px">${ro(caseFmt)}</div>
       <div style="padding:4px 3px">${ro(callFmt)}</div>
       <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-depositDate'+i,r.depositDate)}</div>
