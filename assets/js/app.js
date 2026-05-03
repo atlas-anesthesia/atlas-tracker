@@ -668,7 +668,7 @@ const col = typeColor[e.type] || 'var(--text)';
 // Build inner HTML (no onclick strings — we attach listeners below)
 modal.innerHTML = `
 <div style="background:var(--surface);border-radius:var(--radius);max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden"><div style="background:${bg};padding:16px 20px;border-bottom:2px solid ${col}22"><div style="font-size:15px;font-weight:700;color:${col}">${typeLabel[e.type]||e.type}</div><div style="font-size:12px;color:${col};opacity:.8;margin-top:2px">${e.caseId}</div></div><div style="padding:18px 20px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px"><div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px">Surgery Date</div><div style="font-size:13px;font-weight:500">${fmtDate(e.surgDate)}</div></div><div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px">Event Date</div><div style="font-size:13px;font-weight:500">${fmtDate(e.date)}</div></div>
-${e.provider ? `<div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px">Provider</div><div style="font-size:13px">${e.provider}</div></div>` : ''}
+${e.provider ? `<div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px">Dentist</div><div style="font-size:13px">${e.provider}</div></div>` : ''}
 ${e.worker ? `<div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px">Worker</div><div style="font-size:13px">${e.worker==='dev'?'Devarsh':'Josh'}</div></div>` : ''}
 </div>
 ${e.email ? `<div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;font-family:'DM Mono',monospace">📧 ${e.email}</div>` : ''}
@@ -778,7 +778,7 @@ method:'POST',
 headers:{'Authorization':`Bearer ${gcalToken}`,'Content-Type':'application/json'},
 body: JSON.stringify({
 summary:`Atlas: ${titles[e.type]||e.type} — ${e.caseId}`,
-description:`Case: ${e.caseId}\nProvider: ${e.provider}\nSurgery Date: ${e.surgDate}${e.email?'\nPatient Email: '+e.email:''}`,
+description:`Case: ${e.caseId}\nDentist: ${e.provider}\nSurgery Date: ${e.surgDate}${e.email?'\nPatient Email: '+e.email:''}`,
 start:{date:e.date}, end:{date:e.date},
 colorId: colorIds[e.type]||'9',
 reminders:{useDefault:false,overrides:[{method:'email',minutes:24*60},{method:'popup',minutes:60}]}
@@ -2774,7 +2774,7 @@ const cvChecked = ['neg','htn','cad','angina','mi','chf','murmur','arrythmia'].f
 const pulmChecked = ['neg','asthma','copd','uri','o2','cpap','sleep-apnea','bl-breath-sounds','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.replace(/-/g,' ')).join(', ').toUpperCase();
 return `<div class="case-item"><div class="case-item-header" onclick="togglePreop('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${r['po-caseId'] || 'No Case ID'}
-<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="event.stopPropagation();previewAnesthesiaRecord(window._rawPreopRecords?.find(x=>x.id==='${r.id}')||{})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">🖨 Print Record</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
+<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Dentist: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="event.stopPropagation();previewAnesthesiaRecord(window._rawPreopRecords?.find(x=>x.id==='${r.id}')||{})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">🖨 Print Record</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
 ${r['po-allergies']?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Allergies</strong><div style="font-size:13px;margin-top:3px">${r['po-allergies']}</div></div>`:''}
 ${cvChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Cardiovascular</strong><div style="font-size:13px;margin-top:3px">${cvChecked}</div></div>`:''}
 ${pulmChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Pulmonary</strong><div style="font-size:13px;margin-top:3px">${pulmChecked}</div></div>`:''}
@@ -3032,7 +3032,7 @@ doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(...white);
 doc.text('DATE', 18, y+6);
 doc.text('CASE ID', 52, y+6);
 doc.text('PROCEDURE', 90, y+6);
-doc.text('PROVIDER', 155, y+6);
+doc.text('DENTIST', 155, y+6);
 doc.text('NOTES', 185, y+6);
 y += 11;
 // -- TABLE ROWS --
@@ -3048,7 +3048,7 @@ doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(...white);
 doc.text('DATE', 18, y+6);
 doc.text('CASE ID', 52, y+6);
 doc.text('PROCEDURE', 90, y+6);
-doc.text('PROVIDER', 155, y+6);
+doc.text('DENTIST', 155, y+6);
 doc.text('NOTES', 185, y+6);
 y += 11;
 }
@@ -3153,7 +3153,7 @@ return;
 }
 const sorted = [...workerCases].sort((a,b) => new Date(b.date) - new Date(a.date));
 tableEl.innerHTML = `
-<div style="display:grid;grid-template-columns:110px 1fr 120px 90px 70px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint)"><span>Date</span><span>Procedure</span><span>Case ID</span><span>Provider</span><span></span></div>
+<div style="display:grid;grid-template-columns:110px 1fr 120px 90px 70px;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint)"><span>Date</span><span>Procedure</span><span>Case ID</span><span>Dentist</span><span></span></div>
 ${sorted.map((c,i) => `
 <div style="display:grid;grid-template-columns:110px 1fr 120px 90px 70px;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);align-items:center;background:${i%2===0?'transparent':'var(--surface2)'}"><div style="font-size:13px;font-family:'DM Mono',monospace">${fmtDate(c.date)}</div><div style="font-size:13px;font-weight:500">${c.procedure||'—'}
 ${c.notes?`<div style="font-size:11px;color:var(--text-faint)">${c.notes}</div>`:''}
@@ -4262,7 +4262,7 @@ ${caseId}
 ${dateLabel}
 ${hasDraft ? '<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span>' : ''}
 </div><div class="case-date">
-Surgery: ${surgDateFmt} · Provider: ${provider}
+Surgery: ${surgDateFmt} · Dentist: ${provider}
 ${r['po-allergies'] ? ' · <span style="color:var(--warn)">⚠ Allergies</span>' : ''}
 </div>
 ${allFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
@@ -4435,7 +4435,7 @@ const pill = (text, color='var(--info)') =>
 const row = (label, val, warn=false) => val ? `
 <div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:11px;font-weight:600;color:${warn?'#b91c1c':'var(--text-faint)'};text-transform:uppercase;letter-spacing:.5px;min-width:110px">${label}</span><span style="font-size:13px;color:${warn?'#7f1d1d':'var(--text)'}">${val}</span></div>` : '';
 let html = `
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px"><div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Surgery Date</div><div style="font-size:14px;font-weight:500">${fmtDate(r['po-surgeryDate'])||'—'}</div></div><div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Mallampati</div><div style="font-size:20px;font-weight:500;font-family:'DM Mono',monospace">${r['mallampati']||'—'}</div></div><div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Weight / BMI</div><div style="font-size:13px;font-weight:500">${r['po-weight-kg-val']?r['po-weight-kg-val']+'kg':'—'}${r['po-bmi-val']?' · BMI '+r['po-bmi-val']:''}</div></div><div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Provider</div><div style="font-size:13px;font-weight:500">${r['po-provider']||'—'}</div></div></div>`;
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px"><div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Surgery Date</div><div style="font-size:14px;font-weight:500">${fmtDate(r['po-surgeryDate'])||'—'}</div></div><div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Mallampati</div><div style="font-size:20px;font-weight:500;font-family:'DM Mono',monospace">${r['mallampati']||'—'}</div></div><div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Weight / BMI</div><div style="font-size:13px;font-weight:500">${r['po-weight-kg-val']?r['po-weight-kg-val']+'kg':'—'}${r['po-bmi-val']?' · BMI '+r['po-bmi-val']:''}</div></div><div style="padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:3px">Dentist</div><div style="font-size:13px;font-weight:500">${r['po-provider']||'—'}</div></div></div>`;
 // Warnings first
 if(r['po-allergies']) html += `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:#b91c1c">⚠ ALLERGIES: ${r['po-allergies']}</span></div>`;
 if(r['po-iv-difficulty']) html += `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:8px"><span style="font-size:12px;font-weight:600;color:#856404">⚠ Difficult IV${r['po-iv-difficulty-comment']?' — '+r['po-iv-difficulty-comment']:''}</span></div>`;
@@ -4717,7 +4717,7 @@ const r = records.find(x => x.id === id);
 if(!r) { alert('Record not found.'); return; }
 document.getElementById('preview-title').textContent = r['po-caseId'] || 'Draft';
 document.getElementById('preview-subtitle').textContent =
-`Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Provider: ${r['po-provider']||'—'}`;
+`Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Dentist: ${r['po-provider']||'—'}`;
 // Build condition flags
 const cvFlags = ['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase());
 const ekgFlags = ['nsr','afib','bbb','lvh','chngs'].filter(x=>r['po-ekg-'+x]).map(x=>x.toUpperCase());
