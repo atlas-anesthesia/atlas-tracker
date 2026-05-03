@@ -1055,7 +1055,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       const b1 = document.createElement('button'); b1.className='btn btn-ghost btn-sm'; b1.textContent='+ Add Entry';
       b1.addEventListener('click', function() { window.showAddPayoutExpense(worker); });
       const b2 = document.createElement('button'); b2.className='btn btn-ghost btn-sm'; b2.style.color='var(--accent)'; b2.textContent='Record Distribution';
-      b2.addEventListener('click', function() { window.showRecordDistribution(worker); });
+      b2.addEventListener('click', function() { window.openDistributionModal(worker); });
       btnRow.appendChild(b1); btnRow.appendChild(b2);
       wrap.appendChild(btnRow);
     } else {
@@ -1072,44 +1072,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     addForm.innerHTML = _entryFormHTML(worker, false);
     wrap.appendChild(addForm);
 
-    // Distribution form
-    const distForm = document.createElement('div');
-    distForm.id = 'payout-dist-form-'+worker;
-    distForm.style.cssText = 'display:none;background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px';
-    distForm.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Record Distribution</div>'
-      +'<div style="background:var(--info-light);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;font-size:12px">'
-        +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:4px">Revenue</div>'
-        +'<div>Personal Income: <strong style="color:#0369a1">'+_fmt(piFromLog)+'</strong></div>'
-        +(totalIn?'<div>+ Other Income: <strong style="color:var(--info)">'+_fmt(totalIn)+'</strong></div>':'')
-        +'<div>- Expenses: <strong style="color:var(--warn)">- '+_fmt(totalOut)+'</strong></div>'
-        +'<div>- Already Distributed: <strong style="color:#888">- '+_fmt(totalDist)+'</strong></div>'
-        +'<div style="font-weight:700;color:#2d6a4f;margin-top:4px;padding-top:6px;border-top:1px solid #b8cfe8">Available to Distribute: '+_fmt(revSuggested)+'</div>'
-        +(totalInvest?'<div style="border-top:1px solid #b8cfe8;margin-top:8px;padding-top:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Investment Payback</div>'
-          +'<div>Total Invested: <strong>'+_fmt(totalInvest)+'</strong></div>'
-          +(totalInvestPaid?'<div>Paid Back So Far: <strong style="color:#2d6a4f">'+_fmt(totalInvestPaid)+'</strong></div>':'')
-          +'<div style="font-weight:700;color:var(--info)">Remaining Owed: '+_fmt(investOwed)+'</div>':'')
-      +'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-        +'<div>'+_lbl('Amount')+_field('dist-amount-'+worker,'number','0.00')+'</div>'
-        +'<div>'+_lbl('Date',true)+_field('dist-date-'+worker,'date','')+'</div>'
-      +'</div>'
-      +'<div style="margin-bottom:10px">'+_lbl('Notes',true)+_field('dist-notes-'+worker,'text','')+'</div>'
-      +(investOwed>0 ? '<div style="margin-bottom:10px;padding:12px;background:rgba(29,83,198,0.06);border-radius:6px;border:1px solid rgba(29,83,198,0.2)">'
-        +'<div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:8px">Investment Payback <span style="font-weight:400;color:var(--text-faint)">('+_fmt(investOwed)+' remaining)</span></div>'
-        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">'
-          +'<div><label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Pay back amount</label>'
-          +'<input type="number" id="dist-payback-invest-'+worker+'" min="0" step="0.01" max="'+investOwed+'" placeholder="0.00" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">'
-          +'</div>'
-          +'<div><button type="button" id="dist-payall-'+worker+'" data-max="'+investOwed+'" data-target="dist-payback-invest-'+worker+'" '
-          +'style="width:100%;padding:8px;font-size:12px;font-weight:600;color:var(--info);background:rgba(29,83,198,0.1);border:1px solid rgba(29,83,198,0.3);border-radius:var(--radius-sm);cursor:pointer">Pay All ('+_fmt(investOwed)+')</button></div>'
-        +'</div>'
-        +'<div style="font-size:11px;color:var(--text-faint);margin-top:6px">Enter any amount up to the full balance. Paid amounts are tracked — full balance archived when completely paid off.</div>'
-        +'</div>' : '')
-      +'<div style="display:flex;gap:8px">'
-        +'<button class="btn btn-primary btn-sm" id="dist-save-'+worker+'">Save &amp; Download PDF</button>'
-        +'<button class="btn btn-ghost btn-sm" id="dist-cancel-'+worker+'">Cancel</button>'
-      +'</div>';
-    wrap.appendChild(distForm);
+    // Distribution form removed — handled by distribution-modal.js
+    // (window.openDistributionModal opens the new itemized builder modal)
 
     // ── Entries list ─────────────────────────────────────────────────────────
     const eLabel = document.createElement('div');
@@ -1290,30 +1254,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     setTimeout(function() {
       var saveBtn    = document.getElementById('payout-save-'+worker);
       var cancelBtn  = document.getElementById('payout-cancel-'+worker);
-      var dSaveBtn   = document.getElementById('dist-save-'+worker);
-      var dCancelBtn = document.getElementById('dist-cancel-'+worker);
-      var payAllBtn  = document.getElementById('dist-payall-'+worker);
-      var investInp  = document.getElementById('dist-payback-invest-'+worker);
       if(saveBtn)    saveBtn.addEventListener('click', function() { window.savePayoutEntry(worker); });
       if(cancelBtn)  cancelBtn.addEventListener('click', function() { window.cancelPayoutEntry(worker); });
-      if(dSaveBtn)   dSaveBtn.addEventListener('click', function() { window.saveDistribution(worker); });
-      if(dCancelBtn) dCancelBtn.addEventListener('click', function() { window.cancelDistribution(worker); });
-      if(payAllBtn)  payAllBtn.addEventListener('click', function() {
-        var max = parseFloat(payAllBtn.getAttribute('data-max'))||0;
-        if(investInp) { investInp.value = max.toFixed(2); investInp.dispatchEvent(new Event('input')); }
-      });
-      // Live update: clamp entered value to remaining balance and update Pay All label
-      if(investInp) investInp.addEventListener('input', function() {
-        var max = parseFloat(investInp.getAttribute('max'))||0;
-        var entered = parseFloat(investInp.value)||0;
-        if(entered > max) investInp.value = max.toFixed(2);
-        if(payAllBtn) {
-          var remaining = max - Math.min(entered, max);
-          payAllBtn.textContent = entered > 0
-            ? 'Pay All ('+('$'+(max).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}))+')'
-            : 'Pay All ('+('$'+(max).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}))+')';
-        }
-      });
     }, 0);
   }
 
@@ -1417,83 +1359,11 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     renderPayoutTab();
   };
 
-  window.showRecordDistribution = function(w) {
-    var f = document.getElementById('payout-add-form-'+w);
-    var d = document.getElementById('payout-dist-form-'+w);
-    if(f) f.style.display='none';
-    if(d) d.style.display='';
-    ['dist-amount-','dist-notes-','dist-date-'].forEach(function(p) {
-      var el = document.getElementById(p+w); if(el) el.value='';
-    });
-  };
-
-  window.cancelDistribution = function(w) {
-    var f = document.getElementById('payout-dist-form-'+w); if(f) f.style.display='none';
-  };
-
-  window.saveDistribution = async function(w) {
-    var amount = parseFloat(document.getElementById('dist-amount-'+w).value)||0;
-    var date   = document.getElementById('dist-date-'+w).value || null;
-    var notes  = (document.getElementById('dist-notes-'+w).value||'').trim();
-    var investPaybackAmt = parseFloat(document.getElementById('dist-payback-invest-'+w)?.value||0)||0;
-    if(!amount) { alert('Please enter an amount.'); return; }
-
-    var data = await _load();
-    const { totalIn, totalOut, totalInvest, totalDist, rev } = _totals(w, data);
-
-    // Check if this distribution covers the investment too
-    var investPaid = Math.min(investPaybackAmt, investOwed); // cap at remaining balance
-
-    if(!data.distributions) data.distributions=[];
-    const distId = _uid();
-    const distRefNum = 'DIST-'+distId.toUpperCase();
-    data.distributions.push({
-      id: distId,
-      refNum: distRefNum,
-      worker: w, amount, date, notes,
-      investPaid: investPaid > 0 ? investPaid : undefined,
-      // Store snapshot of breakdown for PDF regeneration
-      pdfData: {
-        invoicedRev: rev, otherIncome: totalIn,
-        expenses: totalOut, prevDist: totalDist,
-        investOwed: totalInvest, investPaid
-      },
-      createdAt: new Date().toISOString()
-    });
-
-    // Track investment payback — archive entries only when fully paid off
-    if(investPaid > 0) {
-      if(!data.investHistory) data.investHistory = [];
-      // Log this payment
-      data.investHistory.push({
-        id: _uid(), worker:w, amountPaid:investPaid,
-        paidBackAt: new Date().toISOString(), partial: investPaid < investOwed
-      });
-      // If fully paid off, archive the investment entries
-      if(investPaid >= investOwed) {
-        const investEntries = (data.entries||[]).filter(e=>e.worker===w&&e.cat==='initial-invest');
-        data.investHistory[data.investHistory.length-1].entries = investEntries;
-        data.entries = (data.entries||[]).filter(e=>!(e.worker===w&&e.cat==='initial-invest'));
-      }
-    }
-
-    await _save(data);
-
-    // Generate distribution PDF
-    if(typeof window.generateDistributionPDF === 'function') {
-      var prevDist = totalDist; // before this distribution
-      window.generateDistributionPDF({
-        worker: w, amount, date, notes,
-        invoicedRev: rev, otherIncome: totalIn,
-        expenses: totalOut, prevDist,
-        investOwed: totalInvest, investPaid,
-        refNum: distRefNum
-      });
-    }
-
-    renderPayoutTab();
-    alert('Distribution recorded! PDF downloaded.');
-  };
+  // Record Distribution flow now lives in distribution-modal.js:
+  //   window.openDistributionModal(worker)      — opens the new builder modal
+  //   window.redownloadDistributionPDF(dist, w) — regenerates a saved PDF
+  // The old inline form, showRecordDistribution, cancelDistribution,
+  // saveDistribution, and the old redownloadDistributionPDF were removed.
 
   window.deleteDistribution = async function(id, w) {
     if(!confirm('Delete this distribution?')) return;
@@ -1501,26 +1371,6 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     data.distributions = (data.distributions||[]).filter(function(d){return d.id!==id;});
     await _save(data);
     renderPayoutTab();
-  };
-  window.redownloadDistributionPDF = function(dist, worker) {
-    if(typeof window.generateDistributionPDF !== 'function') {
-      alert('PDF generator not loaded yet — please try again in a moment.');
-      return;
-    }
-    const pd = dist.pdfData || {};
-    window.generateDistributionPDF({
-      worker: worker,
-      amount: dist.amount,
-      date:   dist.date,
-      notes:  dist.notes,
-      invoicedRev: pd.invoicedRev || 0,
-      otherIncome: pd.otherIncome || 0,
-      expenses:    pd.expenses    || 0,
-      prevDist:    pd.prevDist    || 0,
-      investOwed:  pd.investOwed  || 0,
-      investPaid:  dist.investPaid || pd.investPaid || 0,
-      refNum:      dist.refNum
-    });
   };
 
 })();
