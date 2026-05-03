@@ -6160,6 +6160,9 @@ Object.defineProperty(window, 'cases', {
 Object.defineProperty(window, 'currentWorker', {
   get: () => currentWorker, set: v => { currentWorker = v; }, configurable: true
 });
+Object.defineProperty(window, 'currentInvTab', {
+  get: () => currentInvTab, set: v => { currentInvTab = v; }, configurable: true
+});
 Object.defineProperty(window, 'items', {
   get: () => items, set: v => { items = v; }, configurable: true
 });
