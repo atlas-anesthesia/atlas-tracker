@@ -314,7 +314,7 @@ function renderPaymentRows() {
   };
   const ro = (val,color)=>`<span style="font-size:11px;color:${color||'var(--text-muted)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${val||'<span style="color:#fca5a5;font-size:10px">—</span>'}</span>`;
   const wcolor = w=>w==='dev'?'var(--dev)':'var(--josh)';
-  const COLS = '220px 48px 1fr 82px 82px 92px 34px 92px 34px 78px 34px 38px 34px 34px';
+  const COLS = '220px 48px 1fr 82px 92px 34px 92px 34px 78px 34px 38px 34px 34px';
 
   body.innerHTML = _paymentRows.map((r,i)=>{
     const complete = r.depositDate&&r.paidDate&&r.dep500Paid&&r.paid&&r.invoiceSent;
@@ -325,14 +325,12 @@ function renderPaymentRows() {
     const centerPays = center ? center.billingType === 'center' : false;
     const greyCell = 'background:rgba(0,0,0,0.06);border-radius:4px;opacity:0.4;pointer-events:none;user-select:none;display:flex;align-items:center;justify-content:center;height:32px';
     const caseFmt = r.caseDate?new Date(r.caseDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
-    const callFmt = r.callDate?new Date(r.callDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
     const invAmt = r.invoicedAmount>0?`<span style="font-size:11px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$${Number(r.invoicedAmount).toFixed(2)}</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`:`<span style="color:var(--text-faint);font-size:11px">—</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`;
     return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${bl};align-items:center;min-height:40px">
       <div style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>
       <div style="padding:4px 3px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${r.worker==='dev'?'Dev':'Josh'}</div>
       <div style="padding:4px 3px;font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${scName}">${scName||'<span style="color:#fca5a5;font-size:10px">—</span>'}</div>
       <div style="padding:4px 3px">${ro(caseFmt)}</div>
-      <div style="padding:4px 3px">${ro(callFmt)}</div>
       <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-depositDate'+i,r.depositDate)}</div>
       ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>`}
       <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-paidDate'+i,r.paidDate)}</div>
@@ -704,13 +702,13 @@ window.downloadInvoiceModal = async function() {
     window._invModalCalc={total:amt,billedStr:'Flat Rate',flat:true,proc};
     window._generateFlatRateInvoicePDF(location,date,document.getElementById('inv-modal-provider')?.value||'',proc,amt);
     await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider:document.getElementById('inv-modal-provider')?.value||'',total:amt,caseId,worker:window.currentWorker,emailed:false,savedAt:new Date().toISOString()});
-    if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){_paymentRows[_invoiceModalRowIdx].invoicedAmount=amt;renderPaymentRows();}
+    if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){_paymentRows[_invoiceModalRowIdx].invoicedAmount=amt;window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice amt failed:',e));renderPaymentRows();}
   } else {
     const calc=calcInvModal();
     if(!calc){alert('Please fill in times and rates.');return;}
     window._generateFlatRateInvoicePDF(location,date,document.getElementById('inv-modal-provider')?.value||'','Anesthesia Services',calc.total);
     await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider:document.getElementById('inv-modal-provider')?.value||'',total:calc.total,caseId,worker:window.currentWorker,emailed:false,savedAt:new Date().toISOString()});
-    if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){_paymentRows[_invoiceModalRowIdx].invoicedAmount=calc.total;renderPaymentRows();}
+    if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){_paymentRows[_invoiceModalRowIdx].invoicedAmount=calc.total;window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice amt failed:',e));renderPaymentRows();}
   }
 };
 
@@ -1033,6 +1031,8 @@ window.sendInvoiceEmail = async function() {
     if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){
       _paymentRows[_invoiceModalRowIdx].invoiceSent=true;
       _paymentRows[_invoiceModalRowIdx].invoicedAmount=total;
+      // Persist to Firestore so the row's Inv. Amt + Inv✓ survive page reload
+      window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice after send failed:',e));
       // Auto-sync to Expenses & Distributions
       _syncInvoiceToPayouts(_paymentRows[_invoiceModalRowIdx], total).catch(()=>{});
     }
