@@ -457,6 +457,49 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
   </div>
 </div>
 
+<!-- ── BUNDLE MANAGER MODAL (sits above the supplies QA modal) ──────────── -->
+<div id="bundleManagerModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:680px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:14px">
+      <div>
+        <div id="bundleEditTitle" style="font-size:16px;font-weight:600">📋 Manage Bundles</div>
+        <div style="font-size:12px;color:var(--text-faint);margin-top:2px">A bundle is a saved list of frequently-used items. Select one in Quick Add to pin its items at the top.</div>
+      </div>
+      <button onclick="qa_closeBundleManager()" style="background:none;border:none;cursor:pointer;font-size:24px;line-height:1;color:var(--text-faint);padding:0 4px">×</button>
+    </div>
+
+    <!-- VIEW 1: List of bundles -->
+    <div id="bundleManagerListView" style="flex:1;overflow-y:auto;padding:14px 20px">
+      <div id="bundleManagerList"></div>
+      <button onclick="qa_startNewBundle()" class="btn btn-primary" style="width:100%;margin-top:10px;padding:10px 14px;font-size:13px">+ Create New Bundle</button>
+    </div>
+
+    <!-- VIEW 2: Create / edit form -->
+    <div id="bundleManagerEditView" style="display:none;flex:1;overflow:hidden;flex-direction:column">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);background:var(--surface2)">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:5px;display:block">Bundle Name</label>
+        <input type="text" id="bundleEditName" placeholder='e.g. "Standard MAC", "Wisdom Teeth Setup"' style="width:100%;padding:9px 11px;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">
+      </div>
+      <div style="padding:10px 20px;border-bottom:1px solid var(--border)">
+        <input type="text" id="bundleEditSearch" placeholder="🔍 Search items by name, generic, or category..." oninput="renderBundleEditItems()" style="width:100%;padding:8px 11px;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)">
+      </div>
+      <div id="bundleEditItems" style="flex:1;overflow-y:auto;padding:10px 20px;display:flex;flex-direction:column"></div>
+      <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--surface2)">
+        <div id="bundleEditCount" style="font-size:13px;color:var(--text-muted)">0 items selected</div>
+        <div style="display:flex;gap:8px">
+          <button onclick="qa_cancelBundleEdit()" class="btn btn-ghost">Cancel</button>
+          <button onclick="qa_saveBundleFromManager()" class="btn btn-success">✓ Save Bundle</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer for list view -->
+    <div id="bundleManagerListFooter" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;background:var(--surface2)">
+      <button onclick="qa_closeBundleManager()" class="btn btn-ghost">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── QUICK ADD CONTROLLED SUBSTANCES MODAL ────────────────────────────── -->
 <div id="csQuickAddModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:center;justify-content:center;padding:16px">
   <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:680px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
