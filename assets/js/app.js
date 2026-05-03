@@ -422,21 +422,29 @@ function setStock(item,w,val){if(w==='dev')item.stockDev=val;else item.stockJosh
 function uid(){return Math.random().toString(36).substr(2,9);}
 function generateCaseId(worker, date) {
 const w = worker === 'dev' ? 'DEV' : 'JOSH';
-const d = (date || new Date().toISOString().split('T')[0]).replace(/-/g,'');
-const prefix = `ATL-${w}-${d}-`;
-// Only count unique finalized (non-draft) cases for this prefix
-// Exclude the currently-being-edited case to avoid incrementing on edit
+const dateStr = date || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+const [y, m, d] = dateStr.split('-');
+// New format: WORKER-MM-DD-YYYY-NN  (e.g. JOSH-05-04-2026-01)
+const newPrefix = `${w}-${m}-${d}-${y}-`;
+// Old format: ATL-WORKER-YYYYMMDD-NNN — still recognized so sequence numbers
+// don't reset to 01 when old records already exist for this date.
+const oldPrefix = `ATL-${w}-${y}${m}${d}-`;
+const extractSeq = (id) => {
+if (!id) return 0;
+if (id.startsWith(newPrefix)) return parseInt(id.slice(newPrefix.length)) || 0;
+if (id.startsWith(oldPrefix)) return parseInt(id.slice(oldPrefix.length)) || 0;
+return 0;
+};
+// Count finalized cases (excluding the one being edited)
 const existingNums = cases
-.filter(c => (c.caseId||'').startsWith(prefix) && c.id !== window._editingCaseId)
-.map(c => parseInt((c.caseId||'').replace(prefix,'')) || 0);
-// Also count pre-op records for this date/worker
-const preopNums = (window._cachedPreopRecords||[])
-.filter(r => (r['po-caseId']||'').startsWith(prefix))
-.map(r => parseInt((r['po-caseId']||'').replace(prefix,'')) || 0);
-const allNums = [...existingNums, ...preopNums];
+.filter(c => c.id !== window._editingCaseId)
+.map(c => extractSeq(c.caseId));
+// Count pre-op records for this date/worker
+const preopNums = (window._cachedPreopRecords||[]).map(r => extractSeq(r['po-caseId']));
+const allNums = [...existingNums, ...preopNums].filter(n => n > 0);
 const maxNum = allNums.length > 0 ? Math.max(...allNums) : 0;
-const seq = String(maxNum + 1).padStart(3, '0');
-return `${prefix}${seq}`;
+const seq = String(maxNum + 1).padStart(2, '0');
+return `${newPrefix}${seq}`;
 }
 window.updateCaseIdDisplays = function updateCaseIdDisplays() {
 const ncDisplay = document.getElementById('caseId-display');
