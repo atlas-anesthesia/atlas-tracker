@@ -358,7 +358,15 @@ if(document.getElementById('tab-calendar')?.classList.contains('active')) {
 
 // Listen for preop changes (real-time sync between users)
 onSnapshot(doc(db,'atlas','preop'), (snap) => {
-  const records = snap.exists() ? (snap.data().records||[]) : [];
+  let records = snap.exists() ? (snap.data().records||[]) : [];
+  // Auto-clean any duplicates that slipped in (mirrors the cases onSnapshot pattern)
+  const beforeLen = records.length;
+  const cleaned = deduplicatePreop(records);
+  if(cleaned.length < beforeLen) {
+    setDoc(doc(db,'atlas','preop'), {records: cleaned}).catch(()=>{});
+    console.log('Auto-cleaned', beforeLen - cleaned.length, 'duplicate preop record(s) from database');
+    records = cleaned;
+  }
   window._rawPreopRecords = records;
   window._cachedPreopRecords = [...records];
   // Re-render tabs that depend on preop data
@@ -404,6 +412,31 @@ function deduplicateCases() {
     console.log(`Dedup: removed ${cases.length - deduped.length} duplicate case(s)`);
     cases = deduped;
   }
+}
+// -- Deduplication — ensures no two pre-op records share the same caseId+worker.
+// Mirrors deduplicateCases. Called automatically by savePreopRecords on every
+// preop write so all paths (savePreop, edit, delete, deposit/notes updates,
+// cleanup, etc.) get protection without each having to dedup itself.
+function deduplicatePreop(records) {
+  const seen = new Map();
+  const noKey = []; // records missing caseId — preserved as-is
+  (records || []).forEach(r => {
+    const cid = r && r['po-caseId'];
+    if(!cid) { noKey.push(r); return; }
+    const key = cid + '|' + (r.worker || 'dev');
+    const existing = seen.get(key);
+    if(!existing || (r.savedAt || '') > (existing.savedAt || '')) {
+      seen.set(key, r);
+    }
+  });
+  return [...Array.from(seen.values()), ...noKey];
+}
+async function savePreopRecords(records) {
+  const cleaned = deduplicatePreop(records);
+  const removed = (records||[]).length - cleaned.length;
+  if(removed > 0) console.log(`Preop dedup: removed ${removed} duplicate(s) on save`);
+  await setDoc(doc(db,'atlas','preop'), { records: cleaned });
+  return cleaned;
 }
 async function saveCases() {
 deduplicateCases();
@@ -2533,7 +2566,7 @@ window.cleanupPreopDuplicates = async function() {
 
     // ─ Write back ────────────────────────────────────────────────────────────
     if(preopRemoved > 0) {
-      await setDoc(doc(db,'atlas','preop'), { records: preopCleaned });
+      await savePreopRecords(preopCleaned);
       window._rawPreopRecords = preopCleaned;
       window._cachedPreopRecords = [...preopCleaned];
     }
@@ -2586,7 +2619,7 @@ const cleaned = records.filter(r =>
 );
 cleaned.unshift(updated);
 setSyncing(true);
-await setDoc(doc(db,'atlas','preop'), { records: cleaned });
+await savePreopRecords(cleaned);
 setSyncing(false);
 window._editingPreopId = null;
 const editBanner = document.getElementById('preop-edit-banner');
@@ -2630,7 +2663,7 @@ const cleaned = existingRecs.filter(r =>
 );
 cleaned.unshift(record);
 setSyncing(true);
-await setDoc(doc(db,'atlas','preop'), { records: cleaned });
+await savePreopRecords(cleaned);
 setSyncing(false);
 // Create or update the linked draft case for this Case ID
 // Check for any existing case with this ID (draft OR finalized)
@@ -2802,7 +2835,7 @@ try {
   const records = preopSnap.exists() ? (preopSnap.data().records||[]) : [];
   const deletedRecord = records.find(r => r.id === id);
   const updatedPreop = records.filter(r => r.id !== id);
-  await setDoc(doc(db,'atlas','preop'), { records: updatedPreop });
+  await savePreopRecords(updatedPreop);
   // Update local preop cache immediately
   window._rawPreopRecords = updatedPreop;
   window._cachedPreopRecords = [...updatedPreop];
@@ -4334,7 +4367,7 @@ const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records || []) : [];
 const updated = records.filter(r => r.id !== id);
 setSyncing(true);
-await setDoc(doc(db,'atlas','preop'), { records: updated });
+await savePreopRecords(updated);
 setSyncing(false);
 // Also delete any matching draft case
 const matchingDraft = cases.find(c => c.draft && c.caseId === caseId);
@@ -5544,7 +5577,7 @@ const records = snap.exists() ? (snap.data().records||[]) : [];
 const rec = records.find(r => r.id === recordId);
 if(!rec) return;
 rec['po-depositStatus'] = status;
-await setDoc(doc(db,'atlas','preop'), { records });
+await savePreopRecords(records);
 window._rawPreopRecords = records;
 renderMidCase();
 renderHistory();
@@ -5557,7 +5590,7 @@ const records = snap.exists() ? (snap.data().records||[]) : [];
 const rec = records.find(r => r.id === recordId);
 if(!rec) return;
 rec['po-paymentNotes'] = notes;
-await setDoc(doc(db,'atlas','preop'), { records });
+await savePreopRecords(records);
 window._rawPreopRecords = records;
 renderHistory();
 } catch(e) { console.error(e); }
@@ -5571,7 +5604,7 @@ if(idx === -1) return;
 records[idx]['po-depositStatus'] = status;
 window._rawPreopRecords = records;
 setSyncing(true);
-await setDoc(doc(db,'atlas','preop'), { records });
+await savePreopRecords(records);
 setSyncing(false);
 renderMidCase();
 } catch(e) { console.error(e); }
@@ -5585,7 +5618,7 @@ if(idx === -1) return;
 records[idx]['po-paymentNotes'] = notes;
 window._rawPreopRecords = records;
 setSyncing(true);
-await setDoc(doc(db,'atlas','preop'), { records });
+await savePreopRecords(records);
 setSyncing(false);
 } catch(e) { console.error(e); }
 };
