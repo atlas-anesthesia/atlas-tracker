@@ -1122,71 +1122,102 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       empty.className = 'empty-state'; empty.style.fontSize = '12px';
       empty.textContent = 'No entries yet'; wrap.appendChild(empty);
     } else {
-      // Column header
+      // Column header — simple 2-zone flex layout matching the rows below
       const colHdr = document.createElement('div');
-      colHdr.style.cssText = 'display:grid;grid-template-columns:1fr 52px 1px 90px;gap:0;align-items:center;padding:4px 0 4px 0;border-bottom:2px solid var(--border)';
-      colHdr.innerHTML = '<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Entry</span>'
-        +'<span></span><span></span>'
-        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);text-align:right">Amount</span>';
+      colHdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:2px solid var(--border);margin-bottom:2px';
+      colHdr.innerHTML =
+        '<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);letter-spacing:.5px">Entry</span>'
+        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);letter-spacing:.5px">Amount</span>';
       wrap.appendChild(colHdr);
 
       sorted.forEach(function(e) {
         const meta = _meta(e.cat);
         const row = document.createElement('div');
-        // 4-column grid: info | actions | divider | amount
-        row.style.cssText = 'display:grid;grid-template-columns:1fr 52px 1px 90px;gap:0;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)';
+        // Two-zone flex layout: content on the left, amount block on the right.
+        // Edit/delete actions live in a flexbox slot before the amount and fade
+        // in on row hover only — keeps the resting state clean.
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:11px 8px;border-bottom:1px solid var(--border);border-radius:4px;transition:background .12s';
+        row.addEventListener('mouseenter', function() { row.style.background = 'rgba(0,0,0,0.025)'; });
+        row.addEventListener('mouseleave', function() { row.style.background = ''; });
 
-        // Left: pill + name + details
+        // ── LEFT: pill + name on first line, dotted meta on second ──
         const left = document.createElement('div');
-        left.style.minWidth = '0';
-        const pill = '<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.3px;margin-right:5px;background:'+meta.bg+';color:'+meta.color+'">'+meta.label+'</span>';
-        const autoTag = e.cat==='case-income' ? '<span style="font-size:9px;color:var(--text-faint);margin-left:4px;font-style:italic">auto</span>' : '';
-        left.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+pill+(e.name||'-')+autoTag+'</div>'
-          +(e.supplier?'<div style="font-size:11px;color:var(--text-muted)">'+e.supplier+'</div>':'')
-          +(e.notes?'<div style="font-size:11px;color:var(--text-faint);font-style:italic">'+e.notes+'</div>':'')
-          +(e.date?'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(e.date)+'</div>':'');
+        left.style.cssText = 'min-width:0;flex:1';
+        const pill = '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:'+meta.bg+';color:'+meta.color+';margin-right:8px;vertical-align:middle">'+meta.label+'</span>';
+        const autoTag = e.cat==='case-income'
+          ? '<span style="font-size:9px;color:var(--text-faint);margin-left:6px;font-style:italic;font-weight:400">auto</span>'
+          : '';
+        // Build dotted meta line: date · supplier · notes (with " · " separators)
+        const metaParts = [];
+        if(e.date) metaParts.push(_fmtD(e.date));
+        if(e.supplier) metaParts.push(e.supplier);
+        // For case-income rows the "Center: X" notes string duplicates the pill;
+        // strip that prefix so the meta line stays clean.
+        let displayNotes = e.notes || '';
+        if(e.cat === 'case-income' && displayNotes.indexOf('Center: ') === 0) {
+          displayNotes = displayNotes.slice(8);
+        }
+        if(displayNotes) metaParts.push(displayNotes);
+        const metaLine = metaParts.length
+          ? '<div style="font-size:11px;color:var(--text-faint);margin-top:4px;line-height:1.4">'+metaParts.join('<span style="margin:0 6px;opacity:.5">·</span>')+'</div>'
+          : '';
+        left.innerHTML =
+          '<div style="font-size:13px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+pill+(e.name||'-')+autoTag+'</div>'
+          + metaLine;
 
-        // Action buttons (edit + delete)
-        const actions = document.createElement('div');
-        actions.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-right:10px';
+        // ── RIGHT: hover-only action icons, then amount block ──
+        const right = document.createElement('div');
+        right.style.cssText = 'display:flex;align-items:center;gap:8px;flex-shrink:0';
+
         if(canEdit && e.cat !== 'case-income') {
+          const actions = document.createElement('div');
+          actions.style.cssText = 'display:flex;gap:2px;opacity:0;transition:opacity .12s';
+          row.addEventListener('mouseenter', function() { actions.style.opacity = '1'; });
+          row.addEventListener('mouseleave', function() { actions.style.opacity = '0'; });
+
           const editBtn = document.createElement('button');
-          editBtn.textContent = 'Edit';
-          editBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--info);padding:1px 0';
+          editBtn.innerHTML = '✎';
+          editBtn.title = 'Edit';
+          editBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:14px;color:var(--info);padding:4px 7px;border-radius:4px;line-height:1';
+          editBtn.addEventListener('mouseenter', function() { editBtn.style.background = 'rgba(29,83,198,0.12)'; });
+          editBtn.addEventListener('mouseleave', function() { editBtn.style.background = 'none'; });
           (function(entry, w) {
             editBtn.addEventListener('click', function() { window.editPayoutEntry(entry, w); });
           })(e, worker);
+
           const delBtn = document.createElement('button');
-          delBtn.textContent = 'Delete';
-          delBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:1px 0';
+          delBtn.innerHTML = '🗑';
+          delBtn.title = 'Delete';
+          delBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;padding:4px 7px;border-radius:4px;line-height:1;opacity:.7';
+          delBtn.addEventListener('mouseenter', function() { delBtn.style.background = 'rgba(239,68,68,0.12)'; delBtn.style.opacity = '1'; });
+          delBtn.addEventListener('mouseleave', function() { delBtn.style.background = 'none'; delBtn.style.opacity = '.7'; });
           (function(eid, ew) {
             delBtn.addEventListener('click', function() { window.deletePayoutEntry(eid, ew); });
           })(e.id, worker);
+
           actions.appendChild(editBtn); actions.appendChild(delBtn);
+          right.appendChild(actions);
         }
 
-        // Divider line
-        const divider = document.createElement('div');
-        divider.style.cssText = 'width:1px;background:var(--border);align-self:stretch';
-
-        // Amount column — right-aligned, fixed width
+        // Amount block — right-aligned, monospace, consistent min-width
         const amtCol = document.createElement('div');
-        amtCol.style.cssText = 'text-align:right;padding-left:12px';
+        amtCol.style.cssText = 'text-align:right;min-width:108px';
         if(e.cat === 'case-income') {
           // Case-income rows lead with PI (the practitioner's actual cut) and
           // show the underlying invoice amount as a smaller caption beneath.
           // PI is what matters for personal accounting; invoice is context.
           const piVal = e.personalIncome || 0;
           amtCol.innerHTML =
-            '<div style="font-size:14px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace">+'+_fmt(piVal)+'</div>'
-            + '<div style="font-size:10px;color:var(--text-faint);margin-top:1px;font-family:DM Mono,monospace">of '+_fmt(e.amount)+' inv.</div>';
+            '<div style="font-size:14px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace;line-height:1.2">+'+_fmt(piVal)+'</div>'
+            + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">of '+_fmt(e.amount)+' inv.</div>';
         } else {
-          const sign = _isExp(e.cat) ? '-' : '+';
+          const sign = _isExp(e.cat) ? '−' : '+';   // U+2212 minus for visual weight
           const amtColor = e.cat==='initial-invest' ? 'var(--info)' : (_isExp(e.cat) ? 'var(--warn)' : '#2d6a4f');
-          amtCol.innerHTML = '<span style="font-size:13px;font-weight:700;color:'+amtColor+';font-family:DM Mono,monospace">'+sign+_fmt(e.amount)+'</span>';
+          amtCol.innerHTML = '<div style="font-size:14px;font-weight:700;color:'+amtColor+';font-family:DM Mono,monospace;line-height:1.2">'+sign+_fmt(e.amount)+'</div>';
         }
+        right.appendChild(amtCol);
 
-        row.appendChild(left); row.appendChild(actions); row.appendChild(divider); row.appendChild(amtCol);
+        row.appendChild(left); row.appendChild(right);
         wrap.appendChild(row);
       });
     }
