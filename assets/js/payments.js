@@ -762,31 +762,54 @@ function _calcPersonalIncome(worker) {
   // Only count cases that have actually been invoiced (or marked invoiceSent
   // by the Stripe sync for patient cases). Otherwise PI would include cases
   // that were finalized but never billed, making PI exceed Total Invoiced.
-  const invoicedCaseIds = new Set(
-    (_paymentRows || [])
-      .filter(r => r.invoiceSent && r.caseId)
-      .map(r => r.caseId)
-  );
+  const invoicedRows = (_paymentRows || []).filter(r => r.invoiceSent && r.caseId);
+  const invoicedById = new Map(invoicedRows.map(r => [r.caseId, r]));
   const finalized = (window.cases || []).filter(c =>
-    !c.draft && c.worker === worker && invoicedCaseIds.has(c.caseId)
+    !c.draft && c.worker === worker && invoicedById.has(c.caseId)
   );
   let total = 0;
   finalized.forEach(c => {
     const preop = (window._rawPreopRecords || []).find(r => r['po-caseId'] === c.caseId);
     const centerId = preop?.['po-surgery-center'] || c.surgeryCenter || '';
     const rule = formula.centers.find(f => f.id === centerId);
-    if(rule) {
-      if(rule.type === 'flat') {
-        total += parseFloat(rule.rate) || 0;
-      } else if(rule.type === 'hourly') {
-        const hrs = c.endTime && c.startTime
-          ? (function() {
-              const [sh,sm] = c.startTime.split(':').map(Number);
-              const [eh,em] = c.endTime.split(':').map(Number);
-              return Math.max(0, ((eh*60+em)-(sh*60+sm))/60);
-            })()
-          : (parseFloat(preop?.['po-est-hours']) || 0);
-        total += hrs * (parseFloat(rule.rate) || 0);
+    if(!rule) return;
+    if(rule.type === 'flat') {
+      total += parseFloat(rule.rate) || 0;
+    } else if(rule.type === 'hourly') {
+      const hrs = c.endTime && c.startTime
+        ? (function() {
+            const [sh,sm] = c.startTime.split(':').map(Number);
+            const [eh,em] = c.endTime.split(':').map(Number);
+            return Math.max(0, ((eh*60+em)-(sh*60+sm))/60);
+          })()
+        : (parseFloat(preop?.['po-est-hours']) || 0);
+      total += hrs * (parseFloat(rule.rate) || 0);
+    } else if(rule.type === 'from_invoice') {
+      // Back-derive hours from the invoiced amount using the surgery center's
+      // billing structure (first-hour + 15-min increments), then multiply by
+      // the practitioner's personal hourly rate.
+      //
+      // Example:  invoice = $1440, firstHourRate = $960, incrementRate = $160 / 15min
+      //           remainder = $1440 − $960 = $480
+      //           additionalHours = $480 ÷ ($160 × 4) = 0.75 hr
+      //           totalHours = 1 + 0.75 = 1.75 hr
+      //           PI = 1.75 × personalRate ($600) = $1,050
+      const row = invoicedById.get(c.caseId);
+      const invoiced = parseFloat(row && row.invoicedAmount) || 0;
+      const firstHr  = parseFloat(rule.firstHourRate)  || 0;
+      const incr     = parseFloat(rule.incrementRate)  || 0;
+      const personal = parseFloat(rule.personalRate)   || 0;
+      if(invoiced > 0 && firstHr > 0 && incr > 0 && personal > 0) {
+        let totalHours;
+        if(invoiced <= firstHr) {
+          // Invoice didn't even cover a full first hour — count it as 1 hour
+          totalHours = 1;
+        } else {
+          const remainder = invoiced - firstHr;
+          const additionalHours = remainder / (incr * 4); // 4 fifteen-minute increments per hour
+          totalHours = 1 + additionalHours;
+        }
+        total += totalHours * personal;
       }
     }
   });
@@ -847,15 +870,34 @@ window.openPersonalIncomeModal = async function() {
             <option value="none" ${rule.type==='none'?'selected':''}>Not Used</option>
             <option value="hourly" ${rule.type==='hourly'?'selected':''}>Hourly Rate</option>
             <option value="flat" ${rule.type==='flat'?'selected':''}>Flat Rate / Day</option>
+            <option value="from_invoice" ${rule.type==='from_invoice'?'selected':''}>From Invoice</option>
           </select>
         </td>
-        <td style="padding:9px 12px">
-          <div style="display:flex;align-items:center;gap:4px">
+        <td style="padding:9px 8px">
+          <!-- Single-rate section (used for flat / hourly / none) -->
+          <div data-rate-mode="single" data-center-mode="${c.id}"
+               style="display:${rule.type==='from_invoice'?'none':'flex'};align-items:center;gap:4px">
             <span style="font-size:13px;color:var(--text-muted)">$</span>
             <input type="number" min="0" step="1" value="${rule.rate||''}"
               data-center="${c.id}" data-field="rate"
               placeholder="0" style="width:80px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
             <span style="font-size:11px;color:var(--text-faint)" id="pi-unit-${c.id}">${rule.type==='hourly'?'/hr':rule.type==='flat'?'/day':''}</span>
+          </div>
+          <!-- Three-rate section (used for from_invoice: back-derive PI from invoice) -->
+          <div data-rate-mode="invoice" data-center-mode="${c.id}"
+               style="display:${rule.type==='from_invoice'?'flex':'none'};align-items:center;gap:8px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px">1st hr $
+              <input type="number" min="0" step="1" value="${rule.firstHourRate||''}"
+                data-center="${c.id}" data-field="firstHourRate"
+                placeholder="960" style="width:62px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></label>
+            <label style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px">+15m $
+              <input type="number" min="0" step="1" value="${rule.incrementRate||''}"
+                data-center="${c.id}" data-field="incrementRate"
+                placeholder="160" style="width:62px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></label>
+            <label style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px">PI $/hr
+              <input type="number" min="0" step="1" value="${rule.personalRate||''}"
+                data-center="${c.id}" data-field="personalRate"
+                placeholder="600" style="width:62px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></label>
           </div>
         </td>
       </tr>`;
@@ -863,7 +905,7 @@ window.openPersonalIncomeModal = async function() {
   }
 
   modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:600px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="background:var(--surface);border-radius:12px;width:100%;max-width:700px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="background:#1d3557;padding:18px 24px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:1">
         <div>
           <div style="font-size:16px;font-weight:600;color:#fff">⚙️ Personal Income Formula</div>
@@ -889,11 +931,21 @@ window.openPersonalIncomeModal = async function() {
 
   document.body.appendChild(modal);
 
-  // Live unit label update
+  // Live: when type changes, swap which rate section shows + update unit label
   modal.addEventListener('change', e => {
     const el = e.target;
-    if(el.dataset.field === 'type') {
-      const unitEl = document.getElementById(`pi-unit-${el.dataset.center}`);
+    if(el.dataset.field !== 'type') return;
+    const tr = el.closest('tr');
+    if(!tr) return;
+    const single  = tr.querySelector('[data-rate-mode="single"]');
+    const invoice = tr.querySelector('[data-rate-mode="invoice"]');
+    const unitEl  = tr.querySelector(`#pi-unit-${el.dataset.center}`);
+    if(el.value === 'from_invoice') {
+      if(single)  single.style.display  = 'none';
+      if(invoice) invoice.style.display = 'flex';
+    } else {
+      if(single)  single.style.display  = 'flex';
+      if(invoice) invoice.style.display = 'none';
       if(unitEl) unitEl.textContent = el.value==='hourly'?'/hr':el.value==='flat'?'/day':'';
     }
   });
@@ -907,9 +959,16 @@ window.openPersonalIncomeModal = async function() {
       const centerId = sel.dataset.center;
       const type = sel.value;
       if(type === 'none') return;
-      const rateEl = modal.querySelector(`input[data-center="${centerId}"][data-field="rate"]`);
-      const rate = parseFloat(rateEl?.value) || 0;
-      _piFormula.centers.push({ id: centerId, type, rate });
+      if(type === 'from_invoice') {
+        const firstHourRate = parseFloat(modal.querySelector(`input[data-center="${centerId}"][data-field="firstHourRate"]`)?.value) || 0;
+        const incrementRate = parseFloat(modal.querySelector(`input[data-center="${centerId}"][data-field="incrementRate"]`)?.value) || 0;
+        const personalRate  = parseFloat(modal.querySelector(`input[data-center="${centerId}"][data-field="personalRate"]`)?.value)  || 0;
+        _piFormula.centers.push({ id: centerId, type, firstHourRate, incrementRate, personalRate });
+      } else {
+        const rateEl = modal.querySelector(`input[data-center="${centerId}"][data-field="rate"]`);
+        const rate = parseFloat(rateEl?.value) || 0;
+        _piFormula.centers.push({ id: centerId, type, rate });
+      }
     });
     await _savePIFormula();
     // Sync to both global stores
