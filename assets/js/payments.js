@@ -848,51 +848,48 @@ function _calcPersonalIncome(worker) {
   });
   let total = 0;
   finalized.forEach(c => {
-    const preop = (window._rawPreopRecords || []).find(r => r['po-caseId'] === c.caseId);
-    const centerId = preop?.['po-surgery-center'] || c.surgeryCenter || '';
-    const rule = formula.centers.find(f => f.id === centerId);
-    if(!rule) return;
-    if(rule.type === 'flat') {
-      total += parseFloat(rule.rate) || 0;
-    } else if(rule.type === 'hourly') {
-      const hrs = c.endTime && c.startTime
-        ? (function() {
-            const [sh,sm] = c.startTime.split(':').map(Number);
-            const [eh,em] = c.endTime.split(':').map(Number);
-            return Math.max(0, ((eh*60+em)-(sh*60+sm))/60);
-          })()
-        : (parseFloat(preop?.['po-est-hours']) || 0);
-      total += hrs * (parseFloat(rule.rate) || 0);
-    } else if(rule.type === 'from_invoice') {
-      // Back-derive hours from the invoiced amount using the surgery center's
-      // billing structure (first-hour + 15-min increments), then multiply by
-      // the practitioner's personal hourly rate.
-      //
-      // Example:  invoice = $1440, firstHourRate = $960, incrementRate = $160 / 15min
-      //           remainder = $1440 − $960 = $480
-      //           additionalHours = $480 ÷ ($160 × 4) = 0.75 hr
-      //           totalHours = 1 + 0.75 = 1.75 hr
-      //           PI = 1.75 × personalRate ($600) = $1,050
-      const row = invoicedById.get(c.caseId);
-      const invoiced = parseFloat(row && row.invoicedAmount) || 0;
-      const firstHr  = parseFloat(rule.firstHourRate)  || 0;
-      const incr     = parseFloat(rule.incrementRate)  || 0;
-      const personal = parseFloat(rule.personalRate)   || 0;
-      if(invoiced > 0 && firstHr > 0 && incr > 0 && personal > 0) {
-        let totalHours;
-        if(invoiced <= firstHr) {
-          // Invoice didn't even cover a full first hour — count it as 1 hour
-          totalHours = 1;
-        } else {
-          const remainder = invoiced - firstHr;
-          const additionalHours = remainder / (incr * 4); // 4 fifteen-minute increments per hour
-          totalHours = 1 + additionalHours;
-        }
-        total += totalHours * personal;
-      }
-    }
+    total += _calcPIForCase(c, invoicedById.get(c.caseId), formula);
   });
   return total;
+}
+
+// Per-case PI helper. Returns the personal-income contribution of a single
+// case, given its matching payment row and the active formula. Used both by
+// _calcPersonalIncome (live total) and by _syncAllInvoicedToPayouts (so each
+// case-income log entry stores its PI alongside the invoice amount, enabling
+// E&D to sum from the log without re-running the formula at display time).
+function _calcPIForCase(c, row, formula) {
+  if(!c) return 0;
+  formula = formula || _piFormula;
+  const preop = (window._rawPreopRecords || []).find(r => r['po-caseId'] === c.caseId);
+  const centerId = preop?.['po-surgery-center'] || c.surgeryCenter || '';
+  const rule = formula.centers.find(f => f.id === centerId);
+  if(!rule) return 0;
+  if(rule.type === 'flat') {
+    return parseFloat(rule.rate) || 0;
+  }
+  if(rule.type === 'hourly') {
+    const hrs = c.endTime && c.startTime
+      ? (function() {
+          const [sh,sm] = c.startTime.split(':').map(Number);
+          const [eh,em] = c.endTime.split(':').map(Number);
+          return Math.max(0, ((eh*60+em)-(sh*60+sm))/60);
+        })()
+      : (parseFloat(preop?.['po-est-hours']) || 0);
+    return hrs * (parseFloat(rule.rate) || 0);
+  }
+  if(rule.type === 'from_invoice') {
+    // See _calcPersonalIncome above for math + worked example.
+    const invoiced = parseFloat(row && row.invoicedAmount) || 0;
+    const firstHr  = parseFloat(rule.firstHourRate)  || 0;
+    const incr     = parseFloat(rule.incrementRate)  || 0;
+    const personal = parseFloat(rule.personalRate)   || 0;
+    if(invoiced > 0 && firstHr > 0 && incr > 0 && personal > 0) {
+      const totalHours = invoiced <= firstHr ? 1 : (1 + (invoiced - firstHr) / (incr * 4));
+      return totalHours * personal;
+    }
+  }
+  return 0;
 }
 
 function _calcProjectedPersonalIncome(worker) {
@@ -1077,19 +1074,26 @@ async function _syncAllInvoicedToPayouts(paymentRows) {
     const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payouts'));
     const data = snap.exists() ? snap.data() : { entries: [], distributions: [] };
     if(!data.entries) data.entries = [];
-    // Upsert each invoiced row as a case-income entry
+    // For each invoiced row, look up the matching case so we can compute PI at
+    // sync time. The PI value is stored on the entry itself — that's what
+    // makes E&D's totals "from the log" rather than re-derived from Payments.
+    const cases = window.cases || [];
     invoiced.forEach(row => {
       const existingIdx = data.entries.findIndex(e => e.cat === 'case-income' && e.caseId === row.caseId);
+      const matchedCase = cases.find(c => c.caseId === row.caseId);
+      const pi = _calcPIForCase(matchedCase, row);
       const entry = {
         id:        existingIdx !== -1 ? data.entries[existingIdx].id : (window.uid ? window.uid() : Date.now().toString(36) + Math.random().toString(36).slice(2,5)),
         worker:    row.worker || 'josh',
         cat:       'case-income',
         name:      row.caseId || 'Unknown Case',
         amount:    parseFloat(row.invoicedAmount) || 0,
+        personalIncome: pi,                                  // ← snapshot of PI at sync time
         date:      row.caseDate || null,
         notes:     (row.surgeryCenterName||row.surgeryCenter) ? 'Center: ' + (row.surgeryCenterName||row.surgeryCenter) : '',
         caseId:    row.caseId,
-        createdAt: existingIdx !== -1 ? data.entries[existingIdx].createdAt : new Date().toISOString()
+        createdAt: existingIdx !== -1 ? data.entries[existingIdx].createdAt : new Date().toISOString(),
+        syncedAt:  new Date().toISOString()
       };
       if(existingIdx !== -1) data.entries[existingIdx] = entry;
       else data.entries.push(entry);
@@ -1103,6 +1107,22 @@ async function _syncAllInvoicedToPayouts(paymentRows) {
     console.warn('Could not sync invoices to payouts:', e);
   }
 }
+
+// Expose for E&D tab — lets it trigger a fresh re-sync from the
+// "🔄 Re-sync" button when the mismatch warning shows.
+window._syncAllInvoicedToPayouts = function() { return _syncAllInvoicedToPayouts(_paymentRows); };
+
+// Expose Payments-side per-worker totals so E&D can compare against them
+// without reaching into module state. Used to detect drift between the two
+// boxes (turns the metric card red when they disagree).
+window._getPaymentsTotalsForWorker = function(worker) {
+  const sentRows = (_paymentRows || []).filter(r => r.invoiceSent && r.worker === worker);
+  const totalInvoiced = sentRows.reduce((s, r) => s + (parseFloat(r.invoicedAmount) || 0), 0);
+  // PI uses the same scope as the Payments tab (window._personalIncome already
+  // applies the future-date and invoiceSent filters via _calcPersonalIncome).
+  const personalIncome = (window._personalIncome && window._personalIncome[worker]) || 0;
+  return { totalInvoiced, personalIncome };
+};
 
 window.sendInvoiceEmail = async function() {
   const email=document.getElementById('inv-modal-email')?.value?.trim();
