@@ -404,6 +404,39 @@ window.loadSavedPDFs = async function loadSavedPDFs() {
     const snap = await window.getDoc(window.doc(window.db,'atlas','saved_pdfs'));
     _savedPDFs = snap.exists()?(snap.data().pdfs||[]):[];
   } catch(e){_savedPDFs=[];}
+  // One-time-per-load dedupe: if records were saved before the dedupe fix in
+  // savePDFRecord landed, this collapses them. Key by caseId when available,
+  // falling back to invoiceNum (which is also 1:1 with a case). Merging keeps
+  // emailed:true if any of the duplicates had it. Preserves list order: the
+  // first occurrence wins position; duplicates fold into it.
+  const seen = new Map();   // key → { entry, idx in deduped }
+  const deduped = [];
+  _savedPDFs.forEach(p => {
+    const key = p.caseId || p.invoiceNum;
+    if(!key) { deduped.push(p); return; }   // can't dedupe — keep as-is
+    if(seen.has(key)) {
+      const slot = seen.get(key);
+      const prev = deduped[slot];
+      deduped[slot] = {
+        ...prev,
+        ...p,
+        emailed: prev.emailed === true || p.emailed === true,
+        // Keep the earliest savedAt as the canonical timestamp unless the
+        // newer dup is the one that got emailed.
+        savedAt: p.emailed === true ? p.savedAt : (prev.savedAt || p.savedAt),
+      };
+    } else {
+      seen.set(key, deduped.length);
+      deduped.push(p);
+    }
+  });
+  if(deduped.length !== _savedPDFs.length) {
+    console.log('Saved PDFs: collapsed', _savedPDFs.length - deduped.length, 'duplicate(s)');
+    _savedPDFs = deduped;
+    // Persist the cleaned list so the dedupe is permanent, not per-render.
+    try { await window.setDoc(window.doc(window.db,'atlas','saved_pdfs'),{pdfs:deduped}); }
+    catch(e) { console.warn('Saved PDFs dedupe write-back failed:', e); }
+  }
   renderSavedPDFs();
 }
 async function savePDFRecord(record) {
