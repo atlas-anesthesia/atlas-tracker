@@ -94,11 +94,7 @@
       doc.text(supplier, 18, y + 5.5);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      const supplierTotal = supplierItems.reduce((s, i) => {
-        const restockTo = Math.max(0, (i.alert * 2) - getStock(i, worker));
-        return s + restockTo * (i.costPerUnit || 0);
-      }, 0);
-      doc.text(`${supplierItems.length} item${supplierItems.length !== 1 ? 's' : ''} · est. ~$${supplierTotal.toFixed(2)} to restock to 2× alert`, W - 18, y + 5.5, { align: 'right' });
+      doc.text(`${supplierItems.length} item${supplierItems.length !== 1 ? 's' : ''}`, W - 18, y + 5.5, { align: 'right' });
       y += 11;
 
       // Column headers
@@ -236,11 +232,7 @@
     // ── SUMMARY BANNER ────────────────────────────────────────────────────────
     const summary = workersToInclude.map(w => {
       const low = getLowItems(items, w);
-      const restockCost = low.reduce((s, i) => {
-        const need = Math.max(0, (i.alert * 2) - getStock(i, w));
-        return s + need * (i.costPerUnit || 0);
-      }, 0);
-      return { worker: w, count: low.length, estCost: restockCost };
+      return { worker: w, count: low.length };
     });
 
     const banH = 8 + summary.length * 4.5;
@@ -254,7 +246,7 @@
     doc.setFont('helvetica', 'normal');
     summary.forEach((s, idx) => {
       const wname = WORKER_LABEL[s.worker] || s.worker;
-      const line = `${wname}: ${s.count} item${s.count !== 1 ? 's' : ''} below alert  ·  est. ~$${s.estCost.toFixed(2)} to restock to 2× alert level`;
+      const line = `${wname}: ${s.count} item${s.count !== 1 ? 's' : ''} below alert level`;
       doc.text(line, W/2, y + 11 + (idx * 4.5), { align: 'center' });
     });
     y += banH + 5;
