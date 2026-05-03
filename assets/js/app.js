@@ -6136,11 +6136,22 @@ if(dropdown && !dropdown.contains(e.target)) closeReportsDropdown();
 window.getDoc = getDoc;
 window.setDoc = setDoc;
 window.doc = doc;
+window.onSnapshot = onSnapshot;
 // fax.js, payments.js, anesthesia.js access these via window.*
 window.db = db;
 window.uid = uid;
 window.setSyncing = setSyncing;
 window._generateFlatRateInvoicePDF = _generateFlatRateInvoicePDF;
+
+// Helpers/state needed by quickadd.js (bundles + Quick Add modals)
+window.getStock = getStock;
+window.isCSItem = isCSItem;
+window.linkCSInvIds = linkCSInvIds;
+window.CS_DRUGS = CS_DRUGS;
+window.getCostPerMG = getCostPerMG;
+window.renderCaseSupplies = renderCaseSupplies;
+window.renderCSEntries = renderCSEntries;
+window.refreshItemSelect = refreshItemSelect;
 
 // For reassignable variables, use property descriptors so window always reflects current value
 Object.defineProperty(window, 'cases', {
@@ -6148,4 +6159,13 @@ Object.defineProperty(window, 'cases', {
 });
 Object.defineProperty(window, 'currentWorker', {
   get: () => currentWorker, set: v => { currentWorker = v; }, configurable: true
+});
+Object.defineProperty(window, 'items', {
+  get: () => items, set: v => { items = v; }, configurable: true
+});
+Object.defineProperty(window, 'caseItems', {
+  get: () => caseItems, set: v => { caseItems = v; }, configurable: true
+});
+Object.defineProperty(window, 'csEntries', {
+  get: () => csEntries, set: v => { csEntries = v; }, configurable: true
 });
