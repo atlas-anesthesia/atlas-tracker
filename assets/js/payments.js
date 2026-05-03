@@ -827,9 +827,22 @@ function _calcPersonalIncome(worker) {
   // that were finalized but never billed, making PI exceed Total Invoiced.
   const invoicedRows = (_paymentRows || []).filter(r => r.invoiceSent && r.caseId);
   const invoicedById = new Map(invoicedRows.map(r => [r.caseId, r]));
-  const finalized = (window.cases || []).filter(c =>
-    !c.draft && c.worker === worker && invoicedById.has(c.caseId)
-  );
+  // Local "today" as YYYY-MM-DD for direct string comparison with c.date.
+  // Using local time (not UTC) so the cutoff matches the practitioner's
+  // calendar — a case scheduled "today" stays counted right up until midnight
+  // local, regardless of where the server clock thinks UTC is.
+  const _today = new Date();
+  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+  const finalized = (window.cases || []).filter(c => {
+    if(c.draft) return false;
+    if(c.worker !== worker) return false;
+    if(!invoicedById.has(c.caseId)) return false;
+    // Exclude future-dated cases: PI should reflect work that has happened,
+    // not invoices issued for upcoming cases. Cases with no date stay counted
+    // (we can't classify them either way; preserve prior behavior).
+    if(c.date && c.date > todayStr) return false;
+    return true;
+  });
   let total = 0;
   finalized.forEach(c => {
     const preop = (window._rawPreopRecords || []).find(r => r['po-caseId'] === c.caseId);
