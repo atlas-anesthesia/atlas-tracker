@@ -2445,6 +2445,112 @@ if(el) data[id] = el.value;
 });
 return data;
 }
+// ── ONE-TIME ADMIN: Dedupe duplicate pre-op records ─────────────────────────
+// Run from browser console: cleanupPreopDuplicates()
+// Scans atlas/preop.records and atlas/cases, groups by po-caseId+worker (or
+// caseId+worker for cases), and keeps only the most recently saved entry of
+// each. Reports duplicates and prompts before writing.
+window.cleanupPreopDuplicates = async function() {
+  if(!confirm('Scan Firestore for duplicate pre-op records and case drafts?\n\nThis is safe to run — it will preview duplicates first and only write if you confirm.')) return;
+  try {
+    setSyncing(true);
+
+    // ─ PREOP RECORDS ─────────────────────────────────────────────────────────
+    const preopSnap = await getDoc(doc(db,'atlas','preop'));
+    const preopRecs = preopSnap.exists() ? (preopSnap.data().records || []) : [];
+    const preopBefore = preopRecs.length;
+
+    const preopByKey = new Map();
+    const preopOrphans = [];
+    preopRecs.forEach((r, idx) => {
+      const cid = r['po-caseId'];
+      if(!cid) { preopOrphans.push(r); return; }
+      const key = cid + '|' + (r.worker || 'dev');
+      const existing = preopByKey.get(key);
+      if(!existing) { preopByKey.set(key, r); return; }
+      if((r.savedAt || '') > (existing.savedAt || '')) preopByKey.set(key, r);
+    });
+    const preopCleaned = [...Array.from(preopByKey.values()), ...preopOrphans];
+    const preopRemoved = preopBefore - preopCleaned.length;
+
+    // ─ CASES (drafts may also be duplicated) ─────────────────────────────────
+    const casesSnap = await getDoc(doc(db,'atlas','cases'));
+    const allCases = casesSnap.exists() ? (casesSnap.data().cases || []) : [];
+    const casesBefore = allCases.length;
+
+    const casesByKey = new Map();
+    const casesOrphans = [];
+    allCases.forEach(c => {
+      // Only dedupe DRAFT cases — finalized cases are intentional records and
+      // should never be touched by this cleanup.
+      if(!c.draft) { casesOrphans.push(c); return; }
+      const cid = c.caseId;
+      if(!cid) { casesOrphans.push(c); return; }
+      const key = cid + '|' + (c.worker || 'dev');
+      const existing = casesByKey.get(key);
+      if(!existing) { casesByKey.set(key, c); return; }
+      if((c.savedAt || '') > (existing.savedAt || '')) casesByKey.set(key, c);
+    });
+    const casesCleaned = [...Array.from(casesByKey.values()), ...casesOrphans];
+    const casesRemoved = casesBefore - casesCleaned.length;
+
+    // ─ Build a duplicate report ──────────────────────────────────────────────
+    const tally = (rows, getKey) => {
+      const counts = {};
+      rows.forEach(r => { const k = getKey(r); if(k) counts[k] = (counts[k]||0) + 1; });
+      return Object.entries(counts).filter(([_,c]) => c > 1);
+    };
+    const preopDupes = tally(preopRecs, r => r['po-caseId'] && (r['po-caseId']+' ('+(r.worker||'dev')+')'));
+    const draftDupes = tally(allCases.filter(c=>c.draft), c => c.caseId && (c.caseId+' ('+(c.worker||'dev')+') [draft]'));
+
+    if(preopRemoved === 0 && casesRemoved === 0) {
+      setSyncing(false);
+      alert(`✓ No duplicates found.\n\nPre-op records: ${preopBefore}\nCase entries:   ${casesBefore}\n\nNothing to clean up.`);
+      return;
+    }
+
+    const preopList = preopDupes.map(([k,c]) => `  • ${k}: ${c} copies → keep 1, remove ${c-1}`).join('\n') || '  (none)';
+    const draftList = draftDupes.map(([k,c]) => `  • ${k}: ${c} copies → keep 1, remove ${c-1}`).join('\n') || '  (none)';
+    const msg =
+      `Pre-op records:\n` +
+      `  Before: ${preopBefore}, After: ${preopCleaned.length}, Remove: ${preopRemoved}\n` +
+      preopList + '\n\n' +
+      `Draft cases:\n` +
+      `  Before: ${casesBefore}, After: ${casesCleaned.length}, Remove: ${casesRemoved}\n` +
+      draftList + '\n\n' +
+      `Tiebreaker for each duplicate group: keep the entry with the most recent savedAt.\n\n` +
+      `Proceed with cleanup?`;
+
+    if(!confirm(msg)) { setSyncing(false); return; }
+
+    // ─ Write back ────────────────────────────────────────────────────────────
+    if(preopRemoved > 0) {
+      await setDoc(doc(db,'atlas','preop'), { records: preopCleaned });
+      window._rawPreopRecords = preopCleaned;
+      window._cachedPreopRecords = [...preopCleaned];
+    }
+    if(casesRemoved > 0) {
+      await setDoc(doc(db,'atlas','cases'), { cases: casesCleaned });
+      // Sync local `cases` array used by the rest of the app
+      if(typeof cases !== 'undefined' && Array.isArray(cases)) {
+        cases.length = 0;
+        casesCleaned.forEach(c => cases.push(c));
+      }
+    }
+
+    setSyncing(false);
+    console.log('Cleanup report', {
+      preop: { before: preopBefore, after: preopCleaned.length, removed: preopRemoved, dupes: preopDupes },
+      cases: { before: casesBefore, after: casesCleaned.length, removed: casesRemoved, dupes: draftDupes }
+    });
+    alert(`✓ Cleanup complete!\n\nPre-op: removed ${preopRemoved} duplicate(s)\nDrafts: removed ${casesRemoved} duplicate(s)\n\nRefresh the page to see the cleaned data everywhere.`);
+  } catch(e) {
+    setSyncing(false);
+    alert('Cleanup error: '+e.message);
+    console.error('cleanupPreopDuplicates error:', e);
+  }
+};
+
 window.savePreop = async function() {
 const textData = getPreopTextFields();
 const checkData = getPreopCheckboxes();
@@ -2464,9 +2570,15 @@ if(idx !== -1) {
 // Keep the ORIGINAL case ID — do not regenerate
 textData['po-caseId'] = records[idx]['po-caseId'];
 const updated = { ...records[idx], ...textData, ...checkData, savedAt: new Date().toISOString() };
-records[idx] = updated;
+// HARDENED: filter out ALL records with same caseId+worker (cleans up any
+// pre-existing duplicates) and re-add the updated one. Prevents dupes from
+// ever surviving a save.
+const cleaned = records.filter(r =>
+  !(r['po-caseId'] === updated['po-caseId'] && (r.worker||'dev') === (updated.worker||'dev'))
+);
+cleaned.unshift(updated);
 setSyncing(true);
-await setDoc(doc(db,'atlas','preop'), { records });
+await setDoc(doc(db,'atlas','preop'), { records: cleaned });
 setSyncing(false);
 window._editingPreopId = null;
 const editBanner = document.getElementById('preop-edit-banner');
@@ -2483,7 +2595,7 @@ console.error(e);
 return;
 }
 }
-// Fetch existing pre-op records for duplicate check
+// SINGLE Firestore read — generate ID and dedupe atomically
 const snap0 = await getDoc(doc(db,'atlas','preop'));
 const existingRecs = snap0.exists() ? (snap0.data().records||[]) : [];
 // Always generate a fresh unique case ID — multiple cases on same day are allowed
@@ -2494,27 +2606,23 @@ const display = document.getElementById('po-caseId-display');
 const input = document.getElementById('po-caseId');
 if(display) display.textContent = generatedId;
 if(input) input.value = generatedId;
-// Check if a record already exists with this caseId — update instead of duplicate
-const existingRecIdx = existingRecs.findIndex(r => r['po-caseId'] === generatedId && r.worker === currentWorker);
+// If a record already exists with this caseId+worker, preserve its internal id
+const existingMatch = existingRecs.find(r => r['po-caseId'] === generatedId && (r.worker||'dev') === currentWorker);
 const record = {
-id: existingRecIdx !== -1 ? existingRecs[existingRecIdx].id : uid(),
+id: existingMatch ? existingMatch.id : uid(),
 savedAt: new Date().toISOString(),
 worker: currentWorker,
 ...textData,
 ...checkData
 };
-// Save pre-op record to Firestore
-const preopSnap = await getDoc(doc(db,'atlas','preop'));
-const existing = preopSnap.exists() ? (preopSnap.data().records || []) : [];
-// Update if same caseId+worker already exists, otherwise add new
-const dupeIdx = existing.findIndex(r => r['po-caseId'] === generatedId && r.worker === currentWorker);
-if(dupeIdx !== -1) {
-existing[dupeIdx] = record;
-} else {
-existing.unshift(record);
-}
+// HARDENED: filter out ALL records with same caseId+worker (not just findIndex
+// the first one) — this cleans up any pre-existing duplicates on every save.
+const cleaned = existingRecs.filter(r =>
+  !(r['po-caseId'] === generatedId && (r.worker||'dev') === currentWorker)
+);
+cleaned.unshift(record);
 setSyncing(true);
-await setDoc(doc(db,'atlas','preop'), { records: existing });
+await setDoc(doc(db,'atlas','preop'), { records: cleaned });
 setSyncing(false);
 // Create or update the linked draft case for this Case ID
 // Check for any existing case with this ID (draft OR finalized)
