@@ -894,6 +894,14 @@ function _calcPersonalIncome(worker) {
 function _calcPIForCase(c, row, formula) {
   if(!c) return 0;
   formula = formula || _piFormula;
+  // Match the live-calc filter: PI is only counted once the case has actually
+  // happened. Future-dated cases get PI=0 here so the per-entry PI written
+  // during sync agrees with the per-worker PI shown on Payments. Cases with
+  // no date stay counted — we can't classify them, preserve prior behavior.
+  if(c.date) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if(c.date > todayStr) return 0;
+  }
   const preop = (window._rawPreopRecords || []).find(r => r['po-caseId'] === c.caseId);
   const centerId = preop?.['po-surgery-center'] || c.surgeryCenter || '';
   const rule = formula.centers.find(f => f.id === centerId);
