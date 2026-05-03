@@ -1026,8 +1026,10 @@ window.sendInvoiceEmail = async function() {
       }).catch(()=>{});
       alert('Invoice sent to '+email+'!');
     }
-    else{window.open('mailto:'+email+'?subject='+encodeURIComponent('Atlas Anesthesia Invoice '+invoiceNum));alert('Email client opened.');}
-    await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider,total,caseId,worker:window.currentWorker,emailed:true,savedAt:new Date().toISOString()});
+    else{ alert('Could not send invoice. ' + (data && data.error ? data.error : 'Server returned an error.') + '\n\nPlease try again.'); }
+    // Save PDF record, but isolate its errors so they don't bubble to the outer catch
+    // (otherwise a save failure AFTER a successful email send would trigger the catch handler).
+    await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider,total,caseId,worker:window.currentWorker,emailed:true,savedAt:new Date().toISOString()}).catch(e => console.warn('savePDFRecord failed (email already sent):', e));
     if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){
       _paymentRows[_invoiceModalRowIdx].invoiceSent=true;
       _paymentRows[_invoiceModalRowIdx].invoicedAmount=total;
@@ -1039,7 +1041,8 @@ window.sendInvoiceEmail = async function() {
     renderPaymentRows();
     closeInvoiceModal();
   } catch(e){
-    window.open('mailto:'+email+'?subject='+encodeURIComponent('Atlas Anesthesia Invoice'));
+    console.error('Send invoice error:', e);
+    alert('Could not send invoice: ' + (e.message || 'Network error') + '\n\nPlease try again.');
     await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider,total,caseId,worker:window.currentWorker,emailed:false,savedAt:new Date().toISOString()}).catch(()=>{});
   } finally {
     btn.textContent='Send Invoice Email';btn.disabled=false;
