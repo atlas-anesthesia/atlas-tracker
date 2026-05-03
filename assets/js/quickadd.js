@@ -73,18 +73,23 @@
     if(!bar) return;
     let html = '';
     if(!bundles.length) {
-      html = '<div style="font-size:12px;color:var(--text-faint);font-style:italic;padding:4px 0;flex:1">No bundles yet — set quantities below, then click "Save current as bundle" to create one.</div>';
+      html = '<div style="font-size:12px;color:var(--text-faint);font-style:italic;padding:4px 0;flex:1">No bundles yet — set quantities below, then click one of the save buttons to create a bundle.</div>';
     } else {
       bundles.forEach(b => {
         const itemCount = (b.items || []).length;
+        const itemsOnly = !!b.itemsOnly;
+        const tag = itemsOnly ? '<span style="font-size:9px;font-weight:600;letter-spacing:.4px;background:rgba(29,53,87,.18);color:var(--info);padding:1px 5px;border-radius:8px;margin-right:4px">LIST</span>' : '';
         html += `<div style="display:inline-flex;align-items:stretch;background:var(--info-light);border:1px solid var(--info);border-radius:20px;overflow:hidden;font-size:12px;font-weight:500">
-          <button onclick="window.qa_applyBundle('${b.id}')" title="Click to apply this bundle's quantities" style="background:none;border:none;color:var(--info);padding:5px 4px 5px 12px;cursor:pointer;font:inherit;font-weight:600">${escapeHtml(b.name)}</button>
+          <button onclick="window.qa_applyBundle('${b.id}')" title="Click to apply this bundle" style="background:none;border:none;color:var(--info);padding:5px 4px 5px 10px;cursor:pointer;font:inherit;font-weight:600;display:inline-flex;align-items:center">${tag}${escapeHtml(b.name)}</button>
           <span style="font-size:10px;color:var(--info);opacity:.65;align-self:center;padding:0 6px">${itemCount}</span>
           <button onclick="window.qa_bundleMenu('${b.id}',event)" title="Bundle options" style="background:rgba(29,53,87,.08);border:none;border-left:1px solid rgba(29,53,87,.2);color:var(--info);padding:0 9px;cursor:pointer;font:inherit;font-size:14px">⋯</button>
         </div>`;
       });
     }
-    html += `<button onclick="window.qa_saveCurrentAsBundle()" class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 10px;margin-left:auto">+ Save current as bundle</button>`;
+    html += `<div style="display:inline-flex;gap:6px;margin-left:auto">
+      <button onclick="window.qa_saveCurrentAsBundle(false)" class="btn btn-ghost btn-sm" title="Save current items + their quantities as a reusable bundle" style="font-size:11px;padding:4px 10px">+ Save with quantities</button>
+      <button onclick="window.qa_saveCurrentAsBundle(true)" class="btn btn-ghost btn-sm" title="Save just the list of items (no quantities) — apply later and fill in quantities per case" style="font-size:11px;padding:4px 10px">+ Save items only</button>
+    </div>`;
     bar.innerHTML = html;
   }
 
@@ -95,7 +100,9 @@
     (b.items || []).forEach(bi => {
       const input = document.querySelector(`#suppliesQuickAddModal .qa-qty-input[data-item-id="${cssEscape(bi.itemId)}"]`);
       if(input) {
-        input.value = bi.qty;
+        // qty 0 (items-only bundle) → seed with 1 so the item is visible/counted; user adjusts.
+        // qty > 0 → use the bundle's stored quantity directly.
+        input.value = (bi.qty > 0) ? bi.qty : 1;
         appliedCount++;
       } else {
         missing.push(bi.itemId);
@@ -145,11 +152,15 @@
     if(!b) return;
     const items = readQuickAddItemQuantities();
     if(!items.length) {
-      alert('No quantities set in the modal — fill in some quantities first, then update the bundle.');
+      alert('No quantities set in the modal — set qty ≥ 1 on the items you want to include, then update.');
       return;
     }
-    if(!confirm(`Replace items in "${b.name}" with the current ${items.length} item(s) at their current quantities?`)) return;
-    b.items = items;
+    const typeLabel = b.itemsOnly ? 'items-only' : 'with quantities';
+    if(!confirm(`Replace items in "${b.name}" (${typeLabel}) with the current ${items.length} item(s)?`)) return;
+    // Preserve the bundle's type — items-only stays items-only, with-quantities stays with-quantities
+    b.items = b.itemsOnly
+      ? items.map(({itemId}) => ({itemId, qty: 0}))
+      : items;
     b.savedAt = new Date().toISOString();
     if(await saveBundles()) {
       renderBundlesBar();
@@ -165,24 +176,35 @@
     if(await saveBundles()) renderBundlesBar();
   }
 
-  window.qa_saveCurrentAsBundle = async function() {
+  window.qa_saveCurrentAsBundle = async function(itemsOnly) {
     const items = readQuickAddItemQuantities();
     if(!items.length) {
-      alert('Set some quantities in the modal first, then save them as a bundle.');
+      alert(itemsOnly
+        ? 'No items selected. Set qty ≥ 1 on the items you want to include in the bundle, then click "Save items only".'
+        : 'No quantities set. Fill in some quantities first, then click "Save with quantities".'
+      );
       return;
     }
-    const name = prompt('Bundle name (e.g. "Standard MAC", "Wisdom Teeth Setup"):');
+    const promptLabel = itemsOnly
+      ? `Bundle name (items only — quantities will be set per case):\n\nIncludes ${items.length} item(s).`
+      : `Bundle name (with current quantities):\n\nIncludes ${items.length} item(s).`;
+    const name = prompt(promptLabel);
     if(!name || !name.trim()) return;
+    // For items-only, store qty=0 so apply() knows to seed with 1 instead of using the saved qty
+    const bundleItems = itemsOnly
+      ? items.map(({itemId}) => ({itemId, qty: 0}))
+      : items;
     bundles.push({
       id: window.uid ? window.uid() : (Date.now().toString(36)),
       name: name.trim(),
-      items,
+      items: bundleItems,
+      itemsOnly: !!itemsOnly,
       createdAt: new Date().toISOString(),
       savedAt: new Date().toISOString()
     });
     if(await saveBundles()) {
       renderBundlesBar();
-      alert(`Bundle "${name.trim()}" saved with ${items.length} item(s).`);
+      alert(`Bundle "${name.trim()}" saved with ${bundleItems.length} item(s)${itemsOnly ? ' (items only)' : ''}.`);
     }
   };
 
