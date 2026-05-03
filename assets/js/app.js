@@ -1243,26 +1243,88 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     } else {
       sortedD.forEach(function(d) {
         const row = document.createElement('div');
-        row.style.cssText = 'display:grid;grid-template-columns:1fr 52px 1px 90px;gap:0;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)';
+        // Same two-zone flex layout used by the entry list above for visual consistency.
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 8px;border-bottom:1px solid var(--border);border-radius:4px;transition:background .12s';
+        row.addEventListener('mouseenter', function() { row.style.background = 'rgba(0,0,0,0.025)'; });
+        row.addEventListener('mouseleave', function() { row.style.background = ''; });
+
+        // Left: title (Distribution + ref#) + meta line (date · notes)
         const left = document.createElement('div');
-        left.innerHTML = '<div style="font-size:13px;font-weight:600;color:#2d6a4f">Distribution</div>'
-          +(d.date?'<div style="font-size:11px;color:var(--text-faint)">'+_fmtD(d.date)+'</div>':'')
-          +(d.notes?'<div style="font-size:12px;color:var(--text-muted);font-style:italic">'+d.notes+'</div>':'');
+        left.style.cssText = 'min-width:0;flex:1';
+        const refTag = d.refNum
+          ? '<span style="font-size:10px;font-family:DM Mono,monospace;color:var(--text-faint);margin-left:8px;font-weight:500">'+d.refNum+'</span>'
+          : '';
+        const metaParts = [];
+        if(d.date)  metaParts.push(_fmtD(d.date));
+        if(d.notes) metaParts.push(d.notes);
+        const metaLine = metaParts.length
+          ? '<div style="font-size:11px;color:var(--text-faint);margin-top:4px;line-height:1.4">'+metaParts.map(function(s){return String(s).replace(/[<>&]/g,function(c){return ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c];});}).join('<span style="margin:0 6px;opacity:.5">·</span>')+'</div>'
+          : '';
+        left.innerHTML =
+          '<div style="font-size:13px;font-weight:600;color:#2d6a4f;line-height:1.3">Distribution'+refTag+'</div>'
+          + metaLine;
+
+        // Right: hover-only action icons + amount
+        const right = document.createElement('div');
+        right.style.cssText = 'display:flex;align-items:center;gap:8px;flex-shrink:0';
+
         const actions = document.createElement('div');
-        actions.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-right:10px';
-        if(canEdit) {
-          const dBtn = document.createElement('button');
-          dBtn.textContent = 'Delete';
-          dBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint)';
-          (function(did, dw) { dBtn.addEventListener('click', function() { window.deleteDistribution(did, dw); }); })(d.id, worker);
-          actions.appendChild(dBtn);
+        actions.style.cssText = 'display:flex;gap:2px;opacity:0;transition:opacity .12s';
+        row.addEventListener('mouseenter', function() { actions.style.opacity = '1'; });
+        row.addEventListener('mouseleave', function() { actions.style.opacity = '0'; });
+
+        // Preview — opens the saved sheet in the modal's preview view.
+        // Only offered for new-format distributions (those with lineItems);
+        // legacy records have nothing itemized to display, so skip the button.
+        if(d.lineItems && d.lineItems.length && typeof window.openDistributionPreview === 'function') {
+          const viewBtn = document.createElement('button');
+          viewBtn.innerHTML = '👁';
+          viewBtn.title = 'Preview';
+          viewBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:14px;padding:4px 7px;border-radius:4px;line-height:1';
+          viewBtn.addEventListener('mouseenter', function() { viewBtn.style.background = 'rgba(0,0,0,0.06)'; });
+          viewBtn.addEventListener('mouseleave', function() { viewBtn.style.background = 'none'; });
+          (function(dist, w) {
+            viewBtn.addEventListener('click', function() { window.openDistributionPreview(dist, w); });
+          })(d, worker);
+          actions.appendChild(viewBtn);
         }
-        const divider = document.createElement('div');
-        divider.style.cssText = 'width:1px;background:var(--border);align-self:stretch';
+
+        // PDF — re-generates the PDF for the saved distribution
+        if(typeof window.redownloadDistributionPDF === 'function') {
+          const pdfBtn = document.createElement('button');
+          pdfBtn.innerHTML = '📄';
+          pdfBtn.title = 'Download PDF';
+          pdfBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:13px;padding:4px 7px;border-radius:4px;line-height:1';
+          pdfBtn.addEventListener('mouseenter', function() { pdfBtn.style.background = 'rgba(29,83,198,0.12)'; });
+          pdfBtn.addEventListener('mouseleave', function() { pdfBtn.style.background = 'none'; });
+          (function(dist, w) {
+            pdfBtn.addEventListener('click', function() { window.redownloadDistributionPDF(dist, w); });
+          })(d, worker);
+          actions.appendChild(pdfBtn);
+        }
+
+        // Delete (only when canEdit)
+        if(canEdit) {
+          const delBtn = document.createElement('button');
+          delBtn.innerHTML = '🗑';
+          delBtn.title = 'Delete';
+          delBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;padding:4px 7px;border-radius:4px;line-height:1;opacity:.7';
+          delBtn.addEventListener('mouseenter', function() { delBtn.style.background = 'rgba(239,68,68,0.12)'; delBtn.style.opacity = '1'; });
+          delBtn.addEventListener('mouseleave', function() { delBtn.style.background = 'none'; delBtn.style.opacity = '.7'; });
+          (function(did, dw) {
+            delBtn.addEventListener('click', function() { window.deleteDistribution(did, dw); });
+          })(d.id, worker);
+          actions.appendChild(delBtn);
+        }
+        right.appendChild(actions);
+
+        // Amount block
         const amtCol = document.createElement('div');
-        amtCol.style.cssText = 'text-align:right;padding-left:10px;padding-right:4px';
-        amtCol.innerHTML = '<span style="font-size:12px;font-weight:700;color:#2d6a4f;font-family:DM Mono,monospace;white-space:nowrap">'+_fmt(d.amount)+'</span>';
-        row.appendChild(left); row.appendChild(actions); row.appendChild(divider); row.appendChild(amtCol);
+        amtCol.style.cssText = 'text-align:right;min-width:108px';
+        amtCol.innerHTML = '<div style="font-size:14px;font-weight:700;color:#2d6a4f;font-family:DM Mono,monospace;line-height:1.2">'+_fmt(d.amount)+'</div>';
+        right.appendChild(amtCol);
+
+        row.appendChild(left); row.appendChild(right);
         wrap.appendChild(row);
       });
     }
