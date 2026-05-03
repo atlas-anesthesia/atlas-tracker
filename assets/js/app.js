@@ -1739,14 +1739,23 @@ const qty=parseInt(input.value)||0;
 if(qty<=0){alert('Enter a positive quantity to add.');return;}
 const item=items.find(i=>i.id===id);
 if(item){
-// Only allow adjusting your own stock
+// Stock changes always target the logged-in worker (currentWorker), never
+// the tab being viewed. Block the action if there's a mismatch — better to
+// surface the conflict than to silently update the "wrong" person's stock.
 const w = currentWorker;
 if(currentInvTab !== 'combined' && currentInvTab !== w) {
-alert('You can only update your own inventory.');
+const wname   = w==='dev' ? 'Devarsh' : 'Josh';
+const tabName = currentInvTab==='dev' ? 'Devarsh' : 'Josh';
+alert(`You're logged in as ${wname} but viewing ${tabName}'s tab.\n\nStock changes only apply to the logged-in worker. Switch to ${wname}'s tab, or change the Logged-In Worker on the Finalize Case page first.`);
 return;
 }
 setStock(item,w,getStock(item,w)+qty);
-await saveInventory();input.value='';
+await saveInventory();
+input.value='';
+const wname = w==='dev' ? 'Devarsh' : 'Josh';
+input.style.background='#dcfce7';
+setTimeout(()=>{ input.style.background=''; },800);
+input.title = `+${qty} added to ${wname}`;
 }
 };
 window.editItem = function(id) {
@@ -1891,6 +1900,20 @@ window.toggleQuickAdjust = function(mode) {
     byCategory[cat].push(item);
   });
   let html = '';
+  // For stock mode, prepend a worker banner — stock changes apply only to the
+  // logged-in worker. Alert thresholds are global (one number per item, shared
+  // across both workers), so the banner is omitted in alert mode.
+  if(mode === 'stock') {
+    const wname  = currentWorker==='dev' ? 'Devarsh' : 'Josh';
+    const wpill  = currentWorker==='dev' ? 'pill-dev' : 'pill-josh';
+    const tabMismatch = (currentInvTab==='dev' || currentInvTab==='josh') && currentInvTab !== currentWorker;
+    const tabName = currentInvTab==='dev' ? 'Devarsh' : currentInvTab==='josh' ? 'Josh' : 'Combined';
+    html += `<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:10px 14px;background:${tabMismatch?'rgba(181,69,27,0.08)':'rgba(45,106,79,0.06)'};border:1px solid ${tabMismatch?'var(--warn)':'var(--success,#2d6a4f)'};border-radius:var(--radius-sm);margin-bottom:8px">
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted)">Adjusting:</span>
+      <span class="worker-pill ${wpill}" style="font-size:13px;padding:3px 12px">${wname}'s stock</span>
+      ${tabMismatch ? `<span style="font-size:11px;color:var(--warn);margin-left:auto;font-weight:500">⚠ Viewing ${tabName}'s tab — switch the Logged-In Worker on Finalize Case if this is wrong</span>` : `<span style="font-size:11px;color:var(--text-faint);margin-left:auto">Switch worker via the Finalize Case toggle</span>`}
+    </div>`;
+  }
   Object.entries(byCategory).sort((a,b) => a[0].localeCompare(b[0])).forEach(([cat, catItems]) => {
     html += `<div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);padding:6px 0 2px;border-top:1px solid var(--border);margin-top:4px">${cat}</div>`;
     catItems.forEach(item => {
@@ -1936,8 +1959,12 @@ window.saveAllQuickAdjust = async function() {
   setSyncing(false);
   renderInventory();
   document.getElementById('quickAdjustForm').style.display = 'none';
-  const label = _quickAdjustMode === 'stock' ? 'stock quantity(ies)' : 'alert threshold(s)';
-  alert('✓ ' + changed + ' ' + label + ' updated!');
+  if(_quickAdjustMode === 'stock') {
+    const wname = currentWorker==='dev' ? 'Devarsh' : 'Josh';
+    alert('✓ ' + changed + ' stock quantity(ies) updated for ' + wname + '!');
+  } else {
+    alert('✓ ' + changed + ' alert threshold(s) updated!');
+  }
 };
 
 window.toggleQuickAdd=function(){
@@ -1961,7 +1988,20 @@ const cat=item.category||'Other';
 if(!byCategory[cat]) byCategory[cat]=[];
 byCategory[cat].push(item);
 });
-let html='';
+// Worker banner — make it unmissable WHO this form will update.
+// "currentWorker" is the persistent logged-in user (set via the toggle on
+// Finalize Case). If they're viewing a different worker's inv tab, surface
+// that mismatch so they can decide whether to switch worker or proceed.
+const wname  = currentWorker==='dev' ? 'Devarsh' : 'Josh';
+const wpill  = currentWorker==='dev' ? 'pill-dev' : 'pill-josh';
+const tabMismatch = (currentInvTab==='dev' || currentInvTab==='josh') && currentInvTab !== currentWorker;
+const tabName = currentInvTab==='dev' ? 'Devarsh' : currentInvTab==='josh' ? 'Josh' : 'Combined';
+const banner = `<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:10px 14px;background:${tabMismatch?'rgba(181,69,27,0.08)':'rgba(45,106,79,0.06)'};border:1px solid ${tabMismatch?'var(--warn)':'var(--accent)'};border-radius:var(--radius-sm);margin-bottom:8px">
+  <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted)">Adding to:</span>
+  <span class="worker-pill ${wpill}" style="font-size:13px;padding:3px 12px">${wname}'s stock</span>
+  ${tabMismatch ? `<span style="font-size:11px;color:var(--warn);margin-left:auto;font-weight:500">⚠ Viewing ${tabName}'s tab — switch the Logged-In Worker on Finalize Case if this is wrong</span>` : `<span style="font-size:11px;color:var(--text-faint);margin-left:auto">Switch worker via the Finalize Case toggle</span>`}
+</div>`;
+let html=banner;
 Object.entries(byCategory).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([cat,catItems])=>{
 html+=`<div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);padding:6px 0 2px;border-top:1px solid var(--border);margin-top:4px">${cat}</div>`;
 catItems.forEach(item=>{
@@ -1983,6 +2023,7 @@ const qty=input?parseInt(input.value)||0:0;
 if(qty>0) updates.push({item,qty});
 });
 if(!updates.length){alert('No quantities entered — nothing to save.');return;}
+const wname = currentWorker==='dev' ? 'Devarsh' : 'Josh';
 updates.forEach(({item,qty})=>{
 setStock(item,currentWorker,getStock(item,currentWorker)+qty);
 });
@@ -1997,6 +2038,7 @@ const input=document.getElementById('qa-qty-'+item.id);
 if(stockEl) stockEl.textContent=getStock(item,currentWorker);
 if(input){ input.value=''; input.style.background='#dcfce7'; setTimeout(()=>{ input.style.background=''; },600); }
 });
+alert('✓ ' + updates.length + ' item(s) added to ' + wname + "'s stock!");
 };
 window.saveNewItem = async function() {
 const name=document.getElementById('newItemName').value.trim();
