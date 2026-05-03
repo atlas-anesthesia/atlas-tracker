@@ -30,6 +30,13 @@
   let _previewMode = false;
   let _distributedIds = new Set(); // entries already included in any past distribution
 
+  // View-mode state — populated when openDistributionPreview() is called to
+  // view an already-saved distribution. _viewingSaved short-circuits all
+  // edit/build logic so the modal renders the saved record directly.
+  let _viewingSaved = false;
+  let _viewItems    = [];
+  let _viewTotals   = null;
+
   // ── Helpers ────────────────────────────────────────────────────────────────
   const _fmt = function(n) {
     return '$' + Number(n||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -74,7 +81,10 @@
       refNum: 'DIST-' + _uidFn().toUpperCase().slice(0, 8),
       notes: ''
     };
-    _previewMode = false;
+    _previewMode  = false;
+    _viewingSaved = false;
+    _viewItems    = [];
+    _viewTotals   = null;
 
     try {
       window.setSyncing && window.setSyncing(true);
@@ -99,6 +109,36 @@
         if(li.sourceId) _distributedIds.add(li.sourceId);
       });
     });
+
+    _renderModal();
+  };
+
+  // ── PUBLIC: openDistributionPreview ────────────────────────────────────────
+  // Opens the modal directly into preview mode showing a previously-saved
+  // distribution record. No build view, no "Back to Edit" button — just
+  // the rendered sheet plus Close + Download PDF in the footer.
+  // Distributions saved before lineItems support (legacy) get redirected to
+  // the simple PDF re-download since there's nothing itemized to preview.
+  window.openDistributionPreview = function(dist, worker) {
+    if(!dist || !dist.lineItems || !dist.lineItems.length) {
+      // Legacy distribution — no itemized data to preview, just regen the PDF
+      if(typeof window.redownloadDistributionPDF === 'function') {
+        window.redownloadDistributionPDF(dist, worker);
+      }
+      return;
+    }
+    _worker = worker || 'josh';
+    _meta = {
+      date:   dist.date   || '',
+      refNum: dist.refNum || '',
+      notes:  dist.notes  || ''
+    };
+    _viewItems    = dist.lineItems;
+    _viewTotals   = dist.totals || _totalsFromLineItems(dist.lineItems);
+    _viewingSaved = true;
+    _previewMode  = true;       // enter directly in preview
+    _selectedIds  = new Set();  // unused in view mode but reset for cleanliness
+    _customItems  = [];
 
     _renderModal();
   };
@@ -679,19 +719,31 @@
   }
 
   function _previewHTML() {
-    const items  = _buildLineItems();
-    const totals = _calcTotals();
-    return _headerHTML('Preview — Distribution Sheet') +
+    // When viewing a saved distribution, source from the saved snapshot;
+    // otherwise compute live from the current builder state.
+    const items  = _viewingSaved ? _viewItems  : _buildLineItems();
+    const totals = _viewingSaved ? _viewTotals : _calcTotals();
+    const title  = _viewingSaved
+      ? 'Distribution Sheet — ' + _name(_worker) + (_meta.refNum ? ' · ' + _meta.refNum : '')
+      : 'Preview — Distribution Sheet';
+    const footerButtons = _viewingSaved
+      ? [
+          { id:'dist-cancel-btn',   label:'Close',             kind:'ghost'   },
+          { id:'dist-download-btn', label:'💾  Download PDF',  kind:'primary' }
+        ]
+      : [
+          { id:'dist-back-btn',     label:'← Back to Edit',          kind:'ghost'   },
+          { id:'dist-download-btn', label:'💾  Save & Download PDF', kind:'primary' }
+        ];
+
+    return _headerHTML(title) +
       '<div style="flex:1;overflow-y:auto;padding:30px;background:#ececeb">' +
         '<div style="background:white;max-width:680px;margin:0 auto;border-radius:6px;' +
           'box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:hidden">' +
           _previewBody(items, totals) +
         '</div>' +
       '</div>' +
-      _footerHTML([
-        { id:'dist-back-btn',     label:'← Back to Edit',          kind:'ghost'   },
-        { id:'dist-download-btn', label:'💾  Save & Download PDF', kind:'primary' }
-      ]);
+      _footerHTML(footerButtons);
   }
 
   function _previewBody(items, totals) {
@@ -879,6 +931,23 @@
 
   // ── Save + Download ────────────────────────────────────────────────────────
   async function _onDownload() {
+    // View-only mode: just regenerate the PDF from the loaded snapshot,
+    // no Firestore write. The user is looking at an already-saved record.
+    if(_viewingSaved) {
+      try {
+        _generatePDF({
+          worker:    _worker,
+          meta:      { date: _meta.date, refNum: _meta.refNum, notes: _meta.notes },
+          lineItems: _viewItems,
+          totals:    _viewTotals
+        });
+      } catch(e) {
+        console.error('PDF regen failed:', e);
+        alert('PDF generation failed: ' + (e.message || e));
+      }
+      return;
+    }
+
     const lineItems = _buildLineItems();
     const totals    = _calcTotals();
 
