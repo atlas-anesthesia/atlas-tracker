@@ -46,12 +46,17 @@
     return (window.items || [])
       .filter(function(i) { return i && _itemMatchesVendor(i, vendor); })
       .sort(function(a, b) {
-        // Lowest combined stock floats to the top so the most-urgent
-        // items show first in the order modal. Alphabetical (by generic)
-        // is the tiebreaker so equal-stock items still group cleanly.
-        const stockA = (a.stockDev || 0) + (a.stockJosh || 0);
-        const stockB = (b.stockDev || 0) + (b.stockJosh || 0);
+        // Primary: red-alert items (stock at or below alert level) float to
+        // the top regardless of how low their absolute stock is. A 0-stock
+        // item with alert 0 is fine; a 4-stock item with alert 10 is urgent.
+        const stockA  = (a.stockDev || 0) + (a.stockJosh || 0);
+        const stockB  = (b.stockDev || 0) + (b.stockJosh || 0);
+        const redA    = stockA <= (a.alert || 0) ? 1 : 0;
+        const redB    = stockB <= (b.alert || 0) ? 1 : 0;
+        if(redA !== redB) return redB - redA;          // red first
+        // Secondary: within each group, lower stock surfaces higher
         if(stockA !== stockB) return stockA - stockB;
+        // Tertiary: alphabetical for stable ordering
         return (a.generic || '').localeCompare(b.generic || '');
       });
   }
