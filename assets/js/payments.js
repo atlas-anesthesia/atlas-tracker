@@ -520,8 +520,11 @@ window.editPaymentField = function(field, rowIdx) {
 window._commitPaymentAmount = function(field, idx, val) {
   if(field==='proj') { _paymentRows[idx].projOverride=val; }
   else { _paymentRows[idx].invoicedAmount=val;
+    // Refresh E&D log entries — the bulk sync handles all eligible rows
+    // (invoiced or day-of-case), reading current row state and writing
+    // case-income entries with up-to-date PI + amount snapshots.
     if(val > 0 && _paymentRows[idx].invoiceSent) {
-      _syncInvoiceToPayouts(_paymentRows[idx], parseFloat(val)||0).catch(()=>{});
+      _syncAllInvoicedToPayouts(_paymentRows).catch(()=>{});
     }
   }
   window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
@@ -1482,8 +1485,10 @@ window.sendInvoiceEmail = async function() {
       _paymentRows[modalRow.idx].invoicedAmount = total;
       // Persist to Firestore so the row's Inv. Amt + Inv✓ survive page reload
       window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice after send failed:',e));
-      // Auto-sync to Expenses & Distributions
-      _syncInvoiceToPayouts(_paymentRows[modalRow.idx], total).catch(()=>{});
+      // Auto-sync to Expenses & Distributions — bulk sync re-reads current
+      // row state and writes a fresh case-income log entry for every
+      // eligible row (invoiced or day-of-case).
+      _syncAllInvoicedToPayouts(_paymentRows).catch(()=>{});
     }
     renderPaymentRows();
     closeInvoiceModal();
