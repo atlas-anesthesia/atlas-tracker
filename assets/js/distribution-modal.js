@@ -832,15 +832,9 @@
       : 'Preview — Payout Sheet';
     // Footer changes by mode:
     //   • Building (preview before save) → Back to Edit | Save & Download
-    //   • Viewing saved + has distId (editable) → Close | Save Changes & PDF
-    //   • Viewing saved legacy (no distId)      → Close | Download PDF
+    //   • Viewing a saved payout         → Close | Download PDF (read-only)
     let footerButtons;
-    if(_viewingSaved && _viewingDistId) {
-      footerButtons = [
-        { id:'dist-cancel-btn',   label:'Close',                       kind:'ghost'   },
-        { id:'dist-download-btn', label:'💾  Save Changes & PDF',      kind:'primary' }
-      ];
-    } else if(_viewingSaved) {
+    if(_viewingSaved) {
       footerButtons = [
         { id:'dist-cancel-btn',   label:'Close',                kind:'ghost'   },
         { id:'dist-download-btn', label:'💾  Download PDF',     kind:'primary' }
@@ -852,18 +846,9 @@
       ];
     }
 
-    // Editable meta panel — only shown when viewing a saved distribution
-    // that we can update in place. Lets the user reclassify the kind,
-    // rename via notes, flip already-paid, or update the date/refNum
-    // without rebuilding the line items.
-    const editPanel = (_viewingSaved && _viewingDistId)
-      ? '<div style="max-width:680px;margin:0 auto 20px;padding:16px 20px;background:white;' +
-          'border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">' +
-          '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);' +
-            'letter-spacing:.5px;margin-bottom:12px">Edit Payout</div>' +
-          '<div id="dist-meta-wrap">' + _metaInner() + '</div>' +
-        '</div>'
-      : '';
+    // Edit-saved-payout panel removed — saved payouts are read-only in preview.
+    // To revise a payout, delete it and create a new one.
+    const editPanel = '';
 
     return _headerHTML(title) +
       '<div style="flex:1;overflow-y:auto;padding:30px;background:#ececeb">' +
@@ -1066,62 +1051,8 @@
 
   // ── Save + Download ────────────────────────────────────────────────────────
   async function _onDownload() {
-    // Two view-mode branches:
-    //   • _viewingDistId truthy → editing a saved distribution. We update
-    //     that record in-place (refNum, kind, notes, alreadyPaid changes
-    //     are the typical edits the user wants to make retroactively).
-    //   • _viewingSaved without distId → legacy preview, just regen PDF.
-    if(_viewingSaved && _viewingDistId) {
-      try {
-        window.setSyncing && window.setSyncing(true);
-        const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payouts'));
-        const data = snap.exists() ? snap.data() : { entries:[], distributions:[] };
-        const idx = (data.distributions || []).findIndex(function(d) { return d.id === _viewingDistId; });
-        if(idx === -1) {
-          window.setSyncing && window.setSyncing(false);
-          alert('Could not find this payout to update — it may have been deleted.');
-          return;
-        }
-        // Apply user-edited meta fields. Line items + totals stay as the
-        // saved snapshot — we're only allowing meta edits here, not changing
-        // which entries are included.
-        data.distributions[idx] = Object.assign({}, data.distributions[idx], {
-          refNum:      (_meta.refNum || '').trim() || data.distributions[idx].refNum,
-          date:        _meta.date || data.distributions[idx].date,
-          notes:       (_meta.notes || '').trim(),
-          kind:        _meta.kind || 'salary',
-          alreadyPaid: !!_meta.alreadyPaid,
-          updatedAt:   new Date().toISOString()
-        });
-        await window.setDoc(window.doc(window.db, 'atlas', 'payouts'), _scrubUndefined(data));
-        window.setSyncing && window.setSyncing(false);
-      } catch(e) {
-        console.error('Distribution update failed:', e);
-        window.setSyncing && window.setSyncing(false);
-        alert('Update failed: ' + (e.message || e));
-        return;
-      }
-      // Regenerate the PDF unless flagged as "already paid" — the user
-      // may want a fresh PDF reflecting renamed kind/notes.
-      if(!_meta.alreadyPaid) {
-        try {
-          _generatePDF({
-            worker:    _worker,
-            meta:      { date: _meta.date, refNum: _meta.refNum, notes: _meta.notes, kind: _meta.kind },
-            lineItems: _viewItems,
-            totals:    _viewTotals
-          });
-        } catch(e) {
-          console.error('PDF regen failed:', e);
-          alert('Saved, but PDF generation failed: ' + (e.message || e));
-        }
-      }
-      _close();
-      if(typeof window.renderPayoutTab === 'function') window.renderPayoutTab();
-      return;
-    }
-
-    // Legacy view-only mode (no distId): regenerate PDF, no Firestore write.
+    // Saved payouts are read-only — clicking Download PDF just regenerates
+    // the PDF from the saved snapshot. No Firestore writes for view mode.
     if(_viewingSaved) {
       try {
         _generatePDF({
