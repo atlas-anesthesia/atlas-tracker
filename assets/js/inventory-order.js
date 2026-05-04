@@ -45,7 +45,15 @@
     if(!vendor) return [];
     return (window.items || [])
       .filter(function(i) { return i && _itemMatchesVendor(i, vendor); })
-      .sort(function(a, b) { return (a.generic || '').localeCompare(b.generic || ''); });
+      .sort(function(a, b) {
+        // Lowest combined stock floats to the top so the most-urgent
+        // items show first in the order modal. Alphabetical (by generic)
+        // is the tiebreaker so equal-stock items still group cleanly.
+        const stockA = (a.stockDev || 0) + (a.stockJosh || 0);
+        const stockB = (b.stockDev || 0) + (b.stockJosh || 0);
+        if(stockA !== stockB) return stockA - stockB;
+        return (a.generic || '').localeCompare(b.generic || '');
+      });
   }
 
   function _captureCurrentQtys() {
