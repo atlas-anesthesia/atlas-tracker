@@ -1113,12 +1113,35 @@ function _calcProjectedPersonalIncome(worker) {
   // Projected = PI formula applied to not-yet-finalized cases (drafts + preop-only)
   const formula = _piFormula;
   const pending = (_paymentRows || []).filter(r => r.worker === worker && !(r.invoiceSent));
+  // Mirror the realized-PI dedupe rule for flat-rate centers: each
+  // (worker, date, center) day-bucket should contribute the rate once,
+  // not once per case. We pre-compute, for each pending row, whether
+  // this row is the "primary" of its day-bucket (lowest caseId in the
+  // bucket); only primaries collect the flat rate. Hourly rules stay
+  // per-case since they're driven by each case's own est. hours.
+  const primaryByBucket = new Map();   // bucketKey → caseId of primary row
+  pending.forEach(r => {
+    const rule = formula.centers.find(f => f.id === r.surgeryCenter);
+    if(!rule || rule.type !== 'flat') return;
+    if(!r.caseId || !r.caseDate) return;
+    const key = (r.caseDate || '') + '|' + (r.surgeryCenter || '');
+    const existing = primaryByBucket.get(key);
+    if(!existing || (r.caseId || '').localeCompare(existing) < 0) {
+      primaryByBucket.set(key, r.caseId);
+    }
+  });
   let total = 0;
   pending.forEach(r => {
     const rule = formula.centers.find(f => f.id === r.surgeryCenter);
     if(rule) {
       if(rule.type === 'flat') {
-        total += parseFloat(rule.rate) || 0;
+        // Only the primary in this day-bucket counts. If we couldn't form a
+        // bucket key (no caseDate), fall back to crediting this row so the
+        // projection isn't silently zeroed.
+        const key = (r.caseDate || '') + '|' + (r.surgeryCenter || '');
+        const primary = primaryByBucket.get(key);
+        const isPrimary = !primary || primary === r.caseId;
+        if(isPrimary) total += parseFloat(rule.rate) || 0;
       } else if(rule.type === 'hourly') {
         const hrs = parseFloat(r.estHrs) || 0;
         total += hrs * (parseFloat(rule.rate) || 0);
