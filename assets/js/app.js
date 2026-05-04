@@ -1088,8 +1088,13 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     // (window.openDistributionModal opens the new itemized builder modal)
 
     // ── Entries list ─────────────────────────────────────────────────────────
+    // Category-grouped layout: instead of a flat list with the same pill
+    // repeated row-after-row (visually heavy), entries collapse under
+    // colored category headers that show count + subtotal. The pill on each
+    // row is hidden inside its group since the group header already conveys
+    // the category — keeps rows clean and lets the eye scan by amount.
     const eLabel = document.createElement('div');
-    eLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:6px';
+    eLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);letter-spacing:.5px;margin-bottom:10px';
     eLabel.textContent = 'Expense & Income Log';
     wrap.appendChild(eLabel);
 
@@ -1098,36 +1103,72 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       empty.className = 'empty-state'; empty.style.fontSize = '12px';
       empty.textContent = 'No entries yet'; wrap.appendChild(empty);
     } else {
-      // Column header — simple 2-zone flex layout matching the rows below
-      const colHdr = document.createElement('div');
-      colHdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:2px solid var(--border);margin-bottom:2px';
-      colHdr.innerHTML =
-        '<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);letter-spacing:.5px">Entry</span>'
-        +'<span style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text-faint);letter-spacing:.5px">Amount</span>';
-      wrap.appendChild(colHdr);
+      // Group order matters — case invoices first (most-touched), then other
+      // income, then expenses, then the static initial-investment block last.
+      // Within each group we keep the existing date-desc sort.
+      const GROUPS = [
+        { key:'case-income',    title:'Case Invoices',          accent:'#0369a1' },
+        { key:'other-income',   title:'Other Income',           accent:'#2d6a4f',
+          test: function(e) { return e.cat === 'income'; } },
+        { key:'expenses',       title:'Expenses & Supplies',    accent:'#b91c1c',
+          test: function(e) { return e.cat === 'expense' || e.cat === 'supplies'; } },
+        { key:'initial-invest', title:'Initial Investment',     accent:'#1d4380' }
+      ];
 
-      sorted.forEach(function(e) {
-        const meta = _meta(e.cat);
+      GROUPS.forEach(function(g) {
+        const items = sorted.filter(function(e) {
+          if(g.test) return g.test(e);
+          return e.cat === g.key;
+        });
+        if(!items.length) return;
+
+        // Subtotal: PI for cases (matches Personal Income card), absolute amount for everything else.
+        // Future-dated cases contribute 0 — same rule as the live calc.
+        let subtotal = 0;
+        items.forEach(function(e) {
+          if(e.cat === 'case-income') subtotal += (e.personalIncome || 0);
+          else                         subtotal += (e.amount || 0);
+        });
+
+        // Group header — accent stripe on the left, title + count + subtotal on the right
+        const groupBox = document.createElement('div');
+        groupBox.style.cssText = 'margin-bottom:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);overflow:hidden';
+
+        const ghdr = document.createElement('div');
+        ghdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:9px 14px;background:'+g.accent+'10;border-bottom:1px solid '+g.accent+'20;border-left:3px solid '+g.accent;
+        const subLabel = g.key === 'case-income' ? 'PI total' : 'subtotal';
+        ghdr.innerHTML =
+          '<div style="display:flex;align-items:baseline;gap:10px">'
+          + '<span style="font-size:12px;font-weight:700;color:'+g.accent+';letter-spacing:.2px">'+g.title+'</span>'
+          + '<span style="font-size:10px;font-weight:600;color:var(--text-faint);background:rgba(0,0,0,0.04);padding:1px 7px;border-radius:10px">'+items.length+'</span>'
+          +'</div>'
+          + '<div style="display:flex;align-items:baseline;gap:6px">'
+          + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--text-faint);letter-spacing:.5px">'+subLabel+'</span>'
+          + '<span style="font-size:13px;font-weight:700;color:'+g.accent+';font-family:DM Mono,monospace">'+_fmt(subtotal)+'</span>'
+          +'</div>';
+        groupBox.appendChild(ghdr);
+
+        items.forEach(function(e, i) {
         const row = document.createElement('div');
         // Two-zone flex layout: content on the left, amount block on the right.
         // Edit/delete actions live in a flexbox slot before the amount and fade
         // in on row hover only — keeps the resting state clean.
-        row.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:11px 8px;border-bottom:1px solid var(--border);border-radius:4px;transition:background .12s';
-        row.addEventListener('mouseenter', function() { row.style.background = 'rgba(0,0,0,0.025)'; });
+        const isLast = i === items.length - 1;
+        row.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:11px 14px;'+(isLast?'':'border-bottom:1px solid var(--border);')+'transition:background .12s';
+        row.addEventListener('mouseenter', function() { row.style.background = g.accent + '08'; });
         row.addEventListener('mouseleave', function() { row.style.background = ''; });
 
-        // ── LEFT: pill + name on first line, dotted meta on second ──
+        // ── LEFT: name on first line, dotted meta on second ──
         const left = document.createElement('div');
         left.style.cssText = 'min-width:0;flex:1';
-        const pill = '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:'+meta.bg+';color:'+meta.color+';margin-right:8px;vertical-align:middle">'+meta.label+'</span>';
         const autoTag = e.cat==='case-income'
-          ? '<span style="font-size:9px;color:var(--text-faint);margin-left:6px;font-style:italic;font-weight:400">auto</span>'
+          ? '<span style="font-size:9px;color:var(--text-faint);margin-left:8px;font-style:italic;font-weight:400">auto</span>'
           : '';
         // "Distributed" badge — shown on any entry that's appeared as a line
         // item in a saved distribution. Subtle green pill with a checkmark so
         // it visually echoes the existing "Sent" badge on Saved PDFs.
         const distTag = distributedIds.has(e.id)
-          ? '<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(45,106,79,0.12);color:#2d6a4f;margin-left:6px;vertical-align:middle">✓ DISTRIBUTED</span>'
+          ? '<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(45,106,79,0.12);color:#2d6a4f;margin-left:8px;vertical-align:middle">✓ DISTRIBUTED</span>'
           : '';
         // Build dotted meta line: date · supplier · notes (with " · " separators)
         const metaParts = [];
@@ -1144,7 +1185,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           ? '<div style="font-size:11px;color:var(--text-faint);margin-top:4px;line-height:1.4">'+metaParts.join('<span style="margin:0 6px;opacity:.5">·</span>')+'</div>'
           : '';
         left.innerHTML =
-          '<div style="font-size:13px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+pill+(e.name||'-')+autoTag+distTag+'</div>'
+          '<div style="font-size:13px;font-weight:600;line-height:1.3;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(e.name||'-')+autoTag+distTag+'</div>'
           + metaLine;
 
         // ── RIGHT: hover-only action icons, then amount block ──
@@ -1204,13 +1245,16 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           }
         } else {
           const sign = _isExp(e.cat) ? '−' : '+';   // U+2212 minus for visual weight
-          const amtColor = e.cat==='initial-invest' ? 'var(--info)' : (_isExp(e.cat) ? 'var(--warn)' : '#2d6a4f');
+          const amtColor = e.cat==='initial-invest' ? '#1d4380' : (_isExp(e.cat) ? '#b91c1c' : '#2d6a4f');
           amtCol.innerHTML = '<div style="font-size:14px;font-weight:700;color:'+amtColor+';font-family:DM Mono,monospace;line-height:1.2">'+sign+_fmt(e.amount)+'</div>';
         }
         right.appendChild(amtCol);
 
         row.appendChild(left); row.appendChild(right);
-        wrap.appendChild(row);
+        groupBox.appendChild(row);
+        });
+
+        wrap.appendChild(groupBox);
       });
     }
 
