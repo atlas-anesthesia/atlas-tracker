@@ -1052,7 +1052,38 @@ function _calcPIForCase(c, row, formula) {
   const rule = formula.centers.find(f => f.id === centerId);
   if(!rule) return 0;
   if(rule.type === 'flat') {
-    return parseFloat(rule.rate) || 0;
+    // Daily flat rate — the rule means "this is the PI for the day at this
+    // center, regardless of how many cases worked there that day." Without
+    // dedupe, two cases on the same day would each return rule.rate,
+    // doubling the day's PI. The fix: among all of this worker's
+    // non-future cases at this center on this date, the FIRST one (by
+    // caseId, which encodes the per-day sequence — JOSH-04-30-2026-001 vs
+    // -002) gets the full rate; siblings get 0. Total for the day still
+    // equals rule.rate.
+    const allCases = window.cases || [];
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const sameDayCases = allCases.filter(other => {
+      if(!other.caseId || !other.date) return false;
+      if(other.date !== c.date) return false;
+      if((other.worker || '') !== (c.worker || '')) return false;
+      // Skip future cases — they'd otherwise grab the "primary" slot but
+      // _calcPIForCase already returns 0 for them at the top, leaving the
+      // day with no flat rate at all.
+      if(other.date > todayStr) return false;
+      // Match the same surgery center via that case's preop record.
+      const otherPreop = (window._rawPreopRecords || []).find(r => r['po-caseId'] === other.caseId);
+      const otherCenter = otherPreop?.['po-surgery-center'] || other.surgeryCenter || '';
+      return otherCenter === centerId;
+    });
+    // Defensive fallback: if window.cases isn't loaded yet or this case
+    // isn't in it, treat this case as the only one for the day. Better to
+    // over-count once than silently zero out PI on race.
+    if(!sameDayCases.some(s => s.caseId === c.caseId)) {
+      return parseFloat(rule.rate) || 0;
+    }
+    sameDayCases.sort((a, b) => (a.caseId || '').localeCompare(b.caseId || ''));
+    const primary = sameDayCases[0];
+    return primary.caseId === c.caseId ? (parseFloat(rule.rate) || 0) : 0;
   }
   if(rule.type === 'hourly') {
     const hrs = c.endTime && c.startTime
