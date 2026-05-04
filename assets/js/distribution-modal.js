@@ -217,7 +217,7 @@
 
   // ── Builder view ───────────────────────────────────────────────────────────
   function _builderHTML() {
-    return _headerHTML('Build Distribution Sheet — ' + _name(_worker)) +
+    return _headerHTML('Build Payout Sheet — ' + _name(_worker)) +
       '<div style="flex:1;overflow-y:auto;padding:20px 24px">' +
         '<div id="dist-meta-wrap">'   + _metaInner()   + '</div>' +
         '<div id="dist-items-wrap">'  + _itemsInner()  + '</div>' +
@@ -273,7 +273,7 @@
 
     const kindRow =
       '<div style="margin-bottom:14px">' +
-        '<label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.4px">Distribution Type</label>' +
+        '<label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.4px">Payout Type</label>' +
         '<div style="display:flex;gap:8px">' +
           '<button type="button" id="dist-kind-salary"  style="' + (isSalary  ? pillOn : pillOff) + '">💵  Salary Payout</button>' +
           '<button type="button" id="dist-kind-payback" style="' + (isPayback ? pillOn : pillOff) + '">🏦  Investment Payback</button>' +
@@ -295,7 +295,7 @@
 
     return '<div style="margin-bottom:22px">' +
       '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);' +
-        'letter-spacing:.5px;margin-bottom:8px">Distribution Info</div>' +
+        'letter-spacing:.5px;margin-bottom:8px">Payout Info</div>' +
       kindRow +
       alreadyRow +
       '<div style="display:grid;grid-template-columns:140px 200px 1fr;gap:10px">' +
@@ -439,7 +439,7 @@
                   : (checked ? 'background:rgba(29,83,198,0.05);cursor:pointer' : 'cursor:pointer');
 
     const distTag = distributed
-      ? '<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(45,106,79,0.12);color:#2d6a4f;margin-left:7px;vertical-align:middle">✓ DISTRIBUTED</span>'
+      ? '<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(45,106,79,0.12);color:#2d6a4f;margin-left:7px;vertical-align:middle">✓ PAID OUT</span>'
       : '';
 
     return '<label style="display:flex;align-items:flex-start;gap:11px;padding:10px 14px;' +
@@ -541,7 +541,7 @@
     let inner = '';
     if(rows.length === 0) {
       inner = '<div style="text-align:center;color:var(--text-faint);font-size:12px;padding:6px">' +
-        'Select items above or add custom items to build the distribution</div>';
+        'Select items above or add custom items to build the payout</div>';
     } else {
       inner = rows.map(function(r) {
         const sign = r[1] < 0 ? '−' : '+';
@@ -557,14 +557,14 @@
     inner += '<div style="border-top:2px solid var(--border);margin-top:8px;padding-top:10px;' +
       'display:flex;justify-content:space-between;align-items:center">' +
       '<span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text)">' +
-        'Total Distribution</span>' +
+        'Total Payout</span>' +
       '<span style="font-size:22px;font-weight:700;color:#2d6a4f;font-family:DM Mono,monospace">' +
         _fmt(t.total) + '</span>' +
     '</div>';
 
     return '<div style="margin-bottom:8px">' +
       '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);letter-spacing:.5px;margin-bottom:8px">' +
-        'Distribution Total</div>' +
+        'Payout Total</div>' +
       '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px">' +
         inner +
       '</div>' +
@@ -828,8 +828,8 @@
     const items  = _viewingSaved ? _viewItems  : _buildLineItems();
     const totals = _viewingSaved ? _viewTotals : _calcTotals();
     const title  = _viewingSaved
-      ? 'Distribution Sheet — ' + _name(_worker) + (_meta.refNum ? ' · ' + _meta.refNum : '')
-      : 'Preview — Distribution Sheet';
+      ? 'Payout Sheet — ' + _name(_worker) + (_meta.refNum ? ' · ' + _meta.refNum : '')
+      : 'Preview — Payout Sheet';
     // Footer changes by mode:
     //   • Building (preview before save) → Back to Edit | Save & Download
     //   • Viewing saved + has distId (editable) → Close | Save Changes & PDF
@@ -860,7 +860,7 @@
       ? '<div style="max-width:680px;margin:0 auto 20px;padding:16px 20px;background:white;' +
           'border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">' +
           '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);' +
-            'letter-spacing:.5px;margin-bottom:12px">Edit Distribution</div>' +
+            'letter-spacing:.5px;margin-bottom:12px">Edit Payout</div>' +
           '<div id="dist-meta-wrap">' + _metaInner() + '</div>' +
         '</div>'
       : '';
@@ -900,7 +900,7 @@
     // Body
     html += '<div style="padding:26px 36px 30px;color:#222">';
 
-    html += '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px">Distribution To</div>' +
+    html += '<div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px">Payout To</div>' +
       '<div style="font-size:14px;font-weight:600;margin-top:3px;color:#222">' + _esc(_name(_worker)) + '</div>' +
       '<div style="font-size:11px;color:#888;margin-top:1px">Atlas Anesthesia</div>';
 
@@ -1044,7 +1044,7 @@
     // Total box
     html += '<div style="margin-top:18px;padding:16px 20px;background:#f0f7f0;' +
       'border:1.5px solid #2d6a4f;border-radius:6px;display:flex;justify-content:space-between;align-items:center">' +
-      '<span style="font-size:11px;font-weight:700;color:#444;text-transform:uppercase;letter-spacing:.7px">Total Distribution</span>' +
+      '<span style="font-size:11px;font-weight:700;color:#444;text-transform:uppercase;letter-spacing:.7px">Total Payout</span>' +
       '<span style="font-size:22px;font-weight:700;color:#2d6a4f;font-family:DM Mono,monospace">' + _fmt(totals.total) + '</span>' +
     '</div>';
 
@@ -1057,7 +1057,7 @@
 
     // Footer
     html += '<div style="margin-top:24px;padding-top:12px;border-top:1px solid #ececec;text-align:center;font-size:9px;color:#aaa">' +
-      'Atlas Anesthesia · Distribution Record · ' + _esc(_meta.refNum) + ' · ' + _esc(_fmtD(_meta.date)) +
+      'Atlas Anesthesia · Payout Record · ' + _esc(_meta.refNum) + ' · ' + _esc(_fmtD(_meta.date)) +
     '</div>';
 
     html += '</div>';
@@ -1079,7 +1079,7 @@
         const idx = (data.distributions || []).findIndex(function(d) { return d.id === _viewingDistId; });
         if(idx === -1) {
           window.setSyncing && window.setSyncing(false);
-          alert('Could not find this distribution to update — it may have been deleted.');
+          alert('Could not find this payout to update — it may have been deleted.');
           return;
         }
         // Apply user-edited meta fields. Line items + totals stay as the
@@ -1145,8 +1145,8 @@
       return;
     }
     if(totals.total <= 0) {
-      const ok = confirm('The total distribution is ' + _fmt(totals.total) +
-        '. Save this anyway? (Distributions are usually positive.)');
+      const ok = confirm('The total payout is ' + _fmt(totals.total) +
+        '. Save this anyway? (Payouts are usually positive.)');
       if(!ok) return;
     }
     if(!_meta.date) { alert('Please pick a date.'); return; }
@@ -1270,7 +1270,7 @@
     // ── Recipient ────────────────────────────────────────────────────────────
     doc.setTextColor(120,120,120);
     doc.setFont('Helvetica','bold'); doc.setFontSize(8);
-    doc.text('DISTRIBUTION TO', M, y); y += 13;
+    doc.text('PAYOUT TO', M, y); y += 13;
     doc.setTextColor(40,40,40);
     doc.setFont('Helvetica','bold'); doc.setFontSize(13);
     doc.text(_name(worker), M, y); y += 14;
@@ -1440,7 +1440,7 @@
     doc.roundedRect(M, y, W-2*M, 50, 5, 5, 'FD');
     doc.setFont('Helvetica','bold'); doc.setFontSize(10);
     doc.setTextColor(80,80,80);
-    doc.text('TOTAL DISTRIBUTION', W/2, y+18, {align:'center'});
+    doc.text('TOTAL PAYOUT', W/2, y+18, {align:'center'});
     doc.setFontSize(22); doc.setTextColor(45,106,79);
     doc.text(fmt(totals.total), W/2, y+40, {align:'center'});
     y += 68;
@@ -1461,10 +1461,10 @@
     // ── Footer ───────────────────────────────────────────────────────────────
     doc.setFont('Helvetica','normal'); doc.setFontSize(8);
     doc.setTextColor(160,160,160);
-    doc.text('Atlas Anesthesia  \u00B7  Distribution Record  \u00B7  ' + refNum + '  \u00B7  ' + dateStr,
+    doc.text('Atlas Anesthesia  \u00B7  Payout Record  \u00B7  ' + refNum + '  \u00B7  ' + dateStr,
       W/2, 760, {align:'center'});
 
-    doc.save('Distribution_' + _name(worker).replace(/ /g,'_') + '_' + refNum + '.pdf');
+    doc.save('Payout_' + _name(worker).replace(/ /g,'_') + '_' + refNum + '.pdf');
   }
 
   // ── PUBLIC: redownload (legacy + new format) ───────────────────────────────
@@ -1519,7 +1519,7 @@
     doc.setFontSize(18); doc.setTextColor(255,255,255);
     doc.text('Atlas Anesthesia', M, 30);
     doc.setFontSize(10); doc.setFont('Helvetica','normal');
-    doc.text('Distribution Receipt', M, 46);
+    doc.text('Payout Receipt', M, 46);
     doc.setFontSize(9);
     doc.text(refNum, W-M, 30, {align:'right'});
     doc.text(dateStr, W-M, 46, {align:'right'});
@@ -1527,7 +1527,7 @@
     let y = 95;
     doc.setTextColor(40,40,40);
     doc.setFont('Helvetica','bold'); doc.setFontSize(11);
-    doc.text('Distribution To: ' + _name(worker), M, y); y += 24;
+    doc.text('Payout To: ' + _name(worker), M, y); y += 24;
 
     doc.setDrawColor(220,220,220); doc.line(M, y, W-M, y); y += 22;
 
@@ -1536,7 +1536,7 @@
     doc.roundedRect(M, y, W-2*M, 50, 5, 5, 'FD');
     doc.setFont('Helvetica','bold'); doc.setFontSize(10);
     doc.setTextColor(80,80,80);
-    doc.text('AMOUNT DISTRIBUTED', W/2, y+18, {align:'center'});
+    doc.text('AMOUNT PAID OUT', W/2, y+18, {align:'center'});
     doc.setFontSize(22); doc.setTextColor(45,106,79);
     doc.text(_fmt(dist.amount || 0), W/2, y+40, {align:'center'});
     y += 70;
@@ -1557,10 +1557,10 @@
     }
 
     doc.setFontSize(8); doc.setTextColor(160,160,160);
-    doc.text('Atlas Anesthesia  \u00B7  Distribution Record  \u00B7  ' + refNum + '  \u00B7  ' + dateStr,
+    doc.text('Atlas Anesthesia  \u00B7  Payout Record  \u00B7  ' + refNum + '  \u00B7  ' + dateStr,
       W/2, 760, {align:'center'});
 
-    doc.save('Distribution_' + _name(worker).replace(/ /g,'_') + '_' + refNum + '.pdf');
+    doc.save('Payout_' + _name(worker).replace(/ /g,'_') + '_' + refNum + '.pdf');
   }
 
 })();
