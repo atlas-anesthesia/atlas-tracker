@@ -1003,11 +1003,18 @@ async function _savePIFormula() {
 
 function _calcPersonalIncome(worker) {
   const formula = _piFormula; // shared formula
-  // Only count cases that have actually been invoiced (or marked invoiceSent
-  // by the Stripe sync for patient cases). Otherwise PI would include cases
-  // that were finalized but never billed, making PI exceed Total Invoiced.
-  const invoicedRows = (_paymentRows || []).filter(r => r.invoiceSent && r.caseId);
-  const invoicedById = new Map(invoicedRows.map(r => [r.caseId, r]));
+  // PI now reflects WORK DONE rather than work BILLED — a case counts the
+  // moment its scheduled date arrives (date ≤ today), regardless of
+  // whether the invoice has been marked sent. Reasoning: practitioners
+  // earn the PI on the day they perform the case; invoicing/billing is
+  // an admin step that may happen days later, but the income is real
+  // from the moment the work is finished. The Inv ✓ checkbox now drives
+  // the *invoiced amount* in the column, not whether PI is counted.
+  // For from_invoice rule centers, _calcPIForCase still returns 0 until
+  // invoicedAmount is populated (the math literally needs the invoice
+  // amount to compute the rate), so those cases naturally remain 0 in
+  // PI until invoiced — they're a special case the formula recognizes.
+  const rowsByCaseId = new Map((_paymentRows || []).map(r => [r.caseId, r]));
   // Local "today" as YYYY-MM-DD for direct string comparison with c.date.
   // Using local time (not UTC) so the cutoff matches the practitioner's
   // calendar — a case scheduled "today" stays counted right up until midnight
@@ -1017,7 +1024,6 @@ function _calcPersonalIncome(worker) {
   const finalized = (window.cases || []).filter(c => {
     if(c.draft) return false;
     if(c.worker !== worker) return false;
-    if(!invoicedById.has(c.caseId)) return false;
     // Exclude future-dated cases: PI should reflect work that has happened,
     // not invoices issued for upcoming cases. Cases with no date stay counted
     // (we can't classify them either way; preserve prior behavior).
@@ -1026,7 +1032,7 @@ function _calcPersonalIncome(worker) {
   });
   let total = 0;
   finalized.forEach(c => {
-    total += _calcPIForCase(c, invoicedById.get(c.caseId), formula);
+    total += _calcPIForCase(c, rowsByCaseId.get(c.caseId), formula);
   });
   return total;
 }
@@ -1110,9 +1116,19 @@ function _calcPIForCase(c, row, formula) {
 }
 
 function _calcProjectedPersonalIncome(worker) {
-  // Projected = PI formula applied to not-yet-finalized cases (drafts + preop-only)
+  // Projected = PI from cases STILL TO HAPPEN (date > today). Past/today
+  // cases now flow into _calcPersonalIncome the moment their date arrives,
+  // so showing them here too would double-count. Pending rows without a
+  // date still count (we can't classify them as past or future).
   const formula = _piFormula;
-  const pending = (_paymentRows || []).filter(r => r.worker === worker && !(r.invoiceSent));
+  const _today = new Date();
+  const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+  const pending = (_paymentRows || []).filter(r => {
+    if(r.worker !== worker) return false;
+    // Truly future cases (date > today) OR undated cases. Today/past cases
+    // belong to realized PI now.
+    return !r.caseDate || r.caseDate > todayStr;
+  });
   // Mirror the realized-PI dedupe rule for flat-rate centers: each
   // (worker, date, center) day-bucket should contribute the rate once,
   // not once per case. We pre-compute, for each pending row, whether
@@ -1135,9 +1151,6 @@ function _calcProjectedPersonalIncome(worker) {
     const rule = formula.centers.find(f => f.id === r.surgeryCenter);
     if(rule) {
       if(rule.type === 'flat') {
-        // Only the primary in this day-bucket counts. If we couldn't form a
-        // bucket key (no caseDate), fall back to crediting this row so the
-        // projection isn't silently zeroed.
         const key = (r.caseDate || '') + '|' + (r.surgeryCenter || '');
         const primary = primaryByBucket.get(key);
         const isPrimary = !primary || primary === r.caseId;
@@ -1306,19 +1319,32 @@ async function _backfillInvoicesToPayouts() {
   await _syncAllInvoicedToPayouts(_paymentRows);
 }
 
-// Auto-sync invoiced payment → Income entry in Expenses & Distributions
+// Auto-sync invoiced + day-of-case rows → Income entry in Expenses & Distributions
 async function _syncAllInvoicedToPayouts(paymentRows) {
   try {
-    const invoiced = paymentRows.filter(r => r.invoiceSent && (r.invoicedAmount||0) > 0);
-    if(!invoiced.length) return;
+    // Eligible = case has happened (date ≤ today) OR invoice has been sent.
+    // Either qualifies a row for an E&D log entry. The PI value comes from
+    // _calcPIForCase — for from_invoice rules without an invoiced amount,
+    // that returns 0 naturally (the math needs the invoice to compute), so
+    // those entries appear in the log with PI=0 until invoiced. For flat
+    // and hourly rules, PI is known from the case alone.
+    const _today = new Date();
+    const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+    const eligible = paymentRows.filter(r => {
+      if(!r.caseId) return false;
+      const happened = r.caseDate && r.caseDate <= todayStr;
+      const invoiced = r.invoiceSent && (r.invoicedAmount || 0) > 0;
+      return happened || invoiced;
+    });
+    if(!eligible.length) return;
     const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payouts'));
     const data = snap.exists() ? snap.data() : { entries: [], distributions: [] };
     if(!data.entries) data.entries = [];
-    // For each invoiced row, look up the matching case so we can compute PI at
+    // For each eligible row, look up the matching case so we can compute PI at
     // sync time. The PI value is stored on the entry itself — that's what
     // makes E&D's totals "from the log" rather than re-derived from Payments.
     const cases = window.cases || [];
-    invoiced.forEach(row => {
+    eligible.forEach(row => {
       const existingIdx = data.entries.findIndex(e => e.cat === 'case-income' && e.caseId === row.caseId);
       const matchedCase = cases.find(c => c.caseId === row.caseId);
       const pi = _calcPIForCase(matchedCase, row);
@@ -1327,22 +1353,26 @@ async function _syncAllInvoicedToPayouts(paymentRows) {
         worker:    row.worker || 'josh',
         cat:       'case-income',
         name:      row.caseId || 'Unknown Case',
-        amount:    parseFloat(row.invoicedAmount) || 0,
-        personalIncome: pi,                                  // ← snapshot of PI at sync time
+        amount:    parseFloat(row.invoicedAmount) || 0,        // 0 if not yet invoiced
+        personalIncome: pi,                                     // ← snapshot of PI at sync time
         date:      row.caseDate || null,
         notes:     (row.surgeryCenterName||row.surgeryCenter) ? 'Center: ' + (row.surgeryCenterName||row.surgeryCenter) : '',
         caseId:    row.caseId,
+        // Track invoice status on the entry so E&D's renderer can show
+        // "awaiting invoice" instead of "of $0 inv." when amount is 0.
+        invoiced:  !!row.invoiceSent,
         createdAt: existingIdx !== -1 ? data.entries[existingIdx].createdAt : new Date().toISOString(),
         syncedAt:  new Date().toISOString()
       };
       if(existingIdx !== -1) data.entries[existingIdx] = entry;
       else data.entries.push(entry);
     });
-    // Remove case-income entries for rows that are no longer invoiced
-    const invoicedIds = new Set(invoiced.map(r => r.caseId));
-    data.entries = data.entries.filter(e => e.cat !== 'case-income' || invoicedIds.has(e.caseId));
+    // Remove case-income entries for rows that are no longer eligible (e.g.,
+    // case got deleted, or future cases that were moved further out).
+    const eligibleIds = new Set(eligible.map(r => r.caseId));
+    data.entries = data.entries.filter(e => e.cat !== 'case-income' || eligibleIds.has(e.caseId));
     await window.setDoc(window.doc(window.db, 'atlas', 'payouts'), data);
-    console.log('Synced', invoiced.length, 'invoice income entries to Expenses & Distributions');
+    console.log('Synced', eligible.length, 'case-income entries to Expenses & Distributions');
   } catch(e) {
     console.warn('Could not sync invoices to payouts:', e);
   }
