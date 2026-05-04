@@ -1039,6 +1039,20 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     const sorted  = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const sortedD = [...dists].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
+    // Pre-compute the set of dates that have 2+ case-income entries for
+    // this worker. Any case-income row falling on one of these dates with
+    // PI=$0 is a "same-day stack" — the first case absorbed the day's PI,
+    // the rest land at $0. Used by the SAME DAY tag below.
+    const _caseDateCounts = {};
+    entries.forEach(function(e) {
+      if(e.cat === 'case-income' && e.date) {
+        _caseDateCounts[e.date] = (_caseDateCounts[e.date] || 0) + 1;
+      }
+    });
+    const _sameDayCaseDates = new Set(
+      Object.keys(_caseDateCounts).filter(function(d) { return _caseDateCounts[d] > 1; })
+    );
+
     // Build a Set of entry IDs that have been included in any distribution
     // for this worker, so the entry list can show a "DISTRIBUTED" badge on
     // those rows. Only new-format distributions (with lineItems referencing
@@ -1242,6 +1256,16 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         const autoTag = e.cat==='case-income'
           ? '<span style="font-size:9px;color:var(--text-faint);margin-left:8px;font-style:italic;font-weight:400">auto</span>'
           : '';
+        // SAME DAY tag — when two or more case-income entries share a date
+        // (same worker), only the first absorbs the full day's PI and the
+        // rest land at $0. Tagging the $0 row explains why it isn't paying
+        // out — it's not a stalled case, it's a same-day stack.
+        const sameDayTag = (e.cat === 'case-income'
+            && (e.personalIncome || 0) === 0
+            && e.date
+            && _sameDayCaseDates.has(e.date))
+          ? '<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(180,83,9,0.12);color:#b45309;margin-left:8px;vertical-align:middle">SAME DAY</span>'
+          : '';
         // "Distributed" badge — shown on any entry that's appeared as a line
         // item in a saved distribution. Subtle green pill with a checkmark so
         // it visually echoes the existing "Sent" badge on Saved PDFs.
@@ -1263,7 +1287,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           ? '<div style="font-size:11px;color:var(--text-faint);margin-top:4px;line-height:1.4">'+metaParts.join('<span style="margin:0 6px;opacity:.5">·</span>')+'</div>'
           : '';
         left.innerHTML =
-          '<div style="font-size:13px;font-weight:600;line-height:1.3;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(e.name||'-')+autoTag+distTag+'</div>'
+          '<div style="font-size:13px;font-weight:600;line-height:1.3;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(e.name||'-')+sameDayTag+autoTag+distTag+'</div>'
           + metaLine;
 
         // ── RIGHT: hover-only action icons, then amount block ──
