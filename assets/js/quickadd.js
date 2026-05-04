@@ -80,13 +80,15 @@
   }
 
   // ── BUNDLES UI ──────────────────────────────────────────────────────────────
-  // A bundle is a saved list of item IDs. Selecting one in the supplies modal
-  // pins those items at the top of the list — quantities are still entered per
-  // case in the modal. Manage / create / edit happens in a dedicated modal.
+  // A bundle is a saved list of item IDs + preset quantities. Selecting one in
+  // the supplies modal pins those items at the top of the list and pre-fills
+  // the qty inputs with the preset values (still adjustable per case).
+  // Manage / create / edit happens in a dedicated modal.
 
   let _activeBundleId = null;       // the bundle whose items are currently pinned (or null)
   let _editingBundleId = null;      // bundle being edited in manager modal (null = creating new)
   let _editCheckedIds = null;       // Set<itemId> for the in-progress edit form
+  let _editPresetQtys = null;       // {itemId: qty} preset quantities for the in-progress edit form
 
   // Migrate old-format bundles ({items:[{itemId,qty}], itemsOnly}) to {itemIds:[]}
   function normalizeBundle(b) {
@@ -145,7 +147,24 @@
 
   window.qa_toggleBundleActive = function(bundleId) {
     captureCurrentInputs();
-    _activeBundleId = (_activeBundleId === bundleId) ? null : bundleId;
+    if(_activeBundleId === bundleId) {
+      // Deactivating — leave inputs as-is, user keeps whatever they typed.
+      _activeBundleId = null;
+    } else {
+      // Activating — pre-fill qty inputs from the bundle's presetQtys, but
+      // never overwrite a value the user has already entered (>0).
+      _activeBundleId = bundleId;
+      const bundle = getBundleById(bundleId);
+      if(bundle && bundle.presetQtys) {
+        if(!window._qaInitial) window._qaInitial = {};
+        Object.keys(bundle.presetQtys).forEach(itemId => {
+          const presetQty = parseFloat(bundle.presetQtys[itemId]);
+          if(presetQty > 0 && !(window._qaInitial[itemId] > 0)) {
+            window._qaInitial[itemId] = presetQty;
+          }
+        });
+      }
+    }
     renderSuppliesQuickAddModal();
   };
 
@@ -203,6 +222,7 @@
   window.qa_startNewBundle = function() {
     _editingBundleId = null;
     _editCheckedIds = new Set();
+    _editPresetQtys = {};
     const titleEl = document.getElementById('bundleEditTitle');
     if(titleEl) titleEl.textContent = '+ Create New Bundle';
     const nameEl = document.getElementById('bundleEditName');
@@ -222,6 +242,14 @@
     if(!b) return;
     _editingBundleId = bundleId;
     _editCheckedIds = new Set(b.itemIds || []);
+    // Load existing preset qtys into edit state. For legacy bundles without
+    // presetQtys, default each item to qty 1 so the user has a sensible
+    // starting value to adjust from.
+    _editPresetQtys = {};
+    (b.itemIds || []).forEach(id => {
+      const saved = b.presetQtys && b.presetQtys[id];
+      _editPresetQtys[id] = (saved > 0) ? saved : 1;
+    });
     const titleEl = document.getElementById('bundleEditTitle');
     if(titleEl) titleEl.textContent = `✏ Edit: ${b.name}`;
     document.getElementById('bundleEditName').value = b.name;
@@ -236,6 +264,7 @@
   window.qa_cancelBundleEdit = function() {
     _editingBundleId = null;
     _editCheckedIds = null;
+    _editPresetQtys = null;
     qa_showBundleList();
   };
 
@@ -272,12 +301,24 @@
           .sort((a,b) => (a.generic||'').localeCompare(b.generic||''))
           .forEach(item => {
             const checked = checkedIds.has(item.id);
+            const presetQty = (_editPresetQtys && _editPresetQtys[item.id] > 0)
+              ? _editPresetQtys[item.id]
+              : 1;
+            // The qty input is wrapped in its own click-stopper span so clicks
+            // on the input don't toggle the surrounding label's checkbox.
             html += `<label style="display:flex;align-items:center;gap:10px;padding:7px 4px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--surface2)">
               <input type="checkbox" ${checked?'checked':''} onchange="window.qa_toggleBundleEditItem('${escapeHtml(item.id)}', this.checked)" style="width:16px;height:16px;flex-shrink:0;cursor:pointer">
               <div style="flex:1;min-width:0">
                 <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.generic||item.name||'?')}</div>
                 <div style="font-size:11px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.name||'')}</div>
               </div>
+              <span onclick="event.preventDefault();event.stopPropagation()" style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+                <span style="font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px">qty</span>
+                <input type="number" min="0" step="1" value="${presetQty}" ${checked?'':'disabled'}
+                  oninput="window.qa_setBundleEditQty('${escapeHtml(item.id)}', this.value)"
+                  onclick="event.stopPropagation()"
+                  style="width:54px;padding:4px 6px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:${checked?'var(--bg)':'var(--surface2)'};text-align:center;font-family:DM Mono,monospace">
+              </span>
             </label>`;
           });
         html += `</div>`;
@@ -289,9 +330,26 @@
 
   window.qa_toggleBundleEditItem = function(itemId, checked) {
     if(!_editCheckedIds) _editCheckedIds = new Set();
-    if(checked) _editCheckedIds.add(itemId);
-    else _editCheckedIds.delete(itemId);
+    if(!_editPresetQtys) _editPresetQtys = {};
+    if(checked) {
+      _editCheckedIds.add(itemId);
+      // Default qty to 1 when an item is first checked, but preserve any
+      // value the user already set (so re-checking restores their qty).
+      if(!(_editPresetQtys[itemId] > 0)) _editPresetQtys[itemId] = 1;
+    } else {
+      _editCheckedIds.delete(itemId);
+      // Keep the qty in _editPresetQtys so re-checking remembers it.
+    }
+    // Re-render so the qty input enables/disables to match the new state.
+    if(typeof window.renderBundleEditItems === 'function') window.renderBundleEditItems();
     updateBundleEditCount();
+  };
+
+  // Update the in-progress preset qty for an item. Stays in state until save.
+  window.qa_setBundleEditQty = function(itemId, value) {
+    if(!_editPresetQtys) _editPresetQtys = {};
+    const n = parseFloat(value);
+    _editPresetQtys[itemId] = (n > 0) ? n : 1;
   };
 
   function updateBundleEditCount() {
@@ -315,11 +373,20 @@
       alert('Please check at least one item to include in the bundle.');
       return;
     }
+    // Build presetQtys map — only for items that are actually checked.
+    // Any orphan entries from previously-checked-then-unchecked items are
+    // dropped here so we don't persist stale qtys.
+    const presetQtys = {};
+    itemIds.forEach(id => {
+      const q = (_editPresetQtys && _editPresetQtys[id] > 0) ? _editPresetQtys[id] : 1;
+      presetQtys[id] = q;
+    });
     if(_editingBundleId) {
       const b = getBundleById(_editingBundleId);
       if(b) {
         b.name = name;
         b.itemIds = itemIds;
+        b.presetQtys = presetQtys;
         b.savedAt = new Date().toISOString();
       }
     } else {
@@ -327,6 +394,7 @@
         id: window.uid ? window.uid() : (Date.now().toString(36)),
         name,
         itemIds,
+        presetQtys,
         createdAt: new Date().toISOString(),
         savedAt: new Date().toISOString()
       });
@@ -334,6 +402,7 @@
     if(await saveBundles()) {
       _editingBundleId = null;
       _editCheckedIds = null;
+      _editPresetQtys = null;
       qa_showBundleList();
       renderBundlesBar();
     }
