@@ -1017,14 +1017,39 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     }
   };
 
-  // Show/hide the "new vendor" text field based on dropdown choice.
+  // Show/hide the "new vendor" text field based on dropdown choice. The
+  // same text field is reused for both "+ New vendor…" and the
+  // "Rename current vendor…" flow — for rename, we pre-fill with the
+  // current selected option's label so the user can edit it inline.
   window._onVendorPick = function(w) {
     var sel    = document.getElementById('payout-vendor-' + w);
     var newEl  = document.getElementById('payout-vendor-new-' + w);
     var nameEl = document.getElementById('payout-name-' + w);
     if(!sel) return;
     if(sel.value === '__new__') {
-      if(newEl) { newEl.style.display = ''; newEl.focus(); }
+      if(newEl) {
+        newEl.value = '';
+        newEl.placeholder = 'New vendor name';
+        newEl.style.display = '';
+        newEl.focus();
+      }
+    } else if(sel.value === '__rename__') {
+      // Pre-fill with the existing vendor name (extracted from the
+      // sentinel option's label). The user can then edit it freely.
+      var current = (nameEl && nameEl.value) || '';
+      // Fallback: parse from the option text if hidden name isn't set
+      if(!current) {
+        var opt = sel.options[sel.selectedIndex];
+        var m = opt && /^✎ Rename "(.+)"…$/.exec(opt.textContent);
+        if(m) current = m[1];
+      }
+      if(newEl) {
+        newEl.value = current;
+        newEl.placeholder = 'Rename to…';
+        newEl.style.display = '';
+        newEl.focus();
+        newEl.select();
+      }
     } else {
       if(newEl) newEl.style.display = 'none';
       if(nameEl) nameEl.value = sel.value;
@@ -1377,9 +1402,12 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         // a click-toggle for showing/hiding the panel.
         // Only Henry Schein, Smith Pharmacy, and Toad Airways support invoice
         // tracking — other initial-invest vendors stay as plain lump-sum entries.
+        // Substring match so renames like "Henry Schein" → "Henry Schein Inc."
+        // keep their invoice panels.
         const VENDORS_WITH_INVOICES = ['henry schein', 'smith pharmacy', 'toad airways'];
         const vendorKey = (e.name || '').trim().toLowerCase();
-        const supportsInvoices = e.cat === 'initial-invest' && VENDORS_WITH_INVOICES.indexOf(vendorKey) !== -1;
+        const supportsInvoices = e.cat === 'initial-invest'
+          && VENDORS_WITH_INVOICES.some(function(v) { return vendorKey.indexOf(v) !== -1; });
         if(supportsInvoices && canEdit) {
           const invoices = Array.isArray(e.invoices) ? e.invoices : [];
           // Make the left content clickable to toggle the panel — but skip
@@ -1670,6 +1698,15 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           // the hidden Name field as the source of truth.
           var found = Array.from(vsel.options).some(function(o) { return o.value === (e.name||''); });
           if(found) vsel.value = e.name || '';
+          // Append a "Rename current vendor" sentinel option that, when picked,
+          // reveals the new-vendor text field pre-filled with the current
+          // name so the user can edit it in place. Only shown in edit mode.
+          if(e.name) {
+            var renameOpt = document.createElement('option');
+            renameOpt.value = '__rename__';
+            renameOpt.textContent = '✎ Rename "' + e.name + '"…';
+            vsel.appendChild(renameOpt);
+          }
         }
         // Lock the manual Amount field for entries with invoices — it's
         // derived from the invoice list and shouldn't be edited directly.
@@ -1702,7 +1739,9 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     if(cat === 'initial-invest') {
       var vendorSel = document.getElementById('payout-vendor-'+w);
       var vendorNew = document.getElementById('payout-vendor-new-'+w);
-      if(vendorSel && vendorSel.value === '__new__') {
+      // Both "+ New vendor" and "✎ Rename current vendor" use the same
+      // text input — its value is the vendor name to save.
+      if(vendorSel && (vendorSel.value === '__new__' || vendorSel.value === '__rename__')) {
         name = (vendorNew && vendorNew.value || '').trim();
       } else if(vendorSel) {
         name = (vendorSel.value || '').trim();
