@@ -90,6 +90,43 @@ function syncPaymentRowsFromCases() {
 // -- Load -------------------------------------------------------------
 window.loadPaymentRows = async function loadPaymentRows() {
   try {
+  // ─ In-flight edit snapshot ─────────────────────────────────────────
+  // Before we overwrite _paymentRows with the Firestore version, capture
+  // the user's CURRENT DOM state for editable fields, keyed by caseId.
+  // Why: this function gets called by _globalRefresh in app.js whenever
+  // the atlas/cases or atlas/preop doc changes (including echoes of our
+  // own writes). If the user clicked Inv ✓ a moment ago, our setDoc may
+  // still be in flight — the server doesn't have it yet. Without this
+  // snapshot, we'd reassign _paymentRows from the stale server data and
+  // wipe the click. With it, we re-apply the user's DOM state after the
+  // merge so their edit survives.
+  const _inflightEdits = new Map();
+  if(_paymentRows && _paymentRows.length) {
+    _paymentRows.forEach((r, i) => {
+      if(!r || !r.caseId) return;
+      const dep500El   = document.getElementById('pr-dep500' + i);
+      const paidEl     = document.getElementById('pr-paid' + i);
+      const invEl      = document.getElementById('pr-inv' + i);
+      const rcvdEl     = document.getElementById('pr-rcvd' + i);
+      const depDateEl  = document.getElementById('pr-depositDate' + i);
+      const paidDateEl = document.getElementById('pr-paidDate' + i);
+      // Only capture fields whose input element exists. For greyed-out
+      // cells (the cells that are N/A for the row's billing type), the
+      // element is absent — we leave that field untouched.
+      const edits = {};
+      if(dep500El)   edits.dep500Paid  = !!dep500El.checked;
+      if(paidEl)     edits.paid        = !!paidEl.checked;
+      if(invEl)      edits.invoiceSent = !!invEl.checked;
+      if(rcvdEl)     edits.received    = !!rcvdEl.checked;
+      if(depDateEl)  edits.depositDate = depDateEl.value || '';
+      if(paidDateEl) edits.paidDate    = paidDateEl.value || '';
+      // invoicedAmount isn't a directly-edited DOM field (set by the
+      // invoice modal), preserve from in-memory state.
+      edits.invoicedAmount = r.invoicedAmount || 0;
+      _inflightEdits.set(r.caseId, edits);
+    });
+  }
+
   runDailyPaymentBackup();
   await _loadPIFormula();
   const [paymentsSnap, casesSnap, preopSnap, scSnap] = await Promise.all([
@@ -132,6 +169,17 @@ window.loadPaymentRows = async function loadPaymentRows() {
         patientEmail: preop?.['po-patientEmail'] || _paymentRows[existIdx].patientEmail || '' };
     }
   });
+
+  // Re-apply in-flight DOM edits AFTER merging server data. The user's
+  // most-recent click/edit wins — anything else is either already
+  // persisted to the server or pending a future save.
+  if(_inflightEdits.size) {
+    _paymentRows.forEach(r => {
+      const edits = _inflightEdits.get(r.caseId);
+      if(edits) Object.assign(r, edits);
+    });
+  }
+
   _paymentRows.sort((a,b)=>(a.caseDate||'9999').localeCompare(b.caseDate||'9999'));
   renderPaymentRows();
   renderPaymentSummary();
