@@ -361,12 +361,33 @@ function renderPaymentRows() {
   const COLS = '220px 48px minmax(120px,1fr) 82px 108px 34px 108px 34px 78px 34px 38px 34px 34px';
 
   body.innerHTML = _paymentRows.map((r,i)=>{
-    const complete = r.depositDate&&r.paidDate&&r.dep500Paid&&r.paid&&r.invoiceSent;
-    const bg = complete?'rgba(45,106,79,0.08)':i%2===0?'var(--bg)':'var(--surface2)';
-    const bl = complete?'3px solid var(--accent)':'3px solid transparent';
+    // Build the surgery-center lookup early so the "complete" check can use
+    // billingType. The original lookup happened later — moving it up.
     const center = (window.surgeryCenters||[]).find(c=>c.id===r.surgeryCenter);
     const scName = center?.name||r.surgeryCenterName||'';
     const centerPays = center ? center.billingType === 'center' : false;
+    // Visual completion has two stages on center-billed rows:
+    //   • invoiceSent only        → soft "in flight" green (we sent it, waiting on payment)
+    //   • invoiceSent + received  → full green (paid in full, matches patient rows)
+    // Patient rows keep their existing single-stage rule (deposit + final
+    // payment + invoice all confirmed) — they don't have an in-flight state
+    // because their flow is gated by Stripe events, not manual toggles.
+    const centerInvoicedOnly  = centerPays && !!r.invoiceSent && !r.received;
+    const centerFullyComplete = centerPays && !!r.invoiceSent &&  !!r.received;
+    const patientComplete     = !centerPays && !!(r.depositDate && r.paidDate && r.dep500Paid && r.paid && r.invoiceSent);
+    const complete            = centerFullyComplete || patientComplete;
+    // Background tint:
+    //   • full green   = rgba(45,106,79,0.08)  (existing "complete" color)
+    //   • light green  = rgba(45,106,79,0.035) (new in-flight tint, ~half opacity)
+    const bg = complete           ? 'rgba(45,106,79,0.08)'
+             : centerInvoicedOnly ? 'rgba(45,106,79,0.035)'
+             : i%2===0            ? 'var(--bg)'
+                                  : 'var(--surface2)';
+    // Left accent stripe mirrors the same hierarchy: full accent for done,
+    // softer accent for in-flight, transparent for everything else.
+    const bl = complete           ? '3px solid var(--accent)'
+             : centerInvoicedOnly ? '3px solid rgba(45,106,79,0.35)'
+                                  : '3px solid transparent';
     const greyCell = 'background:rgba(0,0,0,0.06);border-radius:4px;opacity:0.4;pointer-events:none;user-select:none;display:flex;align-items:center;justify-content:center;height:32px';
     const caseFmt = r.caseDate?new Date(r.caseDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
     const invAmt = r.invoicedAmount>0?`<span style="font-size:11px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$${Number(r.invoicedAmount).toFixed(2)}</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`:`<span style="color:var(--text-faint);font-size:11px">—</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`;
@@ -383,11 +404,11 @@ function renderPaymentRows() {
       <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-paidDate'+i,r.paidDate,'paidDate',i)}</div>
       ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="commitPaymentField(${i},'paid','checkbox');renderPaymentSummary()"></div>`}
       <div style="padding:4px 3px;display:flex;align-items:center;justify-content:flex-end;gap:2px">${invAmt}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="commitPaymentField(${i},'invoiceSent','checkbox');renderPaymentSummary()"></div>
+      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="commitPaymentField(${i},'invoiceSent','checkbox');renderPaymentSummary();renderPaymentRows()"></div>
       ${centerPays
         ? `<div style="padding:4px 3px"><button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button></div>`
         : `<div style="padding:4px 3px"><div style="${greyCell}" title="Patient case — no invoice PDF needed"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div></div>`}
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-rcvd${i}" ${r.received?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="commitPaymentField(${i},'received','checkbox')" title="Payment received"></div>
+      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-rcvd${i}" ${r.received?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="commitPaymentField(${i},'received','checkbox');renderPaymentRows()" title="Payment received"></div>
       <div style="padding:4px 8px;display:flex;align-items:center;justify-content:flex-end"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete">🗑</button></div>
     </div>`;
   }).join('');
