@@ -1414,6 +1414,23 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
               + '<button onclick="window.addEDInvoice(\''+e.id+'\',\''+worker+'\')" class="btn btn-primary btn-sm" style="font-size:12px;padding:7px 14px">Add</button>'
               + '</div>'
               + '</div>';
+            // Bulk import section — collapsible, lets the user paste many
+            // invoices at once (CSV / tab / comma / multi-space separated).
+            html += '<div style="margin-top:10px">'
+              + '<button onclick="window.toggleBulkImport(\''+e.id+'\')" style="background:none;border:1px dashed var(--border);color:var(--text-muted);padding:5px 12px;border-radius:var(--radius-sm);font-size:11px;cursor:pointer;font-family:inherit">📋 Bulk import invoices…</button>'
+              + '<div id="inv-bulk-wrap-'+e.id+'" style="display:none;margin-top:10px;padding:12px;background:rgba(29,67,128,0.06);border-radius:var(--radius-sm);border:1px solid rgba(29,67,128,0.15)">'
+                + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">'
+                  + 'Paste one invoice per line, in this order: <strong>date, invoice #, amount</strong>.<br>'
+                  + 'Separators: comma, tab, or 2+ spaces. Dates: <code style="background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px">MM/DD/YY</code> or <code style="background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px">YYYY-MM-DD</code>. Amount can include <code style="background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px">$</code> or <code style="background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px">*</code>.'
+                + '</div>'
+                + '<textarea id="inv-bulk-text-'+e.id+'" placeholder="04/08/26, 55587271, $*652.28&#10;04/10/26, 55670042, 59.70&#10;04/06/26, 55454142, 74.94" style="width:100%;min-height:120px;padding:8px 10px;font-size:12px;font-family:DM Mono,monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;resize:vertical"></textarea>'
+                + '<div style="display:flex;gap:8px;margin-top:8px;align-items:center">'
+                  + '<button onclick="window.runBulkImport(\''+e.id+'\',\''+worker+'\')" class="btn btn-primary btn-sm" style="font-size:12px">Import</button>'
+                  + '<button onclick="window.toggleBulkImport(\''+e.id+'\')" class="btn btn-ghost btn-sm" style="font-size:12px">Cancel</button>'
+                  + '<span id="inv-bulk-status-'+e.id+'" style="font-size:11px;color:var(--text-faint);margin-left:6px"></span>'
+                + '</div>'
+              + '</div>'
+              + '</div>';
             panel.innerHTML = html;
           })();
 
@@ -1751,6 +1768,110 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     entry.invoices = entry.invoices.filter(function(inv) { return inv.id !== invoiceId; });
     entry.amount    = _sumInvoices(entry);
     entry.updatedAt = new Date().toISOString();
+    await _save(data);
+    renderPayoutTab();
+  };
+
+  // Toggle the bulk-import panel visibility.
+  window.toggleBulkImport = function(entryId) {
+    var wrap = document.getElementById('inv-bulk-wrap-' + entryId);
+    if(!wrap) return;
+    var open = wrap.style.display !== 'none';
+    wrap.style.display = open ? 'none' : 'block';
+    if(!open) {
+      var ta = document.getElementById('inv-bulk-text-' + entryId);
+      if(ta) ta.focus();
+      var status = document.getElementById('inv-bulk-status-' + entryId);
+      if(status) status.textContent = '';
+    }
+  };
+
+  // Parse a single bulk-import line into an invoice object, or return an
+  // {error} object if it's malformed. Lenient on separators (tab, comma,
+  // multi-space) and on date/amount formatting (handles $, *, MM/DD/YY,
+  // MM/DD/YYYY, YYYY-MM-DD).
+  function _parseBulkInvoiceLine(rawLine) {
+    var line = (rawLine || '').trim();
+    if(!line) return null; // blank line — skip silently
+    var parts = line.split(/\t|,|\s{2,}/).map(function(p) { return p.trim(); }).filter(Boolean);
+    if(parts.length < 3) {
+      return { error: 'Need 3 fields (date, invoice #, amount)' };
+    }
+    // If user pasted more than 3 fields, treat the first as date, the last
+    // as amount, and join the middle as the invoice number.
+    var dateStr = parts[0];
+    var amtStr  = parts[parts.length - 1];
+    var invNum  = parts.slice(1, parts.length - 1).join(' ');
+    // Date — accept YYYY-MM-DD or M/D/YY or MM/DD/YYYY etc.
+    var date = null;
+    var iso = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    var us  = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if(iso) {
+      date = iso[1] + '-' + iso[2].padStart(2,'0') + '-' + iso[3].padStart(2,'0');
+    } else if(us) {
+      var yyyy = us[3].length === 2 ? '20' + us[3] : us[3];
+      date = yyyy + '-' + us[1].padStart(2,'0') + '-' + us[2].padStart(2,'0');
+    } else {
+      return { error: 'Bad date "' + dateStr + '"' };
+    }
+    // Amount — strip $, *, commas, whitespace
+    var clean = amtStr.replace(/[$*,\s]/g, '');
+    var amount = parseFloat(clean);
+    if(!(amount > 0)) {
+      return { error: 'Bad amount "' + amtStr + '"' };
+    }
+    return { date: date, invoiceNumber: invNum, amount: amount };
+  }
+
+  window.runBulkImport = async function(entryId, w) {
+    var ta     = document.getElementById('inv-bulk-text-' + entryId);
+    var status = document.getElementById('inv-bulk-status-' + entryId);
+    if(!ta) return;
+    var lines = (ta.value || '').split(/\r?\n/);
+    var parsed = [];
+    var errors = [];
+    lines.forEach(function(line, i) {
+      var result = _parseBulkInvoiceLine(line);
+      if(result === null) return; // blank
+      if(result.error) {
+        errors.push('Line ' + (i + 1) + ': ' + result.error);
+      } else {
+        parsed.push(result);
+      }
+    });
+    if(!parsed.length && !errors.length) {
+      if(status) status.textContent = 'No data to import.';
+      return;
+    }
+    // Confirmation summary before writing
+    var confirmMsg = 'Import ' + parsed.length + ' invoice' + (parsed.length === 1 ? '' : 's') + '?';
+    if(errors.length) {
+      confirmMsg += '\n\n' + errors.length + ' line(s) had errors and will be skipped:\n' + errors.slice(0, 5).join('\n');
+      if(errors.length > 5) confirmMsg += '\n…and ' + (errors.length - 5) + ' more';
+    }
+    if(parsed.length && !confirm(confirmMsg)) return;
+    if(!parsed.length) {
+      if(status) status.innerHTML = '<span style="color:var(--warn)">No valid rows to import.</span>';
+      return;
+    }
+    // One Firestore write for the whole batch — much faster than 18 sequential writes.
+    var data = await _load();
+    var idx  = (data.entries || []).findIndex(function(e) { return e.id === entryId; });
+    if(idx === -1) { alert('Entry not found — was it deleted?'); return; }
+    var entry = data.entries[idx];
+    if(!Array.isArray(entry.invoices)) entry.invoices = [];
+    var nowIso = new Date().toISOString();
+    parsed.forEach(function(inv) {
+      entry.invoices.push({
+        id:            _uid(),
+        date:          inv.date,
+        invoiceNumber: inv.invoiceNumber,
+        amount:        inv.amount,
+        createdAt:     nowIso
+      });
+    });
+    entry.amount    = _sumInvoices(entry);
+    entry.updatedAt = nowIso;
     await _save(data);
     renderPayoutTab();
   };
