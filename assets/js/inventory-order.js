@@ -92,11 +92,11 @@
       return;
     }
 
-    let html = '<div style="position:sticky;top:0;background:#fff;display:grid;grid-template-columns:90px 1fr 80px 60px 60px 90px;gap:10px;padding:10px 4px;border-bottom:2px solid #ccc;font-size:10px;font-weight:700;text-transform:uppercase;color:#666;letter-spacing:.5px;z-index:1">'
+    let html = '<div style="position:sticky;top:0;background:#fff;display:grid;grid-template-columns:90px 1fr 80px 110px 60px 90px;gap:10px;padding:10px 4px;border-bottom:2px solid #ccc;font-size:10px;font-weight:700;text-transform:uppercase;color:#666;letter-spacing:.5px;z-index:1">'
       + '<div>Code</div>'
       + '<div>Item</div>'
       + '<div>Unit Size</div>'
-      + '<div style="text-align:center" title="Devarsh / Josh">Stock D/J</div>'
+      + '<div style="text-align:center">Stock (D / J)</div>'
       + '<div style="text-align:center">Alert</div>'
       + '<div style="text-align:center">Order Qty</div>'
       + '</div>';
@@ -105,22 +105,25 @@
       const stockDev  = item.stockDev  || 0;
       const stockJosh = item.stockJosh || 0;
       const alert     = item.alert     || 0;
-      const lowStock  = stockDev <= alert || stockJosh <= alert;
+      const lowDev    = stockDev  <= alert;
+      const lowJosh   = stockJosh <= alert;
+      const lowStock  = lowDev || lowJosh;
       const qty       = qtys[item.id] || '';
       const hasDesc   = item.name && item.name !== item.generic;
-      // Show per-worker breakdown so a "red but high combined" case reads
-      // clearly — e.g. "4 / 30" highlights that Devarsh is the one running
-      // low even though the total looks fine.
-      const stockDisplay = stockDev + ' / ' + stockJosh;
-      const stockTitle   = 'Devarsh: ' + stockDev + ' · Josh: ' + stockJosh + ' · alert at ' + alert;
-      html += '<div style="display:grid;grid-template-columns:90px 1fr 80px 60px 60px 90px;gap:10px;padding:9px 4px;border-bottom:1px solid #eee;font-size:13px;align-items:center">'
+      // Per-worker stock with each side individually red-colored when its
+      // own kit is at/below alert. Makes it instantly clear WHICH kit needs
+      // restocking even when the modal isn't filtered to one worker.
+      const devStr  = '<span style="color:' + (lowDev  ? '#dc2626' : '#333') + ';font-weight:' + (lowDev  ? '700' : 'normal') + '">D ' + stockDev  + '</span>';
+      const joshStr = '<span style="color:' + (lowJosh ? '#dc2626' : '#333') + ';font-weight:' + (lowJosh ? '700' : 'normal') + '">J ' + stockJosh + '</span>';
+      const stockTitle = 'Devarsh: ' + stockDev + ' · Josh: ' + stockJosh + ' · alert at ' + alert;
+      html += '<div style="display:grid;grid-template-columns:90px 1fr 80px 110px 60px 90px;gap:10px;padding:9px 4px;border-bottom:1px solid #eee;font-size:13px;align-items:center">'
         + '<div style="font-family:DM Mono,monospace;font-size:11px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (item.code || item.id) + '</div>'
         + '<div style="min-width:0">'
           + '<div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (item.generic || '—') + '</div>'
           + (hasDesc ? '<div style="font-size:11px;color:#999;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + item.name + '</div>' : '')
         + '</div>'
         + '<div style="font-size:11px;color:#666;font-family:DM Mono,monospace">' + (item.unitSize || '—') + '</div>'
-        + '<div title="' + stockTitle + '" style="text-align:center;color:' + (lowStock ? '#dc2626' : '#333') + ';font-weight:' + (lowStock ? '700' : 'normal') + ';font-family:DM Mono,monospace;font-size:12px">' + stockDisplay + '</div>'
+        + '<div title="' + stockTitle + '" style="text-align:center;font-family:DM Mono,monospace;font-size:12px">' + devStr + ' <span style="color:#bbb">/</span> ' + joshStr + '</div>'
         + '<div style="text-align:center;color:#999;font-family:DM Mono,monospace">' + alert + '</div>'
         + '<div><input type="number" min="0" step="1" data-itemid="' + item.id + '" value="' + qty + '" placeholder="0" oninput="window._vomCountChange()" style="width:100%;padding:6px 8px;font-size:13px;border:1px solid #ccc;border-radius:4px;text-align:center;font-family:DM Mono,monospace;box-sizing:border-box"></div>'
       + '</div>';
@@ -308,7 +311,7 @@
     doc.text('CODE',         18,  y);
     doc.text('ITEM',         48,  y);
     doc.text('UNIT SIZE',    128, y);
-    doc.text('STOCK D/J',    158, y, { align: 'center' });
+    doc.text('STOCK (D/J)',  160, y, { align: 'center' });
     doc.text('ORDER QTY',    192, y, { align: 'center' });
     y += 2.5;
     doc.setDrawColor(180, 180, 180);
@@ -321,7 +324,7 @@
       if(y > 263) { doc.addPage(); y = 20; }
       const stockDev  = item.stockDev  || 0;
       const stockJosh = item.stockJosh || 0;
-      const stockStr  = stockDev + '/' + stockJosh;
+      const stockStr  = 'D ' + stockDev + ' / J ' + stockJosh;
       const orderQty  = qtys[item.id];
       const hasDesc   = item.name && item.name !== item.generic;
       totalUnits += orderQty;
