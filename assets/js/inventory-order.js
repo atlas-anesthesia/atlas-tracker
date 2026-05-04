@@ -40,31 +40,37 @@
     return supplier.indexOf(vendor.match) !== -1;
   }
 
+  // Resolve the worker key ('dev' / 'josh') for the currently signed-in
+  // user. Falls back to 'dev' when not logged in or the email isn't mapped.
+  function _activeWorker() {
+    const u   = window.currentUser;
+    const map = window.EMAIL_WORKER_MAP || {};
+    if(u && u.email) return map[u.email.toLowerCase()] || 'dev';
+    return 'dev';
+  }
+  function _stockFor(item, w) {
+    return w === 'dev' ? (item.stockDev || 0) : (item.stockJosh || 0);
+  }
+  function _workerLabel(w) { return w === 'dev' ? 'Devarsh' : 'Josh'; }
+
   function _itemsForVendor(vendorKey) {
     const vendor = VENDORS.find(function(v) { return v.key === vendorKey; });
     if(!vendor) return [];
+    const w = _activeWorker();
     return (window.items || [])
       .filter(function(i) { return i && _itemMatchesVendor(i, vendor); })
       .sort(function(a, b) {
-        // Primary: items where EITHER worker is at or below alert level
-        // (i.e., either kit needs restock) float to the top — matches the
-        // red flagging in the per-worker inventory view, since each kit
-        // restocks independently. Combined stock can hide a low kit.
-        const alertA   = a.alert || 0;
-        const alertB   = b.alert || 0;
-        const lowDevA  = (a.stockDev  || 0) <= alertA;
-        const lowJoshA = (a.stockJosh || 0) <= alertA;
-        const lowDevB  = (b.stockDev  || 0) <= alertB;
-        const lowJoshB = (b.stockJosh || 0) <= alertB;
-        const redA     = (lowDevA || lowJoshA) ? 1 : 0;
-        const redB     = (lowDevB || lowJoshB) ? 1 : 0;
-        if(redA !== redB) return redB - redA;          // red first
-        // Secondary: within each group, the lowest single-kit stock surfaces
-        // higher (most-urgent kit perspective).
-        const minA = Math.min((a.stockDev || 0), (a.stockJosh || 0));
-        const minB = Math.min((b.stockDev || 0), (b.stockJosh || 0));
-        if(minA !== minB) return minA - minB;
-        // Tertiary: alphabetical for stable ordering
+        // Sort by the LOGGED-IN worker's stock vs alert. Items where this
+        // user's kit is at/below alert (red) float to the top, then by
+        // ascending stock, then alphabetical.
+        const alertA = a.alert || 0;
+        const alertB = b.alert || 0;
+        const stockA = _stockFor(a, w);
+        const stockB = _stockFor(b, w);
+        const redA   = stockA <= alertA ? 1 : 0;
+        const redB   = stockB <= alertB ? 1 : 0;
+        if(redA !== redB) return redB - redA;
+        if(stockA !== stockB) return stockA - stockB;
         return (a.generic || '').localeCompare(b.generic || '');
       });
   }
@@ -92,38 +98,31 @@
       return;
     }
 
-    let html = '<div style="position:sticky;top:0;background:#fff;display:grid;grid-template-columns:90px 1fr 80px 110px 60px 90px;gap:10px;padding:10px 4px;border-bottom:2px solid #ccc;font-size:10px;font-weight:700;text-transform:uppercase;color:#666;letter-spacing:.5px;z-index:1">'
+    const myWorker = _activeWorker();
+    let html = '<div style="position:sticky;top:0;background:#fff;display:grid;grid-template-columns:90px 1fr 80px 70px 60px 90px;gap:10px;padding:10px 4px;border-bottom:2px solid #ccc;font-size:10px;font-weight:700;text-transform:uppercase;color:#666;letter-spacing:.5px;z-index:1">'
       + '<div>Code</div>'
       + '<div>Item</div>'
       + '<div>Unit Size</div>'
-      + '<div style="text-align:center">Stock (D / J)</div>'
+      + '<div style="text-align:center" title="' + _workerLabel(myWorker) + '\'s kit">My Stock</div>'
       + '<div style="text-align:center">Alert</div>'
       + '<div style="text-align:center">Order Qty</div>'
       + '</div>';
 
     items.forEach(function(item) {
-      const stockDev  = item.stockDev  || 0;
-      const stockJosh = item.stockJosh || 0;
-      const alert     = item.alert     || 0;
-      const lowDev    = stockDev  <= alert;
-      const lowJosh   = stockJosh <= alert;
-      const lowStock  = lowDev || lowJosh;
-      const qty       = qtys[item.id] || '';
-      const hasDesc   = item.name && item.name !== item.generic;
-      // Per-worker stock with each side individually red-colored when its
-      // own kit is at/below alert. Makes it instantly clear WHICH kit needs
-      // restocking even when the modal isn't filtered to one worker.
-      const devStr  = '<span style="color:' + (lowDev  ? '#dc2626' : '#333') + ';font-weight:' + (lowDev  ? '700' : 'normal') + '">D ' + stockDev  + '</span>';
-      const joshStr = '<span style="color:' + (lowJosh ? '#dc2626' : '#333') + ';font-weight:' + (lowJosh ? '700' : 'normal') + '">J ' + stockJosh + '</span>';
-      const stockTitle = 'Devarsh: ' + stockDev + ' · Josh: ' + stockJosh + ' · alert at ' + alert;
-      html += '<div style="display:grid;grid-template-columns:90px 1fr 80px 110px 60px 90px;gap:10px;padding:9px 4px;border-bottom:1px solid #eee;font-size:13px;align-items:center">'
+      const myStock = _stockFor(item, myWorker);
+      const alert   = item.alert || 0;
+      const lowStock = myStock <= alert;
+      const qty     = qtys[item.id] || '';
+      const hasDesc = item.name && item.name !== item.generic;
+      const stockTitle = _workerLabel(myWorker) + ': ' + myStock + ' · alert at ' + alert;
+      html += '<div style="display:grid;grid-template-columns:90px 1fr 80px 70px 60px 90px;gap:10px;padding:9px 4px;border-bottom:1px solid #eee;font-size:13px;align-items:center">'
         + '<div style="font-family:DM Mono,monospace;font-size:11px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (item.code || item.id) + '</div>'
         + '<div style="min-width:0">'
           + '<div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (item.generic || '—') + '</div>'
           + (hasDesc ? '<div style="font-size:11px;color:#999;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + item.name + '</div>' : '')
         + '</div>'
         + '<div style="font-size:11px;color:#666;font-family:DM Mono,monospace">' + (item.unitSize || '—') + '</div>'
-        + '<div title="' + stockTitle + '" style="text-align:center;font-family:DM Mono,monospace;font-size:12px">' + devStr + ' <span style="color:#bbb">/</span> ' + joshStr + '</div>'
+        + '<div title="' + stockTitle + '" style="text-align:center;color:' + (lowStock ? '#dc2626' : '#333') + ';font-weight:' + (lowStock ? '700' : 'normal') + ';font-family:DM Mono,monospace">' + myStock + '</div>'
         + '<div style="text-align:center;color:#999;font-family:DM Mono,monospace">' + alert + '</div>'
         + '<div><input type="number" min="0" step="1" data-itemid="' + item.id + '" value="' + qty + '" placeholder="0" oninput="window._vomCountChange()" style="width:100%;padding:6px 8px;font-size:13px;border:1px solid #ccc;border-radius:4px;text-align:center;font-family:DM Mono,monospace;box-sizing:border-box"></div>'
       + '</div>';
@@ -197,7 +196,7 @@
         + '</div>'
         + '<div style="padding:14px 24px;background:#f5f4f0;display:flex;gap:8px;border-bottom:1px solid #ddd;flex-wrap:wrap">' + tabsHTML + '</div>'
         + '<div style="padding:8px 24px;background:#fafafa;border-bottom:1px solid #eee;font-size:11px;color:#666;font-style:italic">'
-          + 'Enter the quantity you want to order for each item. Leave blank or 0 to skip. Switch vendor tabs to fill out multiple at once — your numbers are remembered.'
+          + 'Showing <strong style="color:#1d3557">' + _workerLabel(_activeWorker()) + '</strong>\'s stock. Enter the quantity you want to order for each item. Leave blank or 0 to skip. Switch vendor tabs to fill out multiple at once — your numbers are remembered.'
         + '</div>'
         + '<div id="vom-items" style="flex:1;overflow-y:auto;padding:0 20px;background:#fff"></div>'
         + '<div style="padding:14px 24px;background:#f5f4f0;border-top:1px solid #ddd;display:flex;justify-content:space-between;align-items:center;gap:10px">'
@@ -282,7 +281,7 @@
     doc.text('VENDOR ORDER SHEET', W - 14, 14, { align: 'right' });
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(vendor.label, W - 14, 19, { align: 'right' });
+    doc.text(vendor.label + ' · ' + _workerLabel(_activeWorker()) + '\'s Kit', W - 14, 19, { align: 'right' });
     doc.setFontSize(8);
     doc.text(
       'Generated: ' + new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }),
@@ -311,7 +310,7 @@
     doc.text('CODE',         18,  y);
     doc.text('ITEM',         48,  y);
     doc.text('UNIT SIZE',    128, y);
-    doc.text('STOCK (D/J)',  160, y, { align: 'center' });
+    doc.text('STOCK',        158, y, { align: 'center' });
     doc.text('ORDER QTY',    192, y, { align: 'center' });
     y += 2.5;
     doc.setDrawColor(180, 180, 180);
@@ -319,12 +318,12 @@
     y += 5;
 
     // ── Item rows ─────────────────────────────────────────────────────────────
+    const myWorker = _activeWorker();
     let totalUnits = 0;
     itemsToOrder.forEach(function(item) {
       if(y > 263) { doc.addPage(); y = 20; }
-      const stockDev  = item.stockDev  || 0;
-      const stockJosh = item.stockJosh || 0;
-      const stockStr  = 'D ' + stockDev + ' / J ' + stockJosh;
+      const myStock   = _stockFor(item, myWorker);
+      const stockStr  = String(myStock);
       const orderQty  = qtys[item.id];
       const hasDesc   = item.name && item.name !== item.generic;
       totalUnits += orderQty;
@@ -385,7 +384,8 @@
 
     const dateStr  = new Date().toISOString().split('T')[0];
     const safeName = vendor.label.replace(/\s/g, '-');
-    doc.save('Atlas-Order-' + safeName + '-' + dateStr + '.pdf');
+    const safeWho  = _workerLabel(_activeWorker());
+    doc.save('Atlas-Order-' + safeName + '-' + safeWho + '-' + dateStr + '.pdf');
   }
 
 })();
