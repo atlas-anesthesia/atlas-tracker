@@ -36,6 +36,11 @@
   let _viewingSaved = false;
   let _viewItems    = [];
   let _viewTotals   = null;
+  // ID of the saved distribution being edited in preview mode. Null when
+  // building a brand-new distribution; set when openDistributionPreview()
+  // loads an existing record. Used by the save flow to update-in-place
+  // rather than appending a new record.
+  let _viewingDistId = null;
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const _fmt = function(n) {
@@ -79,12 +84,24 @@
     _meta = {
       date: _today(),
       refNum: 'DIST-' + _uidFn().toUpperCase().slice(0, 8),
-      notes: ''
+      notes: '',
+      // Two distribution categories with distinct accounting meaning:
+      //   • 'salary'             → regular paycheck-style payout. Default
+      //     since this is the most common case.
+      //   • 'investment-payback' → repaying initial investment (subtracts
+      //     from "Investment Owed Back" running total in E&D).
+      kind: 'salary',
+      // When true, no PDF is generated. Useful for recording payouts that
+      // happened outside this app (cash, prior pay periods, etc.) — the
+      // distribution is still saved so the line items get marked
+      // distributed and won't be selectable in future modals.
+      alreadyPaid: false
     };
     _previewMode  = false;
     _viewingSaved = false;
     _viewItems    = [];
     _viewTotals   = null;
+    _viewingDistId = null;
 
     try {
       window.setSyncing && window.setSyncing(true);
@@ -131,8 +148,17 @@
     _meta = {
       date:   dist.date   || '',
       refNum: dist.refNum || '',
-      notes:  dist.notes  || ''
+      notes:  dist.notes  || '',
+      // Legacy distributions saved before kind/alreadyPaid existed default
+      // to 'salary' / not-already-paid. The user can flip the kind via the
+      // editable preview to retroactively reclassify.
+      kind:        dist.kind || 'salary',
+      alreadyPaid: !!dist.alreadyPaid
     };
+    // Preserve the saved distribution's id so edits update-in-place rather
+    // than appending a new record. _viewingDistId being null means "fresh
+    // build, push a new record"; non-null means "update by this id".
+    _viewingDistId = dist.id || null;
     _viewItems    = dist.lineItems;
     _viewTotals   = dist.totals || _totalsFromLineItems(dist.lineItems);
     _viewingSaved = true;
@@ -233,9 +259,45 @@
 
   // ── Section: Meta info ─────────────────────────────────────────────────────
   function _metaInner() {
+    // Kind pill selector — Salary vs Investment Payback. Renders as two
+    // mutually-exclusive buttons since this is a "pick one of two" choice
+    // and pills read more clearly than a dropdown for a binary like this.
+    // Each pill toggles _meta.kind; visual state reflects current choice.
+    const isSalary  = _meta.kind === 'salary';
+    const isPayback = _meta.kind === 'investment-payback';
+    const pillBase  = 'flex:1;padding:9px 14px;border-radius:6px;font-size:12px;font-weight:600;'
+                    + 'cursor:pointer;font-family:inherit;letter-spacing:.1px;text-align:center;'
+                    + 'transition:background .12s,border-color .12s';
+    const pillOn    = pillBase + ';background:var(--info);color:white;border:1px solid var(--info)';
+    const pillOff   = pillBase + ';background:white;color:var(--text-muted);border:1px solid var(--border)';
+
+    const kindRow =
+      '<div style="margin-bottom:14px">' +
+        '<label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.4px">Distribution Type</label>' +
+        '<div style="display:flex;gap:8px">' +
+          '<button type="button" id="dist-kind-salary"  style="' + (isSalary  ? pillOn : pillOff) + '">💵  Salary Payout</button>' +
+          '<button type="button" id="dist-kind-payback" style="' + (isPayback ? pillOn : pillOff) + '">🏦  Investment Payback</button>' +
+        '</div>' +
+      '</div>';
+
+    // "Already paid" checkbox — when checked, save runs but no PDF is
+    // generated. Useful for back-filling distributions that happened
+    // before this app was tracking them, or were paid via cash/Venmo/etc.
+    const alreadyRow =
+      '<div style="margin-bottom:14px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px">' +
+        '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">' +
+          '<input type="checkbox" id="dist-already-paid"' + (_meta.alreadyPaid ? ' checked' : '') +
+            ' style="width:14px;height:14px;cursor:pointer">' +
+          '<span style="font-size:12px;font-weight:500;color:var(--text)">Already paid out</span>' +
+          '<span style="font-size:11px;color:var(--text-faint)">— skip PDF, just record line items</span>' +
+        '</label>' +
+      '</div>';
+
     return '<div style="margin-bottom:22px">' +
       '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);' +
         'letter-spacing:.5px;margin-bottom:8px">Distribution Info</div>' +
+      kindRow +
+      alreadyRow +
       '<div style="display:grid;grid-template-columns:140px 200px 1fr;gap:10px">' +
         _fieldHTML('Date',      'date',  'dist-meta-date',  _meta.date,    '', false) +
         _fieldHTML('Reference', 'text',  'dist-meta-ref',   _meta.refNum,  '', true) +
@@ -287,8 +349,10 @@
   }
 
   function _groupHTML(group, items) {
+    // Eligible = not future AND not already distributed. The Select All
+    // toggle should only flip these — anything disabled isn't a candidate.
     const eligibleIds = items
-      .filter(function(it) { return !_isFutureCase(it); })
+      .filter(function(it) { return !_isFutureCase(it) && !_distributedIds.has(it.id); })
       .map(function(it) { return it.id; });
     const allSelected = eligibleIds.length > 0 &&
       eligibleIds.every(function(id) { return _selectedIds.has(id); });
@@ -319,9 +383,15 @@
   }
 
   function _itemRowHTML(it, group) {
-    const future  = _isFutureCase(it);
-    const checked = _selectedIds.has(it.id);
-    const isCase  = it.cat === 'case-income';
+    const future       = _isFutureCase(it);
+    const distributed  = _distributedIds.has(it.id);
+    // Items already in a saved distribution should not be selectable
+    // again — prevents accidental double-payouts. The visual treatment
+    // mirrors the future-case state (greyed, no cursor) plus the existing
+    // green DISTRIBUTED badge so the reason is obvious.
+    const disabled     = future || distributed;
+    const checked      = !disabled && _selectedIds.has(it.id);
+    const isCase       = it.cat === 'case-income';
 
     // Right-side amount
     let rightCol;
@@ -365,18 +435,18 @@
         parts.map(_esc).join('<span style="margin:0 6px;opacity:.5">·</span>') + '</div>'
       : '';
 
-    const bgStyle = future ? 'opacity:.5;cursor:not-allowed'
+    const bgStyle = disabled ? 'opacity:.5;cursor:not-allowed'
                   : (checked ? 'background:rgba(29,83,198,0.05);cursor:pointer' : 'cursor:pointer');
 
-    const distTag = _distributedIds.has(it.id)
+    const distTag = distributed
       ? '<span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(45,106,79,0.12);color:#2d6a4f;margin-left:7px;vertical-align:middle">✓ DISTRIBUTED</span>'
       : '';
 
     return '<label style="display:flex;align-items:flex-start;gap:11px;padding:10px 14px;' +
       'border-bottom:1px solid var(--border);transition:background .12s;' + bgStyle + '">' +
       '<input type="checkbox" data-id="' + _esc(it.id) + '" class="dist-item-cb"' +
-        (checked ? ' checked' : '') + (future ? ' disabled' : '') +
-        ' style="margin-top:2px;flex-shrink:0;cursor:' + (future ? 'not-allowed' : 'pointer') + '">' +
+        (checked ? ' checked' : '') + (disabled ? ' disabled' : '') +
+        ' style="margin-top:2px;flex-shrink:0;cursor:' + (disabled ? 'not-allowed' : 'pointer') + '">' +
       '<div style="flex:1;min-width:0">' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;' +
         'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + _esc(it.name||'-') + distTag + '</div>' +
@@ -585,12 +655,46 @@
     if(preview)  preview.addEventListener('click', _onPreview);
     if(download) download.addEventListener('click', _onDownload);
 
-    if(!_previewMode) {
-      // Meta inputs
+    // Meta-panel wiring — runs in two cases:
+    //   • Building (not previewMode)  → meta lives at top of builder
+    //   • Editing a saved distribution (_viewingDistId set in preview)
+    //     → meta lives in the editable panel above the preview render
+    const metaIsLive = !_previewMode || (_viewingSaved && _viewingDistId);
+    if(metaIsLive) {
       _wireInput('dist-meta-date',  function(v) { _meta.date = v; });
       _wireInput('dist-meta-ref',   function(v) { _meta.refNum = v; });
       _wireInput('dist-meta-notes', function(v) { _meta.notes = v; });
 
+      // Kind pills — clicking either updates _meta.kind, then re-renders
+      // just the meta wrap to flip the pill visuals. Re-rendering only
+      // the meta panel (not the whole modal) preserves the preview
+      // section + scroll position.
+      function _rewireMeta() {
+        const wrap = document.getElementById('dist-meta-wrap');
+        if(!wrap) return;
+        wrap.innerHTML = _metaInner();
+        _wireInput('dist-meta-date',  function(v) { _meta.date = v; });
+        _wireInput('dist-meta-ref',   function(v) { _meta.refNum = v; });
+        _wireInput('dist-meta-notes', function(v) { _meta.notes = v; });
+        const sal = document.getElementById('dist-kind-salary');
+        const pay = document.getElementById('dist-kind-payback');
+        if(sal) sal.addEventListener('click', function() { _meta.kind = 'salary';            _rewireMeta(); });
+        if(pay) pay.addEventListener('click', function() { _meta.kind = 'investment-payback'; _rewireMeta(); });
+        const ap = document.getElementById('dist-already-paid');
+        if(ap) ap.addEventListener('change', function(e) { _meta.alreadyPaid = !!e.target.checked; });
+      }
+      const kindSal = document.getElementById('dist-kind-salary');
+      const kindPay = document.getElementById('dist-kind-payback');
+      if(kindSal) kindSal.addEventListener('click', function() { _meta.kind = 'salary';            _rewireMeta(); });
+      if(kindPay) kindPay.addEventListener('click', function() { _meta.kind = 'investment-payback'; _rewireMeta(); });
+
+      const alreadyEl = document.getElementById('dist-already-paid');
+      if(alreadyEl) alreadyEl.addEventListener('change', function(e) {
+        _meta.alreadyPaid = !!e.target.checked;
+      });
+    }
+
+    if(!_previewMode) {
       _wireItems();
       _wireCustom();
     }
@@ -726,18 +830,44 @@
     const title  = _viewingSaved
       ? 'Distribution Sheet — ' + _name(_worker) + (_meta.refNum ? ' · ' + _meta.refNum : '')
       : 'Preview — Distribution Sheet';
-    const footerButtons = _viewingSaved
-      ? [
-          { id:'dist-cancel-btn',   label:'Close',             kind:'ghost'   },
-          { id:'dist-download-btn', label:'💾  Download PDF',  kind:'primary' }
-        ]
-      : [
-          { id:'dist-back-btn',     label:'← Back to Edit',          kind:'ghost'   },
-          { id:'dist-download-btn', label:'💾  Save & Download PDF', kind:'primary' }
-        ];
+    // Footer changes by mode:
+    //   • Building (preview before save) → Back to Edit | Save & Download
+    //   • Viewing saved + has distId (editable) → Close | Save Changes & PDF
+    //   • Viewing saved legacy (no distId)      → Close | Download PDF
+    let footerButtons;
+    if(_viewingSaved && _viewingDistId) {
+      footerButtons = [
+        { id:'dist-cancel-btn',   label:'Close',                       kind:'ghost'   },
+        { id:'dist-download-btn', label:'💾  Save Changes & PDF',      kind:'primary' }
+      ];
+    } else if(_viewingSaved) {
+      footerButtons = [
+        { id:'dist-cancel-btn',   label:'Close',                kind:'ghost'   },
+        { id:'dist-download-btn', label:'💾  Download PDF',     kind:'primary' }
+      ];
+    } else {
+      footerButtons = [
+        { id:'dist-back-btn',     label:'← Back to Edit',          kind:'ghost'   },
+        { id:'dist-download-btn', label:'💾  Save & Download PDF', kind:'primary' }
+      ];
+    }
+
+    // Editable meta panel — only shown when viewing a saved distribution
+    // that we can update in place. Lets the user reclassify the kind,
+    // rename via notes, flip already-paid, or update the date/refNum
+    // without rebuilding the line items.
+    const editPanel = (_viewingSaved && _viewingDistId)
+      ? '<div style="max-width:680px;margin:0 auto 20px;padding:16px 20px;background:white;' +
+          'border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.05)">' +
+          '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);' +
+            'letter-spacing:.5px;margin-bottom:12px">Edit Distribution</div>' +
+          '<div id="dist-meta-wrap">' + _metaInner() + '</div>' +
+        '</div>'
+      : '';
 
     return _headerHTML(title) +
       '<div style="flex:1;overflow-y:auto;padding:30px;background:#ececeb">' +
+        editPanel +
         '<div style="background:white;max-width:680px;margin:0 auto;border-radius:6px;' +
           'box-shadow:0 4px 12px rgba(0,0,0,0.08);overflow:hidden">' +
           _previewBody(items, totals) +
@@ -749,12 +879,17 @@
   function _previewBody(items, totals) {
     let html = '';
 
-    // Navy header bar
+    // Navy header bar — top-line says either "Salary Payout" or
+    // "Investment Payback" so the recipient (or future-you) can tell
+    // at a glance what this sheet records.
+    const kindLabel = _meta.kind === 'investment-payback'
+      ? 'Investment Payback'
+      : 'Salary Payout';
     html += '<div style="background:rgb(29,53,87);color:white;padding:22px 36px;' +
       'display:flex;justify-content:space-between;align-items:flex-start">' +
       '<div>' +
         '<div style="font-size:18px;font-weight:700;letter-spacing:-.3px">Atlas Anesthesia</div>' +
-        '<div style="font-size:11px;opacity:.85;margin-top:3px">Distribution Sheet</div>' +
+        '<div style="font-size:11px;opacity:.85;margin-top:3px">' + _esc(kindLabel) + '</div>' +
       '</div>' +
       '<div style="text-align:right">' +
         '<div style="font-size:11px;font-family:DM Mono,monospace">' + _esc(_meta.refNum) + '</div>' +
@@ -931,13 +1066,67 @@
 
   // ── Save + Download ────────────────────────────────────────────────────────
   async function _onDownload() {
-    // View-only mode: just regenerate the PDF from the loaded snapshot,
-    // no Firestore write. The user is looking at an already-saved record.
+    // Two view-mode branches:
+    //   • _viewingDistId truthy → editing a saved distribution. We update
+    //     that record in-place (refNum, kind, notes, alreadyPaid changes
+    //     are the typical edits the user wants to make retroactively).
+    //   • _viewingSaved without distId → legacy preview, just regen PDF.
+    if(_viewingSaved && _viewingDistId) {
+      try {
+        window.setSyncing && window.setSyncing(true);
+        const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payouts'));
+        const data = snap.exists() ? snap.data() : { entries:[], distributions:[] };
+        const idx = (data.distributions || []).findIndex(function(d) { return d.id === _viewingDistId; });
+        if(idx === -1) {
+          window.setSyncing && window.setSyncing(false);
+          alert('Could not find this distribution to update — it may have been deleted.');
+          return;
+        }
+        // Apply user-edited meta fields. Line items + totals stay as the
+        // saved snapshot — we're only allowing meta edits here, not changing
+        // which entries are included.
+        data.distributions[idx] = Object.assign({}, data.distributions[idx], {
+          refNum:      (_meta.refNum || '').trim() || data.distributions[idx].refNum,
+          date:        _meta.date || data.distributions[idx].date,
+          notes:       (_meta.notes || '').trim(),
+          kind:        _meta.kind || 'salary',
+          alreadyPaid: !!_meta.alreadyPaid,
+          updatedAt:   new Date().toISOString()
+        });
+        await window.setDoc(window.doc(window.db, 'atlas', 'payouts'), _scrubUndefined(data));
+        window.setSyncing && window.setSyncing(false);
+      } catch(e) {
+        console.error('Distribution update failed:', e);
+        window.setSyncing && window.setSyncing(false);
+        alert('Update failed: ' + (e.message || e));
+        return;
+      }
+      // Regenerate the PDF unless flagged as "already paid" — the user
+      // may want a fresh PDF reflecting renamed kind/notes.
+      if(!_meta.alreadyPaid) {
+        try {
+          _generatePDF({
+            worker:    _worker,
+            meta:      { date: _meta.date, refNum: _meta.refNum, notes: _meta.notes, kind: _meta.kind },
+            lineItems: _viewItems,
+            totals:    _viewTotals
+          });
+        } catch(e) {
+          console.error('PDF regen failed:', e);
+          alert('Saved, but PDF generation failed: ' + (e.message || e));
+        }
+      }
+      _close();
+      if(typeof window.renderPayoutTab === 'function') window.renderPayoutTab();
+      return;
+    }
+
+    // Legacy view-only mode (no distId): regenerate PDF, no Firestore write.
     if(_viewingSaved) {
       try {
         _generatePDF({
           worker:    _worker,
-          meta:      { date: _meta.date, refNum: _meta.refNum, notes: _meta.notes },
+          meta:      { date: _meta.date, refNum: _meta.refNum, notes: _meta.notes, kind: _meta.kind },
           lineItems: _viewItems,
           totals:    _viewTotals
         });
@@ -974,6 +1163,8 @@
       worker: _worker,
       date:   _meta.date || '',
       notes:  (_meta.notes || '').trim(),
+      kind:        _meta.kind || 'salary',
+      alreadyPaid: !!_meta.alreadyPaid,
       amount: totals.total,                  // top-line total — read by app.js _totals
       lineItems: lineItems,
       totals: totals,
@@ -1019,17 +1210,20 @@
       return;
     }
 
-    // Generate PDF
-    try {
-      _generatePDF({
-        worker:    _worker,
-        meta:      { date: _meta.date, refNum: refNum, notes: _meta.notes },
-        lineItems: lineItems,
-        totals:    totals
-      });
-    } catch(e) {
-      console.error('PDF generation failed:', e);
-      alert('Saved, but PDF generation failed: ' + (e.message || e));
+    // Generate PDF — unless the user marked this as "already paid out"
+    // (back-filled record, not a real payout that needs a sheet).
+    if(!_meta.alreadyPaid) {
+      try {
+        _generatePDF({
+          worker:    _worker,
+          meta:      { date: _meta.date, refNum: refNum, notes: _meta.notes, kind: _meta.kind },
+          lineItems: lineItems,
+          totals:    totals
+        });
+      } catch(e) {
+        console.error('PDF generation failed:', e);
+        alert('Saved, but PDF generation failed: ' + (e.message || e));
+      }
     }
 
     _close();
@@ -1054,13 +1248,19 @@
     const fmt       = function(n) { return _fmt(n); };
 
     // ── Header (navy bar) ────────────────────────────────────────────────────
+    // Subtitle reflects the distribution kind so the PDF is self-describing
+    // (a recipient can tell at a glance whether this was a salary payout or
+    // an investment payback).
+    const kindLabel = meta.kind === 'investment-payback'
+      ? 'Investment Payback'
+      : 'Salary Payout';
     doc.setFillColor(29, 53, 87);
     doc.rect(0, 0, W, 70, 'F');
     doc.setFont('Helvetica','bold');
     doc.setFontSize(18); doc.setTextColor(255,255,255);
     doc.text('Atlas Anesthesia', M, 30);
     doc.setFontSize(10); doc.setFont('Helvetica','normal');
-    doc.text('Distribution Sheet', M, 46);
+    doc.text(kindLabel, M, 46);
     doc.setFontSize(9);
     doc.text(refNum, W-M, 30, {align:'right'});
     doc.text(dateStr, W-M, 46, {align:'right'});
