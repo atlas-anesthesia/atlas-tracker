@@ -926,52 +926,18 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     return '<input type="'+type+'" id="'+id+'" placeholder="'+(placeholder||'')+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">';
   }
 
-  // Sum the per-invoice amounts on an Initial Investment entry. Returns 0 for
-  // entries without an invoices array (legacy entries) — those keep their
-  // stored .amount as the canonical value. Once an entry has even one invoice,
-  // its .amount is treated as a derived field maintained by add/delete below.
-  function _sumInvoices(entry) {
-    if(!entry || !Array.isArray(entry.invoices)) return 0;
-    return entry.invoices.reduce(function(s, inv) {
-      return s + (parseFloat(inv.amount) || 0);
-    }, 0);
-  }
-
-  // Distinct vendor names already used for initial-invest entries — fed to
-  // the Add/Edit form's vendor dropdown so the user picks an existing vendor
-  // rather than re-typing it. Scoped to the worker so each person's list is
-  // their own. Includes a sentinel "+ New vendor" option in the UI elsewhere.
-  function _initInvestVendors(data, worker) {
-    if(!data || !Array.isArray(data.entries)) return [];
-    var names = data.entries
-      .filter(function(e) { return e.cat === 'initial-invest' && e.worker === worker; })
-      .map(function(e) { return (e.name || '').trim(); })
-      .filter(Boolean);
-    return Array.from(new Set(names)).sort();
-  }
-
   function _entryFormHTML(worker, editing) {
     var title = editing ? 'Edit Entry' : 'Add Entry';
     return '<div style="font-size:13px;font-weight:600;margin-bottom:12px">'+title+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-        +'<div id="payout-name-wrap-'+worker+'">'+_lbl('Name')+_field('payout-name-'+worker,'text','e.g. Propofol restock')+'</div>'
+        +'<div>'+_lbl('Name')+_field('payout-name-'+worker,'text','e.g. Propofol restock')+'</div>'
         +'<div>'+_lbl('Type')
-          +'<select id="payout-cat-'+worker+'" onchange="window._onPayoutCatChange(\''+worker+'\')" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+          +'<select id="payout-cat-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
             +'<option value="expense">Expense</option>'
             +'<option value="income">Income</option>'
             +'<option value="initial-invest">Initial Investment</option>'
           +'</select>'
         +'</div>'
-      +'</div>'
-      // Vendor dropdown — only shown when Type=Initial Investment. Populated
-      // from existing initial-invest vendor names so the user picks rather
-      // than re-types. Selecting "+ New vendor" reveals a free-text input.
-      +'<div id="payout-vendor-wrap-'+worker+'" style="display:none;margin-bottom:10px">'
-        +_lbl('Vendor')
-        +'<select id="payout-vendor-'+worker+'" onchange="window._onVendorPick(\''+worker+'\')" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
-          +'<option value="">— Select vendor —</option>'
-        +'</select>'
-        +'<input type="text" id="payout-vendor-new-'+worker+'" placeholder="New vendor name" style="display:none;width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;margin-top:6px">'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
         +'<div>'+_lbl('Amount')+_field('payout-amount-'+worker,'number','0.00')+'</div>'
@@ -988,95 +954,12 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       +'</div>';
   }
 
-  // When Type changes, swap between the free-text Name field and the
-  // vendor dropdown. Initial Investment uses the dropdown so vendors are
-  // reused consistently across invoices.
-  window._onPayoutCatChange = async function(w) {
-    var catEl = document.getElementById('payout-cat-' + w);
-    if(!catEl) return;
-    var nameWrap   = document.getElementById('payout-name-wrap-' + w);
-    var vendorWrap = document.getElementById('payout-vendor-wrap-' + w);
-    var vendorSel  = document.getElementById('payout-vendor-' + w);
-    if(catEl.value === 'initial-invest') {
-      // Populate dropdown from existing vendors
-      var data = await _load();
-      var vendors = _initInvestVendors(data, w);
-      var current = (document.getElementById('payout-name-' + w) || {}).value || '';
-      var opts = '<option value="">— Select vendor —</option>';
-      vendors.forEach(function(v) {
-        var sel = (v === current) ? ' selected' : '';
-        opts += '<option value="' + v.replace(/"/g, '&quot;') + '"' + sel + '>' + v + '</option>';
-      });
-      opts += '<option value="__new__">+ New vendor…</option>';
-      if(vendorSel) vendorSel.innerHTML = opts;
-      if(nameWrap)   nameWrap.style.display   = 'none';
-      if(vendorWrap) vendorWrap.style.display = '';
-    } else {
-      if(nameWrap)   nameWrap.style.display   = '';
-      if(vendorWrap) vendorWrap.style.display = 'none';
-    }
-  };
-
-  // Show/hide the "new vendor" text field based on dropdown choice. The
-  // same text field is reused for both "+ New vendor…" and the
-  // "Rename current vendor…" flow — for rename, we pre-fill with the
-  // current selected option's label so the user can edit it inline.
-  window._onVendorPick = function(w) {
-    var sel    = document.getElementById('payout-vendor-' + w);
-    var newEl  = document.getElementById('payout-vendor-new-' + w);
-    var nameEl = document.getElementById('payout-name-' + w);
-    if(!sel) return;
-    if(sel.value === '__new__') {
-      if(newEl) {
-        newEl.value = '';
-        newEl.placeholder = 'New vendor name';
-        newEl.style.display = '';
-        newEl.focus();
-      }
-    } else if(sel.value === '__rename__') {
-      // Pre-fill with the existing vendor name (extracted from the
-      // sentinel option's label). The user can then edit it freely.
-      var current = (nameEl && nameEl.value) || '';
-      // Fallback: parse from the option text if hidden name isn't set
-      if(!current) {
-        var opt = sel.options[sel.selectedIndex];
-        var m = opt && /^✎ Rename "(.+)"…$/.exec(opt.textContent);
-        if(m) current = m[1];
-      }
-      if(newEl) {
-        newEl.value = current;
-        newEl.placeholder = 'Rename to…';
-        newEl.style.display = '';
-        newEl.focus();
-        newEl.select();
-      }
-    } else {
-      if(newEl) newEl.style.display = 'none';
-      if(nameEl) nameEl.value = sel.value;
-    }
-  };
-
-
   function _buildSection(worker, canEdit, data, container) {
     const wname  = worker==='dev'?'Devarsh':'Josh';
     const wcolor = worker==='dev'?'var(--dev)':'var(--josh)';
     const { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, piFromLog, revSuggested, investOwed } = _totals(worker, data);
     const sorted  = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const sortedD = [...dists].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-
-    // Pre-compute the set of dates that have 2+ case-income entries for
-    // this worker. Any case-income row falling on one of these dates with
-    // PI=$0 is a "same-day stack" — the first case absorbed the day's PI,
-    // the rest land at $0. Used by the SAME DAY tag below.
-    const _caseDateCounts = {};
-    entries.forEach(function(e) {
-      if(e.cat === 'case-income' && e.date) {
-        _caseDateCounts[e.date] = (_caseDateCounts[e.date] || 0) + 1;
-      }
-    });
-    const _sameDayCaseDates = new Set(
-      Object.keys(_caseDateCounts).filter(function(d) { return _caseDateCounts[d] > 1; })
-    );
 
     // Build a Set of entry IDs that have been included in any distribution
     // for this worker, so the entry list can show a "DISTRIBUTED" badge on
@@ -1281,16 +1164,6 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         const autoTag = e.cat==='case-income'
           ? '<span style="font-size:9px;color:var(--text-faint);margin-left:8px;font-style:italic;font-weight:400">auto</span>'
           : '';
-        // SAME DAY tag — when two or more case-income entries share a date
-        // (same worker), only the first absorbs the full day's PI and the
-        // rest land at $0. Tagging the $0 row explains why it isn't paying
-        // out — it's not a stalled case, it's a same-day stack.
-        const sameDayTag = (e.cat === 'case-income'
-            && (e.personalIncome || 0) === 0
-            && e.date
-            && _sameDayCaseDates.has(e.date))
-          ? '<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(180,83,9,0.12);color:#b45309;margin-left:8px;vertical-align:middle">SAME DAY</span>'
-          : '';
         // "Distributed" badge — shown on any entry that's appeared as a line
         // item in a saved distribution. Subtle green pill with a checkmark so
         // it visually echoes the existing "Sent" badge on Saved PDFs.
@@ -1312,7 +1185,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           ? '<div style="font-size:11px;color:var(--text-faint);margin-top:4px;line-height:1.4">'+metaParts.join('<span style="margin:0 6px;opacity:.5">·</span>')+'</div>'
           : '';
         left.innerHTML =
-          '<div style="font-size:13px;font-weight:600;line-height:1.3;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(e.name||'-')+sameDayTag+autoTag+distTag+'</div>'
+          '<div style="font-size:13px;font-weight:600;line-height:1.3;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(e.name||'-')+autoTag+distTag+'</div>'
           + metaLine;
 
         // ── RIGHT: hover-only action icons, then amount block ──
@@ -1395,114 +1268,6 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
         row.appendChild(left); row.appendChild(right);
         groupBox.appendChild(row);
-
-        // For Initial Investment entries with invoices, render an expandable
-        // panel directly under the row that lists each invoice (date, #, $)
-        // and lets the user add/delete invoices inline. The row itself becomes
-        // a click-toggle for showing/hiding the panel.
-        // Only Henry Schein, Smith Pharmacy, and Toad (any variation) support
-        // invoice tracking — other vendors stay as plain lump-sum entries.
-        // Substring match so renames like "Henry Schein" → "Henry Schein Inc."
-        // or "Toad" → "Toad Airway" keep their panels. We don't gate on
-        // category — these vendors might be tracked as Expense, Initial
-        // Investment, or Supplies depending on how the user filed them.
-        const VENDORS_WITH_INVOICES = ['henry schein', 'smith pharmacy', 'toad'];
-        const vendorKey = (e.name || '').trim().toLowerCase();
-        const supportsInvoices = e.cat !== 'case-income'
-          && VENDORS_WITH_INVOICES.some(function(v) { return vendorKey.indexOf(v) !== -1; });
-        if(supportsInvoices && canEdit) {
-          const invoices = Array.isArray(e.invoices) ? e.invoices : [];
-          // Make the left content clickable to toggle the panel — but skip
-          // clicks that hit the action buttons (those have their own handlers
-          // and stopPropagation isn't reliable across browsers for icons).
-          row.style.cursor = 'pointer';
-          row.title = invoices.length
-            ? 'Click to view invoices'
-            : 'Click to add invoices';
-
-          // Chevron in the meta line — appended to left so it sits under name
-          const chevron = document.createElement('span');
-          chevron.id = 'inv-chev-' + e.id;
-          chevron.textContent = invoices.length ? '▾ ' + invoices.length + ' invoice' + (invoices.length === 1 ? '' : 's') : '▾ Add invoices';
-          chevron.style.cssText = 'display:inline-block;margin-top:6px;font-size:11px;font-weight:600;color:var(--info);background:rgba(29,67,128,0.08);padding:2px 8px;border-radius:10px;letter-spacing:.2px';
-          left.appendChild(chevron);
-
-          const panel = document.createElement('div');
-          panel.id = 'inv-panel-' + e.id;
-          panel.style.cssText = 'display:none;padding:12px 14px 14px;background:rgba(29,67,128,0.04);border-top:1px solid var(--border)' + (isLast ? '' : ';border-bottom:1px solid var(--border)');
-
-          // Build the panel content via an extracted renderer so add/delete
-          // can re-render in place without touching the rest of the page.
-          (function renderPanel() {
-            const list = (Array.isArray(e.invoices) ? e.invoices : [])
-              .slice()
-              .sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
-            let html = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;letter-spacing:.4px">Invoices</div>';
-            if(!list.length) {
-              html += '<div style="font-size:12px;color:var(--text-faint);font-style:italic;margin-bottom:10px">No invoices yet — add the first one below.</div>';
-            } else {
-              html += '<div style="display:grid;grid-template-columns:110px 1fr 100px 30px;gap:8px;align-items:center;font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.3px;padding:0 4px 4px;border-bottom:1px solid var(--border)">'
-                + '<div>Date</div><div>Invoice #</div><div style="text-align:right">Amount</div><div></div>'
-                + '</div>';
-              list.forEach(function(inv) {
-                const dateStr = inv.date ? _fmtD(inv.date) : '—';
-                const numStr  = inv.invoiceNumber ? String(inv.invoiceNumber) : '—';
-                html += '<div style="display:grid;grid-template-columns:110px 1fr 100px 30px;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px">'
-                  + '<div style="font-family:DM Mono,monospace;color:var(--text-muted)">' + dateStr + '</div>'
-                  + '<div style="font-family:DM Mono,monospace;color:var(--text);overflow:hidden;text-overflow:ellipsis">' + numStr + '</div>'
-                  + '<div style="text-align:right;font-family:DM Mono,monospace;font-weight:600;color:#1d4380">' + _fmt(inv.amount || 0) + '</div>'
-                  + '<button onclick="window.deleteEDInvoice(\'' + e.id + '\',\'' + inv.id + '\',\'' + worker + '\')" title="Delete invoice" style="background:none;border:none;cursor:pointer;color:var(--text-faint);padding:2px 4px;border-radius:4px;font-size:13px;line-height:1">🗑</button>'
-                  + '</div>';
-              });
-              const subtotal = list.reduce(function(s, inv) { return s + (parseFloat(inv.amount) || 0); }, 0);
-              html += '<div style="display:grid;grid-template-columns:110px 1fr 100px 30px;gap:8px;align-items:center;padding:8px 4px 4px;font-size:12px">'
-                + '<div></div>'
-                + '<div style="text-align:right;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);letter-spacing:.3px">Total</div>'
-                + '<div style="text-align:right;font-family:DM Mono,monospace;font-weight:700;color:#1d4380;font-size:13px">' + _fmt(subtotal) + '</div>'
-                + '<div></div>'
-                + '</div>';
-            }
-            // Add-invoice form — three small inputs side by side, one Save button
-            const today = new Date().toISOString().slice(0, 10);
-            html += '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">'
-              + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:6px;letter-spacing:.4px">Add invoice</div>'
-              + '<div style="display:grid;grid-template-columns:130px 1fr 110px auto;gap:8px;align-items:end">'
-              + '<input type="date" id="inv-add-date-'+e.id+'" value="'+today+'" style="padding:7px 9px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:DM Mono,monospace">'
-              + '<input type="text" id="inv-add-num-'+e.id+'" placeholder="Invoice #" style="padding:7px 9px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:DM Mono,monospace">'
-              + '<input type="number" id="inv-add-amt-'+e.id+'" placeholder="0.00" min="0" step="0.01" style="padding:7px 9px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:DM Mono,monospace;text-align:right">'
-              + '<button onclick="window.addEDInvoice(\''+e.id+'\',\''+worker+'\')" class="btn btn-primary btn-sm" style="font-size:12px;padding:7px 14px">Add</button>'
-              + '</div>'
-              + '</div>';
-            // Bulk import section — collapsible, lets the user paste many
-            // invoices at once (CSV / tab / comma / multi-space separated).
-            html += '<div style="margin-top:10px">'
-              + '<button onclick="window.toggleBulkImport(\''+e.id+'\')" style="background:none;border:1px dashed var(--border);color:var(--text-muted);padding:5px 12px;border-radius:var(--radius-sm);font-size:11px;cursor:pointer;font-family:inherit">📋 Bulk import invoices…</button>'
-              + '<div id="inv-bulk-wrap-'+e.id+'" style="display:none;margin-top:10px;padding:12px;background:rgba(29,67,128,0.06);border-radius:var(--radius-sm);border:1px solid rgba(29,67,128,0.15)">'
-                + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;line-height:1.5">'
-                  + 'Paste one invoice per line, in this order: <strong>date, invoice #, amount</strong>.<br>'
-                  + 'Separators: comma, tab, or 2+ spaces. Dates: <code style="background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px">MM/DD/YY</code> or <code style="background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px">YYYY-MM-DD</code>. Amount can include <code style="background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px">$</code> or <code style="background:rgba(0,0,0,0.05);padding:1px 4px;border-radius:3px">*</code>.'
-                + '</div>'
-                + '<textarea id="inv-bulk-text-'+e.id+'" placeholder="04/08/26, 55587271, $*652.28&#10;04/10/26, 55670042, 59.70&#10;04/06/26, 55454142, 74.94" style="width:100%;min-height:120px;padding:8px 10px;font-size:12px;font-family:DM Mono,monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;resize:vertical"></textarea>'
-                + '<div style="display:flex;gap:8px;margin-top:8px;align-items:center">'
-                  + '<button onclick="window.runBulkImport(\''+e.id+'\',\''+worker+'\')" class="btn btn-primary btn-sm" style="font-size:12px">Import</button>'
-                  + '<button onclick="window.toggleBulkImport(\''+e.id+'\')" class="btn btn-ghost btn-sm" style="font-size:12px">Cancel</button>'
-                  + '<span id="inv-bulk-status-'+e.id+'" style="font-size:11px;color:var(--text-faint);margin-left:6px"></span>'
-                + '</div>'
-              + '</div>'
-              + '</div>';
-            panel.innerHTML = html;
-          })();
-
-          // Toggle panel visibility on row click — but ignore clicks on the
-          // action buttons (✎ ✏ 🗑) so editing/deleting still works.
-          row.addEventListener('click', function(ev) {
-            if(ev.target.closest('button')) return;
-            const open = panel.style.display !== 'none';
-            panel.style.display = open ? 'none' : 'block';
-          });
-
-          groupBox.appendChild(panel);
-        }
         });
 
         wrap.appendChild(groupBox);
@@ -1682,7 +1447,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     if(f) { f.innerHTML = _entryFormHTML(w, true); f.style.display=''; }
     if(d) d.style.display='none';
     // Populate fields
-    setTimeout(async function() {
+    setTimeout(function() {
       var n = document.getElementById('payout-name-'+w); if(n) n.value = e.name||e.desc||'';
       var c = document.getElementById('payout-cat-'+w);  if(c) c.value = e.cat||'expense';
       var a = document.getElementById('payout-amount-'+w); if(a) a.value = e.amount||'';
@@ -1690,37 +1455,6 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       var dt= document.getElementById('payout-date-'+w);   if(dt) dt.value = e.date||'';
       var nt= document.getElementById('payout-notes-'+w);  if(nt) nt.value = e.notes||'';
       var ei= document.getElementById('payout-editing-id-'+w); if(ei) ei.value = e.id;
-      // For initial-invest entries, swap to the vendor dropdown and select
-      // the existing vendor name so the user sees it pre-picked.
-      if(e.cat === 'initial-invest') {
-        await window._onPayoutCatChange(w);
-        var vsel = document.getElementById('payout-vendor-'+w);
-        if(vsel) {
-          // Try to match the existing name; if not in the list (rare), keep
-          // the hidden Name field as the source of truth.
-          var found = Array.from(vsel.options).some(function(o) { return o.value === (e.name||''); });
-          if(found) vsel.value = e.name || '';
-          // Append a "Rename current vendor" sentinel option that, when picked,
-          // reveals the new-vendor text field pre-filled with the current
-          // name so the user can edit it in place. Only shown in edit mode.
-          if(e.name) {
-            var renameOpt = document.createElement('option');
-            renameOpt.value = '__rename__';
-            renameOpt.textContent = '✎ Rename "' + e.name + '"…';
-            vsel.appendChild(renameOpt);
-          }
-        }
-        // Lock the manual Amount field for entries with invoices — it's
-        // derived from the invoice list and shouldn't be edited directly.
-        if(Array.isArray(e.invoices) && e.invoices.length) {
-          if(a) {
-            a.readOnly = true;
-            a.title = 'Amount is the sum of invoices. Edit invoices in the row below.';
-            a.style.background = 'var(--surface2)';
-            a.style.cursor = 'not-allowed';
-          }
-        }
-      }
       var sb = document.getElementById('payout-save-'+w);
       var cb = document.getElementById('payout-cancel-'+w);
       if(sb) sb.addEventListener('click', function() { window.savePayoutEntry(w); });
@@ -1733,47 +1467,22 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   };
 
   window.savePayoutEntry = async function(w) {
+    var name     = (document.getElementById('payout-name-'+w).value||'').trim();
     var cat      = document.getElementById('payout-cat-'+w).value;
-    // Resolve the entry's display name. For Initial Investment, use the
-    // vendor dropdown (or the "new vendor" text field if "+ New" is picked).
-    // For other types, fall back to the standard Name input.
-    var name = '';
-    if(cat === 'initial-invest') {
-      var vendorSel = document.getElementById('payout-vendor-'+w);
-      var vendorNew = document.getElementById('payout-vendor-new-'+w);
-      // Both "+ New vendor" and "✎ Rename current vendor" use the same
-      // text input — its value is the vendor name to save.
-      if(vendorSel && (vendorSel.value === '__new__' || vendorSel.value === '__rename__')) {
-        name = (vendorNew && vendorNew.value || '').trim();
-      } else if(vendorSel) {
-        name = (vendorSel.value || '').trim();
-      }
-      if(!name) {
-        name = (document.getElementById('payout-name-'+w).value||'').trim();
-      }
-    } else {
-      name = (document.getElementById('payout-name-'+w).value||'').trim();
-    }
     var amount   = parseFloat(document.getElementById('payout-amount-'+w).value)||0;
     var supplier = (document.getElementById('payout-supplier-'+w).value||'').trim();
     var date     = document.getElementById('payout-date-'+w).value || null;
     var notes    = (document.getElementById('payout-notes-'+w).value||'').trim();
     var editingId= (document.getElementById('payout-editing-id-'+w).value||'').trim();
-    if(!name)   { alert(cat === 'initial-invest' ? 'Please pick or enter a vendor.' : 'Please enter a name.'); return; }
-    if(!amount && cat !== 'initial-invest') { alert('Please enter an amount.'); return; }
+    if(!name)   { alert('Please enter a name.'); return; }
+    if(!amount) { alert('Please enter an amount.'); return; }
     var data = await _load();
     if(!data.entries) data.entries = [];
     if(editingId) {
-      // Update existing — preserve the invoices array if it exists; if the
-      // entry has invoices, the form's manual amount is ignored in favor of
-      // the derived sum.
+      // Update existing
       var idx = data.entries.findIndex(function(e){return e.id===editingId;});
       if(idx !== -1) {
-        var existing = data.entries[idx];
-        var derivedAmt = (Array.isArray(existing.invoices) && existing.invoices.length)
-          ? _sumInvoices(existing)
-          : amount;
-        data.entries[idx] = Object.assign({}, existing, {name,cat,amount:derivedAmt,supplier,date,notes,updatedAt:new Date().toISOString()});
+        data.entries[idx] = Object.assign({}, data.entries[idx], {name,cat,amount,supplier,date,notes,updatedAt:new Date().toISOString()});
       }
     } else {
       data.entries.push({id:_uid(),worker:w,cat,name,supplier,date,amount,notes,createdAt:new Date().toISOString()});
@@ -1786,162 +1495,6 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     if(!confirm('Delete this entry?')) return;
     var data = await _load();
     data.entries = (data.entries||[]).filter(function(e){return e.id!==id;});
-    await _save(data);
-    renderPayoutTab();
-  };
-
-  // ── Initial Investment per-invoice tracking ────────────────────────────────
-  // Each initial-invest entry can carry an `invoices` array of
-  //   { id, date, invoiceNumber, amount, createdAt }
-  // The entry's top-level .amount is always kept in sync with the sum of
-  // these invoices (so totals/payback/distribution math stays untouched).
-  // Legacy entries with no invoices array continue to use their stored
-  // .amount; once the user adds the first invoice, the entry switches to
-  // derived-amount mode.
-  window.addEDInvoice = async function(entryId, w) {
-    var dateEl = document.getElementById('inv-add-date-' + entryId);
-    var numEl  = document.getElementById('inv-add-num-'  + entryId);
-    var amtEl  = document.getElementById('inv-add-amt-'  + entryId);
-    if(!dateEl || !numEl || !amtEl) return;
-    var date    = dateEl.value || null;
-    var invNum  = (numEl.value || '').trim();
-    var amount  = parseFloat(amtEl.value) || 0;
-    if(!amount) { alert('Please enter an amount.'); amtEl.focus(); return; }
-    if(!date)   { alert('Please pick a date.');     dateEl.focus(); return; }
-    var data = await _load();
-    var idx  = (data.entries || []).findIndex(function(e) { return e.id === entryId; });
-    if(idx === -1) { alert('Entry not found — was it deleted?'); return; }
-    var entry = data.entries[idx];
-    if(!Array.isArray(entry.invoices)) entry.invoices = [];
-    entry.invoices.push({
-      id:            _uid(),
-      date:          date,
-      invoiceNumber: invNum,
-      amount:        amount,
-      createdAt:     new Date().toISOString()
-    });
-    // Derived total — keeps the rest of the app's math working without
-    // needing to know about the invoices array.
-    entry.amount    = _sumInvoices(entry);
-    entry.updatedAt = new Date().toISOString();
-    await _save(data);
-    renderPayoutTab();
-  };
-
-  window.deleteEDInvoice = async function(entryId, invoiceId, w) {
-    if(!confirm('Delete this invoice?')) return;
-    var data = await _load();
-    var idx  = (data.entries || []).findIndex(function(e) { return e.id === entryId; });
-    if(idx === -1) return;
-    var entry = data.entries[idx];
-    if(!Array.isArray(entry.invoices)) return;
-    entry.invoices = entry.invoices.filter(function(inv) { return inv.id !== invoiceId; });
-    entry.amount    = _sumInvoices(entry);
-    entry.updatedAt = new Date().toISOString();
-    await _save(data);
-    renderPayoutTab();
-  };
-
-  // Toggle the bulk-import panel visibility.
-  window.toggleBulkImport = function(entryId) {
-    var wrap = document.getElementById('inv-bulk-wrap-' + entryId);
-    if(!wrap) return;
-    var open = wrap.style.display !== 'none';
-    wrap.style.display = open ? 'none' : 'block';
-    if(!open) {
-      var ta = document.getElementById('inv-bulk-text-' + entryId);
-      if(ta) ta.focus();
-      var status = document.getElementById('inv-bulk-status-' + entryId);
-      if(status) status.textContent = '';
-    }
-  };
-
-  // Parse a single bulk-import line into an invoice object, or return an
-  // {error} object if it's malformed. Lenient on separators (tab, comma,
-  // multi-space) and on date/amount formatting (handles $, *, MM/DD/YY,
-  // MM/DD/YYYY, YYYY-MM-DD).
-  function _parseBulkInvoiceLine(rawLine) {
-    var line = (rawLine || '').trim();
-    if(!line) return null; // blank line — skip silently
-    var parts = line.split(/\t|,|\s{2,}/).map(function(p) { return p.trim(); }).filter(Boolean);
-    if(parts.length < 3) {
-      return { error: 'Need 3 fields (date, invoice #, amount)' };
-    }
-    // If user pasted more than 3 fields, treat the first as date, the last
-    // as amount, and join the middle as the invoice number.
-    var dateStr = parts[0];
-    var amtStr  = parts[parts.length - 1];
-    var invNum  = parts.slice(1, parts.length - 1).join(' ');
-    // Date — accept YYYY-MM-DD or M/D/YY or MM/DD/YYYY etc.
-    var date = null;
-    var iso = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    var us  = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if(iso) {
-      date = iso[1] + '-' + iso[2].padStart(2,'0') + '-' + iso[3].padStart(2,'0');
-    } else if(us) {
-      var yyyy = us[3].length === 2 ? '20' + us[3] : us[3];
-      date = yyyy + '-' + us[1].padStart(2,'0') + '-' + us[2].padStart(2,'0');
-    } else {
-      return { error: 'Bad date "' + dateStr + '"' };
-    }
-    // Amount — strip $, *, commas, whitespace
-    var clean = amtStr.replace(/[$*,\s]/g, '');
-    var amount = parseFloat(clean);
-    if(!(amount > 0)) {
-      return { error: 'Bad amount "' + amtStr + '"' };
-    }
-    return { date: date, invoiceNumber: invNum, amount: amount };
-  }
-
-  window.runBulkImport = async function(entryId, w) {
-    var ta     = document.getElementById('inv-bulk-text-' + entryId);
-    var status = document.getElementById('inv-bulk-status-' + entryId);
-    if(!ta) return;
-    var lines = (ta.value || '').split(/\r?\n/);
-    var parsed = [];
-    var errors = [];
-    lines.forEach(function(line, i) {
-      var result = _parseBulkInvoiceLine(line);
-      if(result === null) return; // blank
-      if(result.error) {
-        errors.push('Line ' + (i + 1) + ': ' + result.error);
-      } else {
-        parsed.push(result);
-      }
-    });
-    if(!parsed.length && !errors.length) {
-      if(status) status.textContent = 'No data to import.';
-      return;
-    }
-    // Confirmation summary before writing
-    var confirmMsg = 'Import ' + parsed.length + ' invoice' + (parsed.length === 1 ? '' : 's') + '?';
-    if(errors.length) {
-      confirmMsg += '\n\n' + errors.length + ' line(s) had errors and will be skipped:\n' + errors.slice(0, 5).join('\n');
-      if(errors.length > 5) confirmMsg += '\n…and ' + (errors.length - 5) + ' more';
-    }
-    if(parsed.length && !confirm(confirmMsg)) return;
-    if(!parsed.length) {
-      if(status) status.innerHTML = '<span style="color:var(--warn)">No valid rows to import.</span>';
-      return;
-    }
-    // One Firestore write for the whole batch — much faster than 18 sequential writes.
-    var data = await _load();
-    var idx  = (data.entries || []).findIndex(function(e) { return e.id === entryId; });
-    if(idx === -1) { alert('Entry not found — was it deleted?'); return; }
-    var entry = data.entries[idx];
-    if(!Array.isArray(entry.invoices)) entry.invoices = [];
-    var nowIso = new Date().toISOString();
-    parsed.forEach(function(inv) {
-      entry.invoices.push({
-        id:            _uid(),
-        date:          inv.date,
-        invoiceNumber: inv.invoiceNumber,
-        amount:        inv.amount,
-        createdAt:     nowIso
-      });
-    });
-    entry.amount    = _sumInvoices(entry);
-    entry.updatedAt = nowIso;
     await _save(data);
     renderPayoutTab();
   };
@@ -2343,9 +1896,6 @@ modal.innerHTML = `
       <div style="grid-column:1/-1"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Brand / Full Name</label>
         <input id="ei-name" type="text" value="${item.name||''}" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
       </div>
-      <div style="grid-column:1/-1"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Supplier</label>
-        <input id="ei-supplier" type="text" value="${item.supplier||''}" placeholder="e.g. Henry Schein, Cardinal Health" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
-      </div>
       <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Category</label>
         <select id="ei-category" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
           ${catOptions}
@@ -2397,7 +1947,6 @@ document.getElementById('ei-save').addEventListener('click', async () => {
   const category = catSel === '__custom__' ? catCustom : catSel;
   item.generic      = document.getElementById('ei-generic').value.trim() || item.generic;
   item.name         = document.getElementById('ei-name').value.trim() || item.name;
-  item.supplier     = document.getElementById('ei-supplier').value.trim();
   item.category     = category || item.category;
   item.code         = document.getElementById('ei-code').value.trim() || item.code;
   item.costPerUnit  = parseFloat(document.getElementById('ei-cost').value) || 0;
@@ -3081,7 +2630,7 @@ data['mallampati'] = mall ? mall.value : '';
 return data;
 }
 function getPreopTextFields() {
-const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-contact-type','po-contact-phone','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
+const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
 const data = {};
@@ -3241,8 +2790,21 @@ const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records || []) : [];
 const idx = records.findIndex(r => r.id === window._editingPreopId);
 if(idx !== -1) {
-// Keep the ORIGINAL case ID — do not regenerate
-textData['po-caseId'] = records[idx]['po-caseId'];
+// Case ID embeds the surgery date (JOSH-MM-DD-YYYY-NN). If the user
+// edited the date in Mid-Case, the original case ID no longer matches
+// the new date — so regenerate it from the new date. The sequence
+// number is computed against existing records on the new date so we
+// don't collide with another case already on that day.
+const origDate = records[idx]['po-surgeryDate'] || '';
+const oldCaseId = records[idx]['po-caseId'];
+let newCaseId = oldCaseId;
+if(surgeryDate !== origDate) {
+  // Cache current preop records (minus the one being edited) so
+  // generateCaseId picks the right next sequence number for the new date.
+  window._cachedPreopRecords = records.filter(r => r.id !== window._editingPreopId);
+  newCaseId = generateCaseId(records[idx].worker || currentWorker, surgeryDate);
+}
+textData['po-caseId'] = newCaseId;
 const updated = { ...records[idx], ...textData, ...checkData, savedAt: new Date().toISOString() };
 // HARDENED: filter out ALL records with same caseId+worker (cleans up any
 // pre-existing duplicates) and re-add the updated one. Prevents dupes from
@@ -3250,15 +2812,57 @@ const updated = { ...records[idx], ...textData, ...checkData, savedAt: new Date(
 const cleaned = records.filter(r =>
   !(r['po-caseId'] === updated['po-caseId'] && (r.worker||'dev') === (updated.worker||'dev'))
 );
-cleaned.unshift(updated);
+// Also strip the OLD record (matched by id) so a date-driven rename
+// doesn't leave the pre-rename copy behind under the old caseId.
+const finalRecs = cleaned.filter(r => r.id !== window._editingPreopId);
+finalRecs.unshift(updated);
 setSyncing(true);
-await savePreopRecords(cleaned);
+await savePreopRecords(finalRecs);
+
+// Propagate the rename to anything else keyed by caseId.
+// 1) If there's a draft case in atlas/cases pointing at the old ID,
+//    update its caseId so Mid-Case keeps matching it to this preop.
+// 2) Drop any stale payment row keyed by the old ID — loadPaymentRows
+//    will recreate a fresh row under the new ID on next render.
+if(newCaseId !== oldCaseId) {
+  try {
+    const casesSnap = await getDoc(doc(db,'atlas','cases'));
+    if(casesSnap.exists()) {
+      const allCases = casesSnap.data().cases || [];
+      let touched = false;
+      allCases.forEach(c => {
+        if(c.caseId === oldCaseId) { c.caseId = newCaseId; touched = true; }
+      });
+      if(touched) {
+        await setDoc(doc(db,'atlas','cases'), { cases: allCases });
+        window.cases = allCases;
+      }
+    }
+    const paySnap = await getDoc(doc(db,'atlas','payments'));
+    if(paySnap.exists()) {
+      const rows = paySnap.data().rows || [];
+      const filtered = rows.filter(r => r.caseId !== oldCaseId);
+      if(filtered.length !== rows.length) {
+        await setDoc(doc(db,'atlas','payments'), { rows: filtered });
+      }
+    }
+  } catch(propErr) {
+    console.error('Case ID rename propagation failed:', propErr);
+    // Non-fatal — the preop itself saved correctly. Worst case is a stale
+    // payment row that the user can manually clean up.
+  }
+}
+
 setSyncing(false);
 window._editingPreopId = null;
 const editBanner = document.getElementById('preop-edit-banner');
 if(editBanner) editBanner.remove();
 clearPreop();
-alert('✓ Pre-Op record updated!');
+if(newCaseId !== oldCaseId) {
+  alert('✓ Pre-Op record updated!\n\nDate changed — Case ID renamed:\n' + oldCaseId + '\n  →  ' + newCaseId);
+} else {
+  alert('✓ Pre-Op record updated!');
+}
 showTab('mid-case');
 return;
 }
@@ -3387,7 +2991,7 @@ if(procedureEl) procedureEl.value = preopRecord['po-procedureType'] || '';
 }
 window.clearPreop = function() {
 // Clear text fields
-['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-patientEmail','po-contact-type','po-contact-phone','po-driverName','po-driverRel',
+['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel',
 'po-height-ft','po-height-in','po-weight-lbs','po-iv-difficulty-comment','po-anesthesia-issues-comment',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other',
@@ -3441,7 +3045,6 @@ const pulmChecked = ['neg','asthma','copd','uri','o2','cpap','sleep-apnea','bl-b
 return `<div class="case-item"><div class="case-item-header" onclick="togglePreop('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${r['po-caseId'] || 'No Case ID'}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Dentist: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="event.stopPropagation();previewAnesthesiaRecord(window._rawPreopRecords?.find(x=>x.id==='${r.id}')||{})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">🖨 Print Record</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
-${r['po-contact-phone']?`<div style="margin-bottom:8px;padding:8px 10px;background:var(--info-light);border-radius:var(--radius-sm)"><strong style="font-size:11px;text-transform:uppercase;color:var(--info)">📞 Contact${r['po-contact-type']?' · '+r['po-contact-type']:''}</strong><div style="font-size:13px;margin-top:3px;color:var(--text)">${r['po-contact-phone']}</div></div>`:''}
 ${r['po-allergies']?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Allergies</strong><div style="font-size:13px;margin-top:3px">${r['po-allergies']}</div></div>`:''}
 ${cvChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Cardiovascular</strong><div style="font-size:13px;margin-top:3px">${cvChecked}</div></div>`:''}
 ${pulmChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Pulmonary</strong><div style="font-size:13px;margin-top:3px">${pulmChecked}</div></div>`:''}
@@ -5119,7 +4722,6 @@ if(neuroFlags.length) html += `<div style="margin-bottom:6px"><span style="font-
 html += '</div>';
 // Key info rows
 html += '<div style="margin-top:10px">';
-html += row('Contact', r['po-contact-phone'] ? [r['po-contact-type'],r['po-contact-phone']].filter(Boolean).join(' · ') : null);
 html += row('Medications', r['po-medications']);
 html += row('Allergies', r['po-allergies'], true);
 html += row('Surgical Hx', r['po-surgicalHistory']);
