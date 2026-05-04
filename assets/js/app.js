@@ -1066,7 +1066,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       btnRow.style.cssText = 'display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap';
       const b1 = document.createElement('button'); b1.className='btn btn-ghost btn-sm'; b1.textContent='+ Add Entry';
       b1.addEventListener('click', function() { window.showAddPayoutExpense(worker); });
-      const b2 = document.createElement('button'); b2.className='btn btn-ghost btn-sm'; b2.style.color='var(--accent)'; b2.textContent='Record Distribution';
+      const b2 = document.createElement('button'); b2.className='btn btn-ghost btn-sm'; b2.style.color='var(--accent)'; b2.textContent='Record Payout';
       b2.addEventListener('click', function() { window.openDistributionModal(worker); });
       btnRow.appendChild(b1); btnRow.appendChild(b2);
       wrap.appendChild(btnRow);
@@ -1168,7 +1168,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         // item in a saved distribution. Subtle green pill with a checkmark so
         // it visually echoes the existing "Sent" badge on Saved PDFs.
         const distTag = distributedIds.has(e.id)
-          ? '<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(45,106,79,0.12);color:#2d6a4f;margin-left:8px;vertical-align:middle">✓ DISTRIBUTED</span>'
+          ? '<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(45,106,79,0.12);color:#2d6a4f;margin-left:8px;vertical-align:middle">✓ PAID OUT</span>'
           : '';
         // Build dotted meta line: date · supplier · notes (with " · " separators)
         const metaParts = [];
@@ -1293,13 +1293,13 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
     const dLabel = document.createElement('div');
     dLabel.style.cssText = 'font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin:14px 0 6px';
-    dLabel.textContent = 'Distribution History';
+    dLabel.textContent = 'Payout History';
     wrap.appendChild(dLabel);
 
     if(!sortedD.length) {
       const empty2 = document.createElement('div');
       empty2.className = 'empty-state'; empty2.style.fontSize = '12px';
-      empty2.textContent = 'No distributions yet'; wrap.appendChild(empty2);
+      empty2.textContent = 'No payouts yet'; wrap.appendChild(empty2);
     } else {
       sortedD.forEach(function(d) {
         const row = document.createElement('div');
@@ -1321,7 +1321,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           ? '<div style="font-size:11px;color:var(--text-faint);margin-top:4px;line-height:1.4">'+metaParts.map(function(s){return String(s).replace(/[<>&]/g,function(c){return ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c];});}).join('<span style="margin:0 6px;opacity:.5">·</span>')+'</div>'
           : '';
         left.innerHTML =
-          '<div style="font-size:13px;font-weight:600;color:#2d6a4f;line-height:1.3">Distribution'+refTag+'</div>'
+          '<div style="font-size:13px;font-weight:600;color:#2d6a4f;line-height:1.3">Payout'+refTag+'</div>'
           + metaLine;
 
         // Right: hover-only action icons + amount
@@ -1506,7 +1506,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   // saveDistribution, and the old redownloadDistributionPDF were removed.
 
   window.deleteDistribution = async function(id, w) {
-    if(!confirm('Delete this distribution?')) return;
+    if(!confirm('Delete this payout?')) return;
     var data = await _load();
     data.distributions = (data.distributions||[]).filter(function(d){return d.id!==id;});
     await _save(data);
