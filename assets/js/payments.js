@@ -520,10 +520,14 @@ window.editPaymentField = function(field, rowIdx) {
 window._commitPaymentAmount = function(field, idx, val) {
   if(field==='proj') { _paymentRows[idx].projOverride=val; }
   else { _paymentRows[idx].invoicedAmount=val;
-    // Refresh E&D log entries — the bulk sync handles all eligible rows
-    // (invoiced or day-of-case), reading current row state and writing
-    // case-income entries with up-to-date PI + amount snapshots.
-    if(val > 0 && _paymentRows[idx].invoiceSent) {
+    // Refresh E&D log entries any time the invoice amount changes — the
+    // bulk sync handles all eligible rows (invoiced OR day-of-case),
+    // reading current row state and writing case-income entries with
+    // up-to-date PI + amount snapshots. This used to be gated on
+    // (val > 0 && invoiceSent), but for the manual Stripe workflow the
+    // user enters the amount via ✏ pencil and may or may not check
+    // Inv ✓ — either way we want E&D to reflect it.
+    if(val > 0) {
       _syncAllInvoicedToPayouts(_paymentRows).catch(()=>{});
     }
   }
@@ -1006,36 +1010,39 @@ async function _savePIFormula() {
 
 function _calcPersonalIncome(worker) {
   const formula = _piFormula; // shared formula
-  // PI now reflects WORK DONE rather than work BILLED — a case counts the
+  // PI reflects WORK DONE rather than work BILLED — a case counts the
   // moment its scheduled date arrives (date ≤ today), regardless of
-  // whether the invoice has been marked sent. Reasoning: practitioners
-  // earn the PI on the day they perform the case; invoicing/billing is
-  // an admin step that may happen days later, but the income is real
-  // from the moment the work is finished. The Inv ✓ checkbox now drives
-  // the *invoiced amount* in the column, not whether PI is counted.
+  // whether the invoice has been marked sent OR whether the case has
+  // been finalized yet. The source of truth is _paymentRows because
+  // every scheduled case (pre-op done) lives there, even before it's
+  // finalized in window.cases. Looping window.cases would miss today's
+  // not-yet-finalized cases, so a worker with 3 cases happening today
+  // would see $0 PI in Payments until they finalized each one.
   // For from_invoice rule centers, _calcPIForCase still returns 0 until
   // invoicedAmount is populated (the math literally needs the invoice
-  // amount to compute the rate), so those cases naturally remain 0 in
-  // PI until invoiced — they're a special case the formula recognizes.
-  const rowsByCaseId = new Map((_paymentRows || []).map(r => [r.caseId, r]));
-  // Local "today" as YYYY-MM-DD for direct string comparison with c.date.
-  // Using local time (not UTC) so the cutoff matches the practitioner's
-  // calendar — a case scheduled "today" stays counted right up until midnight
-  // local, regardless of where the server clock thinks UTC is.
+  // amount), so those cases naturally remain 0 in PI until invoiced.
   const _today = new Date();
   const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
-  const finalized = (window.cases || []).filter(c => {
-    if(c.draft) return false;
-    if(c.worker !== worker) return false;
-    // Exclude future-dated cases: PI should reflect work that has happened,
-    // not invoices issued for upcoming cases. Cases with no date stay counted
-    // (we can't classify them either way; preserve prior behavior).
-    if(c.date && c.date > todayStr) return false;
+  const eligible = (_paymentRows || []).filter(r => {
+    if(r.worker !== worker) return false;
+    if(!r.caseId) return false;
+    // Exclude future-dated cases. Cases with no date stay counted (we
+    // can't classify them either way; preserve prior behavior).
+    if(r.caseDate && r.caseDate > todayStr) return false;
     return true;
   });
   let total = 0;
-  finalized.forEach(c => {
-    total += _calcPIForCase(c, rowsByCaseId.get(c.caseId), formula);
+  eligible.forEach(r => {
+    // Pull the matching finalized case for richer data (start/end times
+    // used by hourly rules). If not finalized yet, synthesize a minimal
+    // case object — _calcPIForCase falls back to estHrs from preop for
+    // hourly billing, so this still computes correctly.
+    const matchedCase = (window.cases || []).find(c => c.caseId === r.caseId && !c.draft);
+    const c = matchedCase || {
+      caseId: r.caseId, date: r.caseDate, worker: r.worker,
+      surgeryCenter: r.surgeryCenter
+    };
+    total += _calcPIForCase(c, r, formula);
   });
   return total;
 }
@@ -1052,8 +1059,12 @@ function _calcPIForCase(c, row, formula) {
   // happened. Future-dated cases get PI=0 here so the per-entry PI written
   // during sync agrees with the per-worker PI shown on Payments. Cases with
   // no date stay counted — we can't classify them, preserve prior behavior.
+  // Use LOCAL time (not UTC) for the cutoff — at late-night hours UTC can
+  // be a day ahead of the practitioner's calendar, which would prematurely
+  // count tomorrow's cases as "today" or fail to count today's late cases.
   if(c.date) {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const _t = new Date();
+    const todayStr = `${_t.getFullYear()}-${String(_t.getMonth()+1).padStart(2,'0')}-${String(_t.getDate()).padStart(2,'0')}`;
     if(c.date > todayStr) return 0;
   }
   const preop = (window._rawPreopRecords || []).find(r => r['po-caseId'] === c.caseId);
@@ -1063,35 +1074,37 @@ function _calcPIForCase(c, row, formula) {
   if(rule.type === 'flat') {
     // Daily flat rate — the rule means "this is the PI for the day at this
     // center, regardless of how many cases worked there that day." Without
-    // dedupe, two cases on the same day would each return rule.rate,
-    // doubling the day's PI. The fix: among all of this worker's
-    // non-future cases at this center on this date, the FIRST one (by
-    // caseId, which encodes the per-day sequence — JOSH-04-30-2026-001 vs
-    // -002) gets the full rate; siblings get 0. Total for the day still
+    // dedupe, multiple cases on the same day would each return rule.rate,
+    // multiplying the day's PI. The fix: among all of this worker's
+    // non-future scheduled cases at this center on this date, the FIRST
+    // one (by caseId, which encodes the per-day sequence — JOSH-04-30-2026-001
+    // vs -002) gets the full rate; siblings get 0. Total for the day still
     // equals rule.rate.
-    const allCases = window.cases || [];
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const sameDayCases = allCases.filter(other => {
-      if(!other.caseId || !other.date) return false;
-      if(other.date !== c.date) return false;
+    //
+    // Source: _paymentRows (not window.cases) so the dedupe works for
+    // today's cases that aren't finalized yet — they live in _paymentRows
+    // from the moment Pre-Op is saved, well before they make it into
+    // window.cases via Finalize Case. Local time for the same reason as
+    // the top guard.
+    const _td = new Date();
+    const todayStr = `${_td.getFullYear()}-${String(_td.getMonth()+1).padStart(2,'0')}-${String(_td.getDate()).padStart(2,'0')}`;
+    const sameDayRows = (_paymentRows || []).filter(other => {
+      if(!other.caseId || !other.caseDate) return false;
+      if(other.caseDate !== c.date) return false;
       if((other.worker || '') !== (c.worker || '')) return false;
-      // Skip future cases — they'd otherwise grab the "primary" slot but
-      // _calcPIForCase already returns 0 for them at the top, leaving the
-      // day with no flat rate at all.
-      if(other.date > todayStr) return false;
-      // Match the same surgery center via that case's preop record.
-      const otherPreop = (window._rawPreopRecords || []).find(r => r['po-caseId'] === other.caseId);
-      const otherCenter = otherPreop?.['po-surgery-center'] || other.surgeryCenter || '';
-      return otherCenter === centerId;
+      // Skip future cases — _calcPIForCase already returns 0 for them at
+      // the top, so giving them the "primary" slot would zero out the day.
+      if(other.caseDate > todayStr) return false;
+      return (other.surgeryCenter || '') === centerId;
     });
-    // Defensive fallback: if window.cases isn't loaded yet or this case
-    // isn't in it, treat this case as the only one for the day. Better to
-    // over-count once than silently zero out PI on race.
-    if(!sameDayCases.some(s => s.caseId === c.caseId)) {
+    // Defensive fallback: if this case isn't in _paymentRows (race during
+    // load, or row not yet created), treat as sole-case-of-the-day rather
+    // than silently zeroing.
+    if(!sameDayRows.some(s => s.caseId === c.caseId)) {
       return parseFloat(rule.rate) || 0;
     }
-    sameDayCases.sort((a, b) => (a.caseId || '').localeCompare(b.caseId || ''));
-    const primary = sameDayCases[0];
+    sameDayRows.sort((a, b) => (a.caseId || '').localeCompare(b.caseId || ''));
+    const primary = sameDayRows[0];
     return primary.caseId === c.caseId ? (parseFloat(rule.rate) || 0) : 0;
   }
   if(rule.type === 'hourly') {
