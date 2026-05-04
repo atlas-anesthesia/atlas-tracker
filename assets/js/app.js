@@ -2630,7 +2630,7 @@ data['mallampati'] = mall ? mall.value : '';
 return data;
 }
 function getPreopTextFields() {
-const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
+const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-contact-type','po-contact-phone','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
 const data = {};
@@ -2936,7 +2936,7 @@ if(procedureEl) procedureEl.value = preopRecord['po-procedureType'] || '';
 }
 window.clearPreop = function() {
 // Clear text fields
-['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-patientEmail','po-driverName','po-driverRel',
+['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-patientEmail','po-contact-type','po-contact-phone','po-driverName','po-driverRel',
 'po-height-ft','po-height-in','po-weight-lbs','po-iv-difficulty-comment','po-anesthesia-issues-comment',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other',
@@ -2990,6 +2990,7 @@ const pulmChecked = ['neg','asthma','copd','uri','o2','cpap','sleep-apnea','bl-b
 return `<div class="case-item"><div class="case-item-header" onclick="togglePreop('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${r['po-caseId'] || 'No Case ID'}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Dentist: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="event.stopPropagation();previewAnesthesiaRecord(window._rawPreopRecords?.find(x=>x.id==='${r.id}')||{})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">🖨 Print Record</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
+${r['po-contact-phone']?`<div style="margin-bottom:8px;padding:8px 10px;background:var(--info-light);border-radius:var(--radius-sm)"><strong style="font-size:11px;text-transform:uppercase;color:var(--info)">📞 Contact${r['po-contact-type']?' · '+r['po-contact-type']:''}</strong><div style="font-size:13px;margin-top:3px;color:var(--text)">${r['po-contact-phone']}</div></div>`:''}
 ${r['po-allergies']?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Allergies</strong><div style="font-size:13px;margin-top:3px">${r['po-allergies']}</div></div>`:''}
 ${cvChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Cardiovascular</strong><div style="font-size:13px;margin-top:3px">${cvChecked}</div></div>`:''}
 ${pulmChecked?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Pulmonary</strong><div style="font-size:13px;margin-top:3px">${pulmChecked}</div></div>`:''}
@@ -4667,6 +4668,7 @@ if(neuroFlags.length) html += `<div style="margin-bottom:6px"><span style="font-
 html += '</div>';
 // Key info rows
 html += '<div style="margin-top:10px">';
+html += row('Contact', r['po-contact-phone'] ? [r['po-contact-type'],r['po-contact-phone']].filter(Boolean).join(' · ') : null);
 html += row('Medications', r['po-medications']);
 html += row('Allergies', r['po-allergies'], true);
 html += row('Surgical Hx', r['po-surgicalHistory']);
