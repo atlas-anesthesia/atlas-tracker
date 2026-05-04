@@ -1351,7 +1351,12 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         // panel directly under the row that lists each invoice (date, #, $)
         // and lets the user add/delete invoices inline. The row itself becomes
         // a click-toggle for showing/hiding the panel.
-        if(e.cat === 'initial-invest' && canEdit) {
+        // Only Henry Schein and Smith Pharmacy support invoice tracking —
+        // other initial-invest vendors stay as plain lump-sum entries.
+        const VENDORS_WITH_INVOICES = ['henry schein', 'smith pharmacy'];
+        const vendorKey = (e.name || '').trim().toLowerCase();
+        const supportsInvoices = e.cat === 'initial-invest' && VENDORS_WITH_INVOICES.indexOf(vendorKey) !== -1;
+        if(supportsInvoices && canEdit) {
           const invoices = Array.isArray(e.invoices) ? e.invoices : [];
           // Make the left content clickable to toggle the panel — but skip
           // clicks that hit the action buttons (those have their own handlers
