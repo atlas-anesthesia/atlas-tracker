@@ -501,7 +501,7 @@ window.editPaymentField = function(field, rowIdx) {
   cancel.style.cssText='flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit';
   const save=document.createElement('button'); save.textContent='Save Amount';
   save.style.cssText='flex:2;padding:10px;border:none;border-radius:8px;background:var(--info);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
-  const doSave=()=>{commitPaymentField(field,rowIdx,parseFloat(inp.value)||0);overlay.remove();};
+  const doSave=()=>{_commitPaymentAmount(field,rowIdx,parseFloat(inp.value)||0);overlay.remove();};
   const doCancel=()=>overlay.remove();
   save.onclick=doSave; cancel.onclick=doCancel;
   inp.addEventListener('keydown',e=>{if(e.key==='Enter')doSave();if(e.key==='Escape')doCancel();});
@@ -512,7 +512,12 @@ window.editPaymentField = function(field, rowIdx) {
   requestAnimationFrame(()=>{inp.focus();inp.select();});
 };
 
-window.commitPaymentField = function(field, idx, val) {
+// Commits a manually-edited Projected Income or Invoiced Amount value from
+// the editPaymentField popup. Renamed from `commitPaymentField` to avoid
+// colliding with the checkbox/date commit helper above — both functions
+// were defined as window.commitPaymentField, and the second definition
+// silently overwrote the first, breaking the checkbox-save flow entirely.
+window._commitPaymentAmount = function(field, idx, val) {
   if(field==='proj') { _paymentRows[idx].projOverride=val; }
   else { _paymentRows[idx].invoicedAmount=val;
     if(val > 0 && _paymentRows[idx].invoiceSent) {
