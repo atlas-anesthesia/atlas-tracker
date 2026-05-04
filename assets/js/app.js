@@ -2749,6 +2749,24 @@ if(!procText) {
   if(el) el.focus();
   return;
 }
+// Deposit Email is required — every Pre-Op needs a working email so the
+// Send Deposit Link / invoice flows have somewhere to deliver to. Also do
+// a quick format check so "yes" or other typos can't sneak through; the
+// regex is intentionally loose (anything-at-anything-dot-anything) so it
+// matches real-world addresses without false-positives on tags or pluses.
+const emailText = (textData['po-patientEmail'] || '').trim();
+if(!emailText) {
+  alert('Deposit Email is required.');
+  const el = document.getElementById('po-patientEmail');
+  if(el) el.focus();
+  return;
+}
+if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailText)) {
+  alert('Please enter a valid Deposit Email address.');
+  const el = document.getElementById('po-patientEmail');
+  if(el) { el.focus(); el.select && el.select(); }
+  return;
+}
 // If editing an existing record, update it instead of creating new
 if(window._editingPreopId) {
 try {
