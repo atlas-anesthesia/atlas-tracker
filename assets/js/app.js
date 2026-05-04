@@ -926,18 +926,52 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     return '<input type="'+type+'" id="'+id+'" placeholder="'+(placeholder||'')+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box">';
   }
 
+  // Sum the per-invoice amounts on an Initial Investment entry. Returns 0 for
+  // entries without an invoices array (legacy entries) — those keep their
+  // stored .amount as the canonical value. Once an entry has even one invoice,
+  // its .amount is treated as a derived field maintained by add/delete below.
+  function _sumInvoices(entry) {
+    if(!entry || !Array.isArray(entry.invoices)) return 0;
+    return entry.invoices.reduce(function(s, inv) {
+      return s + (parseFloat(inv.amount) || 0);
+    }, 0);
+  }
+
+  // Distinct vendor names already used for initial-invest entries — fed to
+  // the Add/Edit form's vendor dropdown so the user picks an existing vendor
+  // rather than re-typing it. Scoped to the worker so each person's list is
+  // their own. Includes a sentinel "+ New vendor" option in the UI elsewhere.
+  function _initInvestVendors(data, worker) {
+    if(!data || !Array.isArray(data.entries)) return [];
+    var names = data.entries
+      .filter(function(e) { return e.cat === 'initial-invest' && e.worker === worker; })
+      .map(function(e) { return (e.name || '').trim(); })
+      .filter(Boolean);
+    return Array.from(new Set(names)).sort();
+  }
+
   function _entryFormHTML(worker, editing) {
     var title = editing ? 'Edit Entry' : 'Add Entry';
     return '<div style="font-size:13px;font-weight:600;margin-bottom:12px">'+title+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
-        +'<div>'+_lbl('Name')+_field('payout-name-'+worker,'text','e.g. Propofol restock')+'</div>'
+        +'<div id="payout-name-wrap-'+worker+'">'+_lbl('Name')+_field('payout-name-'+worker,'text','e.g. Propofol restock')+'</div>'
         +'<div>'+_lbl('Type')
-          +'<select id="payout-cat-'+worker+'" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+          +'<select id="payout-cat-'+worker+'" onchange="window._onPayoutCatChange(\''+worker+'\')" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
             +'<option value="expense">Expense</option>'
             +'<option value="income">Income</option>'
             +'<option value="initial-invest">Initial Investment</option>'
           +'</select>'
         +'</div>'
+      +'</div>'
+      // Vendor dropdown — only shown when Type=Initial Investment. Populated
+      // from existing initial-invest vendor names so the user picks rather
+      // than re-types. Selecting "+ New vendor" reveals a free-text input.
+      +'<div id="payout-vendor-wrap-'+worker+'" style="display:none;margin-bottom:10px">'
+        +_lbl('Vendor')
+        +'<select id="payout-vendor-'+worker+'" onchange="window._onVendorPick(\''+worker+'\')" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+          +'<option value="">— Select vendor —</option>'
+        +'</select>'
+        +'<input type="text" id="payout-vendor-new-'+worker+'" placeholder="New vendor name" style="display:none;width:100%;padding:8px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;margin-top:6px">'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
         +'<div>'+_lbl('Amount')+_field('payout-amount-'+worker,'number','0.00')+'</div>'
@@ -953,6 +987,50 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         +'<button class="btn btn-ghost btn-sm" id="payout-cancel-'+worker+'">Cancel</button>'
       +'</div>';
   }
+
+  // When Type changes, swap between the free-text Name field and the
+  // vendor dropdown. Initial Investment uses the dropdown so vendors are
+  // reused consistently across invoices.
+  window._onPayoutCatChange = async function(w) {
+    var catEl = document.getElementById('payout-cat-' + w);
+    if(!catEl) return;
+    var nameWrap   = document.getElementById('payout-name-wrap-' + w);
+    var vendorWrap = document.getElementById('payout-vendor-wrap-' + w);
+    var vendorSel  = document.getElementById('payout-vendor-' + w);
+    if(catEl.value === 'initial-invest') {
+      // Populate dropdown from existing vendors
+      var data = await _load();
+      var vendors = _initInvestVendors(data, w);
+      var current = (document.getElementById('payout-name-' + w) || {}).value || '';
+      var opts = '<option value="">— Select vendor —</option>';
+      vendors.forEach(function(v) {
+        var sel = (v === current) ? ' selected' : '';
+        opts += '<option value="' + v.replace(/"/g, '&quot;') + '"' + sel + '>' + v + '</option>';
+      });
+      opts += '<option value="__new__">+ New vendor…</option>';
+      if(vendorSel) vendorSel.innerHTML = opts;
+      if(nameWrap)   nameWrap.style.display   = 'none';
+      if(vendorWrap) vendorWrap.style.display = '';
+    } else {
+      if(nameWrap)   nameWrap.style.display   = '';
+      if(vendorWrap) vendorWrap.style.display = 'none';
+    }
+  };
+
+  // Show/hide the "new vendor" text field based on dropdown choice.
+  window._onVendorPick = function(w) {
+    var sel    = document.getElementById('payout-vendor-' + w);
+    var newEl  = document.getElementById('payout-vendor-new-' + w);
+    var nameEl = document.getElementById('payout-name-' + w);
+    if(!sel) return;
+    if(sel.value === '__new__') {
+      if(newEl) { newEl.style.display = ''; newEl.focus(); }
+    } else {
+      if(newEl) newEl.style.display = 'none';
+      if(nameEl) nameEl.value = sel.value;
+    }
+  };
+
 
   function _buildSection(worker, canEdit, data, container) {
     const wname  = worker==='dev'?'Devarsh':'Josh';
@@ -1268,6 +1346,87 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
         row.appendChild(left); row.appendChild(right);
         groupBox.appendChild(row);
+
+        // For Initial Investment entries with invoices, render an expandable
+        // panel directly under the row that lists each invoice (date, #, $)
+        // and lets the user add/delete invoices inline. The row itself becomes
+        // a click-toggle for showing/hiding the panel.
+        if(e.cat === 'initial-invest' && canEdit) {
+          const invoices = Array.isArray(e.invoices) ? e.invoices : [];
+          // Make the left content clickable to toggle the panel — but skip
+          // clicks that hit the action buttons (those have their own handlers
+          // and stopPropagation isn't reliable across browsers for icons).
+          row.style.cursor = 'pointer';
+          row.title = invoices.length
+            ? 'Click to view invoices'
+            : 'Click to add invoices';
+
+          // Chevron in the meta line — appended to left so it sits under name
+          const chevron = document.createElement('span');
+          chevron.id = 'inv-chev-' + e.id;
+          chevron.textContent = invoices.length ? '▾ ' + invoices.length + ' invoice' + (invoices.length === 1 ? '' : 's') : '▾ Add invoices';
+          chevron.style.cssText = 'display:inline-block;margin-top:6px;font-size:11px;font-weight:600;color:var(--info);background:rgba(29,67,128,0.08);padding:2px 8px;border-radius:10px;letter-spacing:.2px';
+          left.appendChild(chevron);
+
+          const panel = document.createElement('div');
+          panel.id = 'inv-panel-' + e.id;
+          panel.style.cssText = 'display:none;padding:12px 14px 14px;background:rgba(29,67,128,0.04);border-top:1px solid var(--border)' + (isLast ? '' : ';border-bottom:1px solid var(--border)');
+
+          // Build the panel content via an extracted renderer so add/delete
+          // can re-render in place without touching the rest of the page.
+          (function renderPanel() {
+            const list = (Array.isArray(e.invoices) ? e.invoices : [])
+              .slice()
+              .sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
+            let html = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:8px;letter-spacing:.4px">Invoices</div>';
+            if(!list.length) {
+              html += '<div style="font-size:12px;color:var(--text-faint);font-style:italic;margin-bottom:10px">No invoices yet — add the first one below.</div>';
+            } else {
+              html += '<div style="display:grid;grid-template-columns:110px 1fr 100px 30px;gap:8px;align-items:center;font-size:11px;font-weight:600;color:var(--text-faint);text-transform:uppercase;letter-spacing:.3px;padding:0 4px 4px;border-bottom:1px solid var(--border)">'
+                + '<div>Date</div><div>Invoice #</div><div style="text-align:right">Amount</div><div></div>'
+                + '</div>';
+              list.forEach(function(inv) {
+                const dateStr = inv.date ? _fmtD(inv.date) : '—';
+                const numStr  = inv.invoiceNumber ? String(inv.invoiceNumber) : '—';
+                html += '<div style="display:grid;grid-template-columns:110px 1fr 100px 30px;gap:8px;align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px">'
+                  + '<div style="font-family:DM Mono,monospace;color:var(--text-muted)">' + dateStr + '</div>'
+                  + '<div style="font-family:DM Mono,monospace;color:var(--text);overflow:hidden;text-overflow:ellipsis">' + numStr + '</div>'
+                  + '<div style="text-align:right;font-family:DM Mono,monospace;font-weight:600;color:#1d4380">' + _fmt(inv.amount || 0) + '</div>'
+                  + '<button onclick="window.deleteEDInvoice(\'' + e.id + '\',\'' + inv.id + '\',\'' + worker + '\')" title="Delete invoice" style="background:none;border:none;cursor:pointer;color:var(--text-faint);padding:2px 4px;border-radius:4px;font-size:13px;line-height:1">🗑</button>'
+                  + '</div>';
+              });
+              const subtotal = list.reduce(function(s, inv) { return s + (parseFloat(inv.amount) || 0); }, 0);
+              html += '<div style="display:grid;grid-template-columns:110px 1fr 100px 30px;gap:8px;align-items:center;padding:8px 4px 4px;font-size:12px">'
+                + '<div></div>'
+                + '<div style="text-align:right;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-faint);letter-spacing:.3px">Total</div>'
+                + '<div style="text-align:right;font-family:DM Mono,monospace;font-weight:700;color:#1d4380;font-size:13px">' + _fmt(subtotal) + '</div>'
+                + '<div></div>'
+                + '</div>';
+            }
+            // Add-invoice form — three small inputs side by side, one Save button
+            const today = new Date().toISOString().slice(0, 10);
+            html += '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">'
+              + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:6px;letter-spacing:.4px">Add invoice</div>'
+              + '<div style="display:grid;grid-template-columns:130px 1fr 110px auto;gap:8px;align-items:end">'
+              + '<input type="date" id="inv-add-date-'+e.id+'" value="'+today+'" style="padding:7px 9px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:DM Mono,monospace">'
+              + '<input type="text" id="inv-add-num-'+e.id+'" placeholder="Invoice #" style="padding:7px 9px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:DM Mono,monospace">'
+              + '<input type="number" id="inv-add-amt-'+e.id+'" placeholder="0.00" min="0" step="0.01" style="padding:7px 9px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:DM Mono,monospace;text-align:right">'
+              + '<button onclick="window.addEDInvoice(\''+e.id+'\',\''+worker+'\')" class="btn btn-primary btn-sm" style="font-size:12px;padding:7px 14px">Add</button>'
+              + '</div>'
+              + '</div>';
+            panel.innerHTML = html;
+          })();
+
+          // Toggle panel visibility on row click — but ignore clicks on the
+          // action buttons (✎ ✏ 🗑) so editing/deleting still works.
+          row.addEventListener('click', function(ev) {
+            if(ev.target.closest('button')) return;
+            const open = panel.style.display !== 'none';
+            panel.style.display = open ? 'none' : 'block';
+          });
+
+          groupBox.appendChild(panel);
+        }
         });
 
         wrap.appendChild(groupBox);
@@ -1447,7 +1606,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     if(f) { f.innerHTML = _entryFormHTML(w, true); f.style.display=''; }
     if(d) d.style.display='none';
     // Populate fields
-    setTimeout(function() {
+    setTimeout(async function() {
       var n = document.getElementById('payout-name-'+w); if(n) n.value = e.name||e.desc||'';
       var c = document.getElementById('payout-cat-'+w);  if(c) c.value = e.cat||'expense';
       var a = document.getElementById('payout-amount-'+w); if(a) a.value = e.amount||'';
@@ -1455,6 +1614,28 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       var dt= document.getElementById('payout-date-'+w);   if(dt) dt.value = e.date||'';
       var nt= document.getElementById('payout-notes-'+w);  if(nt) nt.value = e.notes||'';
       var ei= document.getElementById('payout-editing-id-'+w); if(ei) ei.value = e.id;
+      // For initial-invest entries, swap to the vendor dropdown and select
+      // the existing vendor name so the user sees it pre-picked.
+      if(e.cat === 'initial-invest') {
+        await window._onPayoutCatChange(w);
+        var vsel = document.getElementById('payout-vendor-'+w);
+        if(vsel) {
+          // Try to match the existing name; if not in the list (rare), keep
+          // the hidden Name field as the source of truth.
+          var found = Array.from(vsel.options).some(function(o) { return o.value === (e.name||''); });
+          if(found) vsel.value = e.name || '';
+        }
+        // Lock the manual Amount field for entries with invoices — it's
+        // derived from the invoice list and shouldn't be edited directly.
+        if(Array.isArray(e.invoices) && e.invoices.length) {
+          if(a) {
+            a.readOnly = true;
+            a.title = 'Amount is the sum of invoices. Edit invoices in the row below.';
+            a.style.background = 'var(--surface2)';
+            a.style.cursor = 'not-allowed';
+          }
+        }
+      }
       var sb = document.getElementById('payout-save-'+w);
       var cb = document.getElementById('payout-cancel-'+w);
       if(sb) sb.addEventListener('click', function() { window.savePayoutEntry(w); });
@@ -1467,22 +1648,45 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   };
 
   window.savePayoutEntry = async function(w) {
-    var name     = (document.getElementById('payout-name-'+w).value||'').trim();
     var cat      = document.getElementById('payout-cat-'+w).value;
+    // Resolve the entry's display name. For Initial Investment, use the
+    // vendor dropdown (or the "new vendor" text field if "+ New" is picked).
+    // For other types, fall back to the standard Name input.
+    var name = '';
+    if(cat === 'initial-invest') {
+      var vendorSel = document.getElementById('payout-vendor-'+w);
+      var vendorNew = document.getElementById('payout-vendor-new-'+w);
+      if(vendorSel && vendorSel.value === '__new__') {
+        name = (vendorNew && vendorNew.value || '').trim();
+      } else if(vendorSel) {
+        name = (vendorSel.value || '').trim();
+      }
+      if(!name) {
+        name = (document.getElementById('payout-name-'+w).value||'').trim();
+      }
+    } else {
+      name = (document.getElementById('payout-name-'+w).value||'').trim();
+    }
     var amount   = parseFloat(document.getElementById('payout-amount-'+w).value)||0;
     var supplier = (document.getElementById('payout-supplier-'+w).value||'').trim();
     var date     = document.getElementById('payout-date-'+w).value || null;
     var notes    = (document.getElementById('payout-notes-'+w).value||'').trim();
     var editingId= (document.getElementById('payout-editing-id-'+w).value||'').trim();
-    if(!name)   { alert('Please enter a name.'); return; }
-    if(!amount) { alert('Please enter an amount.'); return; }
+    if(!name)   { alert(cat === 'initial-invest' ? 'Please pick or enter a vendor.' : 'Please enter a name.'); return; }
+    if(!amount && cat !== 'initial-invest') { alert('Please enter an amount.'); return; }
     var data = await _load();
     if(!data.entries) data.entries = [];
     if(editingId) {
-      // Update existing
+      // Update existing — preserve the invoices array if it exists; if the
+      // entry has invoices, the form's manual amount is ignored in favor of
+      // the derived sum.
       var idx = data.entries.findIndex(function(e){return e.id===editingId;});
       if(idx !== -1) {
-        data.entries[idx] = Object.assign({}, data.entries[idx], {name,cat,amount,supplier,date,notes,updatedAt:new Date().toISOString()});
+        var existing = data.entries[idx];
+        var derivedAmt = (Array.isArray(existing.invoices) && existing.invoices.length)
+          ? _sumInvoices(existing)
+          : amount;
+        data.entries[idx] = Object.assign({}, existing, {name,cat,amount:derivedAmt,supplier,date,notes,updatedAt:new Date().toISOString()});
       }
     } else {
       data.entries.push({id:_uid(),worker:w,cat,name,supplier,date,amount,notes,createdAt:new Date().toISOString()});
@@ -1495,6 +1699,58 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     if(!confirm('Delete this entry?')) return;
     var data = await _load();
     data.entries = (data.entries||[]).filter(function(e){return e.id!==id;});
+    await _save(data);
+    renderPayoutTab();
+  };
+
+  // ── Initial Investment per-invoice tracking ────────────────────────────────
+  // Each initial-invest entry can carry an `invoices` array of
+  //   { id, date, invoiceNumber, amount, createdAt }
+  // The entry's top-level .amount is always kept in sync with the sum of
+  // these invoices (so totals/payback/distribution math stays untouched).
+  // Legacy entries with no invoices array continue to use their stored
+  // .amount; once the user adds the first invoice, the entry switches to
+  // derived-amount mode.
+  window.addEDInvoice = async function(entryId, w) {
+    var dateEl = document.getElementById('inv-add-date-' + entryId);
+    var numEl  = document.getElementById('inv-add-num-'  + entryId);
+    var amtEl  = document.getElementById('inv-add-amt-'  + entryId);
+    if(!dateEl || !numEl || !amtEl) return;
+    var date    = dateEl.value || null;
+    var invNum  = (numEl.value || '').trim();
+    var amount  = parseFloat(amtEl.value) || 0;
+    if(!amount) { alert('Please enter an amount.'); amtEl.focus(); return; }
+    if(!date)   { alert('Please pick a date.');     dateEl.focus(); return; }
+    var data = await _load();
+    var idx  = (data.entries || []).findIndex(function(e) { return e.id === entryId; });
+    if(idx === -1) { alert('Entry not found — was it deleted?'); return; }
+    var entry = data.entries[idx];
+    if(!Array.isArray(entry.invoices)) entry.invoices = [];
+    entry.invoices.push({
+      id:            _uid(),
+      date:          date,
+      invoiceNumber: invNum,
+      amount:        amount,
+      createdAt:     new Date().toISOString()
+    });
+    // Derived total — keeps the rest of the app's math working without
+    // needing to know about the invoices array.
+    entry.amount    = _sumInvoices(entry);
+    entry.updatedAt = new Date().toISOString();
+    await _save(data);
+    renderPayoutTab();
+  };
+
+  window.deleteEDInvoice = async function(entryId, invoiceId, w) {
+    if(!confirm('Delete this invoice?')) return;
+    var data = await _load();
+    var idx  = (data.entries || []).findIndex(function(e) { return e.id === entryId; });
+    if(idx === -1) return;
+    var entry = data.entries[idx];
+    if(!Array.isArray(entry.invoices)) return;
+    entry.invoices = entry.invoices.filter(function(inv) { return inv.id !== invoiceId; });
+    entry.amount    = _sumInvoices(entry);
+    entry.updatedAt = new Date().toISOString();
     await _save(data);
     renderPayoutTab();
   };
