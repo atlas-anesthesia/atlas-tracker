@@ -1563,7 +1563,16 @@ document.getElementById('caseImageInput').value='';
 // -- SAVE CASE --
 window.saveCase = async function() {
 const caseId=document.getElementById('caseId').value.trim()||'CASE-'+Date.now();
-const proc=document.getElementById('procedure').value.trim()||'Unnamed Procedure';
+// Case Procedure is required — every case must be identifiable by what was
+// actually done. The previous fallback to "Unnamed Procedure" let blank
+// values slip through, which made later reporting/lookup unreliable.
+const procedureEl = document.getElementById('procedure');
+const proc = procedureEl ? procedureEl.value.trim() : '';
+if(!proc) {
+  alert('Case Procedure is required.');
+  if(procedureEl) procedureEl.focus();
+  return;
+}
 const provider=document.getElementById('provider').value.trim();
 const date=document.getElementById('caseDate').value||new Date().toISOString().split('T')[0];
 const notes=document.getElementById('caseNotes')?document.getElementById('caseNotes').value.trim():'';
@@ -2685,6 +2694,16 @@ const surgeryDate = textData['po-surgeryDate'];
 if(!surgeryDate) {
 alert('Please enter the Date of Surgery — it is used to generate the Case ID.');
 return;
+}
+// Case Procedure is required — keeps Pre-Op records identifiable and lets
+// the Mid-Case → Finalize flow inherit a meaningful procedure name when the
+// case is loaded from this Pre-Op draft. Same rule as saveCase.
+const procText = (textData['po-procedureType'] || '').trim();
+if(!procText) {
+  alert('Case Procedure is required.');
+  const el = document.getElementById('po-procedureType');
+  if(el) el.focus();
+  return;
 }
 // If editing an existing record, update it instead of creating new
 if(window._editingPreopId) {
