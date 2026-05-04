@@ -479,6 +479,66 @@ const maxNum = allNums.length > 0 ? Math.max(...allNums) : 0;
 const seq = String(maxNum + 1).padStart(2, '0');
 return `${newPrefix}${seq}`;
 }
+// Pull the surgery date out of a caseId so we can detect mismatches
+// between a record's stored date and the date encoded in its ID. Both formats
+// are recognised:
+//   New: WORKER-MM-DD-YYYY-NN  → returns YYYY-MM-DD
+//   Old: ATL-WORKER-YYYYMMDD-NNN → returns YYYY-MM-DD
+// Returns '' for unparseable IDs (e.g. legacy CASE-<timestamp> fallbacks).
+function extractDateFromCaseId(caseId) {
+  if(!caseId) return '';
+  const m1 = String(caseId).match(/^(?:JOSH|DEV)-(\d{2})-(\d{2})-(\d{4})-/);
+  if(m1) return `${m1[3]}-${m1[1]}-${m1[2]}`;
+  const m2 = String(caseId).match(/^ATL-(?:JOSH|DEV)-(\d{4})(\d{2})(\d{2})-/);
+  if(m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
+  return '';
+}
+window.extractDateFromCaseId = extractDateFromCaseId;
+// When a caseId is renamed, sync the new ID to anything else keyed by it:
+// the linked preop record, any draft/finalized case sharing the old ID, and
+// any payment row. Best-effort — partial failures log but don't throw, so
+// the caller's primary save still completes.
+async function propagateCaseIdRename(oldId, newId) {
+  if(!oldId || !newId || oldId === newId) return;
+  try {
+    // 1) Pre-op record(s) keyed by old caseId
+    const preopSnap = await getDoc(doc(db,'atlas','preop'));
+    if(preopSnap.exists()) {
+      const recs = preopSnap.data().records || [];
+      let touched = false;
+      recs.forEach(r => {
+        if(r['po-caseId'] === oldId) { r['po-caseId'] = newId; touched = true; }
+      });
+      if(touched) await savePreopRecords(recs);
+    }
+    // 2) atlas/cases entries (drafts or finalized) keyed by old caseId
+    const casesSnap = await getDoc(doc(db,'atlas','cases'));
+    if(casesSnap.exists()) {
+      const allCases = casesSnap.data().cases || [];
+      let touched = false;
+      allCases.forEach(c => {
+        if(c.caseId === oldId) { c.caseId = newId; touched = true; }
+      });
+      if(touched) {
+        await setDoc(doc(db,'atlas','cases'), { cases: allCases });
+        window.cases = allCases;
+      }
+    }
+    // 3) Drop stale payment row keyed by old caseId — loadPaymentRows
+    //    will recreate a fresh row under the new ID on next render.
+    const paySnap = await getDoc(doc(db,'atlas','payments'));
+    if(paySnap.exists()) {
+      const rows = paySnap.data().rows || [];
+      const filtered = rows.filter(r => r.caseId !== oldId);
+      if(filtered.length !== rows.length) {
+        await setDoc(doc(db,'atlas','payments'), { rows: filtered });
+      }
+    }
+  } catch(e) {
+    console.error('Case ID rename propagation failed:', e);
+  }
+}
+window.propagateCaseIdRename = propagateCaseIdRename;
 window.updateCaseIdDisplays = function updateCaseIdDisplays() {
 const ncDisplay = document.getElementById('caseId-display');
 const ncInput = document.getElementById('caseId');
@@ -1622,7 +1682,7 @@ document.getElementById('caseImageInput').value='';
 };
 // -- SAVE CASE --
 window.saveCase = async function() {
-const caseId=document.getElementById('caseId').value.trim()||'CASE-'+Date.now();
+let caseId=document.getElementById('caseId').value.trim()||'CASE-'+Date.now();
 // Case Procedure is required — every case must be identifiable by what was
 // actually done. The previous fallback to "Unnamed Procedure" let blank
 // values slip through, which made later reporting/lookup unreliable.
@@ -1637,6 +1697,32 @@ const provider=document.getElementById('provider').value.trim();
 const date=document.getElementById('caseDate').value||new Date().toISOString().split('T')[0];
 const notes=document.getElementById('caseNotes')?document.getElementById('caseNotes').value.trim():'';
 const comments=document.getElementById('caseComments')?document.getElementById('caseComments').value.trim():'';
+// If the date encoded in the caseId no longer matches the form's date,
+// regenerate the ID from the new date. Same self-healing rule as
+// savePreop — covers both the editFinalizedCase flow (_editingCaseId
+// set) and the resumeCase → finalize flow (_activeDraftId set), and
+// also handles already-orphaned IDs from earlier saves.
+let _renamedFromCaseId = null;
+const _caseIdDate = extractDateFromCaseId(caseId);
+if(_caseIdDate && date && date !== _caseIdDate && !caseId.startsWith('CASE-')) {
+  // Refresh preop cache so generateCaseId picks the right next sequence
+  // for the new date.
+  try {
+    const _preopSnap0 = await getDoc(doc(db,'atlas','preop'));
+    window._cachedPreopRecords = _preopSnap0.exists() ? (_preopSnap0.data().records||[]) : [];
+  } catch(_e) { /* fall back to whatever's already cached */ }
+  const _newCaseId = generateCaseId(currentWorker, date);
+  if(_newCaseId && _newCaseId !== caseId) {
+    _renamedFromCaseId = caseId;
+    caseId = _newCaseId;
+    // Sync the form so the user sees the new ID immediately.
+    const _idInput = document.getElementById('caseId');
+    if(_idInput) _idInput.value = caseId;
+    const _idDisplay = document.getElementById('caseId-display');
+    if(_idDisplay) _idDisplay.textContent = caseId;
+    console.log('Case ID rename:', _renamedFromCaseId, '→', caseId);
+  }
+}
 // If editing an existing case, update it instead of creating new
 if(window._editingCaseId) {
 const editId = window._editingCaseId;
@@ -1655,7 +1741,7 @@ const total = suppliesTotal + csTotal;
 // Build updated case object
 const updatedCase = {
 ...cases[idx],
-procedure:proc, provider, date,
+caseId, procedure:proc, provider, date,
 caseComments:comments, worker:currentWorker,
 items: caseItems.map(i=>({id:i.id,generic:i.generic||'',name:i.name||'',cost:parseFloat(i.cost)||0,qty:parseFloat(i.qty)||0,lineTotal:(parseFloat(i.cost)||0)*(parseFloat(i.qty)||0)})),
 savedCsEntries: csEntries.map(e=>({...e})),
@@ -1706,6 +1792,10 @@ console.warn('CS log update skipped:', csErr);
 }
 // Remove any draft linked to this caseId from Mid-Case
 cases = cases.filter(x => !(x.draft && x.caseId === updatedCase.caseId));
+// Propagate the rename to the linked preop record / payment row.
+if(_renamedFromCaseId) {
+  await propagateCaseIdRename(_renamedFromCaseId, caseId);
+}
 // Clear editing state
 window._editingCaseId = null;
 const banner = document.getElementById('case-edit-banner');
@@ -1715,7 +1805,11 @@ if(saveBtn) saveBtn.textContent = '✓ Finalize Case & Update Inventory';
 clearCase();
 renderHistory();
 renderMidCase();
-alert('✓ Case updated successfully!');
+if(_renamedFromCaseId) {
+  alert('✓ Case updated successfully!\n\nDate changed — Case ID renamed:\n' + _renamedFromCaseId + '\n  →  ' + caseId);
+} else {
+  alert('✓ Case updated successfully!');
+}
 showTab('history');
 } catch(editErr) {
 setSyncing(false);
@@ -1761,14 +1855,24 @@ if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.q
 });
 // Save CS entries and deduct CS inventory
 await saveCSEntriesWithCase(caseId, date, provider);
-// Remove any draft linked to this caseId (whether loaded via picker or not)
-cases = cases.filter(x => !(x.draft && x.caseId === caseId));
+// Remove any draft linked to this caseId (whether loaded via picker or not).
+// If the case was renamed mid-save, also strip the old-caseId draft so we
+// don't persist both the old draft and the new finalized entry.
+cases = cases.filter(x => !(x.draft && (x.caseId === caseId || (_renamedFromCaseId && x.caseId === _renamedFromCaseId))));
 window._activeDraftId = null;
 csEntries = [];
 renderCSEntries();
 await Promise.all([saveInventory(), saveCases()]);
+// Propagate the rename to the linked preop record / payment row.
+if(_renamedFromCaseId) {
+  await propagateCaseIdRename(_renamedFromCaseId, caseId);
+}
 clearCase();
-alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
+if(_renamedFromCaseId) {
+  alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.\n\nDate changed — Case ID renamed:\n${_renamedFromCaseId}\n  →  ${caseId}`);
+} else {
+  alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
+}
 showTab('history');
 };
 window.clearCase=function(){
@@ -2790,15 +2894,16 @@ const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records || []) : [];
 const idx = records.findIndex(r => r.id === window._editingPreopId);
 if(idx !== -1) {
-// Case ID embeds the surgery date (JOSH-MM-DD-YYYY-NN). If the user
-// edited the date in Mid-Case, the original case ID no longer matches
-// the new date — so regenerate it from the new date. The sequence
-// number is computed against existing records on the new date so we
-// don't collide with another case already on that day.
-const origDate = records[idx]['po-surgeryDate'] || '';
+// Case ID embeds the surgery date (JOSH-MM-DD-YYYY-NN). If the date
+// encoded in the existing caseId no longer matches the form's surgery
+// date, regenerate. We compare against the caseId-encoded date (not
+// the stored po-surgeryDate) so an already-orphaned record — where the
+// date was changed in some earlier save without a rename — still
+// self-heals on the next save.
 const oldCaseId = records[idx]['po-caseId'];
+const caseIdDate = extractDateFromCaseId(oldCaseId);
 let newCaseId = oldCaseId;
-if(surgeryDate !== origDate) {
+if(caseIdDate && surgeryDate !== caseIdDate) {
   // Cache current preop records (minus the one being edited) so
   // generateCaseId picks the right next sequence number for the new date.
   window._cachedPreopRecords = records.filter(r => r.id !== window._editingPreopId);
@@ -2819,38 +2924,10 @@ finalRecs.unshift(updated);
 setSyncing(true);
 await savePreopRecords(finalRecs);
 
-// Propagate the rename to anything else keyed by caseId.
-// 1) If there's a draft case in atlas/cases pointing at the old ID,
-//    update its caseId so Mid-Case keeps matching it to this preop.
-// 2) Drop any stale payment row keyed by the old ID — loadPaymentRows
-//    will recreate a fresh row under the new ID on next render.
+// Propagate the rename to anything else keyed by the old caseId
+// (linked draft case, payment row).
 if(newCaseId !== oldCaseId) {
-  try {
-    const casesSnap = await getDoc(doc(db,'atlas','cases'));
-    if(casesSnap.exists()) {
-      const allCases = casesSnap.data().cases || [];
-      let touched = false;
-      allCases.forEach(c => {
-        if(c.caseId === oldCaseId) { c.caseId = newCaseId; touched = true; }
-      });
-      if(touched) {
-        await setDoc(doc(db,'atlas','cases'), { cases: allCases });
-        window.cases = allCases;
-      }
-    }
-    const paySnap = await getDoc(doc(db,'atlas','payments'));
-    if(paySnap.exists()) {
-      const rows = paySnap.data().rows || [];
-      const filtered = rows.filter(r => r.caseId !== oldCaseId);
-      if(filtered.length !== rows.length) {
-        await setDoc(doc(db,'atlas','payments'), { rows: filtered });
-      }
-    }
-  } catch(propErr) {
-    console.error('Case ID rename propagation failed:', propErr);
-    // Non-fatal — the preop itself saved correctly. Worst case is a stale
-    // payment row that the user can manually clean up.
-  }
+  await propagateCaseIdRename(oldCaseId, newCaseId);
 }
 
 setSyncing(false);
