@@ -285,6 +285,14 @@ function autoSavePayments() {
 // up to 900ms, and any intervening loadPaymentRows() / Firestore snapshot
 // fires re-renders from stale data and wipes the user's checkmark or date.
 // `field` is the row property name; `kind` is 'checkbox' or 'value'.
+//
+// SAVE TIMING:
+//   • Checkboxes save IMMEDIATELY (no debounce). They're discrete one-time
+//     actions — there's no rapid stream of edits to coalesce, and waiting
+//     900ms means a refresh in that window loses the state to Firestore
+//     (the bug the user kept hitting on Invoiced ✓ ).
+//   • Date inputs use the debounced path so a user picking dates rapidly
+//     doesn't trigger a write on every onchange.
 window.commitPaymentField = function(idx, field, kind) {
   const i = parseInt(idx);
   if(isNaN(i) || !_paymentRows[i]) return;
@@ -300,7 +308,13 @@ window.commitPaymentField = function(idx, field, kind) {
   const el = document.getElementById(elId + i);
   if(!el) return;
   _paymentRows[i][field] = (kind === 'checkbox') ? !!el.checked : (el.value || '');
-  autoSavePayments();
+  if(kind === 'checkbox') {
+    // Cancel any pending debounced save so we don't double-write.
+    clearTimeout(_paymentSaveTimer);
+    window.savePaymentRows().catch(e => console.error('immediate save failed:', e));
+  } else {
+    autoSavePayments();
+  }
 };
 
 // -- Delete ------------------------------------------------------------
