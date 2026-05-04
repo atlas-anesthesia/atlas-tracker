@@ -40,18 +40,29 @@
     return supplier.indexOf(vendor.match) !== -1;
   }
 
-  // Resolve the worker key ('dev' / 'josh') for the currently signed-in
-  // user. Falls back to 'dev' when not logged in or the email isn't mapped.
+  // Resolve the inventory context the user is currently viewing — this is
+  // the same tab they have selected on the Inventory page (Devarsh / Josh /
+  // Combined). Mirroring that context keeps modal numbers aligned with the
+  // inventory list right above. Defaults to 'dev' if the tab state isn't set.
   function _activeWorker() {
-    const u   = window.currentUser;
-    const map = window.EMAIL_WORKER_MAP || {};
-    if(u && u.email) return map[u.email.toLowerCase()] || 'dev';
-    return 'dev';
+    return window.currentInvTab || 'dev';
   }
   function _stockFor(item, w) {
-    return w === 'dev' ? (item.stockDev || 0) : (item.stockJosh || 0);
+    if(w === 'combined') return (item.stockDev || 0) + (item.stockJosh || 0);
+    if(w === 'josh')     return  item.stockJosh || 0;
+    return item.stockDev || 0;
   }
-  function _workerLabel(w) { return w === 'dev' ? 'Devarsh' : 'Josh'; }
+  function _isLowStock(item, w) {
+    // Combined uses 2x the per-kit alert (matches Inventory's combined check)
+    const alert = item.alert || 0;
+    if(w === 'combined') return _stockFor(item, w) <= alert * 2;
+    return _stockFor(item, w) <= alert;
+  }
+  function _workerLabel(w) {
+    if(w === 'josh')     return 'Josh';
+    if(w === 'combined') return 'Combined';
+    return 'Devarsh';
+  }
 
   function _itemsForVendor(vendorKey) {
     const vendor = VENDORS.find(function(v) { return v.key === vendorKey; });
@@ -60,16 +71,13 @@
     return (window.items || [])
       .filter(function(i) { return i && _itemMatchesVendor(i, vendor); })
       .sort(function(a, b) {
-        // Sort by the LOGGED-IN worker's stock vs alert. Items where this
-        // user's kit is at/below alert (red) float to the top, then by
-        // ascending stock, then alphabetical.
-        const alertA = a.alert || 0;
-        const alertB = b.alert || 0;
+        // Items where THIS view's stock is at or below alert (red) at the
+        // top, then by ascending stock, then alphabetical.
+        const redA   = _isLowStock(a, w) ? 1 : 0;
+        const redB   = _isLowStock(b, w) ? 1 : 0;
+        if(redA !== redB) return redB - redA;
         const stockA = _stockFor(a, w);
         const stockB = _stockFor(b, w);
-        const redA   = stockA <= alertA ? 1 : 0;
-        const redB   = stockB <= alertB ? 1 : 0;
-        if(redA !== redB) return redB - redA;
         if(stockA !== stockB) return stockA - stockB;
         return (a.generic || '').localeCompare(b.generic || '');
       });
@@ -99,23 +107,28 @@
     }
 
     const myWorker = _activeWorker();
-    let html = '<div style="position:sticky;top:0;background:#fff;display:grid;grid-template-columns:90px 1fr 80px 70px 60px 90px;gap:10px;padding:10px 4px;border-bottom:2px solid #ccc;font-size:10px;font-weight:700;text-transform:uppercase;color:#666;letter-spacing:.5px;z-index:1">'
+    const stockHeader = myWorker === 'combined'
+      ? 'Stock (D + J)'
+      : _workerLabel(myWorker) + '\'s Stock';
+    let html = '<div style="position:sticky;top:0;background:#fff;display:grid;grid-template-columns:90px 1fr 80px 80px 60px 90px;gap:10px;padding:10px 4px;border-bottom:2px solid #ccc;font-size:10px;font-weight:700;text-transform:uppercase;color:#666;letter-spacing:.5px;z-index:1">'
       + '<div>Code</div>'
       + '<div>Item</div>'
       + '<div>Unit Size</div>'
-      + '<div style="text-align:center" title="' + _workerLabel(myWorker) + '\'s kit">My Stock</div>'
+      + '<div style="text-align:center">' + stockHeader + '</div>'
       + '<div style="text-align:center">Alert</div>'
       + '<div style="text-align:center">Order Qty</div>'
       + '</div>';
 
     items.forEach(function(item) {
-      const myStock = _stockFor(item, myWorker);
-      const alert   = item.alert || 0;
-      const lowStock = myStock <= alert;
-      const qty     = qtys[item.id] || '';
-      const hasDesc = item.name && item.name !== item.generic;
-      const stockTitle = _workerLabel(myWorker) + ': ' + myStock + ' · alert at ' + alert;
-      html += '<div style="display:grid;grid-template-columns:90px 1fr 80px 70px 60px 90px;gap:10px;padding:9px 4px;border-bottom:1px solid #eee;font-size:13px;align-items:center">'
+      const myStock  = _stockFor(item, myWorker);
+      const alert    = item.alert || 0;
+      const lowStock = _isLowStock(item, myWorker);
+      const qty      = qtys[item.id] || '';
+      const hasDesc  = item.name && item.name !== item.generic;
+      const stockTitle = (myWorker === 'combined')
+        ? 'Devarsh: ' + (item.stockDev || 0) + ' · Josh: ' + (item.stockJosh || 0) + ' · alert at ' + alert + ' per kit'
+        : _workerLabel(myWorker) + ': ' + myStock + ' · alert at ' + alert;
+      html += '<div style="display:grid;grid-template-columns:90px 1fr 80px 80px 60px 90px;gap:10px;padding:9px 4px;border-bottom:1px solid #eee;font-size:13px;align-items:center">'
         + '<div style="font-family:DM Mono,monospace;font-size:11px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (item.code || item.id) + '</div>'
         + '<div style="min-width:0">'
           + '<div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (item.generic || '—') + '</div>'
@@ -196,7 +209,7 @@
         + '</div>'
         + '<div style="padding:14px 24px;background:#f5f4f0;display:flex;gap:8px;border-bottom:1px solid #ddd;flex-wrap:wrap">' + tabsHTML + '</div>'
         + '<div style="padding:8px 24px;background:#fafafa;border-bottom:1px solid #eee;font-size:11px;color:#666;font-style:italic">'
-          + 'Showing <strong style="color:#1d3557">' + _workerLabel(_activeWorker()) + '</strong>\'s stock. Enter the quantity you want to order for each item. Leave blank or 0 to skip. Switch vendor tabs to fill out multiple at once — your numbers are remembered.'
+          + 'Showing <strong style="color:#1d3557">' + _workerLabel(_activeWorker()) + '</strong>\'s view (matches your inventory tab). Enter the quantity you want to order for each item. Leave blank or 0 to skip. Switch vendor tabs to fill out multiple at once — your numbers are remembered.'
         + '</div>'
         + '<div id="vom-items" style="flex:1;overflow-y:auto;padding:0 20px;background:#fff"></div>'
         + '<div style="padding:14px 24px;background:#f5f4f0;border-top:1px solid #ddd;display:flex;justify-content:space-between;align-items:center;gap:10px">'
