@@ -180,7 +180,31 @@ window.loadPaymentRows = async function loadPaymentRows() {
     });
   }
 
-  _paymentRows.sort((a,b)=>(a.caseDate||'9999').localeCompare(b.caseDate||'9999'));
+  // ─ Prune orphaned rows ─────────────────────────────────────────────────
+  // If a case is deleted from Mid-Case (or never finalized and the pre-op
+  // is removed), its payment row should disappear too. Build a Set of
+  // valid caseIds (cases + pre-ops) and drop rows that don't match.
+  // This catches cases deleted via Mid-Case, Case History, or Pre-Op tabs.
+  const validIds = new Set();
+  freshCases.forEach(c => { if(c.caseId) validIds.add(c.caseId); });
+  freshPreop.forEach(r => { if(r['po-caseId']) validIds.add(r['po-caseId']); });
+  const beforePrune = _paymentRows.length;
+  _paymentRows = _paymentRows.filter(r => !r.caseId || validIds.has(r.caseId));
+  const pruned = beforePrune - _paymentRows.length;
+  if(pruned > 0) {
+    // Persist the pruned list so the orphaned rows don't return on next load.
+    window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
+  }
+
+  // ─ Sort: by surgery date (earliest first), then by caseId so same-date
+  // rows have a stable, predictable order regardless of the new JOSH-/DEV-
+  // ID format. caseDate empty → goes last (defaults to '9999').
+  _paymentRows.sort((a,b) => {
+    const dateA = a.caseDate || '9999';
+    const dateB = b.caseDate || '9999';
+    if(dateA !== dateB) return dateA.localeCompare(dateB);
+    return (a.caseId || '').localeCompare(b.caseId || '');
+  });
   renderPaymentRows();
   renderPaymentSummary();
   // Auto-sync all invoiced rows to Expenses & Distributions on every load
@@ -379,8 +403,18 @@ window.deletePaymentRow = async function(idx) {
 window.sortPaymentRows = function() {
   const mode = document.getElementById('pm-sort')?.value||'date-asc';
   _paymentRows.sort((a,b)=>{
-    if(mode==='date-asc')  return (a.caseDate||'9999').localeCompare(b.caseDate||'9999');
-    if(mode==='date-desc') return (b.caseDate||'').localeCompare(a.caseDate||'');
+    if(mode==='date-asc') {
+      const dateA = a.caseDate || '9999';
+      const dateB = b.caseDate || '9999';
+      if(dateA !== dateB) return dateA.localeCompare(dateB);
+      return (a.caseId || '').localeCompare(b.caseId || '');
+    }
+    if(mode==='date-desc') {
+      const dateA = a.caseDate || '';
+      const dateB = b.caseDate || '';
+      if(dateA !== dateB) return dateB.localeCompare(dateA);
+      return (b.caseId || '').localeCompare(a.caseId || '');
+    }
     if(mode==='who')       return (a.worker||'').localeCompare(b.worker||'');
     if(mode==='center')    return (a.surgeryCenterName||'').localeCompare(b.surgeryCenterName||'');
     if(mode==='inv')       return (b.invoiceSent?1:0)-(a.invoiceSent?1:0);
