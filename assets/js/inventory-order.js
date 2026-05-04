@@ -46,16 +46,24 @@
     return (window.items || [])
       .filter(function(i) { return i && _itemMatchesVendor(i, vendor); })
       .sort(function(a, b) {
-        // Primary: red-alert items (stock at or below alert level) float to
-        // the top regardless of how low their absolute stock is. A 0-stock
-        // item with alert 0 is fine; a 4-stock item with alert 10 is urgent.
-        const stockA  = (a.stockDev || 0) + (a.stockJosh || 0);
-        const stockB  = (b.stockDev || 0) + (b.stockJosh || 0);
-        const redA    = stockA <= (a.alert || 0) ? 1 : 0;
-        const redB    = stockB <= (b.alert || 0) ? 1 : 0;
+        // Primary: items where EITHER worker is at or below alert level
+        // (i.e., either kit needs restock) float to the top — matches the
+        // red flagging in the per-worker inventory view, since each kit
+        // restocks independently. Combined stock can hide a low kit.
+        const alertA   = a.alert || 0;
+        const alertB   = b.alert || 0;
+        const lowDevA  = (a.stockDev  || 0) <= alertA;
+        const lowJoshA = (a.stockJosh || 0) <= alertA;
+        const lowDevB  = (b.stockDev  || 0) <= alertB;
+        const lowJoshB = (b.stockJosh || 0) <= alertB;
+        const redA     = (lowDevA || lowJoshA) ? 1 : 0;
+        const redB     = (lowDevB || lowJoshB) ? 1 : 0;
         if(redA !== redB) return redB - redA;          // red first
-        // Secondary: within each group, lower stock surfaces higher
-        if(stockA !== stockB) return stockA - stockB;
+        // Secondary: within each group, the lowest single-kit stock surfaces
+        // higher (most-urgent kit perspective).
+        const minA = Math.min((a.stockDev || 0), (a.stockJosh || 0));
+        const minB = Math.min((b.stockDev || 0), (b.stockJosh || 0));
+        if(minA !== minB) return minA - minB;
         // Tertiary: alphabetical for stable ordering
         return (a.generic || '').localeCompare(b.generic || '');
       });
@@ -88,16 +96,23 @@
       + '<div>Code</div>'
       + '<div>Item</div>'
       + '<div>Unit Size</div>'
-      + '<div style="text-align:center">Stock</div>'
+      + '<div style="text-align:center" title="Devarsh / Josh">Stock D/J</div>'
       + '<div style="text-align:center">Alert</div>'
       + '<div style="text-align:center">Order Qty</div>'
       + '</div>';
 
     items.forEach(function(item) {
-      const stock     = (item.stockDev || 0) + (item.stockJosh || 0);
-      const lowStock  = stock <= (item.alert || 0);
+      const stockDev  = item.stockDev  || 0;
+      const stockJosh = item.stockJosh || 0;
+      const alert     = item.alert     || 0;
+      const lowStock  = stockDev <= alert || stockJosh <= alert;
       const qty       = qtys[item.id] || '';
       const hasDesc   = item.name && item.name !== item.generic;
+      // Show per-worker breakdown so a "red but high combined" case reads
+      // clearly — e.g. "4 / 30" highlights that Devarsh is the one running
+      // low even though the total looks fine.
+      const stockDisplay = stockDev + ' / ' + stockJosh;
+      const stockTitle   = 'Devarsh: ' + stockDev + ' · Josh: ' + stockJosh + ' · alert at ' + alert;
       html += '<div style="display:grid;grid-template-columns:90px 1fr 80px 60px 60px 90px;gap:10px;padding:9px 4px;border-bottom:1px solid #eee;font-size:13px;align-items:center">'
         + '<div style="font-family:DM Mono,monospace;font-size:11px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (item.code || item.id) + '</div>'
         + '<div style="min-width:0">'
@@ -105,8 +120,8 @@
           + (hasDesc ? '<div style="font-size:11px;color:#999;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + item.name + '</div>' : '')
         + '</div>'
         + '<div style="font-size:11px;color:#666;font-family:DM Mono,monospace">' + (item.unitSize || '—') + '</div>'
-        + '<div style="text-align:center;color:' + (lowStock ? '#dc2626' : '#333') + ';font-weight:' + (lowStock ? '700' : 'normal') + ';font-family:DM Mono,monospace">' + stock + '</div>'
-        + '<div style="text-align:center;color:#999;font-family:DM Mono,monospace">' + (item.alert || 0) + '</div>'
+        + '<div title="' + stockTitle + '" style="text-align:center;color:' + (lowStock ? '#dc2626' : '#333') + ';font-weight:' + (lowStock ? '700' : 'normal') + ';font-family:DM Mono,monospace;font-size:12px">' + stockDisplay + '</div>'
+        + '<div style="text-align:center;color:#999;font-family:DM Mono,monospace">' + alert + '</div>'
         + '<div><input type="number" min="0" step="1" data-itemid="' + item.id + '" value="' + qty + '" placeholder="0" oninput="window._vomCountChange()" style="width:100%;padding:6px 8px;font-size:13px;border:1px solid #ccc;border-radius:4px;text-align:center;font-family:DM Mono,monospace;box-sizing:border-box"></div>'
       + '</div>';
     });
@@ -293,7 +308,7 @@
     doc.text('CODE',         18,  y);
     doc.text('ITEM',         48,  y);
     doc.text('UNIT SIZE',    128, y);
-    doc.text('STOCK',        158, y, { align: 'center' });
+    doc.text('STOCK D/J',    158, y, { align: 'center' });
     doc.text('ORDER QTY',    192, y, { align: 'center' });
     y += 2.5;
     doc.setDrawColor(180, 180, 180);
@@ -304,7 +319,9 @@
     let totalUnits = 0;
     itemsToOrder.forEach(function(item) {
       if(y > 263) { doc.addPage(); y = 20; }
-      const stock     = (item.stockDev || 0) + (item.stockJosh || 0);
+      const stockDev  = item.stockDev  || 0;
+      const stockJosh = item.stockJosh || 0;
+      const stockStr  = stockDev + '/' + stockJosh;
       const orderQty  = qtys[item.id];
       const hasDesc   = item.name && item.name !== item.generic;
       totalUnits += orderQty;
@@ -327,7 +344,7 @@
 
       doc.setFont('helvetica', 'normal');
       doc.text(_truncate(item.unitSize || '—', 14), 128, y);
-      doc.text(String(stock), 158, y, { align: 'center' });
+      doc.text(stockStr, 158, y, { align: 'center' });
 
       // Order qty highlighted — that's the whole point of this sheet
       doc.setFont('helvetica', 'bold');
