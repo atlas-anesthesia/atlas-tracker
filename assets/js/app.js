@@ -1400,11 +1400,11 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         // panel directly under the row that lists each invoice (date, #, $)
         // and lets the user add/delete invoices inline. The row itself becomes
         // a click-toggle for showing/hiding the panel.
-        // Only Henry Schein, Smith Pharmacy, and Toad Airways support invoice
-        // tracking — other initial-invest vendors stay as plain lump-sum entries.
-        // Substring match so renames like "Henry Schein" → "Henry Schein Inc."
-        // keep their invoice panels.
-        const VENDORS_WITH_INVOICES = ['henry schein', 'smith pharmacy', 'toad airways'];
+        // Only Henry Schein, Smith Pharmacy, and Toad (any variation) support
+        // invoice tracking — other initial-invest vendors stay as plain
+        // lump-sum entries. Substring match so renames like "Henry Schein"
+        // → "Henry Schein Inc." or "Toad" → "Toad Airways" keep their panels.
+        const VENDORS_WITH_INVOICES = ['henry schein', 'smith pharmacy', 'toad'];
         const vendorKey = (e.name || '').trim().toLowerCase();
         const supportsInvoices = e.cat === 'initial-invest'
           && VENDORS_WITH_INVOICES.some(function(v) { return vendorKey.indexOf(v) !== -1; });
