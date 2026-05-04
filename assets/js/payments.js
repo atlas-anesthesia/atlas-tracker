@@ -2,7 +2,25 @@
 // Depends on: app.js (db, window.cases, surgeryCenters, window.currentWorker, uid, setSyncing)
 
 let _paymentRows = [];
+// Tracks the row the invoice modal is currently editing. Stores the case ID
+// (durable identifier) instead of an array index, because _paymentRows can be
+// re-sorted or re-loaded while the modal is open — for example a Stripe sync
+// or a Firestore snapshot fires loadPaymentRows() and the index that was
+// passed to openInvoiceModal becomes stale, causing the post-send updates to
+// land on the wrong row (or nothing).
+let _invoiceModalCaseId = null;
+// Legacy alias kept for any external readers; mirrors _invoiceModalCaseId via
+// a getter so calls like _invoiceModalRowIdx!==null still work.
 let _invoiceModalRowIdx = null;
+
+// Resolve the row currently bound to the invoice modal by caseId. Returns
+// {idx, row} or null if the row no longer exists (e.g. it was deleted).
+function _getInvoiceModalRow() {
+  if(!_invoiceModalCaseId) return null;
+  const idx = _paymentRows.findIndex(r => r.caseId === _invoiceModalCaseId);
+  if(idx === -1) return null;
+  return { idx, row: _paymentRows[idx] };
+}
 
 // ════════════════════════════════════════════════════════════════════
 // PAYMENTS TAB — complete implementation
@@ -262,6 +280,29 @@ function autoSavePayments() {
   _paymentSaveTimer = setTimeout(()=>window.savePaymentRows().catch(()=>{}), 900);
 }
 
+// Commit a single field-edit synchronously into _paymentRows BEFORE the
+// debounced save runs. Without this, the in-memory model lags the DOM by
+// up to 900ms, and any intervening loadPaymentRows() / Firestore snapshot
+// fires re-renders from stale data and wipes the user's checkmark or date.
+// `field` is the row property name; `kind` is 'checkbox' or 'value'.
+window.commitPaymentField = function(idx, field, kind) {
+  const i = parseInt(idx);
+  if(isNaN(i) || !_paymentRows[i]) return;
+  const elId = (
+    field==='dep500Paid'  ? 'pr-dep500'      :
+    field==='paid'        ? 'pr-paid'        :
+    field==='invoiceSent' ? 'pr-inv'         :
+    field==='received'    ? 'pr-rcvd'        :
+    field==='depositDate' ? 'pr-depositDate' :
+    field==='paidDate'    ? 'pr-paidDate'    : null
+  );
+  if(!elId) return;
+  const el = document.getElementById(elId + i);
+  if(!el) return;
+  _paymentRows[i][field] = (kind === 'checkbox') ? !!el.checked : (el.value || '');
+  autoSavePayments();
+};
+
 // -- Delete ------------------------------------------------------------
 window.deletePaymentRow = async function(idx) {
   if(!confirm('Delete this payment row?\n\nThis cannot be undone.')) return;
@@ -306,11 +347,14 @@ function renderPaymentRows() {
     renderPaymentSummary(); return;
   }
 
-  const dateInp = (id,val) => {
+  const dateInp = (id,val,fieldName,rowIdx) => {
     const empty=!val;
     const bdr=empty?'1px solid #fca5a5':'1px solid var(--border)';
     const bgc=empty?'rgba(239,68,68,0.06)':'var(--bg)';
-    return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:4px 3px;font-size:11px;border:${bdr};border-radius:4px;background:${bgc};color:var(--text);font-family:inherit" onchange="renderPaymentSummary();autoSavePayments()">`;
+    // commitPaymentField synchronously writes the new value into _paymentRows
+    // before the debounced save fires — prevents loss-on-reload during the
+    // 900ms debounce window.
+    return `<input type="date" id="${id}" value="${val||''}" style="width:100%;padding:4px 3px;font-size:11px;border:${bdr};border-radius:4px;background:${bgc};color:var(--text);font-family:inherit" onchange="commitPaymentField(${rowIdx},'${fieldName}','value');renderPaymentSummary()">`;
   };
   const ro = (val,color)=>`<span style="font-size:11px;color:${color||'var(--text-muted)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${val||'<span style="color:#fca5a5;font-size:10px">—</span>'}</span>`;
   const wcolor = w=>w==='dev'?'var(--dev)':'var(--josh)';
@@ -334,16 +378,16 @@ function renderPaymentRows() {
         <span style="font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${scName||'<span style="color:#fca5a5">—</span>'}</span>
       </div>
       <div style="padding:4px 3px">${ro(caseFmt)}</div>
-      <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-depositDate'+i,r.depositDate)}</div>
-      ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>`}
-      <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-paidDate'+i,r.paidDate)}</div>
-      ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>`}
+      <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-depositDate'+i,r.depositDate,'depositDate',i)}</div>
+      ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-dep500${i}" ${r.dep500Paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="commitPaymentField(${i},'dep500Paid','checkbox');renderPaymentSummary()"></div>`}
+      <div style="padding:4px 3px">${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div>` : dateInp('pr-paidDate'+i,r.paidDate,'paidDate',i)}</div>
+      ${centerPays ? `<div style="${greyCell}"><span style="font-size:10px;color:var(--text-faint)">—</span></div>` : `<div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-paid${i}" ${r.paid?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="commitPaymentField(${i},'paid','checkbox');renderPaymentSummary()"></div>`}
       <div style="padding:4px 3px;display:flex;align-items:center;justify-content:flex-end;gap:2px">${invAmt}</div>
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="renderPaymentSummary();autoSavePayments()"></div>
+      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-inv${i}" ${r.invoiceSent?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="commitPaymentField(${i},'invoiceSent','checkbox');renderPaymentSummary()"></div>
       ${centerPays
         ? `<div style="padding:4px 3px"><button onclick="openInvoiceModal(${i})" style="width:100%;background:var(--info);color:#fff;border:none;border-radius:4px;padding:4px 0;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit">📄</button></div>`
         : `<div style="padding:4px 3px"><div style="${greyCell}" title="Patient case — no invoice PDF needed"><span style="font-size:10px;color:var(--text-faint)">N/A</span></div></div>`}
-      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-rcvd${i}" ${r.received?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="autoSavePayments()" title="Payment received"></div>
+      <div style="padding:4px 2px;display:flex;align-items:center;justify-content:center"><input type="checkbox" id="pr-rcvd${i}" ${r.received?'checked':''} style="width:14px;height:14px;cursor:pointer" onchange="commitPaymentField(${i},'received','checkbox')" title="Payment received"></div>
       <div style="padding:4px 8px;display:flex;align-items:center;justify-content:flex-end"><button onclick="deletePaymentRow(${i})" style="background:none;border:none;cursor:pointer;font-size:13px;color:#d1d5db;transition:color .15s" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#d1d5db'" title="Delete">🗑</button></div>
     </div>`;
   }).join('');
@@ -532,6 +576,11 @@ window.deleteSavedPDF = async function(idx) {
 window.openInvoiceModal = function(rowIdx) {
   _invoiceModalRowIdx = rowIdx!==undefined?rowIdx:null;
   const r = rowIdx!==undefined?_paymentRows[rowIdx]:null;
+  // Bind the modal to the row's caseId, not its array position. If
+  // _paymentRows gets re-sorted (Stripe sync, snapshot reload, etc.) before
+  // the user hits Send, the index will be wrong but the caseId will still
+  // resolve via _getInvoiceModalRow().
+  _invoiceModalCaseId = r?.caseId || null;
   const caseEl=document.getElementById('inv-modal-case');
   if(caseEl) caseEl.value=r?.caseId||'';
   ['inv-modal-provider','inv-modal-email','inv-modal-fhr','inv-modal-p15'].forEach(id=>{
@@ -561,6 +610,7 @@ window.closeInvoiceModal = function() {
   if(scSel){scSel.disabled=false;scSel.style.background='';scSel.style.color='';scSel.title='';}
   document.getElementById('invoiceModal').style.display='none';
   _invoiceModalRowIdx=null;
+  _invoiceModalCaseId=null;
 };
 
 function populateInvModalCenterDropdown(preselect) {
@@ -802,12 +852,19 @@ window.downloadInvoiceModal = async function() {
     window._generateFlatRateInvoicePDF(location,date,document.getElementById('inv-modal-provider')?.value||'',proc,amt);
     await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider:document.getElementById('inv-modal-provider')?.value||'',total:amt,caseId,worker:window.currentWorker,emailed:false,savedAt:new Date().toISOString()});
     if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){_paymentRows[_invoiceModalRowIdx].invoicedAmount=amt;window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice amt failed:',e));renderPaymentRows();}
+    // Caseid-based fallback when index has shifted (re-sort/re-load); double-write
+    // is benign because both paths set the same value on the same row.
+    const _flatModalRow = _getInvoiceModalRow();
+    if(_flatModalRow) { _readPaymentDOMIntoRows(); _paymentRows[_flatModalRow.idx].invoicedAmount = amt; window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice amt failed:',e)); renderPaymentRows(); }
   } else {
     const calc=calcInvModal();
     if(!calc){alert('Please fill in times and rates.');return;}
     window._generateFlatRateInvoicePDF(location,date,document.getElementById('inv-modal-provider')?.value||'','Anesthesia Services',calc.total);
     await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider:document.getElementById('inv-modal-provider')?.value||'',total:calc.total,caseId,worker:window.currentWorker,emailed:false,savedAt:new Date().toISOString()});
     if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){_paymentRows[_invoiceModalRowIdx].invoicedAmount=calc.total;window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice amt failed:',e));renderPaymentRows();}
+    // Caseid-based fallback (see flat-rate branch for explanation).
+    const _hrlyModalRow = _getInvoiceModalRow();
+    if(_hrlyModalRow) { _readPaymentDOMIntoRows(); _paymentRows[_hrlyModalRow.idx].invoicedAmount = calc.total; window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice amt failed:',e)); renderPaymentRows(); }
   }
 };
 
@@ -1239,13 +1296,22 @@ window.sendInvoiceEmail = async function() {
     // Save PDF record, but isolate its errors so they don't bubble to the outer catch
     // (otherwise a save failure AFTER a successful email send would trigger the catch handler).
     await savePDFRecord({id:window.uid(),invoiceNum,location,date,provider,total,caseId,worker:window.currentWorker,emailed:true,savedAt:new Date().toISOString()}).catch(e => console.warn('savePDFRecord failed (email already sent):', e));
-    if(_invoiceModalRowIdx!==null&&_paymentRows[_invoiceModalRowIdx]){
-      _paymentRows[_invoiceModalRowIdx].invoiceSent=true;
-      _paymentRows[_invoiceModalRowIdx].invoicedAmount=total;
+    // Find the row the modal is bound to via caseId, not the (potentially
+    // stale) array index captured when the modal opened. This is the fix
+    // for "invoice amount not landing in column" — a Stripe sync or
+    // snapshot reload between open-modal and send re-sorted the rows.
+    const modalRow = _getInvoiceModalRow();
+    if(modalRow) {
+      // Snapshot any other in-flight DOM edits (other rows' checkboxes or
+      // dates the user toggled before sending this invoice) so the upcoming
+      // setDoc doesn't clobber them.
+      _readPaymentDOMIntoRows();
+      _paymentRows[modalRow.idx].invoiceSent    = true;
+      _paymentRows[modalRow.idx].invoicedAmount = total;
       // Persist to Firestore so the row's Inv. Amt + Inv✓ survive page reload
       window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice after send failed:',e));
       // Auto-sync to Expenses & Distributions
-      _syncInvoiceToPayouts(_paymentRows[_invoiceModalRowIdx], total).catch(()=>{});
+      _syncInvoiceToPayouts(_paymentRows[modalRow.idx], total).catch(()=>{});
     }
     renderPaymentRows();
     closeInvoiceModal();
