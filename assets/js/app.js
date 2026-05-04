@@ -1226,22 +1226,38 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         const amtCol = document.createElement('div');
         amtCol.style.cssText = 'text-align:right;min-width:108px';
         if(e.cat === 'case-income') {
-          // Case-income rows lead with PI (the practitioner's actual cut) and
-          // show the underlying invoice amount as a smaller caption beneath.
+          // Case-income rows lead with PI (the practitioner's actual cut)
+          // and show the underlying invoice amount as a caption beneath.
           // PI is what matters for personal accounting; invoice is context.
-          // For future-dated cases PI is 0 (work hasn't happened yet) — show
-          // a PENDING label instead of "+$0" so the row reads clearly.
+          //
+          // Three display states the row can be in:
+          //   1. Future case, PI not yet earned        → "PENDING / $X invoiced"
+          //   2. Past/today, PI earned, not invoiced   → "+$PI / awaiting invoice"
+          //   3. Invoiced (and presumably PI earned)   → "+$PI / of $X inv."
           const piVal = e.personalIncome || 0;
           const todayStr = new Date().toISOString().slice(0, 10);
           const isFutureCase = e.date && e.date > todayStr;
+          const invAmt = e.amount || 0;
+          // Treat the entry as invoiced if either invAmt > 0 or the explicit
+          // flag is set (back-compat for older entries that didn't store the
+          // flag — invAmt > 0 is the historical signal).
+          const isInvoiced = (typeof e.invoiced === 'boolean' ? e.invoiced : invAmt > 0);
           if(isFutureCase && piVal === 0) {
+            // State 1: future case, no PI earned yet
             amtCol.innerHTML =
               '<div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.6px;line-height:1.2">PENDING</div>'
-              + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">'+_fmt(e.amount)+' invoiced</div>';
-          } else {
+              + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">'+_fmt(invAmt)+' invoiced</div>';
+          } else if(!isInvoiced) {
+            // State 2: case happened (PI earned) but not yet invoiced — italic
+            // amber caption distinguishes it from the standard "of $X inv."
             amtCol.innerHTML =
               '<div style="font-size:14px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace;line-height:1.2">+'+_fmt(piVal)+'</div>'
-              + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">of '+_fmt(e.amount)+' inv.</div>';
+              + '<div style="font-size:10px;color:#b45309;margin-top:3px;font-style:italic">awaiting invoice</div>';
+          } else {
+            // State 3: invoiced — show PI on top of invoice context
+            amtCol.innerHTML =
+              '<div style="font-size:14px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace;line-height:1.2">+'+_fmt(piVal)+'</div>'
+              + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">of '+_fmt(invAmt)+' inv.</div>';
           }
         } else {
           const sign = _isExp(e.cat) ? '−' : '+';   // U+2212 minus for visual weight
