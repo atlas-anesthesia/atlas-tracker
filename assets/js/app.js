@@ -1896,6 +1896,9 @@ modal.innerHTML = `
       <div style="grid-column:1/-1"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Brand / Full Name</label>
         <input id="ei-name" type="text" value="${item.name||''}" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
       </div>
+      <div style="grid-column:1/-1"><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Supplier</label>
+        <input id="ei-supplier" type="text" value="${item.supplier||''}" placeholder="e.g. Henry Schein, Cardinal Health" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </div>
       <div><label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);display:block;margin-bottom:4px">Category</label>
         <select id="ei-category" style="width:100%;padding:8px 10px;font-size:14px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
           ${catOptions}
@@ -1947,6 +1950,7 @@ document.getElementById('ei-save').addEventListener('click', async () => {
   const category = catSel === '__custom__' ? catCustom : catSel;
   item.generic      = document.getElementById('ei-generic').value.trim() || item.generic;
   item.name         = document.getElementById('ei-name').value.trim() || item.name;
+  item.supplier     = document.getElementById('ei-supplier').value.trim();
   item.category     = category || item.category;
   item.code         = document.getElementById('ei-code').value.trim() || item.code;
   item.costPerUnit  = parseFloat(document.getElementById('ei-cost').value) || 0;
