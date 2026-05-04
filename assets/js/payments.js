@@ -1343,6 +1343,25 @@ async function _syncAllInvoicedToPayouts(paymentRows) {
     const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payouts'));
     const data = snap.exists() ? snap.data() : { entries: [], distributions: [] };
     if(!data.entries) data.entries = [];
+
+    // Dedupe pre-existing case-income entries by caseId before doing the
+    // upsert. Legacy data from before sync had dedupe protection could
+    // have multiple entries per case (e.g., one written by an older code
+    // path, then another by the current one — both with the same caseId
+    // but different ids). Without this pass, the cleanup filter at the
+    // bottom keeps both because they all match a current eligibleId, and
+    // E&D's piFromLog ends up summing duplicates → totals exceed Payments.
+    {
+      const seen = new Set();
+      data.entries = data.entries.filter(e => {
+        if(e.cat !== 'case-income') return true;
+        if(!e.caseId) return true;   // can't dedupe without a key, leave alone
+        if(seen.has(e.caseId)) return false;   // duplicate, drop
+        seen.add(e.caseId);
+        return true;
+      });
+    }
+
     // For each eligible row, look up the matching case so we can compute PI at
     // sync time. The PI value is stored on the entry itself — that's what
     // makes E&D's totals "from the log" rather than re-derived from Payments.
