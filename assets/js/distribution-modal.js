@@ -83,7 +83,7 @@
     _customItems = [];
     _meta = {
       date: _today(),
-      refNum: 'DIST-' + _uidFn().toUpperCase().slice(0, 8),
+      refNum: 'PAY-' + _uidFn().toUpperCase().slice(0, 8),
       notes: '',
       // Two distribution categories with distinct accounting meaning:
       //   • 'salary'             → regular paycheck-style payout. Default
@@ -1156,7 +1156,7 @@
     // payload through _scrubUndefined() before setDoc as a safety net for any
     // stray undefined that snuck in from older legacy data in the doc.
     const distId  = _uidFn();
-    const refNum  = (_meta.refNum || '').trim() || ('DIST-' + distId.toUpperCase().slice(0,8));
+    const refNum  = (_meta.refNum || '').trim() || ('PAY-' + distId.toUpperCase().slice(0,8));
     const distRec = {
       id: distId,
       refNum: refNum,
@@ -1243,7 +1243,7 @@
     const meta      = payload.meta || {};
     const items     = payload.lineItems || [];
     const totals    = payload.totals    || { pi:0, otherIncome:0, expenses:0, investPaid:0, custom:0, total:0 };
-    const refNum    = meta.refNum || ('DIST-' + Date.now().toString(36).toUpperCase().slice(0,8));
+    const refNum    = meta.refNum || ('PAY-' + Date.now().toString(36).toUpperCase().slice(0,8));
     const dateStr   = _fmtD(meta.date) || _fmtD(_today());
     const fmt       = function(n) { return _fmt(n); };
 
@@ -1510,7 +1510,7 @@
     const jsPDF = window.jspdf.jsPDF;
     const doc   = new jsPDF({ orientation:'portrait', unit:'pt', format:'letter' });
     const W = 612, M = 50;
-    const refNum  = dist.refNum || ('DIST-' + (dist.id || '').toUpperCase().slice(0,8));
+    const refNum  = dist.refNum || ('PAY-' + (dist.id || '').toUpperCase().slice(0,8));
     const dateStr = _fmtD(dist.date) || _fmtD(_today());
 
     doc.setFillColor(29,53,87);
