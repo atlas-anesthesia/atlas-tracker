@@ -2178,7 +2178,15 @@ const mg=(parseFloat(entry.amountGiven)||0)+(parseFloat(entry.wastedAmt)||0);
 return sum+cpm*mg;
 },0);
 const total=suppliesTotal2+csTotal2;
-// Guard: if a non-draft case with this caseId already exists, update it instead
+// Snapshot inventory so we can roll back deductions if the cloud save fails
+// partway. Without this, a failure mid-save would leave inventory deducted
+// while the case record never made it to Firestore.
+const inventorySnapshot = items.map(i => ({id:i.id, stockDev:i.stockDev, stockJosh:i.stockJosh}));
+const casesSnapshot = cases.map(c => c);
+try {
+// STEP 1 — write the case record FIRST. Nothing has been deducted yet, so if
+// this fails we just throw and the user gets a clear error with no orphaned
+// inventory changes.
 const existingFinalIdx = cases.findIndex(c => c.caseId === caseId && !c.draft);
 if(existingFinalIdx !== -1) {
   cases[existingFinalIdx] = { ...cases[existingFinalIdx],
@@ -2199,24 +2207,39 @@ patientEmail: (() => { const preopRec = (window._rawPreopRecords||[]).find(r=>r[
 items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
 savedCsEntries:csEntries.map(e=>({...e})),
 csTotal:csTotal2,
-total,imageData:pendingImageData||null
+total,imageData:pendingImageData||null,
+savedAt:new Date().toISOString()
 });
 } // end duplicate guard
+// Drop the matching draft locally before saving so the cloud copy is clean.
+cases = cases.filter(x => !(x.draft && x.caseId === caseId));
+await saveCases();
+// STEP 2 — case record is committed. Now deduct regular supplies from inventory.
 caseItems.forEach(item=>{
 const inv=items.find(i=>i.id===item.id);
 if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
 });
-// Save CS entries and deduct CS inventory
+// STEP 3 — save CS log entries and deduct CS inventory (no-op if no CS entries).
 await saveCSEntriesWithCase(caseId, date, provider);
-// Remove any draft linked to this caseId (whether loaded via picker or not)
-cases = cases.filter(x => !(x.draft && x.caseId === caseId));
+// STEP 4 — persist final inventory state (covers regular supply deductions).
+await saveInventory();
 window._activeDraftId = null;
 csEntries = [];
 renderCSEntries();
-await Promise.all([saveInventory(), saveCases()]);
 clearCase();
 alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
 showTab('history');
+} catch(saveErr) {
+// Roll back local inventory + cases state so the UI matches reality.
+console.error('Save case error:', saveErr);
+inventorySnapshot.forEach(snap => {
+const inv = items.find(i => i.id === snap.id);
+if(inv) { inv.stockDev = snap.stockDev; inv.stockJosh = snap.stockJosh; }
+});
+cases = casesSnapshot;
+setSyncing(false);
+alert('⚠ Could not save case.\n\n' + (saveErr?.message || saveErr) + '\n\nNothing was changed. Please check your internet connection and try again.');
+}
 };
 window.clearCase=function(){
 // Don't clear if actively editing a case
