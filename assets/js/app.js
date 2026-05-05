@@ -438,10 +438,50 @@ async function savePreopRecords(records) {
   await setDoc(doc(db,'atlas','preop'), { records: cleaned });
   return cleaned;
 }
+// Clean a value so Firestore will accept it. Firestore rejects:
+//   - arrays as direct elements of another array (e.g. [[1,2],[3,4]])
+//   - undefined values
+//   - NaN / Infinity
+//   - functions, symbols, DOM nodes, class instances
+// Converts a raw array-in-array to {values:[...]} so the data is preserved.
+function sanitizeForFirestore(value, _inArray = false) {
+  if(value === undefined) return _inArray ? null : undefined;
+  if(value === null) return null;
+  if(typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if(typeof value === 'string' || typeof value === 'boolean') return value;
+  if(value instanceof Date) return value.toISOString();
+  if(Array.isArray(value)) {
+    return value.map(item => {
+      if(Array.isArray(item)) {
+        // Wrap nested arrays in an object so Firestore accepts them.
+        console.warn('Sanitizer: wrapped nested array');
+        return { values: item.map(v => sanitizeForFirestore(v, true)) };
+      }
+      return sanitizeForFirestore(item, true);
+    });
+  }
+  if(typeof value === 'object') {
+    // Skip non-POJOs (DOM nodes, class instances, etc.) — drop or stringify
+    const proto = Object.getPrototypeOf(value);
+    if(proto !== Object.prototype && proto !== null) {
+      console.warn('Sanitizer: dropped non-plain object', value);
+      return null;
+    }
+    const out = {};
+    Object.keys(value).forEach(k => {
+      const v = sanitizeForFirestore(value[k], false);
+      if(v !== undefined) out[k] = v;
+    });
+    return out;
+  }
+  // functions, symbols, etc.
+  return null;
+}
 async function saveCases() {
 deduplicateCases();
 setSyncing(true);
-await setDoc(doc(db,'atlas','cases'),{cases});
+const safeCases = sanitizeForFirestore(cases) || [];
+await setDoc(doc(db,'atlas','cases'),{cases: safeCases});
 setSyncing(false);
 // onSnapshot fires automatically and calls _globalRefresh indirectly,
 // but sync payments immediately if loaded
