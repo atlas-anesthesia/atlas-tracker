@@ -481,8 +481,24 @@ function sanitizeForFirestore(value, _inArray = false) {
 async function saveCases() {
 deduplicateCases();
 setSyncing(true);
-const safeCases = sanitizeForFirestore(cases) || [];
-await setDoc(doc(db,'atlas','cases'),{cases: safeCases});
+// JSON round-trip strips undefined, functions, Dates → strings, etc.
+// Then run the array sanitizer to wrap any nested arrays Firestore would reject.
+let safeCases;
+try {
+  safeCases = JSON.parse(JSON.stringify(cases));
+} catch(e) {
+  console.warn('Cases JSON clone failed:', e);
+  safeCases = cases;
+}
+safeCases = sanitizeForFirestore(safeCases) || [];
+try {
+  await setDoc(doc(db,'atlas','cases'),{cases: safeCases});
+} catch(setErr) {
+  // Log the actual cases payload so we can identify the offending field in dev tools.
+  console.error('saveCases setDoc failed:', setErr);
+  console.error('Cases count:', safeCases.length, 'Cases payload:', safeCases);
+  throw setErr;
+}
 setSyncing(false);
 // onSnapshot fires automatically and calls _globalRefresh indirectly,
 // but sync payments immediately if loaded
