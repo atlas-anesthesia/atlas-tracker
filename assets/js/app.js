@@ -52,7 +52,7 @@ window.downloadFullBackup = async function() {
   const btn = document.getElementById('backup-download-btn');
   if(btn) { btn.textContent = '⏳...'; btn.disabled = true; }
   try {
-    const COLS = ['cases','preop','payments','deposits','payouts',
+    const COLS = ['inventory','cases','preop','payments','deposits','payouts',
       'surgerycenters','cslog','cstransfers','saved_pdfs','personal_income_formula'];
     const backup = { exportedAt: new Date().toISOString(), version: 'atlas-1.0', data: {} };
     for(const col of COLS) {
