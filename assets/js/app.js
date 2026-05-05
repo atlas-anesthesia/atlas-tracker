@@ -381,7 +381,8 @@ onSnapshot(doc(db,'atlas','preop'), (snap) => {
 }
 async function saveInventory() {
 setSyncing(true);
-await setDoc(doc(db,'atlas','inventory'),{items});
+const safeItems = sanitizeForFirestore(items) || [];
+await setDoc(doc(db,'atlas','inventory'),{items: safeItems});
 setSyncing(false);
 }
 
@@ -2253,6 +2254,8 @@ savedAt:new Date().toISOString()
 } // end duplicate guard
 // Drop the matching draft locally before saving so the cloud copy is clean.
 cases = cases.filter(x => !(x.draft && x.caseId === caseId));
+let _step = 'saving case record';
+try {
 await saveCases();
 // STEP 2 — case record is committed. Now deduct regular supplies from inventory.
 caseItems.forEach(item=>{
@@ -2260,9 +2263,15 @@ const inv=items.find(i=>i.id===item.id);
 if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
 });
 // STEP 3 — save CS log entries and deduct CS inventory (no-op if no CS entries).
+_step = 'saving controlled-substance log';
 await saveCSEntriesWithCase(caseId, date, provider);
 // STEP 4 — persist final inventory state (covers regular supply deductions).
+_step = 'saving inventory';
 await saveInventory();
+} catch(stepErr) {
+stepErr.atlasStep = _step;
+throw stepErr;
+}
 window._activeDraftId = null;
 csEntries = [];
 renderCSEntries();
@@ -2278,7 +2287,8 @@ if(inv) { inv.stockDev = snap.stockDev; inv.stockJosh = snap.stockJosh; }
 });
 cases = casesSnapshot;
 setSyncing(false);
-alert('⚠ Could not save case.\n\n' + (saveErr?.message || saveErr) + '\n\nNothing was changed. Please check your internet connection and try again.');
+const stepLabel = saveErr?.atlasStep ? `\n\nFailed during: ${saveErr.atlasStep}` : '';
+alert('⚠ Could not save case.\n\n' + (saveErr?.message || saveErr) + stepLabel + '\n\nNothing was changed. Please check your internet connection and try again.');
 }
 };
 window.clearCase=function(){
@@ -4138,7 +4148,8 @@ setStock(invItem, currentWorker, newStock);
 }
 });
 setSyncing(true);
-await setDoc(doc(db,'atlas','cslog'), { entries: existing });
+const safeEntries = sanitizeForFirestore(existing) || [];
+await setDoc(doc(db,'atlas','cslog'), { entries: safeEntries });
 await saveInventory();
 setSyncing(false);
 csEntries = [];
