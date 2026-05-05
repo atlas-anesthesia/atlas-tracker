@@ -2187,10 +2187,17 @@ const total = suppliesTotal + csTotal;
 const updatedCase = {
 ...cases[idx],
 procedure:proc, provider, date,
+notes,
+startTime: document.getElementById('caseStartTime')?.value || cases[idx].startTime || '',
+endTime: document.getElementById('caseEndTime')?.value || cases[idx].endTime || '',
 caseComments:comments, worker:currentWorker,
 items: caseItems.map(i=>({id:i.id,generic:i.generic||'',name:i.name||'',cost:parseFloat(i.cost)||0,qty:parseFloat(i.qty)||0,lineTotal:(parseFloat(i.cost)||0)*(parseFloat(i.qty)||0)})),
 savedCsEntries: csEntries.map(e=>({...e})),
-csTotal, total
+csTotal, total,
+// Use whatever's currently in the upload preview — that's the picture the
+// user sees right now (existing one was reloaded by editFinalizedCase, or a
+// new upload, or null after Remove).
+imageData: pendingImageData || null
 };
 // Inventory diff — reverse old, apply new
 (oldCase.items || []).forEach(oldItem => {
@@ -2815,6 +2822,27 @@ stock: inv ? getStock(inv, currentWorker) : parseFloat(i.qty) || 1
 };
 });
 csEntries = (c.savedCsEntries || []).map(e => ({...e}));
+// 3b. Restore the case-log image preview from the saved data so that
+// (a) the user sees what's already attached, and (b) the edit save path
+// has a value in pendingImageData to write back. Without this, opening
+// the edit form silently wipes the saved image on the next save.
+if(c.imageData) {
+  pendingImageData = c.imageData;
+  const uz = document.getElementById('uploadZone');
+  const ip = document.getElementById('imgPreview');
+  const pv = document.getElementById('previewImg');
+  if(uz) uz.style.display = 'none';
+  if(ip) ip.style.display = 'block';
+  if(pv) pv.src = c.imageData;
+} else {
+  pendingImageData = null;
+  const uz = document.getElementById('uploadZone');
+  const ip = document.getElementById('imgPreview');
+  const pv = document.getElementById('previewImg');
+  if(uz) uz.style.display = 'block';
+  if(ip) ip.style.display = 'none';
+  if(pv) pv.src = '';
+}
 // 4. Switch tab manually (bypasses refreshDraftPicker)
 document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
 document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
@@ -3136,6 +3164,18 @@ qty: parseFloat(i.qty) || 1,
 stock: invItem ? getStock(invItem, c.worker) : parseFloat(i.qty) || 1
 };
 });
+// Restore the case-log image preview (same reasoning as editFinalizedCase).
+if(c.imageData) {
+  pendingImageData = c.imageData;
+  const uz = document.getElementById('uploadZone');
+  const ip = document.getElementById('imgPreview');
+  const pv = document.getElementById('previewImg');
+  if(uz) uz.style.display = 'none';
+  if(ip) ip.style.display = 'block';
+  if(pv) pv.src = c.imageData;
+} else {
+  pendingImageData = null;
+}
 // Store draft ID
 window._activeDraftId = draftId;
 renderCaseSupplies();
