@@ -2107,13 +2107,40 @@ window.updateQty=(idx,val)=>{caseItems[idx].qty=Math.max(0,parseInt(val)||0);ren
 window.removeItem=(idx)=>{caseItems.splice(idx,1);renderCaseSupplies();refreshItemSelect();};
 // -- IMAGE --
 window.handleImageUpload = function(e) {
-const file=e.target.files[0];if(!file)return;
-const reader=new FileReader();
-reader.onload=function(ev){
-pendingImageData=ev.target.result;
-document.getElementById('uploadZone').style.display='none';
-document.getElementById('imgPreview').style.display='block';
-document.getElementById('previewImg').src=pendingImageData;
+const file = e.target.files[0];
+if(!file) return;
+const reader = new FileReader();
+reader.onload = function(ev) {
+  const img = new Image();
+  img.onload = function() {
+    // Resize so the longest side is at most 1600px and re-encode as JPEG.
+    // This keeps cases under Firestore's 1MB doc limit and converts iPhone
+    // HEICs (when the browser can decode them) into a universally-saveable
+    // standard JPEG data URL.
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+    const w = Math.round(img.width * scale) || img.width;
+    const h = Math.round(img.height * scale) || img.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    pendingImageData = canvas.toDataURL('image/jpeg', 0.85);
+    document.getElementById('uploadZone').style.display = 'none';
+    document.getElementById('imgPreview').style.display = 'block';
+    document.getElementById('previewImg').src = pendingImageData;
+  };
+  img.onerror = function() {
+    const isHeic = /\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type);
+    if(isHeic) {
+      alert('This is a HEIC photo — most browsers can\'t display them.\n\nEasiest fix: on iPhone, open Settings → Camera → Formats → pick "Most Compatible". New photos will be JPEG.\n\nFor this photo: open it in the Photos app, tap Share → Save to Files, and pick a JPEG-compatible location, then upload that file.');
+    } else {
+      alert('Could not load this image. Try a JPEG or PNG.');
+    }
+    e.target.value = '';
+  };
+  img.src = ev.target.result;
 };
 reader.readAsDataURL(file);
 };
