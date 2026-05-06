@@ -420,8 +420,8 @@ async function _syncDepositToPayments(depositRecord, stripeResult) {
     // $500 deposit
     if(stripeResult?.paid || depositRecord.paid) {
       const paidDate = (stripeResult?.paidAt || depositRecord.paidAt)
-        ? new Date(stripeResult?.paidAt || depositRecord.paidAt).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0];
+        ? window.localDateStr(new Date(stripeResult?.paidAt || depositRecord.paidAt))
+        : window.todayStr();
       rows[rowIdx].depositDate = paidDate;
       rows[rowIdx].dep500Paid  = true;
     }
@@ -429,8 +429,8 @@ async function _syncDepositToPayments(depositRecord, stripeResult) {
     // Remainder balance — any Stripe payment over $500 from same email
     if(stripeResult?.remainderPaid) {
       const remDate = stripeResult.remainderPaidAt
-        ? new Date(stripeResult.remainderPaidAt).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0];
+        ? window.localDateStr(new Date(stripeResult.remainderPaidAt))
+        : window.todayStr();
       rows[rowIdx].paidDate = remDate;
       rows[rowIdx].paid     = true;
       console.log('Remainder balance confirmed for', depositRecord.caseId, '$'+stripeResult.remainderAmount);

@@ -29,7 +29,7 @@ function _getInvoiceModalRow() {
 // -- Daily backup -----------------------------------------------------
 async function runDailyPaymentBackup() {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = window.todayStr();
     const metaSnap = await window.getDoc(window.doc(window.db,'atlas','payments_meta'));
     if(metaSnap.exists() && metaSnap.data().lastBackup === today) return;
     const snap = await window.getDoc(window.doc(window.db,'atlas','payments'));
@@ -884,7 +884,7 @@ function _getInvoiceHeader() {
   const location=(scSel?.value==='__custom__'||!center)?(locInput?.value||'—'):(center?.name||'—');
   const date=document.getElementById('inv-modal-date')?.value||'';
   const formattedDate=date?new Date(date+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}):'—';
-  const invoiceNum='ATL-INV-'+(date||new Date().toISOString().split('T')[0]).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
+  const invoiceNum='ATL-INV-'+(date||window.todayStr()).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
   window._currentInvoiceNum=invoiceNum;
   return {provider,phone,location,date,formattedDate,invoiceNum,w};
 }
@@ -969,7 +969,7 @@ window.downloadInvoiceModal = async function() {
   const location=(scSel?.value==='__custom__'||!center)?(locInput?.value||''):(center?.name||'');
   const date=document.getElementById('inv-modal-date')?.value||'';
   const billingType=document.getElementById('inv-modal-billing-type')?.value||'hourly';
-  const invoiceNum='ATL-INV-'+(date||new Date().toISOString().split('T')[0]).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
+  const invoiceNum='ATL-INV-'+(date||window.todayStr()).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900)+100);
   if(!location||!date){alert('Please fill in surgery center and date.');return;}
   if(billingType==='flat'){
     const amt=parseFloat(document.getElementById('inv-modal-flat-amt')?.value)||0;

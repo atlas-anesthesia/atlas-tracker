@@ -395,7 +395,7 @@
         W/2, 282, { align: 'center' });
     }
 
-    const dateStr  = new Date().toISOString().split('T')[0];
+    const dateStr  = window.todayStr();
     const safeName = vendor.label.replace(/\s/g, '-');
     const safeWho  = _workerLabel(_activeWorker());
     doc.save('Atlas-Order-' + safeName + '-' + safeWho + '-' + dateStr + '.pdf');

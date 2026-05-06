@@ -14,6 +14,22 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// ── LOCAL-TIMEZONE DATE HELPERS ──────────────────────────────────────────────
+// Use these instead of `todayStr()`. The ISO
+// version returns the UTC date, which flips to the next calendar day in the
+// evening for users in negative-offset timezones (e.g. US Central). These
+// helpers always return the date as it appears on the user's local clock.
+function localDateStr(d) {
+  d = d || new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+function todayStr() { return localDateStr(new Date()); }
+window.localDateStr = localDateStr;
+window.todayStr = todayStr;
+
 // ── MANUAL BACKUP DOWNLOAD ─────────────────────────────────────────────────────
 // ── PI FORMULA GLOBAL STORE ───────────────────────────────────────────────────
 window._atlasFormulaData = null;
@@ -64,7 +80,7 @@ window.downloadFullBackup = async function() {
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url; a.download = 'atlas-backup-' + new Date().toISOString().split('T')[0] + '.json';
+    a.href = url; a.download = 'atlas-backup-' + todayStr() + '.json';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch(e) { alert('Backup failed: ' + e.message); }
@@ -251,7 +267,7 @@ currentHistoryFilter = mappedWorker;
 ['all','dev','josh'].forEach(x => { const el=document.getElementById('hbtn-'+x); if(el) el.className='worker-btn'+(x===mappedWorker?' '+(mappedWorker==='dev'?'active-dev':'active-josh'):''); });
 document.getElementById('hbtn-all').className = 'worker-btn';
 document.getElementById('dateDisplay').textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-document.getElementById('caseDate').value = new Date().toISOString().split('T')[0];
+document.getElementById('caseDate').value = todayStr();
 await initData();
 updateCaseIdDisplays();
 renderCSEntries();
@@ -512,7 +528,7 @@ function setStock(item,w,val){if(w==='dev')item.stockDev=val;else item.stockJosh
 function uid(){return Math.random().toString(36).substr(2,9);}
 function generateCaseId(worker, date) {
 const w = worker === 'dev' ? 'DEV' : 'JOSH';
-const dateStr = date || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+const dateStr = date || todayStr(); // YYYY-MM-DD
 const [y, m, d] = dateStr.split('-');
 // New format: WORKER-MM-DD-YYYY-NN  (e.g. JOSH-05-04-2026-01)
 const newPrefix = `${w}-${m}-${d}-${y}-`;
@@ -547,7 +563,7 @@ if(c && ncDisplay) ncDisplay.textContent = c.caseId;
 if(c && ncInput) ncInput.value = c.caseId;
 return;
 }
-const date = document.getElementById('caseDate')?.value || new Date().toISOString().split('T')[0];
+const date = document.getElementById('caseDate')?.value || todayStr();
 const id = generateCaseId(currentWorker, date);
 if(ncDisplay) ncDisplay.textContent = id;
 if(ncInput) ncInput.value = id;
@@ -557,7 +573,7 @@ const surgeryDate = document.getElementById('po-surgeryDate')?.value;
 const display = document.getElementById('po-caseId-display');
 const input = document.getElementById('po-caseId');
 // Generate using surgery date if available, otherwise today's date as preview
-const dateToUse = surgeryDate || new Date().toISOString().split('T')[0];
+const dateToUse = surgeryDate || todayStr();
 const id = generateCaseId(currentWorker, dateToUse);
 if(display) {
   display.textContent = id;
@@ -645,10 +661,10 @@ const email = r['po-patientEmail'] || '';
 events.push({ type:'surgery', date:surgDate, label:`${worker==='josh'?'J':'D'} ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
 const callD = new Date(surgDate+'T12:00:00');
 callD.setDate(callD.getDate() - preopDays);
-events.push({ type:'preop-call', date:callD.toISOString().split('T')[0], label:`📞 ${worker==='josh'?'J':'D'} ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+events.push({ type:'preop-call', date:localDateStr(callD), label:`📞 ${worker==='josh'?'J':'D'} ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
 const depD = new Date(surgDate+'T12:00:00');
 depD.setDate(depD.getDate() - depositDays);
-events.push({ type:'deposit', date:depD.toISOString().split('T')[0], label:`💰 ${worker==='josh'?'J':'D'} ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
+events.push({ type:'deposit', date:localDateStr(depD), label:`💰 ${worker==='josh'?'J':'D'} ${caseId}`, caseId, provider:provider||wname, worker, email, surgDate });
 } catch(rowErr) { console.warn('Calendar row error:', rowErr); }
 });
 return events;
@@ -679,7 +695,7 @@ const months = ['January','February','March','April','May','June','July',
 if(label) label.textContent = `${months[calMonth]} ${calYear}`;
 let events = [];
 try { events = getCalEvents(); } catch(e) { console.warn('getCalEvents error', e); }
-const today = new Date().toISOString().split('T')[0];
+const today = todayStr();
 const firstDay = new Date(calYear, calMonth, 1).getDay();
 const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
 const prevDays = new Date(calYear, calMonth, 0).getDate();
@@ -2165,7 +2181,7 @@ if(!proc) {
   return;
 }
 const provider=document.getElementById('provider').value.trim();
-const date=document.getElementById('caseDate').value||new Date().toISOString().split('T')[0];
+const date=document.getElementById('caseDate').value||todayStr();
 const notes=document.getElementById('caseNotes')?document.getElementById('caseNotes').value.trim():'';
 const comments=document.getElementById('caseComments')?document.getElementById('caseComments').value.trim():'';
 // If editing an existing case, update it instead of creating new
@@ -2358,7 +2374,7 @@ const startEl = document.getElementById('caseStartTime');
 const endEl = document.getElementById('caseEndTime');
 if(startEl) startEl.value = '';
 if(endEl) endEl.value = '';
-document.getElementById('caseDate').value=new Date().toISOString().split('T')[0];
+document.getElementById('caseDate').value=todayStr();
 // Clear BMI displays
 ['po-height-cm','po-weight-kg','po-bmi'].forEach(id => {
 const el = document.getElementById(id);
@@ -2753,7 +2769,7 @@ if(currentHistoryFilter!=='all') filtered=cases.filter(c=>c.worker===currentHist
 filtered = [...filtered].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 const invoices = window._savedInvoices || [];
 if(!filtered.length){el.innerHTML='<div class="empty-state">No cases recorded yet</div>';return;}
-const today = new Date().toISOString().split('T')[0];
+const today = todayStr();
 el.innerHTML=filtered.map(c=>{
 const pill=c.worker==='dev'?'pill-dev':'pill-josh';
 const wname=c.worker==='dev'?'Devarsh':'Josh';
@@ -3117,7 +3133,7 @@ if(ncDisplay) ncDisplay.textContent = c.caseId;
 if(ncInput) ncInput.value = c.caseId;
 document.getElementById('procedure').value = c.procedure || '';
 document.getElementById('provider').value = c.provider || '';
-document.getElementById('caseDate').value = c.date || new Date().toISOString().split('T')[0];
+document.getElementById('caseDate').value = c.date || todayStr();
 if(document.getElementById('caseNotes')) document.getElementById('caseNotes').value = c.notes || '';
 // Set correct worker
 const mappedWorker = EMAIL_WORKER_MAP[currentUser.email.toLowerCase()] || 'dev';
@@ -3145,7 +3161,7 @@ const el = id => document.getElementById(id);
 if(el('caseId')) el('caseId').value = c.caseId || '';
 if(el('procedure')) el('procedure').value = c.procedure || '';
 if(el('provider')) el('provider').value = c.provider || '';
-if(el('caseDate')) el('caseDate').value = c.date || new Date().toISOString().split('T')[0];
+if(el('caseDate')) el('caseDate').value = c.date || todayStr();
 if(el('caseNotes')) el('caseNotes').value = c.notes || '';
 if(el('caseComments')) el('caseComments').value = c.caseComments || '';
 if(el('caseStartTime')) el('caseStartTime').value = c.startTime || '';
@@ -3490,7 +3506,7 @@ id: uid(),
 caseId: record['po-caseId'],
 procedure: '',
 provider: record['po-provider'] || '',
-date: record['po-surgeryDate'] || new Date().toISOString().split('T')[0],
+date: record['po-surgeryDate'] || todayStr(),
 notes: '',
 worker: currentWorker,
 items: [],
@@ -3508,7 +3524,7 @@ await saveCases();
 // Pre-fill the New Case form with pre-op info
 prefillNewCase(record);
 // Check if surgery is within 30 days — send immediate pre-op call reminder
-const today2 = new Date().toISOString().split('T')[0];
+const today2 = todayStr();
 const surgDate2 = textData['po-surgeryDate'];
 if(surgDate2) {
 const daysUntil = Math.ceil((new Date(surgDate2+'T12:00:00') - new Date(today2+'T12:00:00')) / (1000*60*60*24));
@@ -3538,7 +3554,7 @@ const caseDateEl = document.getElementById('caseDate');
 const procedureEl = document.getElementById('procedure');
 if(caseIdEl) caseIdEl.value = preopRecord['po-caseId'] || '';
 if(providerEl) providerEl.value = preopRecord['po-provider'] || '';
-if(caseDateEl) caseDateEl.value = preopRecord['po-surgeryDate'] || new Date().toISOString().split('T')[0];
+if(caseDateEl) caseDateEl.value = preopRecord['po-surgeryDate'] || todayStr();
 if(procedureEl) procedureEl.value = preopRecord['po-procedureType'] || '';
 }
 window.clearPreop = function() {
@@ -3914,7 +3930,7 @@ item.costPerUnit = cost;
 // Log price change in item history
 if(!item.priceHistory) item.priceHistory = [];
 item.priceHistory.unshift({
-date: new Date().toISOString().split('T')[0],
+date: todayStr(),
 oldCost: parseFloat(oldCost.toFixed(2)),
 newCost: parseFloat(cost.toFixed(2)),
 changedBy: currentUser ? currentUser.email.split('@')[0] : 'unknown'
@@ -4374,7 +4390,7 @@ return Math.ceil(minutes / 15) * 15;
 }
 function generateInvoiceNumber() {
 const now = new Date();
-const d = now.toISOString().split('T')[0].replace(/-/g,'');
+const d = localDateStr(now).replace(/-/g,'');
 const seq = String(Math.floor(Math.random()*900)+100);
 return `ATL-INV-${d}-${seq}`;
 }
@@ -5070,7 +5086,7 @@ const provider = r['po-provider'] || '—';
 const cvFlags = ['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase());
 const pulmFlags = ['asthma','copd','uri','cpap','sleep-apnea','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '));
 const allFlags = [...cvFlags, ...pulmFlags];
-const today = new Date().toISOString().split('T')[0];
+const today = todayStr();
 const isPast = surgDate !== '—' && surgDate < today;
 const isToday = surgDate === today;
 const borderColor = isPast ? 'var(--warn)' : isToday ? 'var(--accent)' : 'var(--info)';
@@ -5125,7 +5141,7 @@ const orphanDrafts = drafts
 const orphanHtml = orphanDrafts.map(d => {
 const pill = d.worker==='dev' ? 'pill-dev' : 'pill-josh';
 const wname = d.worker==='dev' ? 'Devarsh' : 'Josh';
-const dToday = new Date().toISOString().split('T')[0];
+const dToday = todayStr();
 const dIsPast = d.date && d.date < dToday;
 const dIsToday = d.date === dToday;
 const dBorder = dIsPast ? 'var(--warn)' : dIsToday ? 'var(--accent)' : '#6b7280';
@@ -5313,7 +5329,7 @@ const newDraft = {
   caseId,
   procedure: '',
   provider: r['po-provider'] || '',
-  date: r['po-surgeryDate'] || new Date().toISOString().split('T')[0],
+  date: r['po-surgeryDate'] || todayStr(),
   notes: '',
   caseComments: '',
   worker: r.worker || currentWorker,
@@ -5613,7 +5629,7 @@ document.getElementById('previewModal').style.display = 'none';
 async function renderReviewTomorrow() {
 const tomorrow = new Date();
 tomorrow.setDate(tomorrow.getDate() + 1);
-const tomorrowStr = tomorrow.toISOString().split('T')[0];
+const tomorrowStr = localDateStr(tomorrow);
 try {
 const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records||[]) : [];
@@ -5667,7 +5683,7 @@ if(existing) {
 if(existing.costPerUnit !== template.costPerUnit) {
 if(!existing.priceHistory) existing.priceHistory = [];
 existing.priceHistory.unshift({
-date: new Date().toISOString().split('T')[0],
+date: todayStr(),
 oldCost: existing.costPerUnit,
 newCost: template.costPerUnit,
 changedBy: 'template-sync'
@@ -5954,7 +5970,7 @@ return surgeryCenters.find(c => c.id === centerId)?.name || '—';
 }
 window.renderAnalytics = function() {
 const yearSel = document.getElementById('analytics-year');
-const today = new Date().toISOString().split('T')[0];
+const today = todayStr();
 const allInvoices = window._savedInvoices || [];
 const preops = window._rawPreopRecords || [];
 // Collect all years from finalized cases + upcoming preops
@@ -6146,7 +6162,7 @@ if(form) {
 form.style.display = 'block';
 // Default to today
 const dateEl = document.getElementById('tf-date');
-if(dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
+if(dateEl && !dateEl.value) dateEl.value = todayStr();
 }
 };
 window.hideAddTransferForm = function() {
@@ -6554,7 +6570,7 @@ window.updateInvoiceTotalDisplay = function() {
 function _generateFlatRateInvoicePDF(location, date, provider, procedure, total, invoiceNumOverride) {
   const invoiceNum = invoiceNumOverride || (function() {
     const now = new Date();
-    const d = now.toISOString().split('T')[0].replace(/-/g,'');
+    const d = localDateStr(now).replace(/-/g,'');
     return 'ATL-INV-'+d+'-'+String(Math.floor(Math.random()*900)+100);
   })();
   const formattedDate = new Date(date+'T12:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
