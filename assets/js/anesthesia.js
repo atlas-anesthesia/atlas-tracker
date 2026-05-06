@@ -225,7 +225,7 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   ].filter(([, txt]) => txt && txt.trim()).map(([lbl, txt]) => `${lbl}: ${txt.trim()}`);
   const mainComments = val('po-comments').trim();
   const combined = [mainComments, ...sectionComments].filter(Boolean).join(' • ');
-  drawWrap(combined, 315, 278, 36, 9, 330);
+  drawWrap(combined, 315, 285, 36, 9, 330);
 
   // Provider name near signature
   const w = r.worker || (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'josh');
