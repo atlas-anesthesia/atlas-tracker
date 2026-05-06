@@ -619,6 +619,8 @@ ind.textContent=(w==='dev'?'Devarsh':'Josh')+"'s inventory will be updated";
 if(!window._editingCaseId) { caseItems=[]; renderCaseSupplies(); refreshItemSelect(); }
 updateCaseIdDisplays();
 updatePreopCaseIdDisplay();
+// Review For Tomorrow filters by currentWorker — refresh when worker changes
+if(typeof renderReviewTomorrow === 'function') renderReviewTomorrow();
 };
 window.setInvTab = function(t) {
 currentInvTab=t;
@@ -5654,7 +5656,7 @@ const tomorrowStr = localDateStr(tomorrow);
 try {
 const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records||[]) : [];
-const tomorrowCases = records.filter(r => r['po-surgeryDate'] === tomorrowStr);
+const tomorrowCases = records.filter(r => r['po-surgeryDate'] === tomorrowStr && (r.worker || 'dev') === currentWorker);
 const section = document.getElementById('review-tomorrow-section');
 const list = document.getElementById('review-tomorrow-list');
 if(!section || !list) return;
