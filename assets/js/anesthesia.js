@@ -208,7 +208,24 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   if(chk('po-nodrive')) drawX(349.9,210.0);
 
   // COMMENTS right column y≈264
-  drawWrap(val('po-comments'), 315, 278, 36, 9, 330);
+  // Combine the main pre-op comments with any section-specific H&P comments,
+  // each prefixed with a short label so it's clear where it came from on the
+  // pre-op form.
+  const sectionComments = [
+    ['Pupil', val('po-pupil-comment')],
+    ['CV',    val('po-cv-comment')],
+    ['EKG',   val('po-ekg-comment')],
+    ['Pulm',  val('po-pulm-comment')],
+    ['GI',    val('po-gastro-comment')],
+    ['Renal', val('po-renal-comment')],
+    ['Neuro', val('po-neuro-comment')],
+    ['Meta',  val('po-meta-comment')],
+    ['Teeth', val('po-teeth-comment')],
+    ['Other', val('po-other-comment')]
+  ].filter(([, txt]) => txt && txt.trim()).map(([lbl, txt]) => `${lbl}: ${txt.trim()}`);
+  const mainComments = val('po-comments').trim();
+  const combined = [mainComments, ...sectionComments].filter(Boolean).join(' • ');
+  drawWrap(combined, 315, 278, 36, 9, 330);
 
   // Provider name near signature
   const w = r.worker || (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'josh');
