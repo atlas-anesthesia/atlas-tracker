@@ -18,28 +18,20 @@ const FAX_PRESETS = [
   { id: 'bellin-prep', name: 'Bellin Prep Team', fax: '+19204368549' }
 ];
 
-const RECORDS = [
-  ['rec-preop-clearance',  'Pre-Op Clearance Notes'],
-  ['rec-hp',               'History & Physical (H&P)'],
-  ['rec-cardiac-clear',    'Cardiac Clearance Letter'],
-  ['rec-meds-allergies',   'Medication List / Allergies'],
-  ['rec-office-visit',     'Recent Office Visit Notes']
-];
-const LABS = [
-  ['lab-cbc',     'CBC'],
-  ['lab-bmp',     'BMP / CMP'],
-  ['lab-coag',    'Coagulation (PT/PTT/INR)'],
-  ['lab-lipid',   'Lipid Panel'],
-  ['lab-hba1c',   'HbA1c'],
-  ['lab-tsh',     'TSH / Thyroid']
-];
-const TESTS = [
-  ['dx-ekg',     'EKG / 12-Lead'],
-  ['dx-echo',    'Echocardiogram'],
-  ['dx-cxr',     'Chest X-Ray'],
-  ['dx-stress',  'Stress Test'],
-  ['dx-pft',     'Pulmonary Function'],
-  ['dx-sleep',   'Sleep Study']
+// Unified Requested Documentation list — replaces the older split between
+// records / labs / diagnostic testing. Order here drives the order in the
+// modal grid and on the printed fax.
+const REQUESTED_DOCS = [
+  ['doc-hp',          'Complete History and Physical'],
+  ['doc-cbc',         'CBC'],
+  ['doc-bmp',         'BMP'],
+  ['doc-hba1c',       'HbA1C'],
+  ['doc-coag',        'PT/PTT'],
+  ['doc-ekg',         'EKG'],
+  ['doc-echo',        'Echocardiogram'],
+  ['doc-lipid',       'Lipid Profile'],
+  ['doc-cardiac-risk','Cardiac Risk Assessment'],
+  ['doc-mgmt-notes',  'Medical Management Notes']
 ];
 const URGENCY = ['Routine','Expedited','Urgent','STAT'];
 
@@ -127,25 +119,140 @@ function fmtDate(iso) {
 }
 
 // Read the patient details we can auto-fill from the live Pre-Op form.
+// The pre-op record the modal is currently scoped to (chosen via dropdown).
+// Until a case is selected, the form's patient fields render blank and Save
+// Draft / Send refuse to proceed.
+let _selectedPreop = null;
+
 function readPreopForm() {
-  const r = {};
-  document.querySelectorAll('#tab-preop input, #tab-preop select, #tab-preop textarea').forEach(el => {
-    if(!el.id) return;
-    if(el.type === 'checkbox') r[el.id] = el.checked;
-    else if(el.type === 'radio') { if(el.checked) r[el.name] = el.value; }
-    else r[el.id] = el.value;
-  });
-  // Patient name field on the pre-op form may not exist as a single input —
-  // the existing fax module looks at po-patient or first/last name fields.
-  r.patientName = $('po-patient')?.value
-    || [$('po-firstName')?.value || '', $('po-lastName')?.value || ''].filter(Boolean).join(' ').trim()
-    || '';
-  r.patientDob  = $('po-dob')?.value || '';
-  r.patientPhone = $('po-contact-phone')?.value || '';
-  r.surgeryDate = $('po-surgeryDate')?.value || '';
-  r.providerSig = $('po-providerSignature')?.value || '';
-  return r;
+  // Patient details come from the SELECTED pre-op record (not the live form),
+  // so the user explicitly chooses which case the fax is for.
+  const r = _selectedPreop || {};
+  return {
+    patientName: [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ').trim()
+              || r['po-patient'] || '',
+    patientDob:  r['po-dob'] || '',
+    patientPhone: r['po-contact-phone'] || '',
+    surgeryDate: r['po-surgeryDate'] || '',
+    providerSig: r['po-providerSignature'] || '',
+    caseWorker:  r.worker || ''
+  };
 }
+
+function preopChoices() {
+  // Cases for the current logged-in worker that have a Case ID. Most recent
+  // surgery dates first.
+  const records = window._rawPreopRecords || [];
+  return records
+    .filter(r => (r.worker || 'dev') === (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'dev'))
+    .filter(r => r['po-caseId'])
+    .sort((a, b) => (b['po-surgeryDate']||'').localeCompare(a['po-surgeryDate']||''));
+}
+
+function populateCaseDropdown() {
+  const sel = $('pof-case-select');
+  if(!sel) return;
+  const choices = preopChoices();
+  const currentValue = sel.value;
+  sel.innerHTML = '<option value="">— Pick a case —</option>'
+    + choices.map(r => {
+        const name = [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ').trim()
+                  || r['po-patient'] || '';
+        const date = r['po-surgeryDate'] ? fmtDate(r['po-surgeryDate']) : '';
+        const bits = [r['po-caseId']];
+        if(name) bits.push(name);
+        if(date) bits.push(date);
+        return `<option value="${r.id}">${bits.join(' · ')}</option>`;
+      }).join('');
+  if(currentValue) sel.value = currentValue;
+}
+
+// Build a short PMH summary from the pre-op record's checked condition flags.
+function buildPmhFromPreop(r) {
+  if(!r) return '';
+  const labels = {
+    cv:     { htn:'HTN', cad:'CAD', angina:'Angina', mi:'MI', chf:'CHF', murmur:'Murmur', arrythmia:'Arrhythmia' },
+    pulm:   { asthma:'Asthma', copd:'COPD', uri:'URI', 'sleep-apnea':'OSA', smoker:'Smoker' },
+    gastro: { gerd:'GERD', 'hiat-hern':'Hiatal hernia', ulcer:'Ulcer' },
+    renal:  { dialysis:'Dialysis', esrd:'ESRD' },
+    neuro:  { depression:'Depression', 'anxiety-disorder':'Anxiety', seizures:'Seizures', cva:'CVA', 'nm-disease':'Neuromuscular disease' },
+    meta:   { iddm:'T1DM', niddm:'T2DM', thyroid:'Thyroid', obesity:'Obesity', 'morbid-obesity':'Morbid obesity' },
+    other:  { hiv:'HIV', 'hep-c':'Hep C', anemia:'Anemia', cancers:'Cancer Hx', steroids:'Steroids', coagulopathy:'Coagulopathy' }
+  };
+  const parts = [];
+  Object.keys(labels).forEach(prefix => {
+    Object.entries(labels[prefix]).forEach(([flag, lbl]) => {
+      if(r[`po-${prefix}-${flag}`]) parts.push(lbl);
+    });
+  });
+  return parts.join(', ');
+}
+
+// Push the selected pre-op's data into the editable form fields. Called BEFORE
+// a saved draft / sent snapshot is applied on top, so user edits win.
+function autofillFromSelectedCase() {
+  if(!_selectedPreop) return;
+  const r = _selectedPreop;
+  const setVal = (id, v) => { const el = $(id); if(el) el.value = v || ''; };
+  const fullName = [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ').trim()
+                || r['po-patient'] || '';
+  setVal('pof-pt-name',  fullName);
+  setVal('pof-pt-dob',   r['po-dob']);
+  setVal('pof-pt-phone', r['po-contact-phone']);
+  setVal('pof-proc-date', r['po-surgeryDate']);
+  setVal('pof-proc-type', r['po-procedureType']);
+  setVal('pof-surgeon',   r['po-provider']);
+  // Procedure location — surgery center ID → name, fall back to the ID string
+  const centerId = r['po-surgery-center'] || '';
+  const center = (window.surgeryCenters || []).find(c => c.id === centerId);
+  setVal('pof-proc-loc', center?.name || centerId);
+  // Estimated length
+  const hrs = r['po-est-hours'];
+  setVal('pof-proc-length', hrs ? `${hrs} hour${parseFloat(hrs) === 1 ? '' : 's'}` : '');
+  // Medical summary
+  setVal('pof-pmh',       buildPmhFromPreop(r));
+  setVal('pof-allergies', r['po-allergies']);
+  setVal('pof-meds',      r['po-medications']);
+  setVal('pof-past-surg', r['po-surgicalHistory']);
+  // Tobacco/alcohol — auto-Yes if smoker flag is checked, otherwise leave blank
+  document.querySelectorAll('input[name="pof-tobacco-alcohol"]').forEach(rad => rad.checked = false);
+  if(r['po-pulm-smoker']) {
+    const yes = document.querySelector('input[name="pof-tobacco-alcohol"][value="Yes"]');
+    if(yes) yes.checked = true;
+  }
+  // Anesthesia type stays blank — user picks MAC or General manually.
+  document.querySelectorAll('input[name="pof-anesth-type"]').forEach(rad => rad.checked = false);
+}
+
+async function onCaseSelected() {
+  const sel = $('pof-case-select');
+  if(!sel) return;
+  const id = sel.value;
+  const records = window._rawPreopRecords || [];
+  _selectedPreop = records.find(r => r.id === id) || null;
+  updateCaseIndicator();
+  clearFormFieldsOnly();
+  autofillFromSelectedCase();
+  // Priority: if the case has already been sent, show it in view-only mode.
+  // Otherwise, if there's a draft, restore the draft. Otherwise blank slate.
+  const sent = _selectedPreop ? loadSentSnapshotForCurrentCase() : null;
+  if(sent) {
+    applyFormState(sent);
+    setViewOnlyMode(true);
+    showDraftHint(sent, 'sent');
+  } else {
+    setViewOnlyMode(false);
+    const draft = await loadDraftForCurrentCase();
+    if(draft) {
+      applyFormState(draft);
+      showDraftHint(draft);
+    } else {
+      showDraftHint(null);
+    }
+  }
+  refreshPreview();
+}
+window._pofOnCaseChange = onCaseSelected;
 
 function buildModal() {
   if(_modalBuilt) return;
@@ -160,6 +267,14 @@ function buildModal() {
           <div style="font-size:12px;opacity:.75;margin-top:2px">Request labs, H&amp;P, and clearance from the patient's PCP</div>
         </div>
         <button onclick="closePreopFaxModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
+      </div>
+
+      <div style="padding:14px 24px;border-bottom:1px solid var(--border);background:#f8fafc">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Case <span style="color:var(--warn)">*</span></label>
+        <select id="pof-case-select" onchange="window._pofOnCaseChange()" style="width:100%;padding:9px 11px;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;font-weight:500">
+          <option value="">— Pick a case —</option>
+        </select>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;font-style:italic">Patient info on the fax will be pulled from whichever case is selected here.</div>
       </div>
 
       <div style="padding:14px 24px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -196,36 +311,107 @@ function buildModal() {
         </div>
       </div>
 
+      <!-- ─── Patient Info ─────────────────────────────────────────────── -->
       <div style="padding:14px 24px;border-bottom:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:6px">Records Requested</div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Patient Information</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Patient Name</label>
+            <input type="text" id="pof-pt-name" oninput="window._pofPreview()" placeholder="First Last" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Date of Birth</label>
+            <input type="date" id="pof-pt-dob" oninput="window._pofPreview()" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Phone</label>
+            <input type="tel" id="pof-pt-phone" oninput="window._pofPreview()" placeholder="(555) 555-5555" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Procedure Date</label>
+            <input type="date" id="pof-proc-date" oninput="window._pofPreview()" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Procedure Info ───────────────────────────────────────────── -->
+      <div style="padding:14px 24px;border-bottom:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Procedure Information</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Procedure Type</label>
+            <input type="text" id="pof-proc-type" oninput="window._pofPreview()" placeholder="e.g. Wisdom teeth extraction" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Surgeon / Dentist</label>
+            <input type="text" id="pof-surgeon" oninput="window._pofPreview()" placeholder="Dr. ___" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Procedure Location</label>
+            <input type="text" id="pof-proc-loc" oninput="window._pofPreview()" placeholder="e.g. Smith Family Dental, Green Bay" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Estimated Procedure Length</label>
+            <input type="text" id="pof-proc-length" oninput="window._pofPreview()" placeholder="e.g. 1 hour 30 min" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:18px;margin-top:10px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);width:130px">Anesthesia Type</span>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+            <input type="radio" name="pof-anesth-type" value="MAC" onchange="window._pofPreview()" style="margin:0"> MAC
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+            <input type="radio" name="pof-anesth-type" value="General" onchange="window._pofPreview()" style="margin:0"> General
+          </label>
+        </div>
+      </div>
+
+      <!-- ─── Medical Summary ──────────────────────────────────────────── -->
+      <div style="padding:14px 24px;border-bottom:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Medical Summary</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">PMH (Past Medical History)</label>
+            <textarea id="pof-pmh" oninput="window._pofPreview()" rows="2" placeholder="e.g. HTN, T2DM, mild asthma" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;font-family:'DM Sans',sans-serif"></textarea>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Allergies</label>
+            <textarea id="pof-allergies" oninput="window._pofPreview()" rows="2" placeholder="e.g. NKDA, or list" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;font-family:'DM Sans',sans-serif"></textarea>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Medications</label>
+            <textarea id="pof-meds" oninput="window._pofPreview()" rows="2" placeholder="List current meds" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;font-family:'DM Sans',sans-serif"></textarea>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Past Surgical History</label>
+            <textarea id="pof-past-surg" oninput="window._pofPreview()" rows="2" placeholder="Prior surgeries" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;font-family:'DM Sans',sans-serif"></textarea>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:18px;margin-top:10px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);width:130px">Tobacco / Alcohol Use</span>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+            <input type="radio" name="pof-tobacco-alcohol" value="Yes" onchange="window._pofPreview()" style="margin:0"> Yes
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+            <input type="radio" name="pof-tobacco-alcohol" value="No" onchange="window._pofPreview()" style="margin:0"> No
+          </label>
+        </div>
+      </div>
+
+      <!-- ─── Requested Documentation ──────────────────────────────────── -->
+      <div style="padding:14px 24px;border-bottom:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:6px">Requested Documentation</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px">
-          ${RECORDS.map(([id, lbl]) => `
+          ${REQUESTED_DOCS.map(([id, lbl]) => `
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
               <input type="checkbox" id="pof-${id}" onchange="window._pofPreview()" style="width:15px;height:15px"> ${lbl}
             </label>`).join('')}
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-            <input type="checkbox" id="pof-rec-other-cb" onchange="window._pofPreview()" style="width:15px;height:15px"> Other
+            <input type="checkbox" id="pof-doc-other-cb" onchange="window._pofPreview()" style="width:15px;height:15px"> Other
           </label>
         </div>
-        <input type="text" id="pof-rec-other-text" oninput="window._pofPreview()" placeholder="Other records — describe..." style="width:100%;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-top:5px">
-
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin:10px 0 6px">Labs Requested</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px">
-          ${LABS.map(([id, lbl]) => `
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-              <input type="checkbox" id="pof-${id}" onchange="window._pofPreview()" style="width:15px;height:15px"> ${lbl}
-            </label>`).join('')}
-        </div>
-        <input type="text" id="pof-lab-other-text" oninput="window._pofPreview()" placeholder="Other labs — describe..." style="width:100%;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-top:5px">
-
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin:10px 0 6px">Diagnostic Testing Requested</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px">
-          ${TESTS.map(([id, lbl]) => `
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-              <input type="checkbox" id="pof-${id}" onchange="window._pofPreview()" style="width:15px;height:15px"> ${lbl}
-            </label>`).join('')}
-        </div>
-        <input type="text" id="pof-test-other-text" oninput="window._pofPreview()" placeholder="Other testing — describe..." style="width:100%;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-top:5px">
+        <input type="text" id="pof-doc-other-text" oninput="window._pofPreview()" placeholder="Other — describe..." style="width:100%;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-top:6px">
+        <div style="margin-top:8px;font-size:11px;color:var(--text-faint);font-style:italic">Note: Attach any recent stress test results (within the past 5 years), if available.</div>
 
         <div style="display:grid;grid-template-columns:90px repeat(4,140px);align-items:center;margin-top:12px">
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">Urgency</span>
@@ -269,27 +455,47 @@ function applyPreset() {
 window._pofApplyPreset = applyPreset;
 
 function buildPreviewHTML() {
-  const r = readPreopForm();
   const w = workerFromForm();
   const today = todayIso();
 
   const checked = id => $('pof-' + id)?.checked;
-  const recOtherTxt   = $('pof-rec-other-text')?.value.trim() || '';
-  const recOtherOn    = checked('rec-other-cb') || !!recOtherTxt;
-  const labOtherTxt   = $('pof-lab-other-text')?.value.trim() || '';
-  const testOtherTxt  = $('pof-test-other-text')?.value.trim() || '';
-  const urgency       = document.querySelector('input[name="pof-urgency"]:checked')?.value || '';
+  const urgency = document.querySelector('input[name="pof-urgency"]:checked')?.value || '';
+  const anesth  = document.querySelector('input[name="pof-anesth-type"]:checked')?.value || '';
+  const tobAlc  = document.querySelector('input[name="pof-tobacco-alcohol"]:checked')?.value || '';
 
-  const to       = $('pof-to')?.value.trim()       || '';
-  const practice = $('pof-practice')?.value.trim() || '';
-  const fax      = $('pof-fax')?.value.trim()      || '';
-  const phone    = $('pof-phone')?.value.trim()    || '';
+  // Recipient + date range
+  const to        = $('pof-to')?.value.trim()       || '';
+  const practice  = $('pof-practice')?.value.trim() || '';
+  const fax       = $('pof-fax')?.value.trim()      || '';
+  const phone     = $('pof-phone')?.value.trim()    || '';
   const rangeFrom = $('pof-range-from')?.value || '';
   const rangeTo   = $('pof-range-to')?.value || '';
 
+  // Patient + procedure (from modal fields — editable, may override the case)
+  const ptName   = $('pof-pt-name')?.value.trim()    || '';
+  const ptDob    = $('pof-pt-dob')?.value            || '';
+  const ptPhone  = $('pof-pt-phone')?.value.trim()   || '';
+  const procDate = $('pof-proc-date')?.value         || '';
+  const procType = $('pof-proc-type')?.value.trim()  || '';
+  const surgeon  = $('pof-surgeon')?.value.trim()    || '';
+  const procLoc  = $('pof-proc-loc')?.value.trim()   || '';
+  const procLen  = $('pof-proc-length')?.value.trim()|| '';
+
+  // Medical summary
+  const pmh       = $('pof-pmh')?.value.trim()        || '';
+  const allergies = $('pof-allergies')?.value.trim()  || '';
+  const meds      = $('pof-meds')?.value.trim()       || '';
+  const pastSurg  = $('pof-past-surg')?.value.trim()  || '';
+
+  // Documentation other
+  const docOtherTxt = $('pof-doc-other-text')?.value.trim() || '';
+  const docOtherOn  = checked('doc-other-cb') || !!docOtherTxt;
+
   const box = (on, lbl) => `<span style="display:inline-block;width:11px;height:11px;border:1px solid #444;text-align:center;line-height:9px;font-size:9px;font-weight:bold;margin-right:5px;vertical-align:middle">${on?'✗':''}</span>${lbl}`;
   const grid = (items) => `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px 12px">${items.map(s=>`<div>${s}</div>`).join('')}</div>`;
-  const labelVal = (lbl, val) => `<div style="margin-bottom:4px"><span style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase">${lbl}:</span> <span style="border-bottom:1px solid #888;display:inline-block;min-width:140px;padding-left:4px">${val||'&nbsp;'}</span></div>`;
+  const labelVal = (lbl, val, minW) => `<div style="margin-bottom:4px"><span style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase">${lbl}:</span> <span style="border-bottom:1px solid #888;display:inline-block;min-width:${minW||140}px;padding-left:4px">${val||'&nbsp;'}</span></div>`;
+  const block = (lbl, val) => `<div style="margin-bottom:6px"><div style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase;margin-bottom:2px">${lbl}</div><div style="border-bottom:1px solid #888;min-height:14px;padding:2px 4px;font-size:10px">${val||'&nbsp;'}</div></div>`;
+  const sectionHdr = (txt) => `<div style="background:#eef2f7;padding:5px 10px;font-size:10px;font-weight:bold;color:#1d3557;letter-spacing:.5px;margin-top:8px">${txt}</div>`;
 
   return `
     <div style="background:#1d3557;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;margin:-24px -24px 14px">
@@ -299,12 +505,12 @@ function buildPreviewHTML() {
       </div>
       <div style="text-align:right">
         <div style="font-size:18px;font-weight:bold">FAX</div>
-        <div style="font-size:10px;opacity:.85;margin-top:1px">RECORDS REQUEST</div>
+        <div style="font-size:10px;opacity:.85;margin-top:1px">PRE-OP EVALUATION REQUEST</div>
       </div>
     </div>
 
-    <div style="font-size:14px;font-weight:bold;color:#1d3557;margin-bottom:2px">Pre-Operative Records Request</div>
-    <div style="font-size:11px;color:#333;margin-bottom:10px">Please fax the records, labs, and diagnostic testing checked below for the patient identified.</div>
+    <div style="font-size:14px;font-weight:bold;color:#1d3557;margin-bottom:2px">Pre-Operative Evaluation Request</div>
+    <div style="font-size:11px;color:#333;margin-bottom:10px">Please review the patient identified below and fax back the documentation checked, along with the signed Provider Certification.</div>
 
     <div style="background:#fff8d6;border:1px solid #e8c200;border-radius:3px;padding:6px 10px;margin-bottom:10px;font-size:10px">
       <strong style="color:#1d3557">RECORDS DATE RANGE:</strong>
@@ -328,62 +534,80 @@ function buildPreviewHTML() {
       </div>
     </div>
 
-    <div style="background:#eef2f7;padding:5px 10px;font-size:10px;font-weight:bold;color:#1d3557;letter-spacing:.5px">PATIENT INFORMATION</div>
+    ${sectionHdr('PATIENT INFORMATION')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:8px 0 12px">
       <div>
-        ${labelVal('NAME', r.patientName || '')}
-        ${labelVal('PHONE', r.patientPhone || '')}
+        ${labelVal('NAME', ptName)}
+        ${labelVal('PHONE', ptPhone)}
       </div>
       <div>
-        ${labelVal('DOB', r.patientDob ? fmtDate(r.patientDob) : '')}
-        ${labelVal('PROCEDURE DATE', r.surgeryDate ? fmtDate(r.surgeryDate) : '')}
+        ${labelVal('DOB', ptDob ? fmtDate(ptDob) : '')}
+        ${labelVal('PROCEDURE DATE', procDate ? fmtDate(procDate) : '')}
       </div>
     </div>
 
-    <div style="background:#eef2f7;padding:5px 10px;font-size:10px;font-weight:bold;color:#1d3557;letter-spacing:.5px">RECORDS REQUESTED</div>
+    ${sectionHdr('PROCEDURE INFORMATION')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:8px 0 4px">
+      <div>
+        ${labelVal('PROCEDURE TYPE', procType)}
+        ${labelVal('LOCATION', procLoc)}
+      </div>
+      <div>
+        ${labelVal('SURGEON / DENTIST', surgeon)}
+        ${labelVal('EST. LENGTH', procLen)}
+      </div>
+    </div>
+    <div style="font-size:11px;margin:6px 0 12px"><strong style="font-size:9px;color:#555;text-transform:uppercase">Anesthesia Type:</strong>
+      <span style="margin-left:10px">${box(anesth==='MAC', 'MAC')}</span>
+      <span style="margin-left:14px">${box(anesth==='General', 'General')}</span>
+    </div>
+
+    ${sectionHdr('MEDICAL SUMMARY')}
+    <div style="margin:8px 0 4px">
+      ${block('PMH', pmh)}
+      ${block('ALLERGIES', allergies)}
+      ${block('MEDICATIONS', meds)}
+      ${block('PAST SURGICAL HISTORY', pastSurg)}
+      <div style="font-size:11px;margin-top:6px"><strong style="font-size:9px;color:#555;text-transform:uppercase">Tobacco / Alcohol Use:</strong>
+        <span style="margin-left:10px">${box(tobAlc==='Yes', 'Yes')}</span>
+        <span style="margin-left:14px">${box(tobAlc==='No', 'No')}</span>
+      </div>
+    </div>
+
+    ${sectionHdr('REQUESTED DOCUMENTATION')}
     <div style="margin:8px 0 4px">
       ${grid([
-        box(checked('rec-preop-clearance'), 'Pre-Op Clearance Notes'),
-        box(checked('rec-hp'),               'History &amp; Physical (H&amp;P)'),
-        box(checked('rec-cardiac-clear'),    'Cardiac Clearance Letter'),
-        box(checked('rec-meds-allergies'),   'Medication List / Allergies'),
-        box(checked('rec-office-visit'),     'Recent Office Visit Notes'),
-        box(recOtherOn,                       'Other: ' + (recOtherTxt ? `<span style="border-bottom:1px solid #888;padding-left:4px">${recOtherTxt}</span>` : ''))
+        ...REQUESTED_DOCS.map(([id, lbl]) => box(checked(id), lbl)),
+        box(docOtherOn, 'Other: ' + (docOtherTxt ? `<span style="border-bottom:1px solid #888;padding-left:4px">${docOtherTxt}</span>` : ''))
       ])}
     </div>
-
-    <div style="background:#eef2f7;padding:5px 10px;font-size:10px;font-weight:bold;color:#1d3557;letter-spacing:.5px;margin-top:8px">LABS REQUESTED</div>
-    <div style="margin:8px 0 4px">
-      ${grid(LABS.map(([id, lbl]) => box(checked(id), lbl)))}
-    </div>
-    ${labOtherTxt ? `<div style="font-size:10px;margin-top:2px"><strong>OTHER LABS:</strong> <span style="border-bottom:1px solid #888;padding:0 4px">${labOtherTxt}</span></div>` : ''}
-
-    <div style="background:#eef2f7;padding:5px 10px;font-size:10px;font-weight:bold;color:#1d3557;letter-spacing:.5px;margin-top:8px">DIAGNOSTIC TESTING REQUESTED</div>
-    <div style="margin:8px 0 4px">
-      ${grid(TESTS.map(([id, lbl]) => box(checked(id), lbl)))}
-    </div>
-    ${testOtherTxt ? `<div style="font-size:10px;margin-top:2px"><strong>OTHER TESTING:</strong> <span style="border-bottom:1px solid #888;padding:0 4px">${testOtherTxt}</span></div>` : ''}
+    <div style="font-size:10px;margin-top:6px;font-style:italic;color:#666">Note: Attach any recent stress test results (within the past 5 years), if available.</div>
 
     <div style="margin-top:10px;font-size:11px"><strong>URGENCY:</strong>
       ${URGENCY.map(u => `<span style="margin-left:14px">${box(urgency===u, u)}</span>`).join('')}
     </div>
 
-    <div style="margin-top:12px;display:grid;grid-template-columns:2fr 1fr;gap:18px;align-items:end">
-      <div>
-        ${labelVal('PROVIDER', providerName(w))}
+    ${sectionHdr('PROVIDER CERTIFICATION')}
+    <div style="margin:8px 0 4px;font-size:11px;line-height:1.5">
+      <div>I certify that the patient's medical condition has been reviewed and is:</div>
+      <div style="margin:6px 0">
+        <span>${box(false, 'Medically Optimized')}</span>
+        <span style="margin-left:16px">${box(false, 'Not Medically Optimized')}</span>
       </div>
-      <div>
-        ${labelVal('DATE', fmtDate(today))}
+      ${block('MEDICATIONS TO HOLD PRIOR TO PROCEDURE', '')}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:8px">
+        <div>${block('PROVIDER SIGNATURE', '')}</div>
+        <div>${block('PROVIDER NAME / CREDENTIALS', '')}</div>
       </div>
+      ${block('DATE', '')}
     </div>
-    ${r.providerSig ? `<div style="margin-top:4px"><img src="${r.providerSig}" style="height:36px"></div>` : '<div style="margin-top:4px;height:36px;border-bottom:1px solid #888;width:240px"></div>'}
 
     <div style="margin-top:14px;background:#fdecec;border:1px solid #f5b5b5;border-radius:3px;padding:6px 10px;font-size:9px;color:#444;line-height:1.4">
       <strong style="color:#a13030">CONFIDENTIALITY &amp; AUTHORIZATION NOTICE</strong><br>
       This request is made for the purpose of pre-anesthesia evaluation. The patient has authorized release of records to Atlas Anesthesia for the procedure noted above. This facsimile transmission may contain protected health information privileged and confidential under HIPAA and applicable state law. It is intended only for the addressee. If you received this fax in error, please notify Atlas Anesthesia immediately and destroy all copies. Records may be returned via the fax number listed in the "RETURN FAX" field above.
     </div>
 
-    <div style="margin-top:8px;font-size:9px;color:#888;text-align:center">Atlas Anesthesia · Pre-Operative Records Request · Page 1 of 1</div>
+    <div style="margin-top:8px;font-size:9px;color:#888;text-align:center">Atlas Anesthesia · Pre-Operative Evaluation Request · Page 1 of 1</div>
   `;
 }
 
@@ -398,7 +622,12 @@ window._pofPreview = refreshPreview;
 // follow the case automatically — open the same record again, get your draft.
 
 function getCurrentCaseId() {
-  return document.getElementById('po-caseId')?.value
+  // Source of truth is the selected pre-op record. Fall back to the live
+  // pre-op form's case ID only when nothing is selected yet (rare; would
+  // only matter if the modal is opened with the page form pre-populated
+  // but the dropdown hasn't initialised).
+  return _selectedPreop?.['po-caseId']
+      || document.getElementById('po-caseId')?.value
       || document.getElementById('po-caseId-display')?.textContent?.trim()
       || '';
 }
@@ -432,15 +661,37 @@ function applyFormState(state) {
   });
 }
 
-function showDraftHint(state) {
+function showDraftHint(state, mode) {
   const hint = $('pof-draft-hint');
   if(!hint) return;
+  if(mode === 'sent' && state && state.__sentAt) {
+    const when = new Date(state.__sentAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    const to = state.__sentTo ? ` to ${state.__sentTo}` : '';
+    hint.innerHTML = `<span style="color:#16a34a;font-weight:500">📠 Already sent ${when}${to} — view only (locked)</span>`;
+    return;
+  }
   if(state && state.__savedAt) {
     const when = new Date(state.__savedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
     hint.innerHTML = `<span style="color:var(--success,#16a34a);font-weight:500">✓ Draft restored — saved ${when}</span>`;
   } else {
     hint.textContent = 'Patient info pulls from the active Pre-Op record automatically.';
   }
+}
+
+// Lock the modal for a case that's already been sent. The case dropdown stays
+// usable so the user can switch to a different case; everything else gets
+// disabled and the action buttons hidden.
+function setViewOnlyMode(on) {
+  document.querySelectorAll('#preopFaxModal input, #preopFaxModal select').forEach(el => {
+    if(el.id === 'pof-case-select') return;     // keep the case picker live
+    el.disabled = !!on;
+  });
+  const saveBtn  = $('pof-save-draft-btn');
+  const sendBtn  = $('pof-send-btn');
+  const clearBtn = document.querySelector('#preopFaxModal button[onclick="window._pofClear()"]');
+  if(saveBtn)  saveBtn.style.display  = on ? 'none' : '';
+  if(sendBtn)  sendBtn.style.display  = on ? 'none' : '';
+  if(clearBtn) clearBtn.style.display = on ? 'none' : '';
 }
 
 async function loadDraftForCurrentCase() {
@@ -457,6 +708,35 @@ async function loadDraftForCurrentCase() {
     } catch(e) { console.warn('loadDraftForCurrentCase:', e); }
   }
   return r?._preopFaxDraft || null;
+}
+
+function loadSentSnapshotForCurrentCase() {
+  // Reads from the cached records — doesn't hit Firestore. Returns the
+  // form-state object that was sent, or null. Includes __sentAt timestamp.
+  const caseId = getCurrentCaseId();
+  if(!caseId) return null;
+  const records = window._rawPreopRecords || [];
+  const r = records.find(x => x['po-caseId'] === caseId);
+  return r?._preopFaxSent || null;
+}
+
+async function persistSentSnapshot(snapshot) {
+  const caseId = getCurrentCaseId();
+  if(!caseId || typeof window.getDoc !== 'function') return false;
+  try {
+    const snap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    const idx = records.findIndex(r => r['po-caseId'] === caseId);
+    if(idx === -1) return false;
+    records[idx]._preopFaxSent = snapshot;
+    await window.setDoc(window.doc(window.db, 'atlas', 'preop'), { records });
+    window._rawPreopRecords = records;
+    window._cachedPreopRecords = [...records];
+    return true;
+  } catch(e) {
+    console.warn('persistSentSnapshot:', e);
+    return false;
+  }
 }
 
 async function persistDraft(draftOrNull) {
@@ -495,6 +775,12 @@ async function persistDraft(draftOrNull) {
 }
 
 window._pofSaveDraft = async function() {
+  if(!_selectedPreop) {
+    alert('Pick a case from the dropdown at the top before saving a draft.');
+    const sel = $('pof-case-select');
+    if(sel) sel.focus();
+    return;
+  }
   const btn = $('pof-save-draft-btn');
   if(btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
   const state = readFormState();
@@ -506,30 +792,90 @@ window._pofSaveDraft = async function() {
   }
 };
 
-function clearForm() {
-  ['pof-preset','pof-to','pof-practice','pof-fax','pof-phone','pof-range-from','pof-range-to',
-   'pof-rec-other-text','pof-lab-other-text','pof-test-other-text'].forEach(id => {
-    const el = $(id); if(el) el.value = '';
-  });
+function clearFormFieldsOnly() {
+  // Clears recipient + patient info + medical summary + documentation
+  // checkboxes. Does NOT touch the case dropdown or _selectedPreop.
+  const textIds = [
+    'pof-preset','pof-to','pof-practice','pof-fax','pof-phone','pof-range-from','pof-range-to',
+    'pof-pt-name','pof-pt-dob','pof-pt-phone','pof-proc-date',
+    'pof-proc-type','pof-surgeon','pof-proc-loc','pof-proc-length',
+    'pof-pmh','pof-allergies','pof-meds','pof-past-surg',
+    'pof-doc-other-text'
+  ];
+  textIds.forEach(id => { const el = $(id); if(el) el.value = ''; });
   document.querySelectorAll('#preopFaxModal input[type="checkbox"]').forEach(cb => cb.checked = false);
-  document.querySelectorAll('#preopFaxModal input[name="pof-urgency"]').forEach(r => r.checked = false);
+  document.querySelectorAll('#preopFaxModal input[type="radio"]').forEach(r => r.checked = false);
+}
+function clearForm() {
+  clearFormFieldsOnly();
   refreshPreview();
 }
 window._pofClear = clearForm;
 
+function updateCaseIndicator() {
+  const ind = $('pof-case-indicator');
+  if(!ind) return;
+  const caseId = getCurrentCaseId();
+  const r = readPreopForm();
+  const name = r.patientName || '';
+  const dob  = r.patientDob ? fmtDate(r.patientDob) : '';
+  const surg = r.surgeryDate ? fmtDate(r.surgeryDate) : '';
+  const chip = (text, mono) => `<span style="background:rgba(255,255,255,.18);color:#fff;padding:3px 10px;border-radius:20px;font-size:11px;${mono?"font-family:'DM Mono',monospace;":''}font-weight:500">${text}</span>`;
+  const subtle = (text) => `<span style="color:rgba(255,255,255,.75);font-size:12px">${text}</span>`;
+  const parts = [];
+  if(caseId) parts.push(chip(caseId, true));
+  else parts.push(`<span style="color:#ffb">⚠ Pick a case from the dropdown below</span>`);
+  if(name) parts.push(subtle('· ' + name));
+  if(dob)  parts.push(subtle('· DOB ' + dob));
+  if(surg) parts.push(subtle('· Surgery ' + surg));
+  ind.innerHTML = parts.join('');
+}
+
 window.openPreopFaxModal = async function() {
   buildModal();
-  clearForm();
-  $('preopFaxModal').style.display = 'flex';
-  // Look for a saved draft tied to this case ID; if found, restore the form.
-  const draft = await loadDraftForCurrentCase();
-  if(draft) {
-    applyFormState(draft);
-    refreshPreview();
-    showDraftHint(draft);
+  clearFormFieldsOnly();
+  // Refresh the dropdown each open so newly-created pre-ops show up.
+  populateCaseDropdown();
+  // If the user opened the modal from the PCP card on a loaded Pre-Op form,
+  // try to pre-select that case so they don't have to re-pick it.
+  const formCaseId = document.getElementById('po-caseId')?.value || '';
+  const records = window._rawPreopRecords || [];
+  const cw = (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'dev');
+  const match = formCaseId
+    ? records.find(r => r['po-caseId'] === formCaseId && (r.worker || 'dev') === cw)
+    : null;
+  const sel = $('pof-case-select');
+  if(match && sel) {
+    sel.value = match.id;
+    _selectedPreop = match;
   } else {
+    if(sel) sel.value = '';
+    _selectedPreop = null;
+  }
+  updateCaseIndicator();
+  $('preopFaxModal').style.display = 'flex';
+  if(_selectedPreop) {
+    autofillFromSelectedCase();
+    const sent = loadSentSnapshotForCurrentCase();
+    if(sent) {
+      applyFormState(sent);
+      setViewOnlyMode(true);
+      showDraftHint(sent, 'sent');
+    } else {
+      setViewOnlyMode(false);
+      const draft = await loadDraftForCurrentCase();
+      if(draft) {
+        applyFormState(draft);
+        showDraftHint(draft);
+      } else {
+        showDraftHint(null);
+      }
+    }
+  } else {
+    setViewOnlyMode(false);
     showDraftHint(null);
   }
+  refreshPreview();
 };
 
 window.closePreopFaxModal = function() {
@@ -538,6 +884,12 @@ window.closePreopFaxModal = function() {
 };
 
 window._pofSend = async function() {
+  if(!_selectedPreop) {
+    alert('Pick a case from the dropdown at the top before sending the fax.');
+    const sel = $('pof-case-select');
+    if(sel) sel.focus();
+    return;
+  }
   const fax = $('pof-fax')?.value.trim() || '';
   const to  = $('pof-to')?.value.trim()  || '';
   if(!fax) { alert('Please enter a Recipient Fax #.'); return; }
@@ -569,7 +921,10 @@ window._pofSend = async function() {
       const flag = $('po-bellin-fax-sent-flag');
       if(flag) flag.value = 'true';
       syncSendButtonState();
-      // Clear any saved draft for this case — it's been fully sent.
+      // Stash a copy of what we just sent (so the user can come back and view
+      // it later) and clear the working draft.
+      const sentSnapshot = { ...readFormState(), __sentAt: new Date().toISOString(), __sentTo: fax };
+      persistSentSnapshot(sentSnapshot).catch(()=>{});
       persistDraft(null).catch(()=>{});
       window.closePreopFaxModal();
     } else {
