@@ -6,7 +6,12 @@
 // send it auto-checks the "Schedule through Bellin" status box.
 
 const FAX_WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev/fax';
-const ATLAS_RETURN_FAX = '833-485-5191';
+// Return-fax numbers per worker — patients send records back to whoever
+// requested them. Josh and Devarsh have separate dedicated fax lines.
+const RETURN_FAX = {
+  josh: '833-485-5191',
+  dev:  '262-228-1623'
+};
 
 // Add more presets here as needed.
 const FAX_PRESETS = [
@@ -232,10 +237,11 @@ function buildModal() {
       </div>
 
       <div style="padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-        <div style="font-size:12px;color:var(--text-faint)">Patient info pulls from the active Pre-Op record automatically.</div>
+        <div style="font-size:12px;color:var(--text-faint)" id="pof-draft-hint">Patient info pulls from the active Pre-Op record automatically.</div>
         <div style="display:flex;gap:10px">
           <button class="btn btn-ghost" onclick="window._pofClear()">Clear Form</button>
           <button class="btn btn-ghost" onclick="closePreopFaxModal()">Cancel</button>
+          <button id="pof-save-draft-btn" class="btn btn-ghost" onclick="window._pofSaveDraft()" style="color:#0369a1;border-color:#0369a1">💾 Save Draft</button>
           <button id="pof-send-btn" class="btn btn-primary" onclick="window._pofSend()" style="background:#1d3557;border-color:#1d3557">📠 Send Pre-Op Fax</button>
         </div>
       </div>
@@ -318,7 +324,7 @@ function buildPreviewHTML() {
         ${labelVal('FROM', 'Atlas Anesthesia')}
         ${labelVal('REQ. PROVIDER', providerName(w))}
         ${labelVal('DATE', fmtDate(today))}
-        ${labelVal('RETURN FAX', ATLAS_RETURN_FAX)}
+        ${labelVal('RETURN FAX', RETURN_FAX[w] || '')}
       </div>
     </div>
 
@@ -387,6 +393,119 @@ function refreshPreview() {
 }
 window._pofPreview = refreshPreview;
 
+// ── Form-state serialization for drafts ────────────────────────────────────
+// Drafts live on the corresponding pre-op record as `_preopFaxDraft` so they
+// follow the case automatically — open the same record again, get your draft.
+
+function getCurrentCaseId() {
+  return document.getElementById('po-caseId')?.value
+      || document.getElementById('po-caseId-display')?.textContent?.trim()
+      || '';
+}
+
+function readFormState() {
+  const state = { __savedAt: new Date().toISOString() };
+  document.querySelectorAll('#preopFaxModal input, #preopFaxModal select').forEach(el => {
+    const key = el.id || el.name;
+    if(!key) return;
+    if(el.type === 'checkbox') state[key] = el.checked;
+    else if(el.type === 'radio') { if(el.checked) state[key] = el.value; }
+    else state[key] = el.value;
+  });
+  return state;
+}
+
+function applyFormState(state) {
+  if(!state) return;
+  Object.keys(state).forEach(key => {
+    if(key === '__savedAt') return;
+    const el = document.getElementById(key);
+    if(el) {
+      if(el.type === 'checkbox') el.checked = !!state[key];
+      else if(el.type !== 'radio') el.value = state[key] || '';
+      return;
+    }
+    // Radios live by name, not id
+    document.querySelectorAll(`#preopFaxModal input[name="${key}"]`).forEach(r => {
+      if(r.value === state[key]) r.checked = true;
+    });
+  });
+}
+
+function showDraftHint(state) {
+  const hint = $('pof-draft-hint');
+  if(!hint) return;
+  if(state && state.__savedAt) {
+    const when = new Date(state.__savedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    hint.innerHTML = `<span style="color:var(--success,#16a34a);font-weight:500">✓ Draft restored — saved ${when}</span>`;
+  } else {
+    hint.textContent = 'Patient info pulls from the active Pre-Op record automatically.';
+  }
+}
+
+async function loadDraftForCurrentCase() {
+  const caseId = getCurrentCaseId();
+  if(!caseId) return null;
+  // Prefer cached records, fall back to Firestore.
+  let records = window._rawPreopRecords || [];
+  let r = records.find(x => x['po-caseId'] === caseId);
+  if(!r && typeof window.getDoc === 'function') {
+    try {
+      const snap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
+      records = snap.exists() ? (snap.data().records || []) : [];
+      r = records.find(x => x['po-caseId'] === caseId);
+    } catch(e) { console.warn('loadDraftForCurrentCase:', e); }
+  }
+  return r?._preopFaxDraft || null;
+}
+
+async function persistDraft(draftOrNull) {
+  const caseId = getCurrentCaseId();
+  if(!caseId) {
+    alert('Cannot save draft — no Case ID is available. Save the Pre-Op record first.');
+    return false;
+  }
+  if(typeof window.getDoc !== 'function') {
+    alert('Cloud sync is not ready yet. Try again in a moment.');
+    return false;
+  }
+  try {
+    const snap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    const idx = records.findIndex(r => r['po-caseId'] === caseId);
+    if(idx === -1) {
+      alert('No matching Pre-Op record found for Case ID ' + caseId + '. Save the Pre-Op record first.');
+      return false;
+    }
+    if(draftOrNull) {
+      records[idx]._preopFaxDraft = draftOrNull;
+    } else {
+      delete records[idx]._preopFaxDraft;
+    }
+    await window.setDoc(window.doc(window.db, 'atlas', 'preop'), { records });
+    // Refresh the in-memory cache so subsequent opens see the new draft
+    window._rawPreopRecords = records;
+    window._cachedPreopRecords = [...records];
+    return true;
+  } catch(e) {
+    console.error('persistDraft:', e);
+    alert('Could not save draft: ' + e.message);
+    return false;
+  }
+}
+
+window._pofSaveDraft = async function() {
+  const btn = $('pof-save-draft-btn');
+  if(btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
+  const state = readFormState();
+  const ok = await persistDraft(state);
+  if(btn) { btn.textContent = '💾 Save Draft'; btn.disabled = false; }
+  if(ok) {
+    showDraftHint(state);
+    alert('✓ Draft saved! You can come back to this Pre-Op later and the form will be restored.');
+  }
+};
+
 function clearForm() {
   ['pof-preset','pof-to','pof-practice','pof-fax','pof-phone','pof-range-from','pof-range-to',
    'pof-rec-other-text','pof-lab-other-text','pof-test-other-text'].forEach(id => {
@@ -398,10 +517,19 @@ function clearForm() {
 }
 window._pofClear = clearForm;
 
-window.openPreopFaxModal = function() {
+window.openPreopFaxModal = async function() {
   buildModal();
   clearForm();
   $('preopFaxModal').style.display = 'flex';
+  // Look for a saved draft tied to this case ID; if found, restore the form.
+  const draft = await loadDraftForCurrentCase();
+  if(draft) {
+    applyFormState(draft);
+    refreshPreview();
+    showDraftHint(draft);
+  } else {
+    showDraftHint(null);
+  }
 };
 
 window.closePreopFaxModal = function() {
@@ -441,6 +569,8 @@ window._pofSend = async function() {
       const flag = $('po-bellin-fax-sent-flag');
       if(flag) flag.value = 'true';
       syncSendButtonState();
+      // Clear any saved draft for this case — it's been fully sent.
+      persistDraft(null).catch(()=>{});
       window.closePreopFaxModal();
     } else {
       alert('❌ Pre-Op fax failed: ' + (data.error || 'Unknown error'));

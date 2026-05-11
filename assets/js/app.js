@@ -619,7 +619,8 @@ ind.textContent=(w==='dev'?'Devarsh':'Josh')+"'s inventory will be updated";
 if(!window._editingCaseId) { caseItems=[]; renderCaseSupplies(); refreshItemSelect(); }
 updateCaseIdDisplays();
 updatePreopCaseIdDisplay();
-// Review For Tomorrow filters by currentWorker — refresh when worker changes
+// Mid-Case now filters by currentWorker — refresh both lists when worker changes
+if(typeof renderMidCase === 'function') renderMidCase();
 if(typeof renderReviewTomorrow === 'function') renderReviewTomorrow();
 };
 window.setInvTab = function(t) {
@@ -5063,6 +5064,11 @@ renderMidCase();
 async function renderMidCase() {
 const el = document.getElementById('midCaseList');
 if(!el) return;
+// Mid-Case is now strictly per-worker: each logged-in user only sees their
+// own draft cases and pre-ops. The old All/Dev/Josh toggle is hidden because
+// it would be confusing — there's nothing to switch between.
+const mcAll = document.getElementById('mcbtn-all');
+if(mcAll && mcAll.parentElement) mcAll.parentElement.style.display = 'none';
 // Get all saved pre-op records
 let preopRecords = [];
 try {
@@ -5071,11 +5077,9 @@ preopRecords = snap.exists() ? (snap.data().records || []) : [];
 } catch(e) { console.error(e); }
 // Get draft cases
 let drafts = cases.filter(c => c.draft);
-// Filter by worker
-if(midCaseFilter !== 'all') {
-preopRecords = preopRecords.filter(r => r.worker === midCaseFilter);
-drafts = drafts.filter(d => d.worker === midCaseFilter);
-}
+// Always filter to the logged-in worker
+preopRecords = preopRecords.filter(r => (r.worker || 'dev') === currentWorker);
+drafts = drafts.filter(d => (d.worker || 'dev') === currentWorker);
 // Match pre-ops to drafts by caseId
 const draftIds = new Set(drafts.map(d => d.caseId));
 // IDs of already-finalized cases — exclude these from Mid-Case entirely
