@@ -220,6 +220,7 @@ window.confirmAndSendFax = async function() {
       if(typeof window.clearFaxFields === 'function') window.clearFaxFields();
       closeFaxModal();
     } else if(result.success) {
+      try { window.logAudit && window.logAudit('fax-sent', caseLabel, `to ${faxNumber}`); } catch(e){}
       alert('✅ Fax sent to ' + faxNumber + '! SID: ' + (result.sid || 'N/A'));
       if(typeof window.clearFaxFields === 'function') window.clearFaxFields();
       const faxSelEl = document.getElementById('fax-to-select');

@@ -516,6 +516,7 @@ window._insSend = async function() {
         sid: data.sid || '',
         html
       });
+      try { window.logAudit && window.logAudit('insurance-fax-sent', _selectedPreop?.['po-caseId'] || '', `to ${to} (${fax})`); } catch(e){}
       alert('✅ Insurance fax sent to ' + fax + '! SID: ' + (data.sid || 'N/A'));
       window.closeInsuranceSheetModal();
     } else {

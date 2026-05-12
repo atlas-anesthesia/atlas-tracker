@@ -30,6 +30,130 @@ function todayStr() { return localDateStr(new Date()); }
 window.localDateStr = localDateStr;
 window.todayStr = todayStr;
 
+// ── HIPAA: AUTO-LOGOUT AFTER INACTIVITY ───────────────────────────────────────
+// Signs the user out after 20 min of no mouse/keyboard activity. Shows a small
+// warning at 19 min so they can wiggle the mouse to stay in.
+const INACTIVITY_LIMIT_MS = 20 * 60 * 1000;
+const INACTIVITY_WARN_MS  = 60 * 1000;
+let _inactivityTimer = null;
+let _inactivityWarnTimer = null;
+
+function _hideInactivityWarning() {
+  const div = document.getElementById('inactivity-warning');
+  if(div) div.remove();
+}
+function _showInactivityWarning() {
+  let div = document.getElementById('inactivity-warning');
+  if(!div) {
+    div = document.createElement('div');
+    div.id = 'inactivity-warning';
+    div.style.cssText = 'position:fixed;top:20px;right:20px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:14px 18px;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.18);font-size:13px;max-width:280px;color:#92400e';
+    document.body.appendChild(div);
+  }
+  div.innerHTML = '<strong>⏰ Inactivity warning</strong><br>You will be logged out in about 1 minute. Click or move the mouse to stay logged in.';
+}
+function _autoLogout() {
+  _hideInactivityWarning();
+  try { logAudit('auto-logout-inactivity'); } catch(e){}
+  alert('You have been logged out due to inactivity.');
+  signOut(auth).catch(()=>{});
+}
+function resetInactivityTimer() {
+  if(!currentUser) return;
+  clearTimeout(_inactivityTimer);
+  clearTimeout(_inactivityWarnTimer);
+  _hideInactivityWarning();
+  _inactivityWarnTimer = setTimeout(_showInactivityWarning, INACTIVITY_LIMIT_MS - INACTIVITY_WARN_MS);
+  _inactivityTimer = setTimeout(_autoLogout, INACTIVITY_LIMIT_MS);
+}
+['mousemove','mousedown','keydown','touchstart','scroll'].forEach(ev => {
+  document.addEventListener(ev, resetInactivityTimer, { passive: true });
+});
+
+// ── HIPAA: AUDIT LOG ──────────────────────────────────────────────────────────
+// Append-only log in Firestore (atlas/audit_log). Captures who did what and
+// when for important PHI-touching actions. Capped at the last 5000 entries to
+// stay under Firestore's 1MB doc limit. Older entries fall off the bottom.
+async function logAudit(action, target, details) {
+  if(typeof setDoc !== 'function' || typeof doc !== 'function' || !db) return;
+  try {
+    const snap = await getDoc(doc(db, 'atlas', 'audit_log')).catch(()=>null);
+    const entries = snap && snap.exists() ? (snap.data().entries || []) : [];
+    entries.unshift({
+      id: Math.random().toString(36).slice(2, 11),
+      at: new Date().toISOString(),
+      email: currentUser?.email || 'unauthenticated',
+      worker: (typeof currentWorker !== 'undefined' ? currentWorker : '') || '',
+      action: String(action || 'unknown'),
+      target: target ? String(target) : '',
+      details: details ? String(details).slice(0, 240) : ''
+    });
+    if(entries.length > 5000) entries.length = 5000;
+    await setDoc(doc(db, 'atlas', 'audit_log'), { entries });
+  } catch(e) {
+    console.warn('audit log write failed:', e);
+  }
+}
+window.logAudit = logAudit;
+
+// Simple Audit Log viewer. Reads the last N entries and displays them in a
+// modal. Read-only — entries are never editable, that's the whole point.
+let _auditModalBuilt = false;
+function _buildAuditModal() {
+  if(_auditModalBuilt) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'auditLogModal';
+  wrap.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99998;align-items:flex-start;justify-content:center;overflow-y:auto;padding:30px 16px';
+  wrap.innerHTML = `
+    <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:920px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
+      <div style="background:#1d3557;color:#fff;padding:18px 24px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:16px;font-weight:600">🔍 Audit Log</div>
+          <div style="font-size:12px;opacity:.75;margin-top:2px">Append-only record of who did what and when — required for HIPAA.</div>
+        </div>
+        <button onclick="closeAuditLogModal()" style="background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
+      </div>
+      <div id="audit-log-body" style="padding:14px 24px;max-height:70vh;overflow-y:auto"></div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+  _auditModalBuilt = true;
+}
+window.openAuditLogModal = async function() {
+  _buildAuditModal();
+  document.getElementById('auditLogModal').style.display = 'flex';
+  const body = document.getElementById('audit-log-body');
+  body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint)">Loading…</div>';
+  try {
+    const snap = await getDoc(doc(db, 'atlas', 'audit_log'));
+    const entries = snap.exists() ? (snap.data().entries || []) : [];
+    if(!entries.length) {
+      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint)">No entries yet.</div>';
+      return;
+    }
+    body.innerHTML = `
+      <div style="display:grid;grid-template-columns:160px 200px 1fr 1fr;gap:10px;padding-bottom:8px;border-bottom:1px solid var(--border-strong);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">
+        <span>When</span><span>Who</span><span>Action</span><span>Target / Details</span>
+      </div>
+      ${entries.map(e => {
+        const when = new Date(e.at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+        return `<div style="display:grid;grid-template-columns:160px 200px 1fr 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;align-items:start">
+          <span style="color:var(--text-muted)">${when}</span>
+          <span><div style="font-weight:500">${e.email||'—'}</div><div style="font-size:10px;color:var(--text-faint)">${e.worker||''}</div></span>
+          <span><span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">${e.action||''}</span></span>
+          <span style="font-family:'DM Mono',monospace;font-size:11px">${e.target||''}<div style="font-family:'DM Sans',sans-serif;font-size:11px;color:var(--text-faint);margin-top:2px">${e.details||''}</div></span>
+        </div>`;
+      }).join('')}
+    `;
+  } catch(e) {
+    body.innerHTML = `<div style="padding:20px;color:var(--warn)">Error: ${e.message}</div>`;
+  }
+};
+window.closeAuditLogModal = function() {
+  const m = document.getElementById('auditLogModal');
+  if(m) m.style.display = 'none';
+};
+
 // ── MANUAL BACKUP DOWNLOAD ─────────────────────────────────────────────────────
 // ── PI FORMULA GLOBAL STORE ───────────────────────────────────────────────────
 window._atlasFormulaData = null;
@@ -225,7 +349,12 @@ const EMAIL_WORKER_MAP = {
 onAuthStateChanged(auth, async (user) => {
 document.getElementById('loadingScreen').style.display='none';
 if(user) {
+const isNewLogin = !currentUser;
 currentUser = user;
+if(isNewLogin) {
+  try { logAudit('login'); } catch(e){}
+}
+resetInactivityTimer();
 document.getElementById('loginScreen').style.display='none';
 document.getElementById('appScreen').style.display='block';
 // Auto-set worker based on email
@@ -292,7 +421,13 @@ setTimeout(() => {
 if(window.buildCalendar) window.buildCalendar();
 }, 2000);
 } else {
+if(currentUser) {
+  try { logAudit('logout'); } catch(e){}
+}
 currentUser = null;
+clearTimeout(_inactivityTimer);
+clearTimeout(_inactivityWarnTimer);
+_hideInactivityWarning();
 document.getElementById('loginScreen').style.display='flex';
 document.getElementById('appScreen').style.display='none';
 }
@@ -2363,6 +2498,7 @@ if(saveBtn) saveBtn.textContent = '✓ Finalize Case & Update Inventory';
 clearCase();
 renderHistory();
 renderMidCase();
+try { logAudit('case-edit', updatedCase.caseId || editId); } catch(e){}
 alert('✓ Case updated successfully!');
 showTab('history');
 } catch(editErr) {
@@ -2436,6 +2572,7 @@ window._activeDraftId = null;
 csEntries = [];
 renderCSEntries();
 clearCase();
+try { logAudit('case-save', caseId, `total $${total.toFixed(2)}`); } catch(e){}
 alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
 showTab('history');
 } catch(saveErr) {
@@ -3525,6 +3662,7 @@ cleaned.unshift(updated);
 setSyncing(true);
 await savePreopRecords(cleaned);
 setSyncing(false);
+try { logAudit('preop-edit', updated['po-caseId'] || ''); } catch(e){}
 window._editingPreopId = null;
 const editBanner = document.getElementById('preop-edit-banner');
 if(editBanner) editBanner.remove();
@@ -3569,6 +3707,7 @@ cleaned.unshift(record);
 setSyncing(true);
 await savePreopRecords(cleaned);
 setSyncing(false);
+try { logAudit('preop-save', record['po-caseId'] || ''); } catch(e){}
 // Create or update the linked draft case for this Case ID
 // Check for any existing case with this ID (draft OR finalized)
 const existingFinalized = cases.find(c => c.caseId === record['po-caseId'] && !c.draft);

@@ -653,7 +653,7 @@ function getCurrentCaseId() {
 
 function readFormState() {
   const state = { __savedAt: new Date().toISOString() };
-  document.querySelectorAll('#preopFaxModal input, #preopFaxModal select').forEach(el => {
+  document.querySelectorAll('#preopFaxModal input, #preopFaxModal select, #preopFaxModal textarea').forEach(el => {
     const key = el.id || el.name;
     if(!key) return;
     if(el.type === 'checkbox') state[key] = el.checked;
@@ -961,6 +961,7 @@ window._pofSend = async function() {
         })();
 
     if(result.success && !result.scheduled) {
+      try { window.logAudit && window.logAudit('preop-fax-sent', _selectedPreop?.['po-caseId'] || '', `to ${to} (${fax})`); } catch(e){}
       alert('✅ Pre-Op fax sent to ' + fax + '! SID: ' + (result.sid || 'N/A'));
       const flag = $('po-bellin-fax-sent-flag');
       if(flag) flag.value = 'true';
