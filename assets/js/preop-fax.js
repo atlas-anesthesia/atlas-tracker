@@ -232,10 +232,18 @@ async function onCaseSelected() {
   _selectedPreop = records.find(r => r.id === id) || null;
   updateCaseIndicator();
   clearFormFieldsOnly();
+  if(!_selectedPreop) {
+    // No case picked → lock the rest of the modal so the user has to pick one.
+    setCaseRequiredMode(true);
+    showDraftHint(null);
+    refreshPreview();
+    return;
+  }
+  setCaseRequiredMode(false);
   autofillFromSelectedCase();
   // Priority: if the case has already been sent, show it in view-only mode.
   // Otherwise, if there's a draft, restore the draft. Otherwise blank slate.
-  const sent = _selectedPreop ? loadSentSnapshotForCurrentCase() : null;
+  const sent = loadSentSnapshotForCurrentCase();
   if(sent) {
     applyFormState(sent);
     setViewOnlyMode(true);
@@ -693,7 +701,7 @@ function showDraftHint(state, mode) {
 // usable so the user can switch to a different case; everything else gets
 // disabled and the action buttons hidden.
 function setViewOnlyMode(on) {
-  document.querySelectorAll('#preopFaxModal input, #preopFaxModal select').forEach(el => {
+  document.querySelectorAll('#preopFaxModal input, #preopFaxModal select, #preopFaxModal textarea').forEach(el => {
     if(el.id === 'pof-case-select') return;     // keep the case picker live
     el.disabled = !!on;
   });
@@ -703,6 +711,28 @@ function setViewOnlyMode(on) {
   if(saveBtn)  saveBtn.style.display  = on ? 'none' : '';
   if(sendBtn)  sendBtn.style.display  = on ? 'none' : '';
   if(clearBtn) clearBtn.style.display = on ? 'none' : '';
+}
+
+// Disables every form field except the case dropdown until a case is picked.
+// Also dims the body of the modal so it's obvious a case ID is required first.
+function setCaseRequiredMode(locked) {
+  document.querySelectorAll('#preopFaxModal input, #preopFaxModal select, #preopFaxModal textarea').forEach(el => {
+    if(el.id === 'pof-case-select') return;
+    el.disabled = !!locked;
+  });
+  const saveBtn = $('pof-save-draft-btn');
+  const sendBtn = $('pof-send-btn');
+  if(saveBtn) saveBtn.disabled = !!locked;
+  if(sendBtn) sendBtn.disabled = !!locked;
+  // Make the prompt above the dropdown louder when locked.
+  const hint = document.querySelector('#preopFaxModal #pof-case-select')?.parentElement?.querySelector('div[style*="font-style:italic"]');
+  if(hint) {
+    if(locked) {
+      hint.innerHTML = '<span style="color:var(--warn);font-weight:600">⚠ Pick a case ID above before filling in anything else.</span>';
+    } else {
+      hint.textContent = 'Patient info on the fax will be pulled from whichever case is selected here.';
+    }
+  }
 }
 
 async function loadDraftForCurrentCase() {
@@ -866,6 +896,7 @@ window.openPreopFaxModal = async function() {
   updateCaseIndicator();
   $('preopFaxModal').style.display = 'flex';
   if(_selectedPreop) {
+    setCaseRequiredMode(false);
     autofillFromSelectedCase();
     const sent = loadSentSnapshotForCurrentCase();
     if(sent) {
@@ -883,7 +914,10 @@ window.openPreopFaxModal = async function() {
       }
     }
   } else {
+    // No case pre-selected (modal opened without a current pre-op) — lock
+    // everything until the user picks a case ID from the dropdown.
     setViewOnlyMode(false);
+    setCaseRequiredMode(true);
     showDraftHint(null);
   }
   refreshPreview();
