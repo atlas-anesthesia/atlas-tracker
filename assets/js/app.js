@@ -96,7 +96,8 @@ let caseItems = [];
 let currentWorker = 'dev';
 let currentInvTab = 'dev';
 let currentHistoryFilter = 'all';
-let pendingImageData = null;
+let pendingImageData = null;       // legacy mirror of pendingImages[0] for older refs
+let pendingImages = [];            // [{id, dataUrl}] — supports multiple case-log photos
 let currentUser = null;
 // -- DEFAULT INVENTORY --
 const ITEM_TEMPLATE = [
@@ -2146,50 +2147,120 @@ el.innerHTML=html;
 window.updateQty=(idx,val)=>{caseItems[idx].qty=Math.max(0,parseInt(val)||0);renderCaseSupplies();};
 window.removeItem=(idx)=>{caseItems.splice(idx,1);renderCaseSupplies();refreshItemSelect();};
 // -- IMAGE --
-window.handleImageUpload = function(e) {
-const file = e.target.files[0];
-if(!file) return;
-const reader = new FileReader();
-reader.onload = function(ev) {
-  const img = new Image();
-  img.onload = function() {
-    // Resize so the longest side is at most 1600px and re-encode as JPEG.
-    // This keeps cases under Firestore's 1MB doc limit and converts iPhone
-    // HEICs (when the browser can decode them) into a universally-saveable
-    // standard JPEG data URL.
-    const maxSide = 1600;
-    const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-    const w = Math.round(img.width * scale) || img.width;
-    const h = Math.round(img.height * scale) || img.height;
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, w, h);
-    pendingImageData = canvas.toDataURL('image/jpeg', 0.85);
-    document.getElementById('uploadZone').style.display = 'none';
-    document.getElementById('imgPreview').style.display = 'block';
-    document.getElementById('previewImg').src = pendingImageData;
-  };
-  img.onerror = function() {
-    const isHeic = /\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type);
-    if(isHeic) {
-      alert('This is a HEIC photo — most browsers can\'t display them.\n\nEasiest fix: on iPhone, open Settings → Camera → Formats → pick "Most Compatible". New photos will be JPEG.\n\nFor this photo: open it in the Photos app, tap Share → Save to Files, and pick a JPEG-compatible location, then upload that file.');
-    } else {
-      alert('Could not load this image. Try a JPEG or PNG.');
+// Helper: read the photos saved on a case, falling back to the legacy single
+// imageData string if no new-format images array is present.
+function caseImages(c) {
+  if(!c) return [];
+  if(Array.isArray(c.images) && c.images.length) return c.images;
+  if(c.imageData) return [{ id: 'legacy', dataUrl: c.imageData }];
+  return [];
+}
+window.caseImages = caseImages;
+
+// Resize + JPEG-encode a single uploaded File. Returns {id, dataUrl} or throws.
+// Each photo is stored as a base64 string inside the case record. Firestore
+// caps a document at 1MB total — and the cases doc holds EVERY case — so we
+// have to keep each photo small. 1100px max side + 0.7 JPEG quality lands
+// around 60-120KB per photo (~base64-encoded), comfortable for several photos
+// across many cases.
+const CASE_PHOTO_MAX_SIDE = 1100;
+const CASE_PHOTO_QUALITY = 0.70;
+const CASE_PHOTO_LIMIT = 4;
+
+function _processCaseImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, CASE_PHOTO_MAX_SIDE / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale) || img.width;
+        const h = Math.round(img.height * scale) || img.height;
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve({ id: uid(), dataUrl: canvas.toDataURL('image/jpeg', CASE_PHOTO_QUALITY) });
+      };
+      img.onerror = () => {
+        const isHeic = /\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type);
+        reject(isHeic ? 'HEIC' : 'BAD_IMAGE');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+window.handleImageUpload = async function(e) {
+  const files = Array.from(e.target.files || []);
+  if(!files.length) return;
+  let heicWarned = false, badWarned = false, limitWarned = false;
+  for(const file of files) {
+    if(pendingImages.length >= CASE_PHOTO_LIMIT) {
+      if(!limitWarned) {
+        limitWarned = true;
+        alert(`Maximum of ${CASE_PHOTO_LIMIT} photos per case. Remove one if you want to add another.`);
+      }
+      break;
     }
-    e.target.value = '';
-  };
-  img.src = ev.target.result;
+    try {
+      const item = await _processCaseImageFile(file);
+      pendingImages.push(item);
+    } catch(err) {
+      if(err === 'HEIC' && !heicWarned) {
+        heicWarned = true;
+        alert('A HEIC photo was skipped — most browsers can\'t display them.\n\nFix: on iPhone, open Settings → Camera → Formats → "Most Compatible". New photos will be JPEG.');
+      } else if(err !== 'HEIC' && !badWarned) {
+        badWarned = true;
+        alert('Could not load one of the images. Try JPEG or PNG.');
+      }
+    }
+  }
+  e.target.value = '';
+  renderCaseImagePreviews();
 };
-reader.readAsDataURL(file);
+
+function renderCaseImagePreviews() {
+  const list = document.getElementById('imgPreviewList');
+  const zone = document.getElementById('uploadZone');
+  if(!zone) return;
+  // Zone always visible so users can add more pictures.
+  zone.style.display = 'block';
+  if(!list) { pendingImageData = pendingImages[0]?.dataUrl || null; return; }
+  if(!pendingImages.length) {
+    list.innerHTML = '';
+    list.style.display = 'none';
+  } else {
+    list.style.display = 'grid';
+    list.innerHTML = pendingImages.map((im, idx) => `
+      <div style="position:relative;display:inline-block">
+        <img src="${im.dataUrl}" style="width:100%;max-width:180px;height:120px;object-fit:cover;border:1px solid var(--border);border-radius:6px;display:block;cursor:pointer" onclick="openPendingLightbox(${idx})">
+        <button type="button" onclick="removeImage('${im.id}')" title="Remove this photo" style="position:absolute;top:4px;right:4px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:14px;cursor:pointer;line-height:1">×</button>
+      </div>
+    `).join('');
+  }
+  // Keep the legacy single var pointing at the first image for any leftover refs.
+  pendingImageData = pendingImages[0]?.dataUrl || null;
+}
+window.renderCaseImagePreviews = renderCaseImagePreviews;
+
+window.openPendingLightbox = function(idx) {
+  const im = pendingImages[idx];
+  if(!im) return;
+  document.getElementById('lightboxImg').src = im.dataUrl;
+  document.getElementById('lightbox').style.display = 'flex';
 };
-window.removeImage=function(){
-pendingImageData=null;
-document.getElementById('uploadZone').style.display='block';
-document.getElementById('imgPreview').style.display='none';
-document.getElementById('previewImg').src='';
-document.getElementById('caseImageInput').value='';
+
+window.removeImage = function(id) {
+  // No arg → clear all (used by clearCase / post-save reset).
+  if(id === undefined || id === null) {
+    pendingImages = [];
+  } else {
+    pendingImages = pendingImages.filter(im => im.id !== id);
+  }
+  const input = document.getElementById('caseImageInput');
+  if(input) input.value = '';
+  renderCaseImagePreviews();
 };
 // -- SAVE CASE --
 window.saveCase = async function() {
@@ -2234,10 +2305,9 @@ caseComments:comments, worker:currentWorker,
 items: caseItems.map(i=>({id:i.id,generic:i.generic||'',name:i.name||'',cost:parseFloat(i.cost)||0,qty:parseFloat(i.qty)||0,lineTotal:(parseFloat(i.cost)||0)*(parseFloat(i.qty)||0)})),
 savedCsEntries: csEntries.map(e=>({...e})),
 csTotal, total,
-// Use whatever's currently in the upload preview — that's the picture the
-// user sees right now (existing one was reloaded by editFinalizedCase, or a
-// new upload, or null after Remove).
-imageData: pendingImageData || null
+// Whatever photos are currently in the upload area — could be original
+// loaded by editFinalizedCase, new uploads, or empty after Remove.
+images: pendingImages.map(im => ({ id: im.id, dataUrl: im.dataUrl }))
 };
 // Inventory diff — reverse old, apply new
 (oldCase.items || []).forEach(oldItem => {
@@ -2338,7 +2408,7 @@ patientEmail: (() => { const preopRec = (window._rawPreopRecords||[]).find(r=>r[
 items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
 savedCsEntries:csEntries.map(e=>({...e})),
 csTotal:csTotal2,
-total,imageData:pendingImageData||null,
+total, images: pendingImages.map(im => ({ id: im.id, dataUrl: im.dataUrl })),
 savedAt:new Date().toISOString()
 });
 } // end duplicate guard
@@ -2847,7 +2917,13 @@ return `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-
 <button onclick="event.stopPropagation();toggleHistoryDropdown('${c.id}');viewLinkedPreop('${c.caseId}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--info);font-family:inherit">📋 Edit Pre-Op</button><button onclick="event.stopPropagation();toggleHistoryDropdown('${c.id}');deleteFinalizedCase(this)" data-id="${c.id}" data-label="${c.procedure||c.caseId||'Case'}" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--warn);font-family:inherit">🗑 Delete</button></div></div></div></div><div class="case-items-list" id="detail_${c.id}">
 ${c.items&&c.items.length?c.items.map(i=>`<div class="case-item-row"><span>${i.generic} × ${i.qty}</span><span>$${i.lineTotal.toFixed(2)}</span></div>`).join(''):'<div style="font-size:13px;color:var(--text-faint);padding:6px 0">No supplies logged yet.</div>'}
 ${c.notes?`<div style="margin-top:6px;font-size:12px;color:var(--text-faint);font-style:italic">${c.notes}</div>`:''}
-${c.imageData?`<img src="${c.imageData}" class="case-log-img" onclick="openLightbox('${c.id}')" title="Click to enlarge">`:''}
+${(function(){
+  const imgs = caseImages(c);
+  if(!imgs.length) return '';
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">` + imgs.map((im, idx) =>
+    `<img src="${im.dataUrl}" class="case-log-img" onclick="openLightbox('${c.id}', ${idx})" title="Click to enlarge" style="cursor:pointer">`
+  ).join('') + `</div>`;
+})()}
 ${c.preopId?`<div style="margin-top:8px"><button onclick="event.stopPropagation();viewLinkedPreop('${c.preopId}')" class="btn btn-ghost btn-sm" style="font-size:11px">📋 View Pre-Op Record</button></div>`:''}
 </div></div>`;
 }).join('');
@@ -2874,27 +2950,12 @@ stock: inv ? getStock(inv, currentWorker) : parseFloat(i.qty) || 1
 };
 });
 csEntries = (c.savedCsEntries || []).map(e => ({...e}));
-// 3b. Restore the case-log image preview from the saved data so that
-// (a) the user sees what's already attached, and (b) the edit save path
-// has a value in pendingImageData to write back. Without this, opening
-// the edit form silently wipes the saved image on the next save.
-if(c.imageData) {
-  pendingImageData = c.imageData;
-  const uz = document.getElementById('uploadZone');
-  const ip = document.getElementById('imgPreview');
-  const pv = document.getElementById('previewImg');
-  if(uz) uz.style.display = 'none';
-  if(ip) ip.style.display = 'block';
-  if(pv) pv.src = c.imageData;
-} else {
-  pendingImageData = null;
-  const uz = document.getElementById('uploadZone');
-  const ip = document.getElementById('imgPreview');
-  const pv = document.getElementById('previewImg');
-  if(uz) uz.style.display = 'block';
-  if(ip) ip.style.display = 'none';
-  if(pv) pv.src = '';
-}
+// 3b. Restore the case-log photo previews from the saved data so the user
+// sees what's already attached, and the edit save path has the data to
+// write back. Without this, opening the edit form silently wipes saved
+// photos on the next save.
+pendingImages = caseImages(c).map(im => ({ id: im.id || uid(), dataUrl: im.dataUrl }));
+renderCaseImagePreviews();
 // 4. Switch tab manually (bypasses refreshDraftPicker)
 document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
 document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
@@ -3080,10 +3141,12 @@ window.toggleHistoryDropdown=function(id){
 document.addEventListener('click',function(){
   document.querySelectorAll('[id^="history-menu-"],[id^="midcase-menu-"]').forEach(m=>m.style.display='none');
 });
-window.openLightbox=function(caseId){
+window.openLightbox=function(caseId, idx){
 const c=cases.find(x=>x.id===caseId);
-if(!c||!c.imageData)return;
-document.getElementById('lightboxImg').src=c.imageData;
+const imgs=caseImages(c);
+if(!imgs.length)return;
+const i = (typeof idx === 'number' && idx >= 0 && idx < imgs.length) ? idx : 0;
+document.getElementById('lightboxImg').src=imgs[i].dataUrl;
 document.getElementById('lightbox').style.display='flex';
 };
 window.closeLightbox=function(){document.getElementById('lightbox').style.display='none';};
@@ -3289,7 +3352,7 @@ data['mallampati'] = mall ? mall.value : '';
 return data;
 }
 function getPreopTextFields() {
-const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
+const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-contact-name','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
 const data = {};
@@ -3595,7 +3658,7 @@ if(procedureEl) procedureEl.value = preopRecord['po-procedureType'] || '';
 }
 window.clearPreop = function() {
 // Clear text fields
-['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-patientEmail','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel',
+['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-patientEmail','po-contact-name','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel',
 'po-height-ft','po-height-in','po-weight-lbs','po-iv-difficulty-comment','po-anesthesia-issues-comment',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other',

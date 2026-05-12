@@ -381,6 +381,15 @@ function buildPreviewHTML() {
 
     ${body}
 
+    <div style="margin-top:18px;display:grid;grid-template-columns:1fr 200px;gap:18px;align-items:end">
+      <div>
+        <div style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase;margin-bottom:2px">Provider Signature</div>
+        <img src="assets/signatures/${w === 'josh' ? 'josh' : 'dev'}.png" style="height:46px;mix-blend-mode:multiply;display:block" alt="Signature" onerror="this.style.display='none'">
+        <div style="border-top:1px solid #000;width:240px;font-size:10px;padding-top:2px;margin-top:2px">${providerName(w)} &middot; Atlas Anesthesia</div>
+      </div>
+      <div style="text-align:right;font-size:10px;color:#555">DATE: <span style="border-bottom:1px solid #888;padding:0 6px">${fmtDate(today)}</span></div>
+    </div>
+
     <div style="margin-top:14px;background:#fdecec;border:1px solid #f5b5b5;border-radius:3px;padding:6px 10px;font-size:9px;color:#444;line-height:1.4">
       <strong style="color:#a13030">CONFIDENTIALITY &amp; AUTHORIZATION NOTICE</strong><br>
       This claim contains protected health information privileged and confidential under HIPAA and applicable state law. It is intended only for the addressee. If you received this fax in error, please notify Atlas Anesthesia immediately and destroy all copies.
