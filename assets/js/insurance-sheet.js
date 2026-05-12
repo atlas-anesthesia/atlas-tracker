@@ -156,11 +156,13 @@ function buildModal() {
         <!-- Filled in by setMode() based on Flat Fee vs CDT Codes -->
       </div>
 
+      <div style="padding:10px 24px;border-bottom:1px solid var(--border)">${(typeof window.scheduleToggleHTML==='function')?window.scheduleToggleHTML('ins'):''}</div>
+
       <div style="padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
         <div style="font-size:12px;color:var(--text-faint)">Patient info pulls from the current case being finalized.</div>
         <div style="display:flex;gap:10px">
           <button class="btn btn-ghost" onclick="closeInsuranceSheetModal()">Cancel</button>
-          <button id="ins-send-btn" class="btn btn-primary" onclick="window._insSend()" style="background:#1d3557;border-color:#1d3557">📠 Send Insurance Fax</button>
+          <button id="ins-send-btn" data-fax-send="ins" class="btn btn-primary" onclick="window._insSend()" style="background:#1d3557;border-color:#1d3557">📠 Send Insurance Fax</button>
         </div>
       </div>
 
@@ -457,24 +459,31 @@ window._insSend = async function() {
   if(!fax.startsWith('+')) { alert('Fax number needs the country code, e.g. +18005551234'); return; }
   if(!to)  { alert('Please enter the Insurer / Recipient name (or pick a preset).'); return; }
 
+  const choice = (typeof window.readScheduleChoice === 'function') ? window.readScheduleChoice('ins') : { mode: 'now' };
+  if(choice.error) { alert(choice.error); return; }
+
   const btn = $('ins-send-btn');
-  if(btn) { btn.textContent = 'Sending...'; btn.disabled = true; }
+  const origLabel = btn?.textContent;
+  if(btn) { btn.textContent = choice.mode === 'later' ? 'Scheduling...' : 'Sending...'; btn.disabled = true; }
 
   try {
     const html = buildPreviewHTML();
     const w = workerNow();
-    const res = await fetch(FAX_WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: fax,
-        caseId: to,        // shows in worker logs as the recipient label
-        worker: w,
-        html
-      })
-    });
-    const data = await res.json();
-    if(res.ok && data.success) {
+    const result = (typeof window.sendOrScheduleFax === 'function')
+      ? await window.sendOrScheduleFax({ faxNumber: fax, caseId: to, worker: w, html, source: 'insurance' }, choice)
+      : await (async () => {
+          const rsp = await fetch(FAX_WORKER_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ to:fax, caseId:to, worker:w, html }) });
+          const d = await rsp.json();
+          return { success: !!(rsp.ok && d.success), scheduled: false, sid: d.sid, error: d.error };
+        })();
+    if(result.scheduled && result.success) {
+      const when = new Date(choice.sendAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      alert('📅 Insurance fax scheduled for ' + when + ' to ' + fax + '. It will be sent automatically.');
+      window.closeInsuranceSheetModal();
+      return;
+    }
+    const data = { success: result.success, sid: result.sid, error: result.error };
+    if(data.success) {
       // Build a compact log entry of what was sent. Total is best-effort.
       const total = _mode === 'flat'
         ? (parseFloat($('ins-flat-amount')?.value) || 0)
@@ -506,7 +515,7 @@ window._insSend = async function() {
   } catch(e) {
     alert('❌ Error sending fax: ' + e.message);
   } finally {
-    if(btn) { btn.textContent = '📠 Send Insurance Fax'; btn.disabled = false; }
+    if(btn) { btn.textContent = origLabel || '📠 Send Insurance Fax'; btn.disabled = false; }
   }
 };
 

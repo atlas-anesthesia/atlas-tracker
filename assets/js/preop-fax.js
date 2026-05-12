@@ -53,12 +53,12 @@ function syncSendButtonState() {
     btn.style.background   = '#16a34a';
     btn.style.borderColor  = '#16a34a';
     btn.style.color        = '#fff';
-    btn.innerHTML = '📠 PRE-OP FAX <span style="background:rgba(255,255,255,.22);padding:2px 9px;border-radius:10px;font-size:10px;font-weight:700;margin-left:8px;letter-spacing:.6px">SENT</span>';
+    btn.innerHTML = '📋 PRE-OP EVALUATION REQUEST <span style="background:rgba(255,255,255,.22);padding:2px 9px;border-radius:10px;font-size:10px;font-weight:700;margin-left:8px;letter-spacing:.6px">SENT</span>';
   } else {
     btn.style.background   = '';
     btn.style.borderColor  = '#0369a1';
     btn.style.color        = '#0369a1';
-    btn.innerHTML = '📠 SEND PRE-OP FAX';
+    btn.innerHTML = '📋 PRE-OP EVALUATION REQUEST';
   }
 }
 window._pofSyncBtn = syncSendButtonState;
@@ -263,7 +263,7 @@ function buildModal() {
     <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:880px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
       <div style="background:#1d3557;color:#fff;padding:18px 24px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-size:16px;font-weight:600">📋 Send Pre-Op Records Request Fax</div>
+          <div style="font-size:16px;font-weight:600">📋 PRE-OP EVALUATION REQUEST</div>
           <div style="font-size:12px;opacity:.75;margin-top:2px">Request labs, H&amp;P, and clearance from the patient's PCP</div>
         </div>
         <button onclick="closePreopFaxModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
@@ -422,13 +422,15 @@ function buildModal() {
         </div>
       </div>
 
+      <div style="padding:10px 24px;border-bottom:1px solid var(--border)">${(typeof window.scheduleToggleHTML==='function')?window.scheduleToggleHTML('pof'):''}</div>
+
       <div style="padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
         <div style="font-size:12px;color:var(--text-faint)" id="pof-draft-hint">Patient info pulls from the active Pre-Op record automatically.</div>
         <div style="display:flex;gap:10px">
           <button class="btn btn-ghost" onclick="window._pofClear()">Clear Form</button>
           <button class="btn btn-ghost" onclick="closePreopFaxModal()">Cancel</button>
           <button id="pof-save-draft-btn" class="btn btn-ghost" onclick="window._pofSaveDraft()" style="color:#0369a1;border-color:#0369a1">💾 Save Draft</button>
-          <button id="pof-send-btn" class="btn btn-primary" onclick="window._pofSend()" style="background:#1d3557;border-color:#1d3557">📠 Send Pre-Op Fax</button>
+          <button id="pof-send-btn" data-fax-send="pof" class="btn btn-primary" onclick="window._pofSend()" style="background:#1d3557;border-color:#1d3557">📠 Send Pre-Op Fax</button>
         </div>
       </div>
 
@@ -896,42 +898,43 @@ window._pofSend = async function() {
   if(!fax.startsWith('+')) { alert('Fax number needs the country code, e.g. +19205551234'); return; }
   if(!to)  { alert('Please enter the Recipient Name (or pick a preset).'); return; }
 
+  const choice = (typeof window.readScheduleChoice === 'function') ? window.readScheduleChoice('pof') : { mode: 'now' };
+  if(choice.error) { alert(choice.error); return; }
+
   const btn = $('pof-send-btn');
-  if(btn) { btn.textContent = 'Sending...'; btn.disabled = true; }
+  const origLabel = btn?.textContent;
+  if(btn) { btn.textContent = choice.mode === 'later' ? 'Scheduling...' : 'Sending...'; btn.disabled = true; }
 
   try {
     const html = buildPreviewHTML();
     const w = workerFromForm();
     const r = readPreopForm();
-    const res = await fetch(FAX_WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: fax,
-        caseId: to,                    // shows up as the recipient label in the worker logs
-        worker: w,
-        html
-      })
-    });
-    const data = await res.json();
-    if(res.ok && data.success) {
-      alert('✅ Pre-Op fax sent to ' + fax + '! SID: ' + (data.sid || 'N/A'));
-      // Mark the pre-op record as having had a fax sent — the button turns
-      // green with a SENT tag, and the state persists with the saved record.
+    const result = (typeof window.sendOrScheduleFax === 'function')
+      ? await window.sendOrScheduleFax({ faxNumber: fax, caseId: to, worker: w, html, source: 'pre-op' }, choice)
+      : await (async () => {
+          const rsp = await fetch(FAX_WORKER_URL, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ to: fax, caseId: to, worker: w, html }) });
+          const d = await rsp.json();
+          return { success: !!(rsp.ok && d.success), scheduled: false, sid: d.sid, error: d.error };
+        })();
+
+    if(result.success && !result.scheduled) {
+      alert('✅ Pre-Op fax sent to ' + fax + '! SID: ' + (result.sid || 'N/A'));
       const flag = $('po-bellin-fax-sent-flag');
       if(flag) flag.value = 'true';
       syncSendButtonState();
-      // Stash a copy of what we just sent (so the user can come back and view
-      // it later) and clear the working draft.
       const sentSnapshot = { ...readFormState(), __sentAt: new Date().toISOString(), __sentTo: fax };
       persistSentSnapshot(sentSnapshot).catch(()=>{});
       persistDraft(null).catch(()=>{});
       window.closePreopFaxModal();
+    } else if(result.success && result.scheduled) {
+      const when = new Date(choice.sendAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      alert('📅 Pre-Op fax scheduled for ' + when + ' to ' + fax + '. It will be sent automatically. (Use 📅 Scheduled Faxes to cancel.)');
+      window.closePreopFaxModal();
     } else {
-      alert('❌ Pre-Op fax failed: ' + (data.error || 'Unknown error'));
+      alert('❌ Pre-Op fax failed: ' + (result.error || 'Unknown error'));
     }
   } catch(e) {
-    alert('❌ Error sending fax: ' + e.message);
+    alert('❌ Error: ' + e.message);
   } finally {
     if(btn) { btn.textContent = '📠 Send Pre-Op Fax'; btn.disabled = false; }
   }

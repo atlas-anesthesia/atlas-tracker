@@ -2789,8 +2789,20 @@ function renderHistory() {
 const el=document.getElementById('caseHistoryList');
 let filtered=cases;
 if(currentHistoryFilter!=='all') filtered=cases.filter(c=>c.worker===currentHistoryFilter);
-// Sort oldest → newest by date
-filtered = [...filtered].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+// Sort: upcoming cases first (soonest first), then past cases (most recent
+// first). This puts what's most relevant — what's coming up and what just
+// happened — at the top.
+const today_ = todayStr();
+filtered = [...filtered].sort((a,b) => {
+  const aDate = a.date || '';
+  const bDate = b.date || '';
+  const aFuture = aDate >= today_;
+  const bFuture = bDate >= today_;
+  if (aFuture && !bFuture) return -1;
+  if (!aFuture && bFuture) return 1;
+  if (aFuture && bFuture) return aDate.localeCompare(bDate);
+  return bDate.localeCompare(aDate);
+});
 const invoices = window._savedInvoices || [];
 if(!filtered.length){el.innerHTML='<div class="empty-state">No cases recorded yet</div>';return;}
 const today = todayStr();

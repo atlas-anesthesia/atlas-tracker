@@ -105,6 +105,12 @@ window.openFaxModalFromForm = function() {
   // Build preview and show modal
   document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
   document.getElementById('faxModal').style.display = 'flex';
+  // Inject the shared Send-now/Schedule-later toggle into the slot above the
+  // action buttons. Reset to "Send now" each open.
+  const slot = document.getElementById('fax-modal-schedule-slot');
+  if(slot && typeof window.scheduleToggleHTML === 'function') {
+    slot.innerHTML = window.scheduleToggleHTML('fax');
+  }
 };
 
 // Called from the 📠 Fax button on a saved pre-op record in the history list
@@ -158,6 +164,10 @@ window.openFaxModal = async function(id) {
     if(!preview) { alert('faxPreviewContent not found.'); return; }
     preview.innerHTML = buildFaxHTML(r);
     modal.style.display = 'flex';
+    const slot = document.getElementById('fax-modal-schedule-slot');
+    if(slot && typeof window.scheduleToggleHTML === 'function') {
+      slot.innerHTML = window.scheduleToggleHTML('fax');
+    }
   } catch(e) {
     console.error('openFaxModal error:', e);
     alert('Error: ' + e.message + '\nStack: ' + e.stack);
@@ -175,32 +185,42 @@ window.confirmAndSendFax = async function() {
   if(!faxNumber.startsWith('+')) { alert('Please include the country code, e.g. +12345678901'); return; }
   if(!_faxRecord) { alert('No record loaded.'); return; }
 
+  const choice = (typeof window.readScheduleChoice === 'function') ? window.readScheduleChoice('fax') : { mode: 'now' };
+  if(choice.error) { alert(choice.error); return; }
+
   const btn = document.getElementById('fax-send-btn');
-  btn.textContent = 'Sending...';
-  btn.disabled = true;
+  const origLabel = btn?.textContent;
+  if(btn) { btn.textContent = choice.mode === 'later' ? 'Scheduling...' : 'Sending...'; btn.disabled = true; }
 
   try {
     const faxHtml = buildFaxHTML(_faxRecord);
-    const res = await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/fax', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: faxNumber,
-        caseId: (function() {
-          const sel = document.getElementById('fax-to-select');
-          const custom = document.getElementById('fax-to-custom');
-          const hidden = document.getElementById('fax-to');
-          if(sel && sel.value === '__custom__') return custom?.value?.trim() || 'Custom Center';
-          return hidden?.value?.trim() || sel?.options[sel?.selectedIndex]?.text || 'Atlas Anesthesia';
-        })(),
-        worker: _faxRecord.worker || window.currentWorker || 'dev',
-        html: faxHtml
-      })
-    });
-    const data = await res.json();
-    if(res.ok && data.success) {
-      alert('✅ Fax sent to ' + faxNumber + '! SID: ' + (data.sid || 'N/A'));
-      // Clear all fields for the next fax
+    const caseLabel = (function() {
+      const sel = document.getElementById('fax-to-select');
+      const custom = document.getElementById('fax-to-custom');
+      const hidden = document.getElementById('fax-to');
+      if(sel && sel.value === '__custom__') return custom?.value?.trim() || 'Custom Center';
+      return hidden?.value?.trim() || sel?.options[sel?.selectedIndex]?.text || 'Atlas Anesthesia';
+    })();
+    const worker = _faxRecord.worker || window.currentWorker || 'dev';
+
+    const result = (typeof window.sendOrScheduleFax === 'function')
+      ? await window.sendOrScheduleFax({ faxNumber, caseId: caseLabel, worker, html: faxHtml, source: 'fax-modal' }, choice)
+      : await (async () => {
+          const res = await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/fax', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ to: faxNumber, caseId: caseLabel, worker, html: faxHtml })
+          });
+          const d = await res.json();
+          return { success: !!(res.ok && d.success), scheduled: false, sid: d.sid, error: d.error };
+        })();
+
+    if(result.success && result.scheduled) {
+      const when = new Date(choice.sendAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      alert('📅 Fax scheduled for ' + when + ' to ' + faxNumber + '. It will be sent automatically.');
+      if(typeof window.clearFaxFields === 'function') window.clearFaxFields();
+      closeFaxModal();
+    } else if(result.success) {
+      alert('✅ Fax sent to ' + faxNumber + '! SID: ' + (result.sid || 'N/A'));
       if(typeof window.clearFaxFields === 'function') window.clearFaxFields();
       const faxSelEl = document.getElementById('fax-to-select');
       if(faxSelEl) faxSelEl.value = '';
@@ -210,13 +230,12 @@ window.confirmAndSendFax = async function() {
       if(destEl) { destEl.readOnly=false; destEl.style.background=''; destEl.style.color=''; destEl.value='+1'; }
       closeFaxModal();
     } else {
-      alert('❌ Fax failed: ' + (data.error || 'Unknown error'));
+      alert('❌ Fax failed: ' + (result.error || 'Unknown error'));
     }
   } catch(e) {
     alert('❌ Error: ' + e.message);
   } finally {
-    btn.textContent = '✉ Confirm & Send Fax';
-    btn.disabled = false;
+    if(btn) { btn.textContent = origLabel || '📠 Confirm & Send Fax'; btn.disabled = false; }
   }
 };
 
@@ -254,6 +273,8 @@ window.clearFaxFields = function() {
   document.getElementById('fax-patient-name').value = '';
   document.getElementById('fax-dob').value = '';
   document.getElementById('fax-pages').value = '';
+  const docs = document.getElementById('fax-requested-docs');
+  if(docs) docs.value = '';
   previewFax();
 };
 
@@ -265,6 +286,9 @@ function buildFaxHTML(r) {
   const providerName = worker === 'josh' ? 'Josh Condado, CRNA' : 'Dev Murthy, CRNA';
   const providerCreds = 'CRNA, Anesthesiology';
   const phone = worker === 'josh' ? '7154996858' : '2625739095';
+  // Per-worker return fax numbers — Atlas's dedicated lines so the recipient
+  // knows where to fax records back.
+  const returnFax = worker === 'josh' ? '833-485-5191' : '262-228-1623';
   const patientName = document.getElementById('fax-patient-name')?.value.trim()
     || [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ')
     || r['po-patient']||'';
@@ -299,7 +323,7 @@ function buildFaxHTML(r) {
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX TO:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${document.getElementById('fax-destination')?.value||''}</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">ATTN:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${attn}</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${providerName} — Atlas Anesthesia</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FAX FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">Atlas Anesthesia</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RETURN FAX:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3"><strong>${returnFax}</strong></td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PHONE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${phone}</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td><td style="padding:5px 8px;border:1px solid #bbb">${pages}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td><td style="padding:5px 8px;border:1px solid #bbb">Patient Medical Records Request</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PATIENT NAME:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${patientName}</td></tr>
@@ -310,11 +334,17 @@ function buildFaxHTML(r) {
   <p style="margin:0 0 8px 0">Dear,</p>
   <p style="margin:0 0 8px 0">We are writing on behalf of <strong>${providerName}</strong> at <strong>Atlas Anesthesia</strong> regarding the above-named patient who is scheduled for an upcoming anesthesia procedure at our facility. In order to ensure the safest and most comprehensive anesthesia care plan, we are respectfully requesting the following records be transmitted to our office at your earliest convenience — <strong>preferably as soon as possible</strong>.</p>
   <p style="margin:0 0 6px 0">Please fax the following documents for the patient listed above:</p>
-  <ul style="margin:0 0 10px 20px;padding:0">
-    <li style="margin-bottom:4px">Most recent <strong>History &amp; Physical (H&amp;P)</strong></li>
-    <li style="margin-bottom:4px">Any and all applicable <strong>Laboratory Work / Lab Results</strong> (e.g., CBC, CMP, BMP, coagulation studies, or other relevant panels)</li>
-    <li style="margin-bottom:4px">Any additional pertinent medical records relevant to anesthesia clearance</li>
-  </ul>
+  ${(function() {
+    const defaults = [
+      'Most recent <strong>History &amp; Physical (H&amp;P)</strong>',
+      'Any and all applicable <strong>Laboratory Work / Lab Results</strong> (e.g., CBC, CMP, BMP, coagulation studies, or other relevant panels)',
+      'Any additional pertinent medical records relevant to anesthesia clearance'
+    ];
+    const customDocs = document.getElementById('fax-requested-docs')?.value.trim() || '';
+    const extras = customDocs ? customDocs.split('\n').map(s => s.trim()).filter(Boolean) : [];
+    const all = [...defaults, ...extras];
+    return `<ul style="margin:0 0 10px 20px;padding:0">${all.map(l => `<li style="margin-bottom:4px">${l}</li>`).join('')}</ul>`;
+  })()}
   <p style="margin:0 0 8px 0">Timely receipt of these records is critical to our pre-operative assessment and scheduling process. If you have any questions or require a signed release of information form, please do not hesitate to contact our office directly.</p>
   <p style="margin:0 0 8px 0">We sincerely appreciate your prompt attention to this matter. Thank you for your cooperation.</p>
   <p style="margin:0 0 24px 0">Warm regards,</p>

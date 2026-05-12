@@ -51,8 +51,8 @@ function _statusPill(record) {
 function _buildDepositEmailHTML(opts) {
   const { firstName, provider, surgDate, isReminder } = opts;
   const greeting = isReminder
-    ? `<p>Hi${firstName ? ' '+firstName : ''},</p><p>We wanted to follow up regarding your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. We noticed your initial deposit of <strong>$500</strong> has not yet been received.</p>`
-    : `<p>Hi${firstName ? ' '+firstName : ''},</p><p>Thank you so much for speaking with us today about your upcoming procedure scheduled for <strong>${surgDate||'your upcoming date'}</strong>. It was a pleasure connecting with you, and we look forward to providing you with exceptional anesthesia care.</p><p>To secure your appointment, we kindly ask for an initial deposit of <strong>$500</strong>, which can be submitted securely online using the link below.</p>`;
+    ? `<p>Hi${firstName ? ' '+firstName : ''},</p><p>We wanted to follow up regarding your upcoming procedure${surgDate ? ' scheduled for <strong>'+surgDate+'</strong>' : ''}. We noticed your initial deposit of <strong>$500</strong> has not yet been received.</p>`
+    : `<p>Hi${firstName ? ' '+firstName : ''},</p><p>Thank you so much for speaking with us today about your upcoming procedure${surgDate ? ' scheduled for <strong>'+surgDate+'</strong>' : ''}. It was a pleasure connecting with you, and we look forward to providing you with exceptional anesthesia care.</p><p>To secure your appointment, an initial deposit of <strong>$500</strong> is required. Please submit it securely online using the link below.</p>`;
 
   return `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#000">
