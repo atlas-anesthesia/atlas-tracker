@@ -27,8 +27,16 @@ function localDateStr(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 function todayStr() { return localDateStr(new Date()); }
+// addDays(isoDate, n) — returns YYYY-MM-DD n days after the input. Used by the
+// reminder modal's quick-pick buttons and the daily-reminder scheduler.
+function addDays(isoDate, n) {
+  const base = isoDate ? new Date(isoDate + 'T00:00:00') : new Date();
+  base.setDate(base.getDate() + (n || 0));
+  return localDateStr(base);
+}
 window.localDateStr = localDateStr;
 window.todayStr = todayStr;
+window.addDays = addDays;
 
 // ── HIPAA: AUTO-LOGOUT AFTER INACTIVITY ───────────────────────────────────────
 // Signs the user out after 20 min of no mouse/keyboard activity. Shows a small
@@ -8802,7 +8810,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515ag'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515ah'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
