@@ -617,10 +617,13 @@
       window.closeSuppliesQuickAddModal();
       if(typeof window.renderCaseSupplies === 'function') window.renderCaseSupplies();
       if(typeof window.refreshItemSelect === 'function') window.refreshItemSelect();
-      // Live Case path: also push into the active draft + persist + refresh the
-      // "Supplies & CS Logged This Case" panel so Surgery Mode reflects edits.
+      // Live Case path: only when the user is actually on the Live Case tab,
+      // mirror into the active draft + persist + refresh the panel. Without
+      // this guard, editing supplies from Case History (Finalize tab) would
+      // accidentally write to whichever live draft was last selected.
+      const onLiveTab = !!document.getElementById('tab-live-case')?.classList.contains('active');
       const liveDraft = window._currentLiveCaseDraft;
-      if(liveDraft) {
+      if(onLiveTab && liveDraft) {
         liveDraft.items = newCaseItems.map(i => ({
           id: i.id, generic: i.generic, name: i.name,
           cost: i.cost, qty: i.qty, lineTotal: (i.cost || 0) * (i.qty || 0)
@@ -901,10 +904,12 @@
     window.closeCSQuickAddModal();
     if(typeof window.renderCSEntries === 'function') window.renderCSEntries();
     if(typeof window.renderCaseSupplies === 'function') window.renderCaseSupplies();
-    // Live Case path: mirror CS entries into the active draft so the
-    // "Supplies & CS Logged This Case" panel updates immediately.
+    // Live Case path: only mirror CS entries when actually on the Live Case
+    // tab. Same reason as the supplies mirror — prevents Finalize/Edit from
+    // bleeding into whatever was last selected in Live Case.
+    const onLiveTab = !!document.getElementById('tab-live-case')?.classList.contains('active');
     const liveDraft = window._currentLiveCaseDraft;
-    if(liveDraft) {
+    if(onLiveTab && liveDraft) {
       liveDraft.savedCsEntries = newEntries.map(e => ({...e}));
       if(typeof window.saveCases === 'function') {
         window.saveCases().catch(e => console.warn('saveCases after CS apply failed:', e));

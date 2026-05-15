@@ -424,9 +424,10 @@ window.onLiveCaseChange = function() {
 
 // Refresh the Live Case "Supplies & CS Logged This Case" panel from whatever
 // is currently in the active draft + the live session arrays. Prefer session
-// state (window.caseItems / window.csEntries) when they have more entries than
-// the persisted draft — covers the moment right after Apply where the draft
-// has not yet been saved to Firestore.
+// state (window.caseItems / window.csEntries) when populated — covers the
+// moment right after Apply where the draft has not yet been saved to Firestore.
+// In Surgery Mode each row is inline-editable so the CRNA can adjust qty or
+// drop an item without re-opening the Quick Add modal.
 window.renderLiveLoggedList = function() {
   const loggedList = document.getElementById('live-logged-list');
   if(!loggedList) return;
@@ -435,27 +436,89 @@ window.renderLiveLoggedList = function() {
   const sessionCS = (window.csEntries || []);
   const draftItems = (caseRec && caseRec.items) || [];
   const draftCS = (caseRec && caseRec.savedCsEntries) || [];
-  // Use whichever array is the freshest (session wins when populated)
   const items = sessionItems.length ? sessionItems : draftItems;
   const cs = sessionCS.length ? sessionCS : draftCS;
   let html = '';
   if(items.length) {
     html += `<div style="margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Supplies</div>`;
     html += items.map(i => {
-      const line = (i.lineTotal != null) ? i.lineTotal : ((parseFloat(i.cost)||0) * (parseFloat(i.qty)||0));
-      return `<div style="padding:5px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between"><span>${i.generic||i.name||'—'} × ${i.qty}</span><span style="color:var(--text-muted)">$${(line||0).toFixed(2)}</span></div>`;
+      const line = (parseFloat(i.cost)||0) * (parseFloat(i.qty)||0);
+      const safeId = (i.id || '').replace(/'/g, "\\'");
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 90px 80px 30px;gap:8px;align-items:center">
+        <span style="font-size:13px">${i.generic||i.name||'—'}</span>
+        <input type="number" min="0" step="0.5" value="${i.qty}" onchange="window._liveUpdateSupplyQty('${safeId}', this.value)" style="width:100%;padding:4px 8px;text-align:center;font-size:13px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+        <span style="font-size:12px;color:var(--text-muted);text-align:right;font-family:'DM Mono',monospace">$${line.toFixed(2)}</span>
+        <button onclick="window._liveRemoveSupply('${safeId}')" title="Remove" style="background:none;border:none;color:var(--warn);font-size:18px;line-height:1;cursor:pointer;padding:0">×</button>
+      </div>`;
     }).join('');
   }
   if(cs.length) {
     html += `<div style="margin-top:10px;margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:#d97706">Controlled Substances</div>`;
     html += cs.map(e => {
       const drug = e.drug || e.generic || '—';
-      const amt = e.amountGiven ? ' · given ' + e.amountGiven : '';
-      const left = e.leftInVial ? ' · left ' + e.leftInVial : '';
-      return `<div style="padding:5px 0;border-bottom:1px solid var(--border)">${drug}${amt}${left}</div>`;
+      const safeId = (e.id || '').replace(/'/g, "\\'");
+      const safeDrug = (e.drug || '').replace(/'/g, "\\'");
+      const amt = e.amountGiven || '0';
+      const left = e.leftInVial || '0';
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 70px 70px 30px;gap:8px;align-items:center">
+        <span style="font-size:13px;text-transform:capitalize">${drug}</span>
+        <input type="number" min="0" step="0.1" value="${amt}" placeholder="given" title="Amount given (mg/mL)" onchange="window._liveUpdateCSField('${safeId}','amountGiven', this.value)" style="width:100%;padding:4px 6px;text-align:center;font-size:12px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+        <input type="number" min="0" step="0.1" value="${left}" placeholder="left" title="Amount left in vial" onchange="window._liveUpdateCSField('${safeId}','leftInVial', this.value)" style="width:100%;padding:4px 6px;text-align:center;font-size:12px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:6px;background:var(--bg)">
+        <button onclick="window._liveRemoveCS('${safeId}','${safeDrug}')" title="Remove" style="background:none;border:none;color:var(--warn);font-size:18px;line-height:1;cursor:pointer;padding:0">×</button>
+      </div>`;
     }).join('');
+    html += `<div style="font-size:10px;color:var(--text-faint);margin-top:4px;font-style:italic">Adjust the given / left-in-vial numbers as the case progresses. Use the 💊 Add CS button for signatures.</div>`;
   }
   loggedList.innerHTML = html || '<div style="color:var(--text-faint);font-style:italic">Nothing logged yet. Use the buttons above to add supplies or controlled substances.</div>';
+};
+
+// ── Live Case inline edit helpers ──
+// Persist any inline edits to (1) session state, (2) the active draft, and
+// (3) Firestore. Re-render the panel + finalize-case supplies table so the
+// edit is reflected everywhere.
+function _liveSyncAndPersist() {
+  const draft = window._currentLiveCaseDraft;
+  if(draft) {
+    draft.items = (window.caseItems || []).map(i => ({
+      id: i.id, generic: i.generic, name: i.name,
+      cost: i.cost, qty: i.qty, lineTotal: (i.cost || 0) * (i.qty || 0)
+    }));
+    draft.savedCsEntries = (window.csEntries || []).map(e => ({...e}));
+    if(typeof window.saveCases === 'function') {
+      window.saveCases().catch(e => console.warn('saveCases (live edit) failed:', e));
+    }
+  }
+  if(typeof window.renderLiveLoggedList === 'function') window.renderLiveLoggedList();
+  if(typeof window.renderCaseSupplies === 'function') window.renderCaseSupplies();
+}
+window._liveUpdateSupplyQty = function(itemId, val) {
+  const qty = Math.max(0, parseFloat(val) || 0);
+  const arr = window.caseItems || [];
+  const idx = arr.findIndex(i => i.id === itemId);
+  if(idx === -1) return;
+  if(qty === 0) arr.splice(idx, 1);
+  else arr[idx].qty = qty;
+  window.caseItems = arr;
+  _liveSyncAndPersist();
+};
+window._liveRemoveSupply = function(itemId) {
+  const arr = (window.caseItems || []).filter(i => i.id !== itemId);
+  window.caseItems = arr;
+  _liveSyncAndPersist();
+};
+window._liveUpdateCSField = function(entryId, field, val) {
+  const arr = window.csEntries || [];
+  const e = arr.find(x => x.id === entryId);
+  if(!e) return;
+  e[field] = val;
+  window.csEntries = arr;
+  _liveSyncAndPersist();
+};
+window._liveRemoveCS = function(entryId, drugLabel) {
+  if(!confirm('Remove ' + (drugLabel || 'this CS entry') + ' from this case?')) return;
+  const arr = (window.csEntries || []).filter(e => e.id !== entryId);
+  window.csEntries = arr;
+  _liveSyncAndPersist();
 };
 
 let _liveNotesSaveTimer = null;
@@ -8929,7 +8992,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515an'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515ao'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
