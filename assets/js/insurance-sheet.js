@@ -19,6 +19,26 @@ const INSURANCE_PRESETS = [
 let _modalBuilt = false;
 let _mode = 'josh-receipt';   // 'josh-receipt' | 'flat' | 'cdt'
 
+// Provider details printed on the Receipt sheet. Tax ID is shared (Atlas
+// Anesthesia, LLC) — NPI and phone are individual to each CRNA.
+const PROVIDER_INFO = {
+  josh: {
+    name:    'Joshua Condado, CRNA',
+    phone:   '(715) 499-6858',
+    npi:     '1861900201',
+    taxId:   '41-4070944',
+    sigPath: 'assets/signatures/josh.png'
+  },
+  dev: {
+    name:    'Devarsh Murthy, CRNA',
+    phone:   '(262) 573-9095',
+    npi:     '1356864276',
+    taxId:   '41-4070944',
+    sigPath: 'assets/signatures/dev.png'
+  }
+};
+function providerInfo() { return PROVIDER_INFO[workerNow()] || PROVIDER_INFO.dev; }
+
 // Procedure codes from Josh's PDF form (Receipt/Insurance Claim Information)
 const JOSH_PROCEDURES = [
   { code: '',       label: 'Dental Restoration' },
@@ -163,7 +183,7 @@ function buildModal() {
       <div style="padding:14px 24px;border-bottom:1px solid var(--border);background:#f8fafc;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
         <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">Claim Type</span>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-          <input type="radio" name="ins-mode" value="josh-receipt" checked onchange="window._insSetMode('josh-receipt')" style="margin:0"> Receipt Form (Josh)
+          <input type="radio" name="ins-mode" value="josh-receipt" checked onchange="window._insSetMode('josh-receipt')" style="margin:0"> Anesthesia Receipt
         </label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
           <input type="radio" name="ins-mode" value="flat" onchange="window._insSetMode('flat')" style="margin:0"> Flat Fee
@@ -249,7 +269,7 @@ function renderJoshReceiptForm() {
     </label>`
   ).join('');
   return `
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Josh Receipt / Insurance Claim Form</div>
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Anesthesia Receipt / Insurance Claim Form</div>
 
     <div style="display:grid;grid-template-columns:130px 1fr;gap:12px;margin-bottom:14px;padding:10px;background:#f8fafc;border:1px solid var(--border);border-radius:6px;align-items:end">
       <div>
@@ -535,11 +555,12 @@ function buildJoshReceiptHTML() {
 
   const field = (lbl, val, width) => `<div style="display:inline-block;margin-right:14px;margin-bottom:5px;font-size:11px"><span style="font-weight:700">${lbl}:</span> <span style="border-bottom:1px solid #555;display:inline-block;min-width:${width||120}px;padding:0 4px">${val||'&nbsp;'}</span></div>`;
 
+  const pInfo = providerInfo();
   return `
     <div style="text-align:center;border-bottom:2px solid #1d3557;padding-bottom:10px;margin-bottom:14px">
       <div style="font-size:22px;font-weight:bold;letter-spacing:1px;color:#1d3557">Atlas Anesthesia, LLC</div>
-      <div style="font-size:10.5px;margin-top:4px;color:#333">Federal Tax ID #41-4070944 &nbsp;·&nbsp; NPI #1861900201</div>
-      <div style="font-size:10.5px;margin-top:2px;color:#333">Joshua Condado, CRNA &nbsp;·&nbsp; (715) 499-6858</div>
+      <div style="font-size:10.5px;margin-top:4px;color:#333">Federal Tax ID #${pInfo.taxId} &nbsp;·&nbsp; NPI #${pInfo.npi}</div>
+      <div style="font-size:10.5px;margin-top:2px;color:#333">${pInfo.name} &nbsp;·&nbsp; ${pInfo.phone}</div>
     </div>
 
     <div style="text-align:center;font-size:14px;font-weight:bold;letter-spacing:.8px;margin-bottom:12px;color:#1d3557">RECEIPT / INSURANCE CLAIM INFORMATION</div>
@@ -607,8 +628,8 @@ function buildJoshReceiptHTML() {
     <div style="display:grid;grid-template-columns:1fr 200px;gap:18px;align-items:end;margin-top:18px">
       <div>
         <div style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase;margin-bottom:2px">Signed</div>
-        <img src="assets/signatures/josh.png" style="height:46px;mix-blend-mode:multiply;display:block" alt="Signature" onerror="this.style.display='none'">
-        <div style="border-top:1px solid #000;width:240px;font-size:10px;padding-top:2px;margin-top:2px">Joshua Condado, CRNA · Atlas Anesthesia, LLC</div>
+        <img src="${pInfo.sigPath}" style="height:46px;mix-blend-mode:multiply;display:block" alt="Signature" onerror="this.style.display='none'">
+        <div style="border-top:1px solid #000;width:240px;font-size:10px;padding-top:2px;margin-top:2px">${pInfo.name} · Atlas Anesthesia, LLC</div>
       </div>
       <div style="text-align:right;font-size:10px;color:#555">DATE: <span style="border-bottom:1px solid #888;padding:0 6px">${fmtDate(today)}</span></div>
     </div>
@@ -624,7 +645,7 @@ function buildJoshReceiptHTML() {
     <div style="page-break-before:always;margin-top:30px;padding-top:24px;border-top:3px double #1d3557">
       <div style="text-align:center;border-bottom:2px solid #1d3557;padding-bottom:10px;margin-bottom:14px">
         <div style="font-size:22px;font-weight:bold;letter-spacing:1px;color:#1d3557">Atlas Anesthesia, LLC</div>
-        <div style="font-size:10.5px;margin-top:4px;color:#333">Federal Tax ID #41-4070944 &nbsp;·&nbsp; NPI #1861900201</div>
+        <div style="font-size:10.5px;margin-top:4px;color:#333">Federal Tax ID #${pInfo.taxId} &nbsp;·&nbsp; NPI #${pInfo.npi}</div>
       </div>
 
       <div style="text-align:center;font-size:14px;font-weight:bold;letter-spacing:.8px;margin-bottom:14px;color:#1d3557">PAYOR DISCLOSURE</div>
