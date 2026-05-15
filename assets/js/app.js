@@ -2914,6 +2914,11 @@ window.removeImage = function(id) {
 // -- SAVE CASE --
 window.saveCase = async function() {
 const caseId=document.getElementById('caseId').value.trim()||'CASE-'+Date.now();
+// Test cases (caseId prefixed with TEST-) are sandbox-only — they save a
+// case record so the UI flow can be tested end-to-end, but they MUST NOT
+// touch real inventory or the CS log. The isTest flag keeps them out of
+// stats and reports too.
+const _isTestCase = caseId.startsWith('TEST-');
 // Case Procedure is required — every case must be identifiable by what was
 // actually done. The previous fallback to "Unnamed Procedure" let blank
 // values slip through, which made later reporting/lookup unreliable.
@@ -2958,18 +2963,21 @@ csTotal, total,
 // loaded by editFinalizedCase, new uploads, or empty after Remove.
 images: pendingImages.map(im => ({ id: im.id, dataUrl: im.dataUrl }))
 };
-// Inventory diff — reverse old, apply new
-(oldCase.items || []).forEach(oldItem => {
-const inv = items.find(i => i.id === oldItem.id);
-if(inv) setStock(inv, oldCase.worker || currentWorker, getStock(inv, oldCase.worker || currentWorker) + (parseFloat(oldItem.qty)||0));
-});
-caseItems.forEach(item => {
-const inv = items.find(i => i.id === item.id);
-if(inv) setStock(inv, currentWorker, Math.max(0, getStock(inv, currentWorker) - (parseFloat(item.qty)||0)));
-});
+// Inventory diff — reverse old, apply new (test cases skip this entirely)
+if(!_isTestCase) {
+  (oldCase.items || []).forEach(oldItem => {
+    const inv = items.find(i => i.id === oldItem.id);
+    if(inv) setStock(inv, oldCase.worker || currentWorker, getStock(inv, oldCase.worker || currentWorker) + (parseFloat(oldItem.qty)||0));
+  });
+  caseItems.forEach(item => {
+    const inv = items.find(i => i.id === item.id);
+    if(inv) setStock(inv, currentWorker, Math.max(0, getStock(inv, currentWorker) - (parseFloat(item.qty)||0)));
+  });
+}
+updatedCase.isTest = _isTestCase || !!oldCase.isTest;
 // Save inventory first
 setSyncing(true);
-await saveInventory();
+if(!_isTestCase) await saveInventory();
 // Re-find index after async (onSnapshot may have replaced the array)
 const freshIdx = cases.findIndex(x => x.id === editId);
 if(freshIdx !== -1) {
@@ -2980,7 +2988,8 @@ cases.unshift(updatedCase);
 await saveCases();
 setSyncing(false);
 // CS log update (best-effort, won't block save if it fails)
-try {
+// Test cases never touch the controlled-substance log.
+if(!_isTestCase) try {
 const csSnap = await getDoc(doc(db,'atlas','cslog'));
 let csLog = csSnap.exists() ? (csSnap.data().entries||[]) : [];
 csLog = csLog.filter(e => e.caseId !== oldCase.caseId);
@@ -3053,6 +3062,7 @@ id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
 startTime: document.getElementById('caseStartTime')?.value || '',
 endTime: document.getElementById('caseEndTime')?.value || '',
 caseComments:comments,
+isTest: _isTestCase,
 surgeryCenter: (() => { const preopRec = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===caseId); return preopRec?.['po-surgery-center']||''; })(),
 patientEmail: (() => { const preopRec = (window._rawPreopRecords||[]).find(r=>r['po-caseId']===caseId); return preopRec?.['po-patientEmail']||''; })(),
 items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i.qty,lineTotal:i.cost*i.qty})),
@@ -3067,17 +3077,22 @@ cases = cases.filter(x => !(x.draft && x.caseId === caseId));
 let _step = 'saving case record';
 try {
 await saveCases();
-// STEP 2 — case record is committed. Now deduct regular supplies from inventory.
-caseItems.forEach(item=>{
-const inv=items.find(i=>i.id===item.id);
-if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
-});
-// STEP 3 — save CS log entries and deduct CS inventory (no-op if no CS entries).
-_step = 'saving controlled-substance log';
-await saveCSEntriesWithCase(caseId, date, provider);
-// STEP 4 — persist final inventory state (covers regular supply deductions).
-_step = 'saving inventory';
-await saveInventory();
+if(!_isTestCase) {
+  // STEP 2 — case record is committed. Now deduct regular supplies from inventory.
+  caseItems.forEach(item=>{
+  const inv=items.find(i=>i.id===item.id);
+  if(inv) setStock(inv,currentWorker,Math.max(0,getStock(inv,currentWorker)-item.qty));
+  });
+  // STEP 3 — save CS log entries and deduct CS inventory (no-op if no CS entries).
+  _step = 'saving controlled-substance log';
+  await saveCSEntriesWithCase(caseId, date, provider);
+  // STEP 4 — persist final inventory state (covers regular supply deductions).
+  _step = 'saving inventory';
+  await saveInventory();
+} else {
+  // Test case path — flush CS entries from the form without writing to the log
+  csEntries = [];
+}
 } catch(stepErr) {
 stepErr.atlasStep = _step;
 throw stepErr;
@@ -3086,8 +3101,12 @@ window._activeDraftId = null;
 csEntries = [];
 renderCSEntries();
 clearCase();
-try { logAudit('case-save', caseId, `total $${total.toFixed(2)}`); } catch(e){}
-alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
+try { logAudit('case-save', caseId, `total $${total.toFixed(2)}` + (_isTestCase ? ' [TEST]' : '')); } catch(e){}
+if(_isTestCase) {
+  alert(`🧪 Test case saved — inventory NOT changed.\nTotal: $${total.toFixed(2)}\nThis case is excluded from stats.`);
+} else {
+  alert(`✓ Case saved & synced!\nTotal: $${total.toFixed(2)}\n${currentWorker==='dev'?'Devarsh':'Josh'}'s inventory updated.`);
+}
 showTab('history');
 } catch(saveErr) {
 // Roll back local inventory + cases state so the UI matches reality.
@@ -8882,7 +8901,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515ak'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515al'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
