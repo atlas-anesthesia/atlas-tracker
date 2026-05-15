@@ -14,13 +14,19 @@ const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/00wfZgh0refXfSIarfejK00';
 async function _loadDeposits() {
   try {
     const snap = await window.getDoc(window.doc(window.db, 'atlas', 'deposits'));
-    return snap.exists() ? (snap.data().records || []) : [];
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    // Cache globally so the Follow-up Tracker can detect "deposit link sent" status
+    window._depositsCache = records;
+    return records;
   } catch(e) { return []; }
 }
 
 async function _saveDeposits(records) {
   window.setSyncing(true);
   await window.setDoc(window.doc(window.db, 'atlas', 'deposits'), { records });
+  window._depositsCache = records;
+  // Refresh the Follow-up Tracker if it's visible (deposit just got sent/marked)
+  try { if(typeof window.renderFollowupTab === 'function') window.renderFollowupTab(); } catch(e){}
   window.setSyncing(false);
 }
 
@@ -163,12 +169,15 @@ async function _renderDepositsTable(containerEl) {
     const overdue = !r.paid && days >= 7;
     const bg = r.paid ? 'rgba(45,106,79,0.04)' : (overdue ? 'rgba(239,68,68,0.04)' : 'var(--bg)');
 
+    const depPhiHidden = typeof window.isPHIHidden === 'function' && window.isPHIHidden(r.surgDate, r.caseId);
+    const depPatientName = depPhiHidden ? '<span style="color:#94a3b8;font-style:italic">[hidden]</span>' : (r.patientName || '-');
+    const depPatientEmail = depPhiHidden ? '<span style="color:#94a3b8;font-style:italic">[hidden]</span>' : (r.patientEmail || '-');
     html += `<div data-deposit-id="${r.id}" style="display:grid;grid-template-columns:${COLS};gap:0;padding:10px 12px;border-bottom:1px solid var(--border);align-items:center;background:${bg}">
       <div>
-        <div style="font-size:12px;font-weight:600">${r.caseId||'-'}</div>
-        <div style="font-size:11px;color:var(--text-muted)">${r.patientName||'-'}</div>
+        <div style="font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px">${r.caseId||'-'}${depPhiHidden ? '<span style="background:#f1f5f9;color:#64748b;font-size:9px;font-weight:600;padding:1px 6px;border-radius:8px" title="Patient details hidden — case is 3+ days old">🔒</span>' : ''}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${depPatientName}</div>
       </div>
-      <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.patientEmail||'-'}</div>
+      <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${depPatientEmail}</div>
       <div style="text-align:center;font-size:11px;color:var(--text-faint)">${_fmtDate(r.sentAt)||'-'}</div>
       <div style="text-align:center">${_statusPill(r)}</div>
       <div style="text-align:center;font-size:11px;color:#2d6a4f;font-weight:600">${r.paidAt ? _fmtDate(r.paidAt) : '-'}</div>

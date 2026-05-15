@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Atlas Anesthesia — Your Appointment</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    :root {
+      --primary: #1d3557;
+      --accent: #2d6a4f;
+      --warn: #d97706;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text: #1e293b;
+      --text-muted: #475569;
+      --text-faint: #94a3b8;
+      --border: #e2e8f0;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .brand {
+      text-align: center;
+      margin-bottom: 24px;
+      padding: 16px 0;
+    }
+    .brand-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: 0.5px;
+    }
+    .brand-tag {
+      font-size: 12px;
+      color: var(--text-faint);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      margin-bottom: 16px;
+    }
+    .card-header {
+      background: var(--primary);
+      color: #fff;
+      padding: 20px 24px;
+      border-radius: var(--radius) var(--radius) 0 0;
+      margin: -28px -24px 24px;
+    }
+    .card-header-tag {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #90b8e0;
+      margin-bottom: 4px;
+    }
+    .card-header-title {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .detail-row {
+      display: flex;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      letter-spacing: 0.5px;
+      min-width: 110px;
+      flex-shrink: 0;
+    }
+    .detail-value {
+      font-size: 15px;
+      color: var(--text);
+      flex: 1;
+    }
+    .pill-paid {
+      display: inline-block;
+      background: #dcfce7;
+      color: #166534;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 12px;
+      letter-spacing: 0.3px;
+    }
+    .pill-unpaid {
+      display: inline-block;
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 12px;
+      letter-spacing: 0.3px;
+    }
+    .btn-deposit {
+      display: block;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      padding: 16px 24px;
+      border-radius: var(--radius-sm);
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      margin-top: 16px;
+      transition: transform 0.1s;
+    }
+    .btn-deposit:hover { transform: translateY(-1px); }
+    .alert-info {
+      background: #dbeafe;
+      border-left: 4px solid #2563eb;
+      padding: 14px 18px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #1e3a8a;
+      line-height: 1.6;
+    }
+    .alert-warn {
+      background: #fef3c7;
+      border-left: 4px solid var(--warn);
+      padding: 14px 18px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #78350f;
+      line-height: 1.6;
+    }
+    .checklist {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .checklist li {
+      padding: 8px 0;
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .checklist li::before {
+      content: "☐";
+      margin-right: 10px;
+      color: var(--text-faint);
+    }
+    .footer {
+      text-align: center;
+      padding: 24px 16px;
+      font-size: 12px;
+      color: var(--text-faint);
+      line-height: 1.6;
+    }
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-faint);
+      font-size: 14px;
+    }
+    .error {
+      background: #fee2e2;
+      border-left: 4px solid #dc2626;
+      padding: 18px 22px;
+      border-radius: var(--radius-sm);
+      color: #7f1d1d;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand">
+      <div class="brand-name">ATLAS ANESTHESIA</div>
+      <div class="brand-tag">Mobile Dental Anesthesia &middot; Stevens Point, WI</div>
+    </div>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <div>Loading your appointment details...</div>
+    </div>
+
+    <div id="content" style="display:none">
+      <!-- populated by JS -->
+    </div>
+
+    <div id="error" style="display:none">
+      <div class="card">
+        <div class="error">
+          <strong>Link not valid</strong><br>
+          <span id="error-message">This link may have expired or is incorrect. Please contact your dentist's office or call Atlas Anesthesia at (262) 573-9095.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Questions? Email <a href="mailto:admin@atlasanesthesia.co" style="color:var(--primary)">admin@atlasanesthesia.co</a> or call (262) 573-9095<br>
+      Atlas Anesthesia LLC · 1257 Main Street, Stevens Point, WI 54481
+    </div>
+  </div>
+
+  <script>
+    const WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
+
+    function getParam(name) {
+      return new URLSearchParams(window.location.search).get(name);
+    }
+
+    function showError(msg) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      if(msg) document.getElementById('error-message').textContent = msg;
+    }
+
+    function fmtDate(iso) {
+      if(!iso) return '—';
+      const d = new Date(iso + 'T12:00:00');
+      return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    }
+
+    function fmtTime(t) {
+      if(!t) return '';
+      const [h, m] = t.split(':');
+      const d = new Date(); d.setHours(parseInt(h), parseInt(m||0), 0);
+      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    }
+
+    function renderPatientPortal(data) {
+      const c = data.case || {};
+      const depositPaid = !!c.depositPaid;
+      const depositLink = c.depositLink || 'https://buy.stripe.com/00wfZgh0refXfSIarfejK00';
+      const surgDate = fmtDate(c.surgeryDate);
+      const timeStr = fmtTime(c.startTime);
+      const html = `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-header-tag">Your upcoming appointment</div>
+            <div class="card-header-title">Dental Anesthesia</div>
+          </div>
+
+          <div class="detail-row">
+            <div class="detail-label">Date</div>
+            <div class="detail-value"><strong>${surgDate}</strong>${timeStr ? ' at <strong>'+timeStr+'</strong>' : ''}</div>
+          </div>
+          ${c.provider ? `<div class="detail-row"><div class="detail-label">Dentist</div><div class="detail-value">${c.provider}</div></div>` : ''}
+          ${c.surgeryCenter ? `<div class="detail-row"><div class="detail-label">Location</div><div class="detail-value">${c.surgeryCenter}</div></div>` : ''}
+          ${c.anesthesiaProvider ? `<div class="detail-row"><div class="detail-label">Anesthesia By</div><div class="detail-value">${c.anesthesiaProvider}</div></div>` : ''}
+          <div class="detail-row">
+            <div class="detail-label">Deposit</div>
+            <div class="detail-value">
+              ${depositPaid
+                ? '<span class="pill-paid">✓ PAID</span><div style="font-size:12px;color:var(--text-faint);margin-top:6px">Thank you — your $500 deposit has been received.</div>'
+                : '<span class="pill-unpaid">⏳ NOT YET RECEIVED</span><div style="font-size:13px;color:var(--text-muted);margin-top:8px">A $500 deposit is required to confirm your appointment. The remaining balance is collected 7–8 days before surgery.</div>'}
+            </div>
+          </div>
+        </div>
+
+        ${!depositPaid ? `
+        <div class="card">
+          <h3 style="font-size:18px;color:var(--text);margin-bottom:8px">Complete Your Deposit</h3>
+          <p style="font-size:14px;color:var(--text-muted);margin-bottom:8px">Click the button below to pay your $500 deposit securely via Stripe.</p>
+          <a href="${depositLink}" class="btn-deposit" target="_blank">Pay $500 Deposit →</a>
+        </div>
+        ` : ''}
+
+        <div class="card">
+          <h3 style="font-size:18px;color:var(--text);margin-bottom:14px">Important Reminders</h3>
+          <div class="alert-warn">
+            <strong>⚠️ No food or drink (NPO)</strong><br>
+            Nothing to eat or drink — including water, gum, or mints — for at least <strong>8 hours before</strong> your appointment. This is essential for your safety.
+          </div>
+          <div class="alert-info">
+            <strong>🚗 Driver required</strong><br>
+            You must have a responsible adult to drive you home after anesthesia. Rideshares are not permitted. Your driver should plan to stay with you for the first 24 hours.
+          </div>
+          <h4 style="font-size:14px;font-weight:700;color:var(--text);margin:18px 0 8px;text-transform:uppercase;letter-spacing:0.5px">Day-of checklist</h4>
+          <ul class="checklist">
+            <li>Bring photo ID and insurance card</li>
+            <li>Bring a list of all current medications</li>
+            <li>Wear loose, comfortable clothing with short sleeves</li>
+            <li>Remove nail polish, jewelry, and contact lenses</li>
+            <li>Arrive 15 minutes early</li>
+          </ul>
+        </div>
+      `;
+      document.getElementById('content').innerHTML = html;
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+    }
+
+    async function loadPortal() {
+      const token = getParam('t');
+      if(!token) { showError('No appointment token provided in URL.'); return; }
+      try {
+        const res = await fetch(`${WORKER_URL}/portal-resolve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+        if(!res.ok) {
+          if(res.status === 404) { showError('This link has expired or is no longer valid.'); return; }
+          showError('Could not load appointment details. Please try again later.'); return;
+        }
+        const data = await res.json();
+        if(data.error) { showError(data.error); return; }
+        if(data.type === 'patient') { renderPatientPortal(data); }
+        else if(data.type === 'center') { window.location.href = `portal-center.html?t=${encodeURIComponent(token)}`; }
+        else { showError('Unknown portal type.'); }
+      } catch(err) {
+        console.error(err);
+        showError('Could not load appointment details. Please check your internet connection.');
+      }
+    }
+    loadPortal();
+  </script>
+</body>
+</html>

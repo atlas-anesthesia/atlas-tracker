@@ -46,6 +46,8 @@ function syncPaymentRowsFromCases() {
   const finalized = (window.cases||[]).filter(c => !c.draft);
   let changed = false;
   finalized.forEach(c => {
+    // Skip cases the user has explicitly deleted from this table.
+    if(c.caseId && _excludedCaseIds.has(c.caseId)) return;
     const rowIdx = _paymentRows.findIndex(r => r.caseId === c.caseId);
     if(rowIdx !== -1) {
       if(_paymentRows[rowIdx].caseDate !== c.date) { _paymentRows[rowIdx].caseDate = c.date||''; changed=true; }
@@ -135,7 +137,12 @@ window.loadPaymentRows = async function loadPaymentRows() {
     window.getDoc(window.doc(window.db,'atlas','preop')),
     window.getDoc(window.doc(window.db,'atlas','surgerycenters'))
   ]);
-  _paymentRows = paymentsSnap.exists() ? (paymentsSnap.data().rows||[]) : [];
+  const paymentsData = paymentsSnap.exists() ? paymentsSnap.data() : {};
+  _paymentRows = paymentsData.rows || [];
+  // Load the persistent excluded list — caseIds the user has explicitly
+  // deleted from the Payments table. These should NOT be auto-recreated.
+  _excludedCaseIds.clear();
+  (paymentsData.excludedCaseIds || []).forEach(id => _excludedCaseIds.add(id));
   const freshCases = casesSnap.exists() ? (casesSnap.data().cases||[]) : (window.cases||[]);
   const freshPreop = preopSnap.exists() ? (preopSnap.data().records||[]) : [];
   const freshCenters = scSnap.exists() ? (scSnap.data().centers||[]) : (window.surgeryCenters||[]);
@@ -143,6 +150,9 @@ window.loadPaymentRows = async function loadPaymentRows() {
   if(freshCenters.length) window.surgeryCenters = freshCenters;
   const finalized = freshCases; // show all cases including mid-case drafts
   finalized.forEach(c => {
+    // Respect explicit user deletions — don't auto-create a row for a case
+    // the user already deleted from this table.
+    if(c.caseId && _excludedCaseIds.has(c.caseId)) return;
     const preop = freshPreop.find(r=>r['po-caseId']===c.caseId);
     const sc = preop?.['po-surgery-center']||'';
     const center = freshCenters.find(x=>x.id===sc);
@@ -390,13 +400,130 @@ window.commitPaymentField = function(idx, field, kind) {
 };
 
 // -- Delete ------------------------------------------------------------
+// Persistent set of caseIds the user has explicitly deleted from the
+// Payments table. Survives reloads via the payments doc.
+const _excludedCaseIds = new Set();
+
 window.deletePaymentRow = async function(idx) {
-  if(!confirm('Delete this payment row?\n\nThis cannot be undone.')) return;
-  _paymentRows.splice(idx,1);
+  const row = _paymentRows[idx];
+  if(!row) return;
+  const caseId = row.caseId || '';
+  const caseLabel = row.name || caseId || 'this case';
+  if(!confirm(
+    'PERMANENTLY DELETE "' + caseLabel + '"?\n\n' +
+    'This will remove the case from EVERYWHERE:\n' +
+    '  • Payments table\n' +
+    '  • Case History\n' +
+    '  • Pre-Op records / Mid-Case\n' +
+    '  • Controlled Substance log\n' +
+    '  • Saved invoices and PDFs\n' +
+    '  • Expenses & Distributions log\n\n' +
+    'This cannot be undone. Continue?'
+  )) return;
+
   window.setSyncing(true);
-  await window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows});
-  window.setSyncing(false);
+  try {
+    // 1) Remove from the payments table + remember the exclusion so it
+    //    can't be auto-recreated even if something errors mid-delete.
+    _paymentRows.splice(idx, 1);
+    if(caseId) _excludedCaseIds.add(caseId);
+    await window.setDoc(window.doc(window.db, 'atlas', 'payments'), {
+      rows: _paymentRows,
+      excludedCaseIds: Array.from(_excludedCaseIds)
+    });
+
+    if(caseId) {
+      // 2) Delete the case (finalized + draft) from atlas/cases
+      try {
+        const casesSnap = await window.getDoc(window.doc(window.db, 'atlas', 'cases'));
+        if(casesSnap.exists()) {
+          const all = casesSnap.data().cases || [];
+          const kept = all.filter(c => c.caseId !== caseId);
+          if(kept.length !== all.length) {
+            await window.setDoc(window.doc(window.db, 'atlas', 'cases'), { cases: kept });
+            if(typeof window.cases !== 'undefined') {
+              window.cases = window.cases.filter(c => c.caseId !== caseId);
+            }
+          }
+        }
+      } catch(e) { console.warn('cases delete failed:', e); }
+
+      // 3) Delete the pre-op record from atlas/preop
+      try {
+        const preopSnap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
+        if(preopSnap.exists()) {
+          const records = preopSnap.data().records || [];
+          const kept = records.filter(r => r['po-caseId'] !== caseId);
+          if(kept.length !== records.length) {
+            await window.setDoc(window.doc(window.db, 'atlas', 'preop'), { records: kept });
+            if(window._rawPreopRecords) {
+              window._rawPreopRecords = window._rawPreopRecords.filter(r => r['po-caseId'] !== caseId);
+            }
+          }
+        }
+      } catch(e) { console.warn('preop delete failed:', e); }
+
+      // 4) Clean up CS log entries
+      try {
+        const csSnap = await window.getDoc(window.doc(window.db, 'atlas', 'cslog'));
+        if(csSnap.exists()) {
+          const entries = csSnap.data().entries || [];
+          const kept = entries.filter(e => e.caseId !== caseId);
+          if(kept.length !== entries.length) {
+            await window.setDoc(window.doc(window.db, 'atlas', 'cslog'), { entries: kept });
+          }
+        }
+      } catch(e) { console.warn('cslog delete failed:', e); }
+
+      // 5) Clean up saved PDFs
+      try {
+        const pdfSnap = await window.getDoc(window.doc(window.db, 'atlas', 'saved_pdfs'));
+        if(pdfSnap.exists()) {
+          const pdfs = pdfSnap.data().pdfs || [];
+          const kept = pdfs.filter(p => p.caseId !== caseId);
+          if(kept.length !== pdfs.length) {
+            await window.setDoc(window.doc(window.db, 'atlas', 'saved_pdfs'), { pdfs: kept });
+          }
+        }
+      } catch(e) { console.warn('saved_pdfs delete failed:', e); }
+
+      // 6) Clean up Expenses & Distributions case-income entries
+      try {
+        const payoutSnap = await window.getDoc(window.doc(window.db, 'atlas', 'payouts'));
+        if(payoutSnap.exists()) {
+          const pdata = payoutSnap.data();
+          const entries = pdata.entries || [];
+          const kept = entries.filter(e => e.caseId !== caseId);
+          if(kept.length !== entries.length) {
+            await window.setDoc(window.doc(window.db, 'atlas', 'payouts'), { ...pdata, entries: kept });
+          }
+        }
+      } catch(e) { console.warn('payouts delete failed:', e); }
+
+      // 7) Clean up deposits
+      try {
+        const depSnap = await window.getDoc(window.doc(window.db, 'atlas', 'deposits'));
+        if(depSnap.exists()) {
+          const records = depSnap.data().records || [];
+          const kept = records.filter(d => d.caseId !== caseId);
+          if(kept.length !== records.length) {
+            await window.setDoc(window.doc(window.db, 'atlas', 'deposits'), { records: kept });
+          }
+        }
+      } catch(e) { console.warn('deposits delete failed:', e); }
+
+      // Audit log
+      try { if(typeof window.logAudit === 'function') window.logAudit('case-deleted-via-payments', caseId, 'Full delete from Payments tab'); } catch(e){}
+    }
+  } finally {
+    window.setSyncing(false);
+  }
+  // Refresh visible UI
   renderPaymentRows();
+  try { if(typeof window.renderHistory === 'function') window.renderHistory(); } catch(e){}
+  try { if(typeof window.renderMidCase === 'function') window.renderMidCase(); } catch(e){}
+  try { if(typeof window.renderDashboard === 'function') window.renderDashboard(); } catch(e){}
+  if(typeof window.toastSuccess === 'function') window.toastSuccess(caseLabel + ' fully deleted.');
 };
 
 // -- Sort --------------------------------------------------------------
@@ -1105,6 +1232,14 @@ function _calcPIForCase(c, row, formula) {
   const centerId = preop?.['po-surgery-center'] || c.surgeryCenter || '';
   const rule = formula.centers.find(f => f.id === centerId);
   if(!rule) return 0;
+  if(rule.type === 'per_arch') {
+    // Per-arch billing: pay yourself a fixed amount based on the case's arch type.
+    // The case's archType comes from po-archType on the pre-op record.
+    const arch = (preop && preop['po-archType']) || '';
+    if(arch === 'single') return parseFloat(rule.singleArchRate) || 0;
+    if(arch === 'dual')   return parseFloat(rule.dualArchRate)   || 0;
+    return 0; // arch not specified → no PI counted (so it doesn't double-count)
+  }
   if(rule.type === 'flat') {
     // Daily flat rate — the rule means "this is the PI for the day at this
     // center, regardless of how many cases worked there that day." Without
@@ -1249,18 +1384,39 @@ window.openPersonalIncomeModal = async function() {
             <option value="none" ${rule.type==='none'?'selected':''}>Not Used</option>
             <option value="hourly" ${rule.type==='hourly'?'selected':''}>Hourly Rate</option>
             <option value="flat" ${rule.type==='flat'?'selected':''}>Flat Rate / Day</option>
+            <option value="per_arch" ${rule.type==='per_arch'?'selected':''}>Per Arch (Single/Dual)</option>
             <option value="from_invoice" ${rule.type==='from_invoice'?'selected':''}>From Invoice</option>
           </select>
         </td>
         <td style="padding:9px 8px">
           <!-- Single-rate section (used for flat / hourly / none) -->
           <div data-rate-mode="single" data-center-mode="${c.id}"
-               style="display:${rule.type==='from_invoice'?'none':'flex'};align-items:center;gap:4px">
+               style="display:${(rule.type==='from_invoice'||rule.type==='per_arch')?'none':'flex'};align-items:center;gap:4px">
             <span style="font-size:13px;color:var(--text-muted)">$</span>
             <input type="number" min="0" step="1" value="${rule.rate||''}"
               data-center="${c.id}" data-field="rate"
               placeholder="0" style="width:80px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
             <span style="font-size:11px;color:var(--text-faint)" id="pi-unit-${c.id}">${rule.type==='hourly'?'/hr':rule.type==='flat'?'/day':''}</span>
+          </div>
+          <!-- Per-arch rate section (single + dual arch, personal pay + billed) -->
+          <div data-rate-mode="per_arch" data-center-mode="${c.id}"
+               style="display:${rule.type==='per_arch'?'grid':'none'};grid-template-columns:1fr 1fr;gap:6px 10px;align-items:center;font-size:11px">
+            <label style="display:flex;align-items:center;gap:3px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px">Single Arch PI $
+              <input type="number" min="0" step="1" value="${rule.singleArchRate||''}"
+                data-center="${c.id}" data-field="singleArchRate"
+                placeholder="2000" style="width:70px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></label>
+            <label style="display:flex;align-items:center;gap:3px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px">Single Billed $
+              <input type="number" min="0" step="1" value="${rule.singleArchBilled||''}"
+                data-center="${c.id}" data-field="singleArchBilled"
+                placeholder="2500" style="width:70px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></label>
+            <label style="display:flex;align-items:center;gap:3px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px">Dual Arch PI $
+              <input type="number" min="0" step="1" value="${rule.dualArchRate||''}"
+                data-center="${c.id}" data-field="dualArchRate"
+                placeholder="3000" style="width:70px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></label>
+            <label style="display:flex;align-items:center;gap:3px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px">Dual Billed $
+              <input type="number" min="0" step="1" value="${rule.dualArchBilled||''}"
+                data-center="${c.id}" data-field="dualArchBilled"
+                placeholder="4000" style="width:70px;padding:4px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></label>
           </div>
           <!-- Three-rate section (used for from_invoice: back-derive PI from invoice) -->
           <div data-rate-mode="invoice" data-center-mode="${c.id}"
@@ -1318,13 +1474,19 @@ window.openPersonalIncomeModal = async function() {
     if(!tr) return;
     const single  = tr.querySelector('[data-rate-mode="single"]');
     const invoice = tr.querySelector('[data-rate-mode="invoice"]');
+    const perArch = tr.querySelector('[data-rate-mode="per_arch"]');
     const unitEl  = tr.querySelector(`#pi-unit-${el.dataset.center}`);
+    // Hide all
+    if(single)  single.style.display  = 'none';
+    if(invoice) invoice.style.display = 'none';
+    if(perArch) perArch.style.display = 'none';
+    // Show the right one
     if(el.value === 'from_invoice') {
-      if(single)  single.style.display  = 'none';
       if(invoice) invoice.style.display = 'flex';
+    } else if(el.value === 'per_arch') {
+      if(perArch) perArch.style.display = 'grid';
     } else {
       if(single)  single.style.display  = 'flex';
-      if(invoice) invoice.style.display = 'none';
       if(unitEl) unitEl.textContent = el.value==='hourly'?'/hr':el.value==='flat'?'/day':'';
     }
   });
@@ -1343,6 +1505,12 @@ window.openPersonalIncomeModal = async function() {
         const incrementRate = parseFloat(modal.querySelector(`input[data-center="${centerId}"][data-field="incrementRate"]`)?.value) || 0;
         const personalRate  = parseFloat(modal.querySelector(`input[data-center="${centerId}"][data-field="personalRate"]`)?.value)  || 0;
         _piFormula.centers.push({ id: centerId, type, firstHourRate, incrementRate, personalRate });
+      } else if(type === 'per_arch') {
+        const singleArchRate   = parseFloat(modal.querySelector(`input[data-center="${centerId}"][data-field="singleArchRate"]`)?.value)   || 0;
+        const singleArchBilled = parseFloat(modal.querySelector(`input[data-center="${centerId}"][data-field="singleArchBilled"]`)?.value) || 0;
+        const dualArchRate     = parseFloat(modal.querySelector(`input[data-center="${centerId}"][data-field="dualArchRate"]`)?.value)     || 0;
+        const dualArchBilled   = parseFloat(modal.querySelector(`input[data-center="${centerId}"][data-field="dualArchBilled"]`)?.value)   || 0;
+        _piFormula.centers.push({ id: centerId, type, singleArchRate, singleArchBilled, dualArchRate, dualArchBilled });
       } else {
         const rateEl = modal.querySelector(`input[data-center="${centerId}"][data-field="rate"]`);
         const rate = parseFloat(rateEl?.value) || 0;

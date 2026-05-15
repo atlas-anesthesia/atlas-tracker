@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Atlas Anesthesia — Surgery Center Portal</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    :root {
+      --primary: #1d3557;
+      --accent: #2d6a4f;
+      --josh: #1d3557;
+      --dev: #7c3aed;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text: #1e293b;
+      --text-muted: #475569;
+      --text-faint: #94a3b8;
+      --border: #e2e8f0;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px;
+      line-height: 1.5;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    .brand {
+      text-align: center;
+      margin-bottom: 24px;
+      padding: 16px 0;
+    }
+    .brand-name {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: 0.5px;
+    }
+    .brand-tag {
+      font-size: 12px;
+      color: var(--text-faint);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      margin-bottom: 16px;
+    }
+    .header-card {
+      background: var(--primary);
+      color: #fff;
+      padding: 24px 28px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+    }
+    .header-tag {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: #90b8e0;
+      margin-bottom: 6px;
+    }
+    .header-title {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .header-sub {
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+    .provider-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 600px) {
+      .provider-cards { grid-template-columns: 1fr; }
+    }
+    .provider-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      transition: border-color 0.15s;
+    }
+    .provider-card.active { border-color: var(--primary); border-width: 2px; }
+    .provider-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .provider-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-faint);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+    .provider-bio {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 14px;
+    }
+    .btn-book {
+      display: inline-block;
+      background: var(--primary);
+      color: #fff;
+      text-decoration: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      width: 100%;
+    }
+    .btn-book.dev { background: var(--dev); }
+    .booking-section {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    }
+    .booking-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .booking-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+    iframe.tidycal {
+      width: 100%;
+      min-height: 700px;
+      border: none;
+      border-radius: 8px;
+    }
+    .alert-info {
+      background: #dbeafe;
+      border-left: 4px solid #2563eb;
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #1e3a8a;
+      line-height: 1.6;
+    }
+    .footer {
+      text-align: center;
+      padding: 24px 16px;
+      font-size: 12px;
+      color: var(--text-faint);
+      line-height: 1.6;
+    }
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-faint);
+      font-size: 14px;
+    }
+    .error {
+      background: #fee2e2;
+      border-left: 4px solid #dc2626;
+      padding: 18px 22px;
+      border-radius: 8px;
+      color: #7f1d1d;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand">
+      <div class="brand-name">ATLAS ANESTHESIA</div>
+      <div class="brand-tag">Mobile Dental Anesthesia &middot; Surgery Center Portal</div>
+    </div>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <div>Loading...</div>
+    </div>
+
+    <div id="content" style="display:none">
+      <div class="header-card">
+        <div class="header-tag">Welcome</div>
+        <div class="header-title" id="center-name">Surgery Center Portal</div>
+        <div class="header-sub">Schedule mobile anesthesia services for your patients.</div>
+      </div>
+
+      <div class="alert-info">
+        Atlas Anesthesia provides on-site IV sedation and general anesthesia for dental procedures. Our CRNAs handle pre-op assessment, anesthesia administration, monitoring, and recovery — all at your facility. Book using the calendars below.
+      </div>
+
+      <div id="announcements-section" style="display:none">
+        <h3 style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">📢 Announcements</h3>
+        <div id="announcements-list"></div>
+      </div>
+
+      <div class="provider-cards">
+        <div class="provider-card" id="josh-card">
+          <div class="provider-name">Joshua Condado, CRNA</div>
+          <div class="provider-title">Certified Registered Nurse Anesthetist</div>
+          <div class="provider-bio">Specializing in pediatric and adult dental sedation. Experienced with complex airways, special-needs patients, and long oral surgery cases.</div>
+          <button class="btn-book" onclick="showBookingFor('josh')">View Josh's Calendar →</button>
+        </div>
+        <div class="provider-card" id="dev-card">
+          <div class="provider-name">Devarsh Murthy, CRNA</div>
+          <div class="provider-title">Certified Registered Nurse Anesthetist</div>
+          <div class="provider-bio">Specializing in adult sedation and full-arch surgical procedures. Experienced with high-anxiety patients and IV access challenges.</div>
+          <button class="btn-book dev" onclick="showBookingFor('dev')">View Dev's Calendar →</button>
+        </div>
+      </div>
+
+      <!-- Contact form: surgery centers can send questions/feedback to Atlas -->
+      <div class="card" id="contact-section" style="margin-top:24px;margin-bottom:24px">
+        <h3 style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">💬 Contact Atlas Anesthesia</h3>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Questions, feedback, or scheduling needs not covered by the calendar above? Send us a message — we'll reply within one business day.</p>
+        <form id="contact-form" onsubmit="submitContactForm(event)" style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;letter-spacing:.3px">Your Name *</label>
+              <input type="text" id="cf-name" required style="width:100%;padding:9px 12px;font-size:14px;border:1px solid var(--border);border-radius:6px;outline:none;font-family:inherit;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;letter-spacing:.3px">Email *</label>
+              <input type="email" id="cf-email" required style="width:100%;padding:9px 12px;font-size:14px;border:1px solid var(--border);border-radius:6px;outline:none;font-family:inherit;box-sizing:border-box">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;letter-spacing:.3px">Surgery Center</label>
+              <input type="text" id="cf-center" placeholder="e.g. Acme Surgery Center" style="width:100%;padding:9px 12px;font-size:14px;border:1px solid var(--border);border-radius:6px;outline:none;font-family:inherit;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;letter-spacing:.3px">Phone</label>
+              <input type="tel" id="cf-phone" placeholder="(555) 555-5555" style="width:100%;padding:9px 12px;font-size:14px;border:1px solid var(--border);border-radius:6px;outline:none;font-family:inherit;box-sizing:border-box">
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint);margin-bottom:5px;letter-spacing:.3px">Message *</label>
+            <textarea id="cf-message" required rows="5" placeholder="How can we help?" style="width:100%;padding:10px 12px;font-size:14px;border:1px solid var(--border);border-radius:6px;outline:none;font-family:inherit;resize:vertical;box-sizing:border-box;min-height:110px"></textarea>
+          </div>
+          <div style="font-size:11px;color:var(--text-faint)">⚠️ Please do not include any patient health information in this form. For HIPAA-protected communications, contact us via fax or our secure channels.</div>
+          <button type="submit" id="cf-submit" style="background:var(--primary);color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;align-self:flex-start">Send Message</button>
+          <div id="cf-status" style="font-size:13px;padding:10px 14px;border-radius:6px;display:none"></div>
+        </form>
+      </div>
+
+      <div class="booking-section" id="booking-section" style="display:none">
+        <div class="booking-title" id="booking-title">Book an Appointment</div>
+        <div class="booking-sub" id="booking-sub">Pick a date and time that works for your case.</div>
+        <iframe id="booking-iframe" class="tidycal" src="about:blank" loading="lazy"></iframe>
+        <div style="margin-top:14px;font-size:12px;color:var(--text-faint);text-align:center">After booking, you'll receive a confirmation email with pre-op paperwork to send to your patient.</div>
+      </div>
+    </div>
+
+    <div id="error" style="display:none">
+      <div class="card">
+        <div class="error">
+          <strong>Portal not available</strong><br>
+          <span id="error-message">This link may have expired. Please contact Atlas Anesthesia at admin@atlasanesthesia.co or (262) 573-9095.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Questions? Email <a href="mailto:admin@atlasanesthesia.co" style="color:var(--primary)">admin@atlasanesthesia.co</a> or call (262) 573-9095<br>
+      Atlas Anesthesia LLC · 1257 Main Street, Stevens Point, WI 54481
+    </div>
+  </div>
+
+  <script>
+    const WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
+
+    // TidyCal URLs — REPLACE with real ones once Josh and Dev set up their accounts
+    const TIDYCAL_URLS = {
+      josh: 'https://tidycal.com/atlasanesthesia/josh-condado',
+      dev: 'https://tidycal.com/atlasanesthesia/dev-murthy'
+    };
+
+    function getParam(name) {
+      return new URLSearchParams(window.location.search).get(name);
+    }
+
+    function showError(msg) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      if(msg) document.getElementById('error-message').textContent = msg;
+    }
+
+    window.showBookingFor = function(who) {
+      const section = document.getElementById('booking-section');
+      const iframe = document.getElementById('booking-iframe');
+      const title = document.getElementById('booking-title');
+      const sub = document.getElementById('booking-sub');
+      const url = TIDYCAL_URLS[who];
+      const name = who === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA';
+      title.textContent = `Book with ${name}`;
+      sub.textContent = `Pick a date and time below. Confirmed appointments will be added to Atlas Anesthesia's schedule.`;
+      iframe.src = url;
+      section.style.display = 'block';
+      // Highlight active card
+      document.getElementById('josh-card').classList.remove('active');
+      document.getElementById('dev-card').classList.remove('active');
+      document.getElementById(who+'-card').classList.add('active');
+      // Scroll to booking section
+      setTimeout(() => section.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    };
+
+    function fmtAnnouncementDate(iso) {
+      if(!iso) return '';
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    }
+
+    async function loadAnnouncements() {
+      try {
+        const res = await fetch(`${WORKER_URL}/portal-announcements`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        if(!res.ok) return;
+        const data = await res.json();
+        const items = (data.announcements || []);
+        if(!items.length) return;
+        const section = document.getElementById('announcements-section');
+        const list = document.getElementById('announcements-list');
+        list.innerHTML = items.map(a => `
+          <div style="background:#fff;border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:8px;padding:14px 18px;margin-bottom:10px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px">
+              <div style="font-size:15px;font-weight:700;color:var(--text)">${a.title || ''}</div>
+              <div style="font-size:11px;color:var(--text-faint);white-space:nowrap">${fmtAnnouncementDate(a.postedAt)}</div>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);line-height:1.6;white-space:pre-wrap">${(a.body || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+          </div>
+        `).join('');
+        section.style.display = 'block';
+      } catch(e) { /* silent — non-critical */ }
+    }
+
+    window.submitContactForm = async function(e) {
+      e.preventDefault();
+      const name = document.getElementById('cf-name').value.trim();
+      const email = document.getElementById('cf-email').value.trim();
+      const centerName = document.getElementById('cf-center').value.trim();
+      const phone = document.getElementById('cf-phone').value.trim();
+      const message = document.getElementById('cf-message').value.trim();
+      const status = document.getElementById('cf-status');
+      const btn = document.getElementById('cf-submit');
+      if(!name || !email || !message) {
+        status.textContent = 'Please fill in name, email, and message.';
+        status.style.cssText = 'font-size:13px;padding:10px 14px;border-radius:6px;display:block;background:#fee2e2;color:#991b1b';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      status.style.display = 'none';
+      try {
+        const res = await fetch(`${WORKER_URL}/portal-contact`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, centerName, phone, message })
+        });
+        const data = await res.json();
+        if(res.ok && data.success) {
+          status.textContent = '✓ Message sent! We will reply within one business day.';
+          status.style.cssText = 'font-size:13px;padding:10px 14px;border-radius:6px;display:block;background:#dcfce7;color:#166534';
+          document.getElementById('contact-form').reset();
+        } else {
+          status.textContent = data.error || 'Could not send message. Please try again or call (262) 573-9095.';
+          status.style.cssText = 'font-size:13px;padding:10px 14px;border-radius:6px;display:block;background:#fee2e2;color:#991b1b';
+        }
+      } catch(err) {
+        status.textContent = 'Could not send message. Please check your internet connection.';
+        status.style.cssText = 'font-size:13px;padding:10px 14px;border-radius:6px;display:block;background:#fee2e2;color:#991b1b';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Message';
+      }
+    };
+
+    async function loadPortal() {
+      const token = getParam('t');
+      // Center portal can work WITHOUT a token (public scheduling page) or WITH a token (personalized)
+      if(token) {
+        try {
+          const res = await fetch(`${WORKER_URL}/portal-resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+          });
+          if(res.ok) {
+            const data = await res.json();
+            if(data.type === 'center' && data.center) {
+              const nameEl = document.getElementById('center-name');
+              if(nameEl && data.center) nameEl.textContent = data.center + ' — Booking Portal';
+            }
+          }
+        } catch(e) { /* fall back to generic */ }
+      }
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+      loadAnnouncements();
+    }
+    loadPortal();
+  </script>
+</body>
+</html>

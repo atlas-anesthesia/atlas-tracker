@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 // -- FIREBASE CONFIG --
 const firebaseConfig = {
@@ -60,6 +60,7 @@ function _autoLogout() {
 }
 function resetInactivityTimer() {
   if(!currentUser) return;
+  if(window._surgeryModeActive) return; // Surgery Mode pauses auto-logout
   clearTimeout(_inactivityTimer);
   clearTimeout(_inactivityWarnTimer);
   _hideInactivityWarning();
@@ -69,6 +70,400 @@ function resetInactivityTimer() {
 ['mousemove','mousedown','keydown','touchstart','scroll'].forEach(ev => {
   document.addEventListener(ev, resetInactivityTimer, { passive: true });
 });
+
+// ── SURGERY MODE ──────────────────────────────────────────────────────────────
+// When active: pauses auto-logout AND keeps the screen on via Wake Lock API.
+// Use during anesthesia administration so the iPad doesn't sleep or log out
+// mid-case. Banner shows clearly so it's never left on accidentally.
+window._surgeryModeActive = false;
+let _wakeLock = null;
+
+async function _acquireWakeLock() {
+  try {
+    if('wakeLock' in navigator) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      // Re-acquire if the lock is released (e.g. tab loses focus then regains)
+      _wakeLock.addEventListener('release', () => {
+        if(window._surgeryModeActive) {
+          setTimeout(() => { if(window._surgeryModeActive) _acquireWakeLock(); }, 500);
+        }
+      });
+    }
+  } catch(e) { console.warn('Wake Lock failed:', e); }
+}
+function _releaseWakeLock() {
+  if(_wakeLock) {
+    try { _wakeLock.release(); } catch(e){}
+    _wakeLock = null;
+  }
+}
+
+function _renderSurgeryModeBanner() {
+  let banner = document.getElementById('surgery-mode-banner');
+  if(window._surgeryModeActive) {
+    if(!banner) {
+      banner = document.createElement('div');
+      banner.id = 'surgery-mode-banner';
+      banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:#fef3c7;border-bottom:2px solid #d97706;padding:8px 16px;text-align:center;font-size:13px;font-weight:600;color:#78350f;box-shadow:0 2px 8px rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;gap:12px';
+      banner.innerHTML = `<span>🏥 <strong>SURGERY MODE ACTIVE</strong> &middot; Screen will stay on, auto-logout paused. Turn off when case ends.</span><button onclick="toggleSurgeryMode()" style="background:#92400e;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer">Turn Off</button>`;
+      document.body.appendChild(banner);
+      // Add top padding to body so content doesn't hide under banner
+      document.body.style.paddingTop = '38px';
+    }
+  } else {
+    if(banner) banner.remove();
+    document.body.style.paddingTop = '';
+  }
+}
+
+function _applySurgeryModeNav() {
+  const nav = document.querySelector('.nav');
+  if(!nav) return;
+  const liveBtn = document.getElementById('nav-live-case');
+  // Direct children of .nav — buttons AND the Reports dropdown wrapper
+  Array.from(nav.children).forEach(child => {
+    if(child === liveBtn || child.id === 'nav-live-case') {
+      // Live Case button — only visible in surgery mode
+      child.style.display = window._surgeryModeActive ? '' : 'none';
+    } else {
+      // Everything else — hidden in surgery mode
+      child.style.display = window._surgeryModeActive ? 'none' : '';
+    }
+  });
+}
+
+window.toggleSurgeryMode = async function() {
+  window._surgeryModeActive = !window._surgeryModeActive;
+  if(window._surgeryModeActive) {
+    await _acquireWakeLock();
+    clearTimeout(_inactivityTimer);
+    clearTimeout(_inactivityWarnTimer);
+    _hideInactivityWarning();
+    try { logAudit('surgery-mode-on'); } catch(e){}
+    // Navigate to Live Case automatically
+    try { showTab('live-case'); if(typeof renderLiveCase === 'function') renderLiveCase(); } catch(e){}
+  } else {
+    _releaseWakeLock();
+    resetInactivityTimer();
+    try { logAudit('surgery-mode-off'); } catch(e){}
+    // Return to Mid-Case when leaving surgery mode (most natural landing spot)
+    try { showTab('mid-case'); } catch(e){}
+  }
+  _applySurgeryModeNav();
+  _renderSurgeryModeBanner();
+  // Update the toggle button text/style
+  const btn = document.getElementById('surgery-mode-toggle');
+  if(btn) {
+    btn.textContent = window._surgeryModeActive ? '🏥 Surgery Mode: ON' : '🏥 Surgery Mode';
+    btn.style.background = window._surgeryModeActive ? '#d97706' : '';
+    btn.style.color = window._surgeryModeActive ? '#fff' : '';
+    btn.style.borderColor = window._surgeryModeActive ? '#d97706' : '';
+  }
+  // Also update the in-page button on the Live Case tab
+  const liveBtn = document.getElementById('live-surgery-toggle');
+  if(liveBtn) {
+    liveBtn.textContent = window._surgeryModeActive ? '🏥 Surgery Mode: ON' : '🏥 Surgery Mode';
+    liveBtn.style.background = window._surgeryModeActive ? '#d97706' : '';
+    liveBtn.style.color = window._surgeryModeActive ? '#fff' : '';
+  }
+};
+
+// Reacquire wake lock when tab becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if(window._surgeryModeActive && !document.hidden) {
+    _acquireWakeLock();
+  }
+});
+
+// ── LIVE CASE PORTAL ──────────────────────────────────────────────────────────
+// Single-case tablet-optimized view used during anesthesia administration.
+// Pairs with Surgery Mode (keeps screen on, pauses auto-logout).
+window._currentLiveCaseDraft = null; // the active case draft being tracked
+window._liveTimerInterval = null;
+window._liveTimerStartedAt = null;     // ms epoch when timer started running
+window._liveTimerAccumulatedMs = 0;    // total elapsed time before current run
+
+function _formatLiveTimer(totalMs) {
+  const totalSec = Math.floor(totalMs / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function _liveTimerTick() {
+  const el = document.getElementById('live-timer');
+  if(!el) return;
+  const running = window._liveTimerStartedAt;
+  const elapsed = window._liveTimerAccumulatedMs + (running ? (Date.now() - running) : 0);
+  el.textContent = _formatLiveTimer(elapsed);
+}
+
+window.toggleLiveTimer = function() {
+  const btn = document.getElementById('live-timer-toggle');
+  if(window._liveTimerStartedAt) {
+    // Currently running — pause
+    window._liveTimerAccumulatedMs += Date.now() - window._liveTimerStartedAt;
+    window._liveTimerStartedAt = null;
+    clearInterval(window._liveTimerInterval);
+    window._liveTimerInterval = null;
+    if(btn) { btn.textContent = '▶ Resume'; btn.style.background = '#2d6a4f'; }
+  } else {
+    // Currently paused — start/resume
+    window._liveTimerStartedAt = Date.now();
+    window._liveTimerInterval = setInterval(_liveTimerTick, 1000);
+    if(btn) { btn.textContent = '⏸ Pause'; btn.style.background = '#1d3557'; }
+    _liveTimerTick();
+  }
+};
+
+window.resetLiveTimer = function() {
+  if(!confirm('Reset the case timer to 00:00:00?')) return;
+  clearInterval(window._liveTimerInterval);
+  window._liveTimerInterval = null;
+  window._liveTimerStartedAt = null;
+  window._liveTimerAccumulatedMs = 0;
+  const el = document.getElementById('live-timer');
+  if(el) el.textContent = '00:00:00';
+  const btn = document.getElementById('live-timer-toggle');
+  if(btn) { btn.textContent = '▶ Start'; btn.style.background = '#1d3557'; }
+};
+
+window.renderLiveCase = function() {
+  const picker = document.getElementById('live-case-picker');
+  if(!picker) return;
+  const drafts = (window.cases || []).filter(c => c.draft);
+  const preops = (window._rawPreopRecords || []);
+  // Show drafts first, then any pre-op without a draft yet (so live tracking can start before Finalize)
+  const allActive = [];
+  drafts.forEach(d => allActive.push({ kind:'draft', id:d.id, caseId:d.caseId, date:d.date, worker:d.worker, ref:d }));
+  preops.forEach(p => {
+    if(!allActive.find(a => a.caseId === p['po-caseId'])) {
+      allActive.push({ kind:'preop', id:p.id, caseId:p['po-caseId'], date:p['po-surgeryDate'], worker:p.worker, ref:p });
+    }
+  });
+  allActive.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const currentVal = picker.value;
+  picker.innerHTML = '<option value="">— Select an active draft —</option>' +
+    allActive.map(a => {
+      const displayId = (typeof window.getCaseDisplayId === 'function')
+        ? window.getCaseDisplayId(a.caseId, a.date,
+            a.kind === 'preop' ? a.ref['po-patientFirstName'] : '',
+            a.kind === 'preop' ? a.ref['po-patientLastName'] : '')
+        : a.caseId;
+      const label = `${displayId}${a.kind==='draft' ? ' (Draft)' : ''}`;
+      return `<option value="${a.kind}:${a.id}" ${currentVal===a.kind+':'+a.id?'selected':''}>${label}</option>`;
+    }).join('');
+  if(currentVal) onLiveCaseChange();
+};
+
+window.onLiveCaseChange = function() {
+  const picker = document.getElementById('live-case-picker');
+  const empty = document.getElementById('live-case-empty');
+  const content = document.getElementById('live-case-content');
+  if(!picker || !empty || !content) return;
+  const val = picker.value;
+  if(!val) {
+    empty.style.display = 'block';
+    content.style.display = 'none';
+    window._currentLiveCaseDraft = null;
+    return;
+  }
+  const [kind, id] = val.split(':');
+  let caseRec = null, preopRec = null;
+  if(kind === 'draft') {
+    caseRec = (window.cases || []).find(c => c.id === id);
+    if(caseRec) preopRec = (window._rawPreopRecords || []).find(p => p['po-caseId'] === caseRec.caseId);
+  } else if(kind === 'preop') {
+    preopRec = (window._rawPreopRecords || []).find(p => p.id === id);
+  }
+  if(!caseRec && !preopRec) {
+    empty.style.display = 'block';
+    content.style.display = 'none';
+    return;
+  }
+  window._currentLiveCaseDraft = caseRec;
+  window._currentLivePreop = preopRec;
+  empty.style.display = 'none';
+  content.style.display = 'block';
+  // Silently load the draft into form state so "Add Supplies" / "Add CS" save
+  // to THIS case. resumeCase() navigates to Finalize tab as a side-effect, so
+  // we flip back to Live Case immediately. Without this, supplies added in
+  // Live Case would be lost when "Go to Finalize" reloads the draft.
+  if(caseRec && caseRec.id && typeof window.resumeCase === 'function' && window._activeDraftId !== caseRec.id) {
+    try { window.resumeCase(caseRec.id); } catch(e){}
+    setTimeout(() => { try { showTab('live-case'); } catch(e){} }, 50);
+  }
+  // Populate header
+  const caseId = (caseRec && caseRec.caseId) || (preopRec && preopRec['po-caseId']) || '—';
+  const surgDate = (caseRec && caseRec.date) || (preopRec && preopRec['po-surgeryDate']) || '';
+  const displayId = (typeof window.getCaseDisplayId === 'function')
+    ? window.getCaseDisplayId(caseId, surgDate,
+        preopRec ? preopRec['po-patientFirstName'] : '',
+        preopRec ? preopRec['po-patientLastName'] : '')
+    : caseId;
+  const idEl = document.getElementById('live-case-id');
+  if(idEl) idEl.textContent = displayId;
+  // Meta line: provider, surgery center, time
+  const parts = [];
+  const provider = (caseRec && caseRec.provider) || (preopRec && preopRec['po-provider']);
+  if(provider) parts.push(provider);
+  if(preopRec && preopRec['po-surgery-center']) {
+    const center = (window.surgeryCenters || []).find(x => x.id === preopRec['po-surgery-center']);
+    if(center) parts.push(center.name);
+  }
+  if(surgDate) parts.push(fmtDate(surgDate));
+  const startTime = preopRec && preopRec['po-startTime'];
+  if(startTime) parts.push(startTime);
+  const metaEl = document.getElementById('live-case-meta');
+  if(metaEl) metaEl.textContent = parts.join(' · ') || '—';
+  // Patient info card (PHI-aware)
+  const phiHidden = preopRec && typeof window.isPHIHidden === 'function' && window.isPHIHidden(surgDate, caseId);
+  const patientCard = document.getElementById('live-patient-info');
+  if(patientCard) {
+    if(phiHidden) {
+      patientCard.innerHTML = `<div style="color:#64748b;font-style:italic">🔒 Patient details are hidden (case is 3+ days old). Use the reveal button in Mid-Case to unlock.</div>`;
+    } else if(!preopRec) {
+      patientCard.innerHTML = `<div style="color:var(--text-faint);font-style:italic">No pre-op record linked yet.</div>`;
+    } else {
+      const allergies = preopRec['po-allergies'];
+      const mall = preopRec['mallampati'];
+      const weight = preopRec['po-weight-kg-val'];
+      const bmi = preopRec['po-bmi-val'];
+      const meds = preopRec['po-medications'];
+      let html = '';
+      if(allergies) html += `<div style="background:#fee2e2;color:#b91c1c;padding:8px 12px;border-radius:6px;font-weight:600;margin-bottom:8px">⚠ ALLERGIES: ${allergies}</div>`;
+      const inline = [];
+      if(mall) inline.push(`<strong>Mallampati:</strong> ${mall}`);
+      if(weight) inline.push(`<strong>Wt:</strong> ${weight} kg`);
+      if(bmi) inline.push(`<strong>BMI:</strong> ${bmi}`);
+      if(inline.length) html += `<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--text);margin-bottom:6px">${inline.join('')}</div>`;
+      if(meds) html += `<div style="font-size:12px;color:var(--text-muted)"><strong>Meds:</strong> ${meds}</div>`;
+      patientCard.innerHTML = html || '<div style="color:var(--text-faint);font-style:italic">No medical details entered.</div>';
+    }
+  }
+  // Render the supplies/CS list from the draft
+  const loggedList = document.getElementById('live-logged-list');
+  if(loggedList) {
+    const items = (caseRec && caseRec.items) || [];
+    const cs = (caseRec && caseRec.savedCsEntries) || [];
+    let html = '';
+    if(items.length) {
+      html += `<div style="margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Supplies</div>`;
+      html += items.map(i => `<div style="padding:5px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between"><span>${i.generic} × ${i.qty}</span><span style="color:var(--text-muted)">$${(i.lineTotal||0).toFixed(2)}</span></div>`).join('');
+    }
+    if(cs.length) {
+      html += `<div style="margin-top:10px;margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:#d97706">Controlled Substances</div>`;
+      html += cs.map(e => `<div style="padding:5px 0;border-bottom:1px solid var(--border)">${e.drug || e.generic || '—'} ${e.dose ? '· '+e.dose : ''}${e.route ? ' · '+e.route : ''}</div>`).join('');
+    }
+    loggedList.innerHTML = html || '<div style="color:var(--text-faint);font-style:italic">Nothing logged yet. Use the buttons above to add supplies or controlled substances.</div>';
+  }
+  // Restore notes from the draft
+  const notesEl = document.getElementById('live-notes');
+  if(notesEl) notesEl.value = (caseRec && (caseRec.liveNotes || caseRec.caseComments)) || '';
+  // Suggest enabling Surgery Mode if not already
+  const toggleBtn = document.getElementById('live-surgery-toggle');
+  if(toggleBtn) {
+    toggleBtn.textContent = window._surgeryModeActive ? '🏥 Surgery Mode: ON' : '🏥 Surgery Mode';
+    toggleBtn.style.background = window._surgeryModeActive ? '#d97706' : '';
+    toggleBtn.style.color = window._surgeryModeActive ? '#fff' : '';
+  }
+};
+
+let _liveNotesSaveTimer = null;
+window.saveLiveNotes = function() {
+  clearTimeout(_liveNotesSaveTimer);
+  _liveNotesSaveTimer = setTimeout(async () => {
+    const notesEl = document.getElementById('live-notes');
+    if(!notesEl || !window._currentLiveCaseDraft) return;
+    const value = notesEl.value;
+    try {
+      window._currentLiveCaseDraft.liveNotes = value;
+      // Persist to the case record if it's a finalized draft
+      if(typeof saveCasesToFirestore === 'function') {
+        await saveCasesToFirestore(window.cases);
+      }
+    } catch(e) { console.warn('saveLiveNotes failed:', e); }
+  }, 800);
+};
+
+// ── EXTERNAL PORTAL: link generation ──────────────────────────────────────────
+// Cloudflare worker URL — must match the live worker domain
+const PORTAL_WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
+const PORTAL_PAGE_BASE  = 'https://atlas-anesthesia.github.io/atlas-tracker';
+
+async function _createPortalToken(caseId, type, centerId) {
+  const res = await fetch(`${PORTAL_WORKER_URL}/portal-create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ caseId, type, centerId, expiresInDays: 60 })
+  });
+  if(!res.ok) throw new Error('Could not create portal link.');
+  return await res.json();
+}
+
+async function _copyToClipboard(text) {
+  try {
+    if(navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch(e){}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    return true;
+  } catch(e){ return false; }
+}
+
+window.generatePatientPortalLink = async function(caseId) {
+  if(!caseId) return;
+  try {
+    const result = await _createPortalToken(caseId, 'patient');
+    const url = `${PORTAL_PAGE_BASE}/portal.html?t=${result.token}`;
+    const copied = await _copyToClipboard(url);
+    try { logAudit('portal-link-generated', caseId, 'patient link created'); } catch(e){}
+    alert(`Patient portal link created${copied ? ' and copied to clipboard' : ''}:\n\n${url}\n\nExpires in 60 days. Share via email, text, or print.`);
+  } catch(err) {
+    alert('Failed to generate patient link: ' + err.message);
+  }
+};
+
+window.generateCenterPortalLink = async function(centerId, centerName) {
+  try {
+    // Center portal doesn't need a specific case — use centerId as the "case" for token tracking
+    const result = await _createPortalToken(centerId || 'general', 'center', centerId);
+    const url = `${PORTAL_PAGE_BASE}/portal-center.html?t=${result.token}`;
+    const copied = await _copyToClipboard(url);
+    try { logAudit('portal-link-generated', centerId || '', 'center link created for ' + (centerName||'')); } catch(e){}
+    alert(`Surgery Center portal link created${copied ? ' and copied to clipboard' : ''}:\n\n${url}\n\nExpires in 60 days. Share with the surgery center contact.`);
+  } catch(err) {
+    alert('Failed to generate center link: ' + err.message);
+  }
+};
+
+window.goToFinalizeFromLive = function() {
+  if(!window._currentLiveCaseDraft) {
+    if(window._currentLivePreop) {
+      // Start a case from the pre-op
+      if(typeof window.startCaseFromPreop === 'function') {
+        window.startCaseFromPreop(window._currentLivePreop.id);
+        return;
+      }
+    }
+    alert('No active case to finalize. Select a draft from the dropdown.');
+    return;
+  }
+  // Resume the draft case (sets up Finalize form with this case's data)
+  if(typeof window.resumeCase === 'function') {
+    window.resumeCase(window._currentLiveCaseDraft.id);
+  } else {
+    showTab('new-case');
+  }
+};
 
 // ── HIPAA: AUDIT LOG ──────────────────────────────────────────────────────────
 // Append-only log in Firestore (atlas/audit_log). Captures who did what and
@@ -95,6 +490,15 @@ async function logAudit(action, target, details) {
   }
 }
 window.logAudit = logAudit;
+
+// PHI Redaction support: verifies the current user's password without
+// changing the session. Used by phi-redaction.js when the user wants to
+// reveal hidden PHI for a case older than 3 days. Throws on wrong password.
+window.verifyCurrentUserPassword = async function(password) {
+  if(!currentUser || !currentUser.email) throw new Error('Not logged in');
+  const credential = EmailAuthProvider.credential(currentUser.email, password);
+  await reauthenticateWithCredential(currentUser, credential);
+};
 
 // Simple Audit Log viewer. Reads the last N entries and displays them in a
 // modal. Read-only — entries are never editable, that's the whole point.
@@ -357,6 +761,14 @@ if(isNewLogin) {
 resetInactivityTimer();
 document.getElementById('loginScreen').style.display='none';
 document.getElementById('appScreen').style.display='block';
+// Always land on Home (Dashboard) when logging in
+if(isNewLogin) {
+  try { showTab('home'); if(typeof renderDashboard === 'function') renderDashboard(); } catch(e){}
+  // Start checking for app updates so Dev/Josh see a banner if a new version is deployed
+  try { _startUpdateChecker(); } catch(e){}
+  // Show today's follow-ups / overdue reminders as a notification panel
+  try { if(typeof showLoginNotifications === 'function') showLoginNotifications(); } catch(e){}
+}
 // Auto-set worker based on email
 const mappedWorker = EMAIL_WORKER_MAP[user.email.toLowerCase()] || 'dev';
 currentWorker = mappedWorker;
@@ -385,8 +797,8 @@ ind.textContent = (mappedWorker==='dev' ? 'Devarsh' : 'Josh') + "'s inventory wi
 // Default inventory tab to their own
 ['dev','josh','combined'].forEach(x => document.getElementById('itab-'+x).classList.toggle('active', x===mappedWorker));
 document.getElementById('userLabel').textContent = mappedWorker === 'dev' ? 'Devarsh' : 'Josh';
-// Show payout tab only for Josh
-const payoutNavBtn = document.getElementById('nav-payout-btn');
+// Show payout tab only for Josh (now lives inside the Setup dropdown)
+const payoutNavBtn = document.getElementById('subnav-payout');
 if(payoutNavBtn) payoutNavBtn.style.display = '';
 // Default Case Log, CS Log, and Case History to logged-in user's perspective
 currentCaseLogTab = mappedWorker;
@@ -396,7 +808,7 @@ document.getElementById('caselog-josh').style.display = mappedWorker==='josh' ? 
 currentHistoryFilter = mappedWorker;
 ['all','dev','josh'].forEach(x => { const el=document.getElementById('hbtn-'+x); if(el) el.className='worker-btn'+(x===mappedWorker?' '+(mappedWorker==='dev'?'active-dev':'active-josh'):''); });
 document.getElementById('hbtn-all').className = 'worker-btn';
-document.getElementById('dateDisplay').textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+{ const _dd = document.getElementById('dateDisplay'); if(_dd) _dd.textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
 document.getElementById('caseDate').value = todayStr();
 await initData();
 updateCaseIdDisplays();
@@ -512,6 +924,8 @@ cases = [];
 getDoc(doc(db,'atlas','preop')).then(ps => {
 window._rawPreopRecords = ps.exists() ? (ps.data().records||[]) : [];
 window._cachedPreopRecords = [...(window._rawPreopRecords||[])];
+// Refresh dashboard now that preop data is loaded
+if(typeof renderDashboard === 'function') renderDashboard();
 }).catch(()=>{});
 // Update was from Firestore — refresh all dependent views
 if(typeof _globalRefresh === 'function') {
@@ -523,6 +937,8 @@ if(typeof _globalRefresh === 'function') {
   renderCaseLog();
   renderMidCase();
 }
+// Refresh dashboard with the freshly loaded cases
+if(typeof renderDashboard === 'function') renderDashboard();
 // Refresh calendar if open
 if(document.getElementById('tab-calendar')?.classList.contains('active')) {
   setTimeout(buildCalendar, 100);
@@ -555,7 +971,32 @@ onSnapshot(doc(db,'atlas','preop'), (snap) => {
 async function saveInventory() {
 setSyncing(true);
 const safeItems = sanitizeForFirestore(items) || [];
-await setDoc(doc(db,'atlas','inventory'),{items: safeItems});
+try {
+  await setDoc(doc(db,'atlas','inventory'),{items: safeItems});
+} catch(err) {
+  setSyncing(false);
+  if(typeof window.atlasError === 'function') {
+    window.atlasError('INV-001', err.message || String(err));
+  }
+  throw err;
+}
+// Verify the write actually persisted by reading back. Catches the case
+// where setDoc resolves locally (offline cache) but the server never
+// received it — user would think they saved, then lose their changes when
+// the snapshot caught up to the real server state.
+try {
+  const verify = await getDoc(doc(db,'atlas','inventory'));
+  const persistedCount = verify.exists() ? (verify.data().items || []).length : 0;
+  if(persistedCount !== safeItems.length) {
+    if(typeof window.atlasError === 'function') {
+      window.atlasError('INV-002', `Expected ${safeItems.length} items, server has ${persistedCount}.`);
+    }
+  } else {
+    try { logAudit('inventory-save-ok', '', `${safeItems.length} items by ` + (currentWorker || 'unknown')); } catch(e){}
+  }
+} catch(verifyErr) {
+  console.warn('Inventory save verification skipped:', verifyErr);
+}
 setSyncing(false);
 }
 
@@ -670,7 +1111,39 @@ try {
   // Log the actual cases payload so we can identify the offending field in dev tools.
   console.error('saveCases setDoc failed:', setErr);
   console.error('Cases count:', safeCases.length, 'Cases payload:', safeCases);
+  setSyncing(false);
+  if(typeof window.atlasError === 'function') {
+    window.atlasError('CASE-001', setErr.message || String(setErr));
+  }
   throw setErr;
+}
+// CASE-002 verification: read back to confirm the write actually persisted.
+// This is the critical guard against "I saved supplies but they're gone."
+try {
+  const verify = await getDoc(doc(db,'atlas','cases'));
+  const persisted = verify.exists() ? (verify.data().cases || []) : [];
+  const persistedById = new Map(persisted.map(c => [c.id, c]));
+  let mismatches = 0;
+  let detail = '';
+  for(const c of safeCases) {
+    const p = persistedById.get(c.id);
+    if(!p) { mismatches++; detail += `\n• ${c.caseId||c.id}: NOT FOUND on server`; continue; }
+    const localItems = (c.items||[]).length;
+    const serverItems = (p.items||[]).length;
+    if(localItems !== serverItems) {
+      mismatches++;
+      detail += `\n• ${c.caseId||c.id}: local has ${localItems} supplies, server has ${serverItems}`;
+    }
+  }
+  if(mismatches > 0) {
+    if(typeof window.atlasError === 'function') {
+      window.atlasError('CASE-002', `${mismatches} case(s) mismatch:${detail}\n\nDO NOT close the app — refresh and check the affected case. If supplies are missing, re-enter them.`);
+    }
+  } else {
+    try { logAudit('cases-save-ok', '', `${safeCases.length} cases verified persisted`); } catch(e){}
+  }
+} catch(verifyErr) {
+  console.warn('Cases save verification skipped:', verifyErr);
 }
 setSyncing(false);
 // onSnapshot fires automatically and calls _globalRefresh indirectly,
@@ -774,13 +1247,9 @@ btn.style.color=x===f?'#fff':'';
 renderHistory();
 };
 // -- CALENDAR --
-const GCAL_CLIENT_ID = '677020713040-6smv4mss68prvd3mqnq3pkotcea8l16v.apps.googleusercontent.com';
-const GCAL_SCOPES = 'https://www.googleapis.com/auth/calendar.events';
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 let calFilter = 'all';
-let gcalToken = null;
-let gcalTokenClient = null;
 window.setCalFilter = function(f) {
 calFilter = f;
 ['all','dev','josh'].forEach(x => {
@@ -833,10 +1302,12 @@ console.error('getCalEvents error:', e);
 return [];
 }
 }
+// FullCalendar instance (lazy-init)
+window._fcInstance = null;
 function buildCalendar() {
+const fcEl = document.getElementById('fullcalendar');
 const grid = document.getElementById('cal-grid');
 const label = document.getElementById('cal-month-label');
-if(!grid) { console.error('cal-grid not found'); return; }
 // Merge preop records + finalized cases, strictly deduped by caseId
 try {
 const preopSnap = window._rawPreopRecords || [];
@@ -855,6 +1326,53 @@ const months = ['January','February','March','April','May','June','July',
 if(label) label.textContent = `${months[calMonth]} ${calYear}`;
 let events = [];
 try { events = getCalEvents(); } catch(e) { console.warn('getCalEvents error', e); }
+
+// ── FullCalendar render path ─────────────────────────────────────────────
+if(fcEl && typeof FullCalendar !== 'undefined') {
+  // Map our events to FullCalendar format
+  const workerColors = {
+    josh: { surgery: '#dc2626', 'preop-call': '#ea580c', deposit: '#ca8a04', default: '#b91c1c' },
+    dev:  { surgery: '#2563eb', 'preop-call': '#16a34a', deposit: '#9333ea', default: '#1d4ed8' }
+  };
+  const fcEvents = events.map(e => {
+    const w = e.worker === 'josh' ? 'josh' : 'dev';
+    const color = (workerColors[w][e.type] || workerColors[w].default);
+    return {
+      id: e.id || (e.date + '-' + (e.type||'')),
+      title: e.label || '',
+      start: e.date,
+      allDay: true,
+      backgroundColor: color,
+      borderColor: color,
+      textColor: '#fff',
+      extendedProps: { _raw: e }
+    };
+  });
+  if(!window._fcInstance) {
+    window._fcInstance = new FullCalendar.Calendar(fcEl, {
+      initialView: 'dayGridMonth',
+      headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' },
+      buttonText: { today: 'Today', month: 'Month', week: 'Week', list: 'List' },
+      height: 'auto',
+      dayMaxEvents: 4,
+      editable: false, // events are not draggable — dates are fixed
+      eventClick: function(info) {
+        const raw = info.event.extendedProps._raw;
+        if(raw && typeof showCalDetail === 'function') {
+          try { showCalDetail(raw); } catch(e){}
+        }
+      }
+    });
+    window._fcInstance.render();
+  }
+  // Update events
+  window._fcInstance.removeAllEvents();
+  fcEvents.forEach(e => window._fcInstance.addEvent(e));
+  return; // Skip the legacy grid render
+}
+
+// Legacy grid (fallback if FullCalendar not loaded)
+if(!grid) { console.error('cal-grid not found'); return; }
 const today = todayStr();
 const firstDay = new Date(calYear, calMonth, 1).getDay();
 const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
@@ -938,7 +1456,7 @@ ${e.provider ? `<div style="background:var(--surface2);padding:8px 12px;border-r
 ${e.worker ? `<div style="background:var(--surface2);padding:8px 12px;border-radius:var(--radius-sm)"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--text-faint);margin-bottom:2px">Worker</div><div style="font-size:13px">${e.worker==='dev'?'Devarsh':'Josh'}</div></div>` : ''}
 </div>
 ${e.email ? `<div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;font-family:'DM Mono',monospace">📧 ${e.email}</div>` : ''}
-<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px"><button id="cal-view-preop-btn" class="btn btn-primary btn-sm" style="font-size:12px">📋 View Pre-Op / Case</button><button id="cal-gcal-btn" class="btn btn-ghost btn-sm" style="font-size:12px;padding:6px 14px">${gcalToken ? '+ Add to Google Cal' : 'Connect Google Cal'}</button><button id="cal-close-btn" class="btn btn-ghost btn-sm">Close</button></div></div></div>`;
+<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px"><button id="cal-view-preop-btn" class="btn btn-primary btn-sm" style="font-size:12px">📋 View Pre-Op / Case</button><button id="cal-close-btn" class="btn btn-ghost btn-sm">Close</button></div></div></div>`;
 modal.style.display = 'flex';
 // Use modal.querySelector to avoid ID conflicts with static HTML
 modal.querySelector('#cal-close-btn').addEventListener('click', () => {
@@ -948,14 +1466,6 @@ modal.querySelector('#cal-view-preop-btn').addEventListener('click', () => {
 modal.style.display = 'none';
 // Small delay to ensure modal is fully hidden before opening preview
 setTimeout(() => window.viewPreopFromCalendar(e.caseId), 100);
-});
-modal.querySelector('#cal-gcal-btn').addEventListener('click', () => {
-if(gcalToken) {
-addSingleEventToGCal(JSON.stringify(e));
-modal.style.display = 'none';
-} else {
-connectGoogleCalendar();
-}
 });
 }
 window.viewPreopFromCalendar = async function(caseId) {
@@ -997,61 +1507,6 @@ alert('Error: ' + err.message);
 }
 };
 window.showCalEventDetail = showCalDetail;
-window.connectGoogleCalendar = function() {
-if(!gcalTokenClient) {
-gcalTokenClient = google.accounts.oauth2.initTokenClient({
-client_id: GCAL_CLIENT_ID,
-scope: GCAL_SCOPES,
-callback: (resp) => {
-if(resp.error) return;
-gcalToken = resp.access_token;
-const btn = document.getElementById('gcal-connect-btn');
-const syncBtn = document.getElementById('gcal-sync-btn');
-const status = document.getElementById('gcal-status');
-if(btn) btn.style.display='none';
-if(syncBtn) syncBtn.style.display='inline-flex';
-if(status) status.innerHTML='<span style="background:var(--accent-light);color:var(--accent);border:1px solid var(--accent-mid);border-radius:var(--radius-sm);padding:5px 13px;font-size:12px;font-weight:500">✓ Connected</span>';
-syncAllToGoogleCalendar();
-}
-});
-}
-gcalTokenClient.requestAccessToken();
-};
-window.syncAllToGoogleCalendar = async function() {
-if(!gcalToken) { connectGoogleCalendar(); return; }
-const events = getCalEvents();
-if(!events.length) { alert('No events to sync.'); return; }
-const syncBtn = document.getElementById('gcal-sync-btn');
-if(syncBtn) syncBtn.textContent='Syncing...';
-let synced=0, failed=0;
-for(const e of events) {
-try { await pushToGCal(e); synced++; } catch(err) { failed++; }
-}
-if(syncBtn) syncBtn.textContent='↻ Sync All';
-alert(`✓ Synced ${synced} events to Google Calendar${failed>0?`
-${failed} failed`:''}!`);
-};
-window.addSingleEventToGCal = async function(eStr) {
-let e; try { e = JSON.parse(eStr); } catch(ex) { return; }
-if(!gcalToken) { connectGoogleCalendar(); return; }
-try { await pushToGCal(e); alert(`✓ Added to Google Calendar!`); } catch(err) { alert('Error: '+err.message); }
-};
-async function pushToGCal(e) {
-const titles = {surgery:'Surgery','preop-call':'Pre-Op Call Due',deposit:'Initiate Final Payment'};
-const colorIds = {surgery:'11','preop-call':'9',deposit:'10'};
-const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-method:'POST',
-headers:{'Authorization':`Bearer ${gcalToken}`,'Content-Type':'application/json'},
-body: JSON.stringify({
-summary:`Atlas: ${titles[e.type]||e.type} — ${e.caseId}`,
-description:`Case: ${e.caseId}\nDentist: ${e.provider}\nSurgery Date: ${e.surgDate}${e.email?'\nPatient Email: '+e.email:''}`,
-start:{date:e.date}, end:{date:e.date},
-colorId: colorIds[e.type]||'9',
-reminders:{useDefault:false,overrides:[{method:'email',minutes:24*60},{method:'popup',minutes:60}]}
-})
-});
-if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'Failed'); }
-}
 window.showTab = function(tab, pushState) { if(pushState===undefined) pushState=true;
 try { localStorage.setItem('atlas_active_tab', tab); } catch(e) {}
 if(pushState) {
@@ -2992,6 +3447,7 @@ await saveInventory();
 toggleAddForm();refreshItemSelect();
 };
 // -- HISTORY --
+window.renderHistory = renderHistory;
 function renderHistory() {
 const el=document.getElementById('caseHistoryList');
 let filtered=cases;
@@ -3011,25 +3467,50 @@ filtered = [...filtered].sort((a,b) => {
   return bDate.localeCompare(aDate);
 });
 const invoices = window._savedInvoices || [];
-if(!filtered.length){el.innerHTML='<div class="empty-state">No cases recorded yet</div>';return;}
+if(!filtered.length){el.innerHTML='<div class="empty-state"><span class="empty-state-icon">📋</span><div class="empty-state-title">No cases recorded yet</div><div class="empty-state-sub">Cases will appear here after you finalize them. Start by saving a Pre-Op record.</div><button class="empty-state-cta" onclick="showTab(\'preop\')">+ New Pre-Op →</button></div>';return;}
 const today = todayStr();
+// Helper: format the date into a group label like "May 2026" or "This Week"
+function _historyGroupFor(dateStr, todayStr) {
+  if(!dateStr) return { key: 'undated', label: 'No date' };
+  const d = new Date(dateStr + 'T12:00:00');
+  if(isNaN(d.getTime())) return { key: 'undated', label: 'No date' };
+  const now = new Date(todayStr + 'T12:00:00');
+  const diffDays = Math.round((d - now) / 86400000);
+  if(diffDays === 0) return { key: 'today', label: 'Today' };
+  if(diffDays === 1) return { key: 'tomorrow', label: 'Tomorrow' };
+  if(diffDays > 1 && diffDays <= 7) return { key: 'thisweek', label: 'This Week' };
+  if(diffDays > 7 && diffDays <= 14) return { key: 'nextweek', label: 'Next Week' };
+  if(diffDays === -1) return { key: 'yesterday', label: 'Yesterday' };
+  if(diffDays < 0 && diffDays >= -7) return { key: 'lastweek', label: 'Last Week' };
+  // Otherwise group by Month YYYY
+  const monthName = d.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  return { key: 'm-'+monthName, label: monthName };
+}
+let _lastHistoryGroup = '';
 el.innerHTML=filtered.map(c=>{
+const group = _historyGroupFor(c.date, today);
+const groupHeader = (group.key !== _lastHistoryGroup) ? `<div class="history-group-header"><span>${group.label}</span></div>` : '';
+_lastHistoryGroup = group.key;
 const pill=c.worker==='dev'?'pill-dev':'pill-josh';
 const wname=c.worker==='dev'?'Devarsh':'Josh';
 const isPast = c.date && c.date < today;
 const isToday = c.date === today;
+// HIPAA: hide PHI for cases 3+ days post-surgery (HHS minimum-necessary rule)
+const phiHidden = typeof window.isPHIHidden === 'function' && window.isPHIHidden(c.date, c.caseId);
+const phiBadge = phiHidden ? `<span style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px" title="Case notes and photos hidden — case is 3+ days old">🔒 PHI HIDDEN</span>` : '';
 const borderColor = c.draft ? 'var(--warn)' : isPast ? '#94a3b8' : isToday ? 'var(--accent)' : 'var(--info)';
 const bgTint = c.draft ? 'transparent' : isPast ? 'rgba(148,163,184,0.06)' : isToday ? 'rgba(45,106,79,0.04)' : 'rgba(29,53,87,0.03)';
 const dateBadge = c.draft ? '' : isPast
-? `<span style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">PAST</span>`
+? `<span style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">⏱ PAST</span>`
 : isToday
-? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">TODAY</span>`
-: `<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">UPCOMING</span>`;
-return `<div class="case-item" style="border-left:3px solid ${borderColor};background:${bgTint}"><div class="case-item-header" onclick="toggleCase('${c.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
-${c.caseId||'No Case ID'}
+? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">● TODAY</span>`
+: `<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">📅 UPCOMING</span>`;
+return groupHeader + `<div class="case-item" style="border-left:3px solid ${borderColor};background:${bgTint}"><div class="case-item-header" onclick="toggleCase('${c.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
+${typeof window.getCaseDisplayIdFromCase === 'function' ? window.getCaseDisplayIdFromCase(c) : (c.caseId||'No Case ID')}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>
-${c.draft?'<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span>':''}
+${c.draft?'<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">✏ DRAFT</span>':''}
 ${dateBadge}
+${phiBadge}
 </div><div class="case-date">${fmtDate(c.date)} · ${c.procedure||c.caseId}${c.provider?' · '+c.provider:''}</div>
 ${(() => {
 const inv = invoices.find(i => i.linkedCaseId === c.caseId);
@@ -3053,14 +3534,16 @@ return `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-
 }
 <button onclick="event.stopPropagation();toggleHistoryDropdown('${c.id}');viewLinkedPreop('${c.caseId}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--info);font-family:inherit">📋 Edit Pre-Op</button><button onclick="event.stopPropagation();toggleHistoryDropdown('${c.id}');deleteFinalizedCase(this)" data-id="${c.id}" data-label="${c.procedure||c.caseId||'Case'}" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--warn);font-family:inherit">🗑 Delete</button></div></div></div></div><div class="case-items-list" id="detail_${c.id}">
 ${c.items&&c.items.length?c.items.map(i=>`<div class="case-item-row"><span>${i.generic} × ${i.qty}</span><span>$${i.lineTotal.toFixed(2)}</span></div>`).join(''):'<div style="font-size:13px;color:var(--text-faint);padding:6px 0">No supplies logged yet.</div>'}
-${c.notes?`<div style="margin-top:6px;font-size:12px;color:var(--text-faint);font-style:italic">${c.notes}</div>`:''}
+${(!phiHidden && c.notes) ? `<div style="margin-top:6px;font-size:12px;color:var(--text-faint);font-style:italic">${c.notes}</div>` : ''}
 ${(function(){
+  if(phiHidden) return '';
   const imgs = caseImages(c);
   if(!imgs.length) return '';
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">` + imgs.map((im, idx) =>
     `<img src="${im.dataUrl}" class="case-log-img" onclick="openLightbox('${c.id}', ${idx})" title="Click to enlarge" style="cursor:pointer">`
   ).join('') + `</div>`;
 })()}
+${phiHidden && (c.notes || (caseImages(c)||[]).length) ? `<div style="margin-top:8px;padding:10px 12px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;text-align:center"><div style="font-size:12px;color:#64748b;margin-bottom:6px">🔒 Case notes and photos are hidden under HIPAA minimum-necessary rule.</div>${window.phiRevealButtonHTML(c.caseId, 'renderHistory')}</div>` : ''}
 ${c.preopId?`<div style="margin-top:8px"><button onclick="event.stopPropagation();viewLinkedPreop('${c.preopId}')" class="btn btn-ghost btn-sm" style="font-size:11px">📋 View Pre-Op Record</button></div>`:''}
 </div></div>`;
 }).join('');
@@ -3491,12 +3974,17 @@ return data;
 function getPreopTextFields() {
 const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-contact-name','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
-'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment'];
+'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment',
+'po-patientFirstName','po-patientLastName','po-patientPhone','po-patientDOB','po-archType','po-officeAddress',
+'po-callStatus','po-invoiceStatus','po-paymentStatus','po-lastFollowupAt','po-reminderDate','po-depositSentAt'];
 const data = {};
 fields.forEach(id => {
 const el = document.getElementById(id);
 if(el) data[id] = el.value;
 });
+// Sex is a radio group, not a normal input — pull the checked value separately.
+const sexEl = document.querySelector('input[name="po-sex"]:checked');
+data['po-sex'] = sexEl ? sexEl.value : '';
 return data;
 }
 // ── ONE-TIME ADMIN: Dedupe duplicate pre-op records ─────────────────────────
@@ -3651,7 +4139,16 @@ const idx = records.findIndex(r => r.id === window._editingPreopId);
 if(idx !== -1) {
 // Keep the ORIGINAL case ID — do not regenerate
 textData['po-caseId'] = records[idx]['po-caseId'];
-const updated = { ...records[idx], ...textData, ...checkData, savedAt: new Date().toISOString() };
+// HIPAA: if PHI was hidden in the modal and never revealed, strip PHI
+// fields from the update payload so we don't overwrite existing PHI
+// values with empty strings.
+let mergeText = textData, mergeCheck = checkData;
+if(typeof window.isPHIHidden === 'function' && window.isPHIHidden(records[idx]['po-surgeryDate'], records[idx]['po-caseId']) && typeof window.stripPHIFromUpdate === 'function') {
+  const stripped = window.stripPHIFromUpdate(textData, checkData);
+  mergeText = stripped.textData;
+  mergeCheck = stripped.checkData;
+}
+const updated = { ...records[idx], ...mergeText, ...mergeCheck, savedAt: new Date().toISOString() };
 // HARDENED: filter out ALL records with same caseId+worker (cleans up any
 // pre-existing duplicates) and re-add the updated one. Prevents dupes from
 // ever surviving a save.
@@ -3667,7 +4164,7 @@ window._editingPreopId = null;
 const editBanner = document.getElementById('preop-edit-banner');
 if(editBanner) editBanner.remove();
 clearPreop();
-alert('✓ Pre-Op record updated!');
+toastSuccess('Pre-Op record updated');
 showTab('mid-case');
 return;
 }
@@ -3795,9 +4292,23 @@ if(providerEl) providerEl.value = preopRecord['po-provider'] || '';
 if(caseDateEl) caseDateEl.value = preopRecord['po-surgeryDate'] || todayStr();
 if(procedureEl) procedureEl.value = preopRecord['po-procedureType'] || '';
 }
+// Toggle the M/F segmented button in the pre-op form. Also reachable from
+// the inline onclick handlers in the rendered HTML and from editPreopRecord.
+window._preopSetSex = function(value) {
+  const group = document.getElementById('po-sex-group');
+  if(!group) return;
+  group.querySelectorAll('label').forEach(l => {
+    const input = l.querySelector('input[type="radio"]');
+    const isActive = input && input.value === value;
+    l.style.background = isActive ? '#1d3557' : '#fff';
+    l.style.color = isActive ? '#fff' : 'var(--text)';
+    if(input) input.checked = isActive;
+  });
+};
+
 window.clearPreop = function() {
 // Clear text fields
-['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-patientEmail','po-contact-name','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel',
+['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-officeAddress','po-patientEmail','po-patientFirstName','po-patientLastName','po-patientPhone','po-patientDOB','po-archType','po-contact-name','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel',
 'po-height-ft','po-height-in','po-weight-lbs','po-iv-difficulty-comment','po-anesthesia-issues-comment',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other',
@@ -3811,6 +4322,8 @@ if(surgCenterSel) surgCenterSel.value = '';
 // Clear checkboxes and radios
 document.querySelectorAll('#tab-preop input[type="checkbox"]').forEach(el => el.checked = false);
 document.querySelectorAll('#tab-preop input[type="radio"]').forEach(el => el.checked = false);
+// Reset visual state of the Sex segmented button
+window._preopSetSex('');
 // Clear BMI displays
 ['po-height-cm','po-weight-kg','po-bmi'].forEach(id => {
 const el = document.getElementById(id);
@@ -3820,6 +4333,9 @@ if(el) el.textContent = '—';
 const caseIdDisplay = document.getElementById('po-caseId-display');
 if(caseIdDisplay) caseIdDisplay.textContent = '';
 // NOTE: do NOT reset _editingPreopId here — editing state is managed by editPreopRecord/cancelEditPreop/savePreop
+// Clear cached PHI-edit state and any PHI-hidden banner
+window._editingPreopRecord = null;
+if(typeof window.removePreopPHIBanner === 'function') window.removePreopPHIBanner();
 };
 async function renderPreopHistory() {
 const el = document.getElementById('preopHistoryList');
@@ -3841,8 +4357,8 @@ const records = allRecords
   if(timeA !== timeB) return timeA.localeCompare(timeB);
   return (a['po-caseId']||'').localeCompare(b['po-caseId']||'');
 });
-if(!allRecords.length) { el.innerHTML='<div class="empty-state">No pre-op records saved yet</div>'; return; }
-if(!records.length) { el.innerHTML='<div class="empty-state">All pre-op records have been finalized</div>'; return; }
+if(!allRecords.length) { el.innerHTML='<div class="empty-state"><span class="empty-state-icon">📝</span><div class="empty-state-title">No pre-op records yet</div><div class="empty-state-sub">Start by creating your first pre-op assessment for an upcoming case.</div><button class="empty-state-cta" onclick="showTab(\'preop\')">+ New Pre-Op →</button></div>'; return; }
+if(!records.length) { el.innerHTML='<div class="empty-state"><span class="empty-state-icon">✅</span><div class="empty-state-title">All caught up</div><div class="empty-state-sub">Every pre-op record has been finalized. Nice work.</div></div>'; return; }
 el.innerHTML = records.map(r => {
 const pill = r.worker==='dev' ? 'pill-dev' : 'pill-josh';
 const wname = r.worker==='dev' ? 'Devarsh' : 'Josh';
@@ -3955,8 +4471,12 @@ await new Promise(resolve => setTimeout(resolve, 150));
 clearPreop();
 // Store editing ID immediately after clear (clearPreop resets it)
 window._editingPreopId = id;
-// Fill ALL saved fields
+// HIPAA: hide PHI fields if case is 3+ days post-surgery (until reveal)
+const phiHiddenInModal = typeof window.isPHIHidden === 'function' && window.isPHIHidden(record['po-surgeryDate'], record['po-caseId']);
+window._editingPreopRecord = record; // stored so reveal can fill PHI fields later
+// Fill saved fields (skip PHI fields when hidden — they'll fill on reveal)
 Object.keys(record).forEach(fid => {
+if(phiHiddenInModal && typeof window.isPHIField === 'function' && window.isPHIField(fid)) return;
 const el = document.getElementById(fid);
 if(!el) return;
 if(el.type === 'checkbox') {
@@ -3965,23 +4485,31 @@ el.checked = !!record[fid];
 el.value = record[fid] || '';
 }
 });
-// Fill radio (mallampati)
-if(record['mallampati']) {
+// Fill radio (mallampati) — also PHI
+if(!phiHiddenInModal && record['mallampati']) {
 const radio = document.querySelector(`input[name="mallampati"][value="${record['mallampati']}"]`);
 if(radio) radio.checked = true;
 }
-// Restore BMI displays
-if(record['po-height-cm-val']) {
+// Restore Sex segmented button (PHI — only if not hidden)
+if(!phiHiddenInModal && record['po-sex'] && typeof window._preopSetSex === 'function') {
+  window._preopSetSex(record['po-sex']);
+}
+// Restore BMI displays (PHI — skip when hidden)
+if(!phiHiddenInModal && record['po-height-cm-val']) {
 const cmEl = document.getElementById('po-height-cm');
 if(cmEl) cmEl.textContent = record['po-height-cm-val'] + ' cm';
 }
-if(record['po-weight-kg-val']) {
+if(!phiHiddenInModal && record['po-weight-kg-val']) {
 const kgEl = document.getElementById('po-weight-kg');
 if(kgEl) kgEl.textContent = record['po-weight-kg-val'] + ' kg';
 }
-if(record['po-bmi-val']) {
+if(!phiHiddenInModal && record['po-bmi-val']) {
 const bmiEl = document.getElementById('po-bmi');
 if(bmiEl) bmiEl.textContent = record['po-bmi-val'];
+}
+// Inject the PHI-hidden banner so the user can reveal
+if(phiHiddenInModal && typeof window.injectPreopPHIBanner === 'function') {
+window.injectPreopPHIBanner(record['po-caseId'] || '', record['po-surgeryDate'] || '');
 }
 // Restore OTHER rows visibility
 ['po-pupil','po-cv','po-ekg','po-pulm','po-gastro','po-renal','po-neuro','po-meta','po-teeth','po-other'].forEach(p => {
@@ -4929,6 +5457,650 @@ ${inv.invoiceNum}
 window.toggleInvoice = function(id) {
 document.getElementById('inv-detail-'+id).classList.toggle('open');
 };
+// ── PRE-OP FOLLOW-UP TRACKING ───────────────────────────────────────────────
+// Three status fields on each pre-op record so providers can track:
+//   po-callStatus:    'not-called' | 'no-answer' | 'spoken' | 'voicemail'
+//   po-invoiceStatus: 'not-sent' | 'sent' | 'paid'  (for direct-billed patients)
+//   po-paymentStatus: 'not-paid' | 'paid'
+// Plus po-lastFollowupAt timestamp to auto-flag "needs follow-up" cases.
+
+const CALL_STATES = ['not-called', 'voicemail', 'no-answer', 'spoken'];
+const CALL_LABELS = {
+  'not-called': '📞 Call Pending',
+  'voicemail':  '📞 Voicemail Left',
+  'no-answer':  '📞 No Answer',
+  'spoken':     '✓ Spoken To'
+};
+const CALL_COLORS = {
+  'not-called': { bg: '#fef3c7', color: '#92400e' },
+  'voicemail':  { bg: '#dbeafe', color: '#1e40af' },
+  'no-answer':  { bg: '#fee2e2', color: '#991b1b' },
+  'spoken':     { bg: '#dcfce7', color: '#166534' }
+};
+
+async function _updatePreopStatusField(preopId, field, value) {
+  try {
+    const snap = await getDoc(doc(db, 'atlas', 'preop'));
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    const idx = records.findIndex(r => r.id === preopId);
+    if(idx === -1) return false;
+    records[idx][field] = value;
+    if(field === 'po-callStatus') records[idx]['po-lastFollowupAt'] = new Date().toISOString();
+    records[idx].savedAt = new Date().toISOString();
+    setSyncing(true);
+    await savePreopRecords(records);
+    setSyncing(false);
+    try { logAudit('preop-status-update', records[idx]['po-caseId'] || '', `${field}=${value}`); } catch(e){}
+    return true;
+  } catch(err) {
+    console.error('updatePreopStatus failed:', err);
+    if(typeof toastError === 'function') toastError('Failed to update status: ' + err.message, { persist: true });
+    return false;
+  }
+}
+
+// Modal selector for call status — replaces the cycle behavior so all options
+// are visible at once instead of having to click through them.
+window.openCallStatusModal = function(preopId) {
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  const current = preop['po-callStatus'] || 'not-called';
+  const caseId = preop['po-caseId'] || '';
+  const displayId = (typeof window.getCaseDisplayIdFromPreop === 'function') ? window.getCaseDisplayIdFromPreop(preop) : caseId;
+  // Remove any existing modal
+  const existing = document.getElementById('call-status-modal');
+  if(existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'call-status-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  const optionHTML = CALL_STATES.map(state => {
+    const c = CALL_COLORS[state];
+    const isSelected = state === current;
+    return `<button onclick="window._pickCallStatus('${preopId}','${state}')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 18px;background:${isSelected?c.bg:'#fff'};border:2px solid ${isSelected?c.color:'#e2e8f0'};border-radius:10px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:${isSelected?'700':'500'};color:${isSelected?c.color:'#1e293b'};text-align:left;transition:all .12s"><span style="font-size:18px">${state==='spoken'?'✓':state==='voicemail'?'📨':state==='no-answer'?'❌':'📞'}</span><span style="flex:1">${CALL_LABELS[state]}</span>${isSelected?'<span style="font-size:11px;background:'+c.color+';color:#fff;padding:2px 8px;border-radius:8px">CURRENT</span>':''}</button>`;
+  }).join('');
+  overlay.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">
+    <div style="background:#1d3557;color:#fff;padding:18px 22px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Call Status</div>
+      <div style="font-size:17px;font-weight:700">${displayId}</div>
+    </div>
+    <div style="padding:18px;display:flex;flex-direction:column;gap:8px">${optionHTML}</div>
+    <div style="padding:0 18px 18px;text-align:right"><button onclick="document.getElementById('call-status-modal').remove()" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Cancel</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+};
+
+window._pickCallStatus = async function(preopId, state) {
+  const overlay = document.getElementById('call-status-modal');
+  if(overlay) overlay.remove();
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  preop['po-callStatus'] = state;
+  preop['po-lastFollowupAt'] = new Date().toISOString();
+  if(typeof renderMidCase === 'function') renderMidCase();
+  if(typeof renderFollowupTab === 'function') renderFollowupTab();
+  await _updatePreopStatusField(preopId, 'po-callStatus', state);
+  if(typeof toastSuccess === 'function') toastSuccess('Call status: ' + CALL_LABELS[state]);
+};
+
+// Keep cycle function as deprecated alias for any external callers
+window.cyclePreopCallStatus = window.openCallStatusModal;
+
+// Helper: find the payment row for a pre-op's case
+function _findPaymentRowForPreop(preop) {
+  if(!preop || !window._paymentRows) return null;
+  const caseId = preop['po-caseId'];
+  if(!caseId) return null;
+  return window._paymentRows.find(r => r.caseId === caseId) || null;
+}
+// Create a new payment row from a pre-op record. Used when the user toggles
+// a deposit/payment pill before the Payments tab has been visited (rows
+// load lazily). Mirrors the auto-create logic in payments.js syncFromCases.
+function _createPaymentRowFromPreop(preop) {
+  if(!preop || !window._paymentRows) window._paymentRows = window._paymentRows || [];
+  const caseId = preop['po-caseId'];
+  if(!caseId) return null;
+  const sc = preop['po-surgery-center'] || '';
+  const center = (window.surgeryCenters||[]).find(c => c.id === sc);
+  const row = {
+    id: (window.uid ? window.uid() : Date.now().toString(36)),
+    caseId,
+    name: caseId,
+    worker: preop.worker || 'josh',
+    caseDate: preop['po-surgeryDate'] || '',
+    callDate: (preop['po-callDateTime']||'').split('T')[0] || '',
+    depositDate: '', paidDate: '',
+    dep500Paid: false, paid: false, invoiceSent: false,
+    invoicedAmount: 0, projOverride: null, caseCost: 0,
+    estHrs: parseFloat(preop['po-est-hours']) || 0,
+    surgeryCenter: sc, surgeryCenterName: (center && center.name) || '',
+    patientEmail: preop['po-patientEmail'] || ''
+  };
+  window._paymentRows.unshift(row);
+  return row;
+}
+
+// Save current _paymentRows to Firestore (mirrors what Payments tab does)
+async function _savePaymentRowsFromFollowup() {
+  if(!window._paymentRows) return;
+  try {
+    const docRef = doc(db, 'atlas', 'payments');
+    const snap = await getDoc(docRef);
+    const existing = snap.exists() ? snap.data() : {};
+    await setDoc(docRef, {
+      ...existing,
+      rows: window._paymentRows,
+      excludedCaseIds: existing.excludedCaseIds || []
+    });
+  } catch(e) {
+    if(typeof window.atlasError === 'function') window.atlasError('PAY-001', e.message);
+    throw e;
+  }
+}
+
+// Returns whether this case is billed to the patient (vs the surgery center).
+// The Follow-up Tracker only shows patient-billed cases per the user's spec.
+function _whoPaysFor(preop) {
+  const row = _findPaymentRowForPreop(preop);
+  const centerId = (row && row.surgeryCenter) || (preop && preop['po-surgery-center']) || '';
+  const center = (window.surgeryCenters||[]).find(c => c.id === centerId);
+  return (center && center.billingType === 'center') ? 'center' : 'patient';
+}
+window.isPatientBilled = function(preop) { return _whoPaysFor(preop) === 'patient'; };
+
+// $500 deposit status (from the Payments row)
+window.getPreopDepositStatus = function(preop) {
+  const row = _findPaymentRowForPreop(preop);
+  if(!row) return { paid: false, date: '' };
+  return { paid: !!row.dep500Paid, date: row.depositDate || '' };
+};
+// Remaining payment (final balance) status
+window.getPreopRemainingStatus = function(preop) {
+  const row = _findPaymentRowForPreop(preop);
+  if(!row) return { paid: false, date: '' };
+  if(row.paid) return { paid: true, date: row.paidDate || '' };
+  if(row.received) return { paid: true, date: '' };
+  return { paid: false, date: '' };
+};
+// Legacy getters used by Mid-Case pills — map to deposit/remaining
+window.getPreopInvoiceStatus = function(preop) {
+  return window.getPreopDepositStatus(preop).paid ? 'sent' : 'not-sent';
+};
+window.getPreopPaymentStatus = function(preop) {
+  return window.getPreopRemainingStatus(preop).paid ? 'paid' : 'not-paid';
+};
+
+window.togglePreopDepositStatus = async function(preopId) {
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  // Auto-create the Payments row if it doesn't exist yet — they should always
+  // match 1:1 so the user doesn't see "No row exists" errors.
+  let row = _findPaymentRowForPreop(preop);
+  if(!row) row = _createPaymentRowFromPreop(preop);
+  if(!row) { if(typeof toastError === 'function') toastError('Could not create payment row.'); return; }
+  row.dep500Paid = !row.dep500Paid;
+  if(row.dep500Paid && !row.depositDate) row.depositDate = todayStr();
+  if(typeof renderFollowupTab === 'function') renderFollowupTab();
+  if(typeof renderPaymentRows === 'function') renderPaymentRows();
+  try { await _savePaymentRowsFromFollowup(); try { logAudit('deposit500-toggle', preop['po-caseId']||'', 'paid=' + row.dep500Paid); } catch(e){} } catch(e){}
+};
+window.togglePreopRemainingStatus = async function(preopId) {
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  let row = _findPaymentRowForPreop(preop);
+  if(!row) row = _createPaymentRowFromPreop(preop);
+  if(!row) { if(typeof toastError === 'function') toastError('Could not create payment row.'); return; }
+  const who = _whoPaysFor(preop);
+  if(who === 'center') { row.received = !row.received; }
+  else { row.paid = !row.paid; if(row.paid && !row.paidDate) row.paidDate = todayStr(); }
+  if(typeof renderFollowupTab === 'function') renderFollowupTab();
+  if(typeof renderPaymentRows === 'function') renderPaymentRows();
+  try { await _savePaymentRowsFromFollowup(); try { logAudit('remaining-toggle', preop['po-caseId']||'', 'paid=' + (who==='center'?row.received:row.paid)); } catch(e){} } catch(e){}
+};
+window.togglePreopRemPayment = window.togglePreopRemainingStatus;
+
+window.togglePreopInvoiceStatus = async function(preopId) {
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  const row = _findPaymentRowForPreop(preop);
+  if(row) {
+    // Update the Payments row so the Payments tab and Follow-up stay in sync
+    row.invoiceSent = !row.invoiceSent;
+    if(typeof renderMidCase === 'function') renderMidCase();
+    if(typeof renderFollowupTab === 'function') renderFollowupTab();
+    if(typeof renderPaymentRows === 'function') renderPaymentRows();
+    try {
+      await _savePaymentRowsFromFollowup();
+      try { logAudit('invoice-status-toggle', preop['po-caseId']||'', 'invoiceSent=' + row.invoiceSent); } catch(e){}
+    } catch(e) { /* atlasError already shown */ }
+  } else {
+    // No payment row exists — fall back to pre-op field
+    const current = preop['po-invoiceStatus'] || 'not-sent';
+    const next = current === 'sent' ? 'not-sent' : 'sent';
+    preop['po-invoiceStatus'] = next;
+    if(typeof renderMidCase === 'function') renderMidCase();
+    if(typeof renderFollowupTab === 'function') renderFollowupTab();
+    await _updatePreopStatusField(preopId, 'po-invoiceStatus', next);
+  }
+};
+
+window.togglePreopPaymentStatus = async function(preopId) {
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  const row = _findPaymentRowForPreop(preop);
+  if(row) {
+    // Determine which flag to flip: patient-billed cases use `paid`,
+    // surgery-center-billed cases use `received`.
+    const center = (window.surgeryCenters||[]).find(c => c.id === row.surgeryCenter);
+    const centerPays = center && center.billingType === 'center';
+    if(centerPays) {
+      row.received = !row.received;
+    } else {
+      row.paid = !row.paid;
+      if(row.paid && !row.paidDate) row.paidDate = todayStr();
+    }
+    if(typeof renderMidCase === 'function') renderMidCase();
+    if(typeof renderFollowupTab === 'function') renderFollowupTab();
+    if(typeof renderPaymentRows === 'function') renderPaymentRows();
+    try {
+      await _savePaymentRowsFromFollowup();
+      try { logAudit('payment-status-toggle', preop['po-caseId']||'', 'paid=' + (centerPays?row.received:row.paid)); } catch(e){}
+    } catch(e) { /* atlasError already shown */ }
+  } else {
+    const current = preop['po-paymentStatus'] || 'not-paid';
+    const next = current === 'paid' ? 'not-paid' : 'paid';
+    preop['po-paymentStatus'] = next;
+    if(typeof renderMidCase === 'function') renderMidCase();
+    if(typeof renderFollowupTab === 'function') renderFollowupTab();
+    await _updatePreopStatusField(preopId, 'po-paymentStatus', next);
+  }
+};
+
+// Toggle $500 deposit status. Three states cycle: not-sent → sent → paid → not-sent
+// Auto-creates the Payments row if it doesn't exist yet so the pills always work.
+window.togglePreopDepositStatus = async function(preopId) {
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  let row = _findPaymentRowForPreop(preop);
+  if(!row) row = _createPaymentRowFromPreop(preop);
+  if(!row) { if(typeof toastError === 'function') toastError('Could not create payment row — pre-op is missing a Case ID.'); return; }
+  const depositSent = !!(row.depositDate || preop['po-depositSentAt']);
+  const depositPaid = !!row.dep500Paid;
+  if(!depositSent) { row.depositDate = todayStr(); preop['po-depositSentAt'] = new Date().toISOString(); await _savePaymentRowsFromFollowup(); await _updatePreopStatusField(preopId, 'po-depositSentAt', preop['po-depositSentAt']); }
+  else if(!depositPaid) { row.dep500Paid = true; await _savePaymentRowsFromFollowup(); }
+  else { row.depositDate = ''; row.dep500Paid = false; preop['po-depositSentAt'] = ''; await _savePaymentRowsFromFollowup(); await _updatePreopStatusField(preopId, 'po-depositSentAt', ''); }
+  if(typeof renderFollowupTab === 'function') renderFollowupTab();
+  if(typeof renderMidCase === 'function') renderMidCase();
+  if(typeof renderPaymentRows === 'function') renderPaymentRows();
+  try { logAudit('deposit-status-toggle', preop['po-caseId']||'', `sent=${!!row.depositDate} paid=${!!row.dep500Paid}`); } catch(e){}
+};
+
+window.togglePreopRemPayment = async function(preopId) {
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  let row = _findPaymentRowForPreop(preop);
+  if(!row) row = _createPaymentRowFromPreop(preop);
+  if(!row) { if(typeof toastError === 'function') toastError('Could not create payment row — pre-op is missing a Case ID.'); return; }
+  row.paid = !row.paid;
+  if(row.paid && !row.paidDate) row.paidDate = todayStr();
+  await _savePaymentRowsFromFollowup();
+  if(typeof renderFollowupTab === 'function') renderFollowupTab();
+  if(typeof renderMidCase === 'function') renderMidCase();
+  if(typeof renderPaymentRows === 'function') renderPaymentRows();
+  try { logAudit('rem-payment-toggle', preop['po-caseId']||'', 'paid=' + row.paid); } catch(e){}
+};
+
+window.openReminderModal = function(preopId) {
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  const caseId = preop['po-caseId'] || '';
+  const current = preop['po-reminderDate'] || '';
+  const today = todayStr();
+  const existing = document.getElementById('reminder-modal');
+  if(existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'reminder-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">
+    <div style="background:#1d3557;color:#fff;padding:18px 22px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Set Follow-up Reminder</div>
+      <div style="font-size:17px;font-weight:700">${caseId}</div>
+    </div>
+    <div style="padding:20px 22px">
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px">Quick pick</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+        <button onclick="window._setReminder('${preopId}','${addDays(today,1)}')" style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit">Tomorrow</button>
+        <button onclick="window._setReminder('${preopId}','${addDays(today,3)}')" style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit">In 3 days</button>
+        <button onclick="window._setReminder('${preopId}','${addDays(today,7)}')" style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit">In 1 week</button>
+        <button onclick="window._setReminder('${preopId}','${addDays(today,14)}')" style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit">In 2 weeks</button>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Or pick a date</div>
+      <input type="date" id="reminder-date-input" value="${current}" min="${today}" style="width:100%;padding:10px 12px;font-size:14px;border:1px solid #cbd5e1;border-radius:8px;outline:none;font-family:inherit;margin-bottom:14px">
+      <div style="display:flex;gap:8px;justify-content:space-between">
+        ${current ? `<button onclick="window._setReminder('${preopId}','')" style="padding:9px 16px;background:transparent;color:#dc2626;border:1px solid #fca5a5;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Clear</button>` : '<div></div>'}
+        <div style="display:flex;gap:8px">
+          <button onclick="document.getElementById('reminder-modal').remove()" style="padding:9px 18px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
+          <button onclick="window._setReminder('${preopId}',document.getElementById('reminder-date-input').value)" style="padding:9px 18px;background:#1d3557;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Set</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+};
+
+window._setReminder = async function(preopId, dateStr) {
+  const overlay = document.getElementById('reminder-modal');
+  if(overlay) overlay.remove();
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  preop['po-reminderDate'] = dateStr || '';
+  if(typeof renderFollowupTab === 'function') renderFollowupTab();
+  await _updatePreopStatusField(preopId, 'po-reminderDate', dateStr || '');
+  if(typeof toastSuccess === 'function') toastSuccess(dateStr ? `Reminder set for ${fmtDate(dateStr)}` : 'Reminder cleared');
+};
+
+// ── LOGIN NOTIFICATIONS ──────────────────────────────────────────────────────
+window.showLoginNotifications = function() {
+  setTimeout(() => {
+    const preops = (window._rawPreopRecords || []).filter(r => !r.isTest);
+    if(!preops.length) return;
+    const today = todayStr();
+    const overdueReminders = [], todayReminders = [], needsFollowup = [];
+    preops.forEach(r => {
+      const rd = r['po-reminderDate'];
+      if(rd) { if(rd < today) overdueReminders.push(r); else if(rd === today) todayReminders.push(r); }
+      const cs = r['po-callStatus'];
+      const lf = r['po-lastFollowupAt'];
+      if(cs && cs !== 'spoken' && cs !== 'not-called' && lf) {
+        const days = (Date.now() - new Date(lf).getTime()) / 86400000;
+        if(days >= 5) needsFollowup.push({ rec: r, days: Math.floor(days) });
+      }
+    });
+    const total = overdueReminders.length + todayReminders.length + needsFollowup.length;
+    if(total === 0) return;
+    const renderRow = (r, badge, bg, color) => {
+      const cid = r['po-caseId'] || '—';
+      const phiHidden = typeof window.isPHIHidden === 'function' && window.isPHIHidden(r['po-surgeryDate'], cid);
+      const pname = phiHidden ? '[hidden]' : ([r['po-patientLastName'], r['po-patientFirstName']].filter(Boolean).join(', ') || cid);
+      return `<div onclick="window._notifGoToCase('${r.id}')" style="padding:10px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer;display:flex;align-items:center;gap:10px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
+        <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;background:${bg};color:${color};white-space:nowrap">${badge}</span>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${pname}</div><div style="font-size:11px;color:#94a3b8;font-family:monospace">${cid}</div></div>
+        <span style="font-size:11px;color:#cbd5e1">→</span>
+      </div>`;
+    };
+    const overlay = document.createElement('div');
+    overlay.id = 'login-notif-overlay';
+    overlay.style.cssText = 'position:fixed;top:80px;right:20px;z-index:9998;background:#fff;border-radius:12px;max-width:380px;width:calc(100vw - 40px);box-shadow:0 12px 40px rgba(15,23,42,.18);overflow:hidden;animation:toastSlideIn .25s ease;max-height:calc(100vh - 120px);display:flex;flex-direction:column';
+    let body = '';
+    if(overdueReminders.length) body += '<div style="padding:8px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#dc2626;background:#fef2f2;border-bottom:1px solid #fecaca">⏰ Overdue Reminders</div>' + overdueReminders.map(r => renderRow(r, 'OVERDUE', '#fee2e2', '#991b1b')).join('');
+    if(todayReminders.length) body += '<div style="padding:8px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#d97706;background:#fef3c7;border-bottom:1px solid #fde68a">⏰ Reminders for Today</div>' + todayReminders.map(r => renderRow(r, 'TODAY', '#fef3c7', '#92400e')).join('');
+    if(needsFollowup.length) body += '<div style="padding:8px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#dc2626;background:#fef2f2;border-bottom:1px solid #fecaca">⚠ Follow-up Needed</div>' + needsFollowup.map(x => renderRow(x.rec, x.days + 'd ago', '#fee2e2', '#991b1b')).join('');
+    overlay.innerHTML = `<div style="background:#1d3557;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#90b8e0">Welcome back</div><div style="font-size:15px;font-weight:700">${total} item${total!==1?'s':''} need${total===1?'s':''} attention</div></div><button onclick="window._dismissLoginNotif()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:13px">✕</button></div><div style="overflow-y:auto;flex:1">${body}</div><div style="padding:10px 14px;border-top:1px solid #e2e8f0;background:#f8fafc"><button onclick="showTab('followup');renderFollowupTab();window._dismissLoginNotif()" style="width:100%;background:#1d3557;color:#fff;border:none;padding:9px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Open Follow-up Tracker →</button></div>`;
+    document.body.appendChild(overlay);
+  }, 2500);
+};
+window._notifGoToCase = function(preopId) { window._dismissLoginNotif(); showTab('followup'); if(typeof renderFollowupTab === 'function') renderFollowupTab(); };
+window._dismissLoginNotif = function() { const o = document.getElementById('login-notif-overlay'); if(o) o.remove(); };
+
+// Bulk Stripe check — runs through every patient-billed pre-op with an
+// email and not-yet-paid status, calling /stripe-check for each. Updates
+// payment rows + follow-up tracker as it finds payments.
+window.checkStripeForAllFollowups = async function() {
+  if(!window._rawPreopRecords || !window._rawPreopRecords.length) return;
+  if(typeof toastInfo === 'function') toastInfo('Checking Stripe for all upcoming patients...');
+  const today = todayStr();
+  const candidates = window._rawPreopRecords.filter(r => {
+    if(r.isTest) return false;
+    if(!r['po-patientEmail']) return false;
+    const surgDate = r['po-surgeryDate'];
+    if(surgDate && surgDate < today) return false; // upcoming only
+    if(typeof window.isPatientBilled === 'function' && !window.isPatientBilled(r)) return false;
+    const row = window._paymentRows && window._paymentRows.find(pr => pr.caseId === r['po-caseId']);
+    if(row && row.paid) return false; // already paid
+    return true;
+  });
+  let updated = 0;
+  for(const r of candidates) {
+    try {
+      const res = await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/stripe-check', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerEmail: r['po-patientEmail'] })
+      });
+      if(!res.ok) continue;
+      const data = await res.json();
+      if(data.paid) {
+        const row = window._paymentRows && window._paymentRows.find(pr => pr.caseId === r['po-caseId']);
+        if(row) {
+          let changed = false;
+          if(!row.dep500Paid) { row.dep500Paid = true; if(!row.depositDate) row.depositDate = new Date(data.paidAt).toISOString().split('T')[0]; changed = true; }
+          if(data.remainderPaid && !row.paid) { row.paid = true; if(!row.paidDate) row.paidDate = new Date(data.remainderPaidAt).toISOString().split('T')[0]; changed = true; }
+          if(changed) updated++;
+        }
+      }
+    } catch(e) { /* skip individual failure */ }
+  }
+  if(updated > 0) {
+    try { await _savePaymentRowsFromFollowup(); } catch(e){}
+    if(typeof renderFollowupTab === 'function') renderFollowupTab();
+    if(typeof renderPaymentRows === 'function') renderPaymentRows();
+    if(typeof toastSuccess === 'function') toastSuccess(updated + ' patient(s) auto-marked paid from Stripe.');
+  } else {
+    if(typeof toastInfo === 'function') toastInfo('No new Stripe payments found.');
+  }
+};
+
+// Check Stripe for payment status of a pre-op's patient. If found paid,
+// update the payment row and refresh the Follow-up Tracker.
+window.checkStripeForFollowup = async function(preopId) {
+  const preop = (window._rawPreopRecords||[]).find(r => r.id === preopId);
+  if(!preop) return;
+  const email = preop['po-patientEmail'];
+  if(!email) {
+    if(typeof toastWarn === 'function') toastWarn('No patient email on this pre-op — cannot check Stripe.');
+    return;
+  }
+  if(typeof toastInfo === 'function') toastInfo('Checking Stripe for ' + email + '...');
+  try {
+    const res = await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/stripe-check', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerEmail: email })
+    });
+    const data = await res.json();
+    if(data.paid) {
+      const row = _findPaymentRowForPreop(preop);
+      if(row) {
+        row.dep500Paid = true;
+        if(!row.depositDate) row.depositDate = new Date(data.paidAt).toISOString().split('T')[0];
+        if(data.remainderPaid) {
+          row.paid = true;
+          if(!row.paidDate) row.paidDate = new Date(data.remainderPaidAt).toISOString().split('T')[0];
+        }
+        await _savePaymentRowsFromFollowup();
+        if(typeof renderFollowupTab === 'function') renderFollowupTab();
+        if(typeof renderPaymentRows === 'function') renderPaymentRows();
+      }
+      if(typeof toastSuccess === 'function') toastSuccess('Stripe: deposit paid' + (data.remainderPaid ? ' + remainder' : '') + ' for ' + email);
+    } else {
+      if(typeof toastInfo === 'function') toastInfo('Stripe: no payment found yet for ' + email);
+    }
+  } catch(err) {
+    if(typeof window.atlasError === 'function') window.atlasError('PAY-001', 'Stripe check failed: ' + err.message);
+  }
+};
+
+// Helper for renderMidCase: returns just the "needs follow-up" warning chip
+// when the case is overdue. Call / invoice / payment status pills used to live
+// here but were removed — those statuses are now only edited from the
+// Follow-up Tracker (Home) and Payments tab to avoid duplicate clutter.
+window.buildPreopFollowupPills = function(r) {
+  const callStatus = r['po-callStatus'] || 'not-called';
+  const lastFollowup = r['po-lastFollowupAt'];
+  let needsFollowup = false;
+  if(callStatus !== 'spoken' && callStatus !== 'not-called' && lastFollowup) {
+    const daysSince = (Date.now() - new Date(lastFollowup).getTime()) / 86400000;
+    if(daysSince >= 5) needsFollowup = true;
+  }
+  if(!needsFollowup) return '';
+  return `<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+    <span title="Called ${Math.floor((Date.now() - new Date(lastFollowup).getTime())/86400000)} days ago without a response" style="background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;border:1px dashed #fca5a5">⚠ FOLLOW-UP</span>
+  </div>`;
+};
+
+// ── FOLLOW-UP TAB ─────────────────────────────────────────────────────────────
+// Chart-style view of every pre-op's call / invoice / payment status, similar
+// to the Payments tab. Lets Josh/Dev see who they need to follow up with at
+// a glance and update statuses inline.
+
+window._followupFilter = 'all';
+window.setFollowupFilter = function(f) {
+  window._followupFilter = f;
+  ['all','followup','uncalled','unpaid'].forEach(k => {
+    const btn = document.getElementById('fu-filter-' + k);
+    if(btn) {
+      btn.style.background = f === k ? 'var(--info)' : 'transparent';
+      btn.style.color = f === k ? '#fff' : 'var(--text-muted)';
+    }
+  });
+  renderFollowupTab();
+};
+
+window.renderFollowupTab = function() {
+  const body = document.getElementById('fu-table-body');
+  if(!body) return;
+  const allPreops = (window._rawPreopRecords || []).filter(r => !r.isTest);
+  // Filter out surgery-center-billed cases — they don't use the deposit/remainder
+  // workflow. We only show cases where the patient pays directly.
+  const patientBilledPreops = allPreops.filter(r => {
+    const centerId = r['po-surgery-center'];
+    if(!centerId) return true; // no center selected → assume patient-billed
+    const center = (window.surgeryCenters||[]).find(c => c.id === centerId);
+    if(!center) return true;
+    return center.billingType !== 'center'; // exclude surgery-center-billed
+  });
+  if(!patientBilledPreops.length) {
+    body.innerHTML = '<div class="empty-state" style="margin:0;border:none"><span class="empty-state-icon">📞</span><div class="empty-state-title">No patient-billed pre-ops</div><div class="empty-state-sub">This tracker shows only cases where the patient pays directly. Surgery-center-billed cases are handled in the Payments tab.</div></div>';
+    return;
+  }
+  const today = todayStr();
+  const filter = window._followupFilter || 'all';
+  const filtered = patientBilledPreops.filter(r => {
+    // Hide past cases — Follow-up Tracker is for upcoming cases only.
+    const surgDate = r['po-surgeryDate'];
+    if(surgDate && surgDate < today) return false;
+    // Hide PHI-hidden cases (3+ days post-surgery — but those are past anyway).
+    if(typeof window.isPHIHidden === 'function' && window.isPHIHidden(surgDate, r['po-caseId'])) return false;
+    const callStatus = r['po-callStatus'] || 'not-called';
+    const row = window._paymentRows && window._paymentRows.find(pr => pr.caseId === r['po-caseId']);
+    const remPaid = row ? !!row.paid : false;
+    const lastFollowup = r['po-lastFollowupAt'];
+    const needsFollowup = callStatus !== 'spoken' && callStatus !== 'not-called' && lastFollowup
+      ? ((Date.now() - new Date(lastFollowup).getTime()) / 86400000) >= 5
+      : false;
+    if(filter === 'followup') return needsFollowup;
+    if(filter === 'uncalled') return callStatus === 'not-called';
+    if(filter === 'unpaid') return !remPaid;
+    return true;
+  });
+  // Sort: needs follow-up first, then by surgery date (most recent past first)
+  filtered.sort((a, b) => {
+    const aDate = a['po-surgeryDate'] || '';
+    const bDate = b['po-surgeryDate'] || '';
+    // Upcoming/today first, then most recent past
+    const aFuture = aDate >= today;
+    const bFuture = bDate >= today;
+    if(aFuture && !bFuture) return -1;
+    if(!aFuture && bFuture) return 1;
+    if(aFuture && bFuture) return aDate.localeCompare(bDate);
+    return bDate.localeCompare(aDate);
+  });
+  if(!filtered.length) {
+    body.innerHTML = '<div class="empty-state" style="margin:0;border:none"><span class="empty-state-icon">✓</span><div class="empty-state-title">Nothing matches this filter</div><div class="empty-state-sub">Try selecting "All" or another filter above.</div></div>';
+    return;
+  }
+  // Table header — cleaner layout with status columns matching Payments tab
+  // Compact column widths so the whole chart fits without horizontal scroll.
+  // Case ID is truncated — full text appears on hover via the title attr.
+  // No indicator column — the ⚠/⏰ icons are inline with the Case ID instead.
+  const COLS = '140px 1fr 90px 56px 110px 130px 110px 110px';
+  const cellCSS = 'display:flex;align-items:center';
+  let html = `<div style="display:grid;grid-template-columns:${COLS};gap:6px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text-faint)">
+    <span>Case ID</span><span>Patient</span><span>Surgery</span><span style="text-align:center">Who</span><span style="text-align:center">Call</span><span style="text-align:center">$500 Deposit</span><span style="text-align:center">Rem Payment</span><span style="text-align:center">Reminder</span>
+  </div>`;
+  filtered.forEach(r => {
+    const caseId = r['po-caseId'] || '—';
+    const surgDate = r['po-surgeryDate'] || '';
+    const surgDateFmt = surgDate ? fmtDate(surgDate) : '—';
+    const isPast = surgDate && surgDate < today;
+    const phiHidden = typeof window.isPHIHidden === 'function' && window.isPHIHidden(surgDate, caseId);
+    // Patient-friendly display: "Smith, J — 05/15/2026" until 3 days post-surgery,
+    // then auto-reverts to the technical case ID.
+    const displayId = (typeof window.getCaseDisplayIdFromPreop === 'function')
+      ? window.getCaseDisplayIdFromPreop(r)
+      : caseId;
+    const patientName = phiHidden
+      ? '<span style="color:#94a3b8;font-style:italic">[hidden]</span>'
+      : [r['po-patientLastName'], r['po-patientFirstName']].filter(Boolean).join(', ') || '—';
+    const worker = r.worker === 'dev' ? 'Dev' : 'Josh';
+    const workerClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
+
+    const callStatus = r['po-callStatus'] || 'not-called';
+    const lastFollowup = r['po-lastFollowupAt'];
+    const callC = CALL_COLORS[callStatus] || CALL_COLORS['not-called'];
+    const needsFollowup = callStatus !== 'spoken' && callStatus !== 'not-called' && lastFollowup
+      ? ((Date.now() - new Date(lastFollowup).getTime()) / 86400000) >= 5
+      : false;
+
+    // $500 Deposit status — 3 states using Payments row + deposits cache
+    const row = window._paymentRows && window._paymentRows.find(pr => pr.caseId === caseId);
+    // Look up a matching record in atlas/deposits (created when "Send Deposit Link" was clicked)
+    const depositRecord = (window._depositsCache || []).find(d => d.caseId === caseId);
+    const depositSent = !!(row && row.depositDate) || !!depositRecord || !!r['po-depositSentAt'];
+    const depositPaid = (row && row.dep500Paid) || (depositRecord && depositRecord.paid) || false;
+    let depState, depBg, depColor, depLabel;
+    if(depositPaid)       { depState='paid';    depBg='#dcfce7'; depColor='#166534'; depLabel='✓ $500 Paid'; }
+    else if(depositSent)  { depState='sent';    depBg='#dbeafe'; depColor='#1e40af'; depLabel='📧 Sent (awaiting)'; }
+    else                  { depState='not-sent'; depBg='#fef3c7'; depColor='#92400e'; depLabel='📧 Not Sent'; }
+
+    // Remaining payment status
+    const remPaid = row ? !!row.paid : false;
+
+    // Reminder date
+    const reminderDate = r['po-reminderDate'] || '';
+    const reminderOverdue = reminderDate && reminderDate < today;
+    const reminderToday = reminderDate === today;
+
+    const rowBg = needsFollowup || reminderOverdue ? 'rgba(239,68,68,0.04)' : (reminderToday ? 'rgba(245,158,11,0.06)' : '');
+
+    // Left-edge indicator
+    const indicator = needsFollowup
+      ? '<span title="Follow-up needed" style="color:#dc2626;font-size:14px">⚠</span>'
+      : reminderOverdue
+      ? '<span title="Reminder overdue" style="color:#dc2626;font-size:14px">⏰</span>'
+      : reminderToday
+      ? '<span title="Reminder today" style="color:#d97706;font-size:14px">⏰</span>'
+      : '';
+
+    // Inline indicator next to the case ID (instead of a separate column)
+    const inlineIndicator = needsFollowup
+      ? '<span title="Follow-up needed" style="color:#dc2626;font-size:13px;margin-right:4px;flex-shrink:0">⚠</span>'
+      : reminderOverdue ? '<span title="Reminder overdue" style="color:#dc2626;font-size:13px;margin-right:4px;flex-shrink:0">⏰</span>'
+      : reminderToday   ? '<span title="Reminder today" style="color:#d97706;font-size:13px;margin-right:4px;flex-shrink:0">⏰</span>'
+      : '';
+    html += `<div style="display:grid;grid-template-columns:${COLS};gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;background:${rowBg};transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${rowBg||'transparent'}'">
+      <div style="${cellCSS};font-size:12px;font-weight:600;overflow:hidden;min-width:0;cursor:help" title="${displayId === caseId ? caseId : displayId + '\\n' + caseId}">${inlineIndicator}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayId}</span></div>
+      <div style="${cellCSS};font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;min-width:0">${patientName}</div>
+      <div style="${cellCSS};font-size:12px;color:var(--text-muted)">${surgDateFmt}${isPast?' <span style="font-size:9px;color:var(--text-faint);margin-left:4px">(past)</span>':''}</div>
+      <div style="${cellCSS};justify-content:center"><span class="worker-pill ${workerClass}" style="font-size:10px;padding:2px 8px">${worker}</span></div>
+      <div style="${cellCSS};justify-content:center"><button onclick="openCallStatusModal('${r.id}')" style="background:${callC.bg};color:${callC.color};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${CALL_LABELS[callStatus] || '📞 Pending'}</button></div>
+      <div style="${cellCSS};justify-content:center"><button onclick="togglePreopDepositStatus('${r.id}')" style="background:${depBg};color:${depColor};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${depLabel}</button></div>
+      <div style="${cellCSS};justify-content:center"><button onclick="togglePreopRemPayment('${r.id}')" style="background:${remPaid?'#dcfce7':'#f1f5f9'};color:${remPaid?'#166534':'#64748b'};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${remPaid?'✓ Rem Paid':'💰 Pending'}</button></div>
+      <div style="${cellCSS};justify-content:center"><button onclick="openReminderModal('${r.id}')" style="background:${reminderDate?(reminderOverdue?'#fef2f2':reminderToday?'#fef3c7':'#dbeafe'):'transparent'};color:${reminderDate?(reminderOverdue?'#dc2626':reminderToday?'#92400e':'#1e40af'):'var(--text-faint)'};border:1px ${reminderDate?'solid':'dashed'} ${reminderDate?(reminderOverdue?'#fca5a5':reminderToday?'#fde68a':'#bfdbfe'):'var(--border)'};font-size:11px;font-weight:600;padding:5px 10px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap">${reminderDate?'⏰ '+fmtDate(reminderDate):'+ Set'}</button></div>
+    </div>`;
+  });
+  body.innerHTML = html;
+};
+
 window.deleteInvoice = async function(id) {
 if(!confirm('Delete this invoice record?')) return;
 try {
@@ -5275,6 +6447,7 @@ btn.style.color = x===f ? '#fff' : '';
 });
 renderMidCase();
 };
+window.renderMidCase = renderMidCase;
 async function renderMidCase() {
 const el = document.getElementById('midCaseList');
 if(!el) return;
@@ -5310,12 +6483,13 @@ const allPreops = preopRecords.sort((a,b) => {
   return (a['po-caseId']||'').localeCompare(b['po-caseId']||'');
 });
 if(!allPreops.length && !drafts.length) {
-el.innerHTML = '<div class="empty-state">No mid-case records yet. Save a Pre-Op to get started.</div>';
+el.innerHTML = '<div class="empty-state"><span class="empty-state-icon">🩺</span><div class="empty-state-title">No mid-case records yet</div><div class="empty-state-sub">Cases waiting to be finalized will appear here once you save a Pre-Op.</div><button class="empty-state-cta" onclick="showTab(\'preop\')">+ New Pre-Op →</button></div>';
 return;
 }
 // Build combined list
 const items_html = allPreops.map(r => {
 const caseId = r['po-caseId'] || '—';
+const displayCaseId = typeof window.getCaseDisplayIdFromPreop === 'function' ? window.getCaseDisplayIdFromPreop(r) : caseId;
 const hasDraft = draftIds.has(caseId);
 const draft = drafts.find(d => d.caseId === caseId);
 const pill = r.worker==='dev' ? 'pill-dev' : 'pill-josh';
@@ -5323,6 +6497,12 @@ const wname = r.worker==='dev' ? 'Devarsh' : 'Josh';
 const surgDate = r['po-surgeryDate'] || '—'; // raw for logic
 const surgDateFmt = fmtDate(r['po-surgeryDate']) || '—';
 const provider = r['po-provider'] || '—';
+// PHI auto-hide: hide patient details 3+ days after surgery date (HIPAA minimum-necessary)
+const phiHidden = typeof window.isPHIHidden === 'function' && window.isPHIHidden(r['po-surgeryDate'], caseId);
+const showAllergies = r['po-allergies'] && !phiHidden;
+const showMeds = r['po-medications'] && !phiHidden;
+const showComments = r['po-comments'] && !phiHidden;
+const phiBadge = phiHidden ? `<span style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:3px" title="Patient details hidden — case is 3+ days old">🔒 PHI HIDDEN</span>` : '';
 // Summarize checked conditions
 const cvFlags = ['htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).map(x=>x.toUpperCase());
 const pulmFlags = ['asthma','copd','uri','cpap','sleep-apnea','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.toUpperCase().replace(/-/g,' '));
@@ -5333,22 +6513,25 @@ const isToday = surgDate === today;
 const borderColor = isPast ? 'var(--warn)' : isToday ? 'var(--accent)' : 'var(--info)';
 const bgTint = isPast ? 'rgba(181,69,27,0.04)' : isToday ? 'rgba(45,106,79,0.04)' : 'transparent';
 const dateLabel = isPast
-? `<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">PAST</span>`
+? `<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">⏱ PAST</span>`
 : isToday
-? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">TODAY</span>`
-: `<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">UPCOMING</span>`;
+? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">● TODAY</span>`
+: `<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">📅 UPCOMING</span>`;
 return `<div class="case-item" style="border-left:3px solid ${borderColor};background:${bgTint}"><div class="case-item-header" onclick="toggleMidCase('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
-${caseId}
+${displayCaseId}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>
 ${dateLabel}
-${hasDraft ? '<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span>' : ''}
+${hasDraft ? '<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">✏ DRAFT</span>' : ''}
+${phiBadge}
 </div><div class="case-date">
 Surgery: ${surgDateFmt} · Dentist: ${provider}
-${r['po-allergies'] ? ' · <span style="color:var(--warn)">⚠ Allergies</span>' : ''}
+${showAllergies ? ' · <span style="color:var(--warn)">⚠ Allergies</span>' : ''}
 </div>
+${phiHidden ? `<div style="margin-top:6px">${window.phiRevealButtonHTML(caseId, 'renderMidCase')}</div>` : ''}
 ${allFlags.length ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
 ${allFlags.map(f=>`<span style="background:var(--info-light);color:var(--info);font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px">${f}</span>`).join('')}
 </div>` : ''}
+${typeof window.buildPreopFollowupPills === 'function' ? window.buildPreopFollowupPills(r) : ''}
 </div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
 ${hasDraft && draft
 ? `<button onclick="event.stopPropagation();resumeCase('${draft.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button>`
@@ -5359,12 +6542,14 @@ ${hasDraft && draft
 <div id="midcase-menu-${r.id}" style="display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;min-width:150px;overflow:hidden">
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');previewDraft('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">👁 Preview</button>
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');editPreopRecord('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">✏ Edit Draft</button>
+<button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');generatePatientPortalLink('${caseId}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:#2d6a4f;font-family:inherit">🔗 Patient Portal Link</button>
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');deleteMidCase('preop','${r.id}','${caseId}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--warn);font-family:inherit">🗑 Delete</button>
 </div>
 </div></div></div><div class="case-items-list" id="midcase-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px;font-size:13px"><div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Surgery Date</strong><div>${fmtDate(r['po-surgeryDate'])||'—'}</div></div><div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Call Date/Time</strong><div>${r['po-callDateTime']||'—'}</div></div><div><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Mallampati</strong><div style="font-size:18px;font-weight:500;font-family:'DM Mono',monospace">${r['mallampati']||'—'}</div></div>
-${r['po-allergies']?`<div style="grid-column:1/-1"><strong style="font-size:10px;text-transform:uppercase;color:var(--warn)">⚠ Allergies</strong><div style="color:var(--warn)">${r['po-allergies']}</div></div>`:''}
-${r['po-medications']?`<div style="grid-column:1/-1"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Medications</strong><div>${r['po-medications']}</div></div>`:''}
-${r['po-comments']?`<div style="grid-column:1/-1"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Comments</strong><div style="font-style:italic">${r['po-comments']}</div></div>`:''}
+${showAllergies?`<div style="grid-column:1/-1"><strong style="font-size:10px;text-transform:uppercase;color:var(--warn)">⚠ Allergies</strong><div style="color:var(--warn)">${r['po-allergies']}</div></div>`:''}
+${showMeds?`<div style="grid-column:1/-1"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Medications</strong><div>${r['po-medications']}</div></div>`:''}
+${showComments?`<div style="grid-column:1/-1"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Comments</strong><div style="font-style:italic">${r['po-comments']}</div></div>`:''}
+${phiHidden && (r['po-allergies'] || r['po-medications'] || r['po-comments'] || r['po-surgicalHistory'] || r['po-driverName'] || r['po-patientEmail']) ? `<div style="grid-column:1/-1;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;padding:10px 12px;text-align:center"><div style="font-size:12px;color:#64748b;margin-bottom:6px">🔒 Patient details (allergies, medications, contact info, etc.) are hidden under HIPAA minimum-necessary rule.</div>${window.phiRevealButtonHTML(caseId, 'renderMidCase')}</div>` : ''}
 </div>
 ${hasDraft && draft && draft.items && draft.items.length ? `
 <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><strong style="font-size:10px;text-transform:uppercase;color:var(--text-faint)">Supplies Added So Far</strong>
@@ -5388,13 +6573,13 @@ const dIsToday = d.date === dToday;
 const dBorder = dIsPast ? 'var(--warn)' : dIsToday ? 'var(--accent)' : '#6b7280';
 const dBg = dIsPast ? 'rgba(181,69,27,0.04)' : dIsToday ? 'rgba(45,106,79,0.04)' : 'transparent';
 const dDateLabel = dIsPast
-? `<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">PAST</span>`
+? `<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">⏱ PAST</span>`
 : dIsToday
-? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">TODAY</span>`
-: `<span style="background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">UPCOMING</span>`;
+? `<span style="background:var(--accent-light);color:var(--accent);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">● TODAY</span>`
+: `<span style="background:#f3f4f6;color:#6b7280;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">📅 UPCOMING</span>`;
 return `<div class="case-item" style="border-left:3px solid ${dBorder};background:${dBg}"><div class="case-item-header"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
 ${d.caseId}
-<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>${dDateLabel}<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">DRAFT</span></div><div class="case-date">${fmtDate(d.date)} · ${d.provider||'—'}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><button onclick="resumeCase('${d.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button><button onclick="editFinalizedCase('${d.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit Draft</button><button onclick="deleteMidCase('draft','${d.id}','${d.caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑 Delete</button></div></div></div>`;
+<span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>${dDateLabel}<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">✏ DRAFT</span></div><div class="case-date">${fmtDate(d.date)} · ${d.provider||'—'}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><button onclick="resumeCase('${d.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button><button onclick="editFinalizedCase('${d.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit Draft</button><button onclick="deleteMidCase('draft','${d.id}','${d.caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑 Delete</button></div></div></div>`;
 }).join('');
 el.innerHTML = (items_html + orphanHtml) || '<div class="empty-state">No mid-case records yet.</div>';
 // Deposit status is now manual — no Stripe check needed
@@ -7165,18 +8350,986 @@ history.replaceState({ tab: initTab }, '', '#' + initTab);
 window.toggleReportsDropdown = function() {
 const btn = document.getElementById('reports-dropdown-btn');
 const menu = document.getElementById('reports-dropdown-menu');
+// Close other dropdowns first so only one is open at a time
+closeWorkflowDropdown(); closeSetupDropdown();
 btn.classList.toggle('open');
 menu.classList.toggle('open');
 };
 window.closeReportsDropdown = function() {
-document.getElementById('reports-dropdown-btn').classList.remove('open');
-document.getElementById('reports-dropdown-menu').classList.remove('open');
+const btn = document.getElementById('reports-dropdown-btn');
+const menu = document.getElementById('reports-dropdown-menu');
+if(btn) btn.classList.remove('open');
+if(menu) menu.classList.remove('open');
 };
-// Close dropdown when clicking outside
-document.addEventListener('click', function(e) {
-const dropdown = document.getElementById('reports-dropdown');
-if(dropdown && !dropdown.contains(e.target)) closeReportsDropdown();
+
+window.toggleWorkflowDropdown = function() {
+const btn = document.getElementById('workflow-dropdown-btn');
+const menu = document.getElementById('workflow-dropdown-menu');
+closeReportsDropdown(); closeSetupDropdown();
+if(btn) btn.classList.toggle('open');
+if(menu) menu.classList.toggle('open');
+};
+window.closeWorkflowDropdown = function() {
+const btn = document.getElementById('workflow-dropdown-btn');
+const menu = document.getElementById('workflow-dropdown-menu');
+if(btn) btn.classList.remove('open');
+if(menu) menu.classList.remove('open');
+};
+
+// ── COMMAND PALETTE (Cmd+K) ───────────────────────────────────────────────────
+function _ensureCommandPaletteDOM() {
+  if(document.getElementById('cmd-palette-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'cmd-palette-overlay';
+  overlay.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;align-items:flex-start;justify-content:center;padding-top:12vh;backdrop-filter:blur(4px)';
+  overlay.innerHTML = `
+    <div id="cmd-palette-modal" style="background:#fff;width:min(640px,calc(100vw - 32px));max-height:70vh;border-radius:14px;overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,.35);display:flex;flex-direction:column">
+      <div style="padding:14px 18px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px;color:#94a3b8">🔍</span>
+        <input id="cmd-palette-input" type="text" placeholder="Search cases, supplies, surgery centers, actions..." autocomplete="off" style="flex:1;border:none;outline:none;font-size:15px;background:transparent;color:#1e293b;font-family:inherit">
+        <kbd style="font-size:10px;color:#94a3b8;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:2px 6px;font-family:inherit">esc</kbd>
+      </div>
+      <div id="cmd-palette-results" style="overflow-y:auto;padding:8px 0;flex:1"></div>
+      <div style="padding:8px 14px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:11px;color:#94a3b8;display:flex;gap:14px;align-items:center">
+        <span><kbd style="background:#fff;border:1px solid #e2e8f0;border-radius:3px;padding:1px 5px;font-family:inherit;font-size:10px">↑↓</kbd> navigate</span>
+        <span><kbd style="background:#fff;border:1px solid #e2e8f0;border-radius:3px;padding:1px 5px;font-family:inherit;font-size:10px">↵</kbd> select</span>
+        <span><kbd style="background:#fff;border:1px solid #e2e8f0;border-radius:3px;padding:1px 5px;font-family:inherit;font-size:10px">esc</kbd> close</span>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) closeCommandPalette(); });
+  const input = document.getElementById('cmd-palette-input');
+  input.addEventListener('input', () => _renderCommandPaletteResults(input.value));
+  input.addEventListener('keydown', _commandPaletteKeyHandler);
+}
+
+// ── HELP TOPICS ─────────────────────────────────────────────────────────────
+// Natural-language help entries surfaced in the command palette. Each topic
+// has a title, search keywords, step-by-step instructions, and an optional
+// navigation action (run when the user clicks "Take me there").
+const HELP_TOPICS = [
+  { title: 'How to create a new Pre-Op assessment',
+    keywords: 'pre-op preop new patient assessment first save record start how do i',
+    steps: ['Click "Pre-Op" in the Workflow menu (or use Cmd+K → Go to Pre-Op).','Fill in patient name, phone, and date of birth at the top.','Enter the surgery date, time, dentist, and surgery center.','Fill in pre-op call info, medical history, and vitals.','Click "✓ Save Record" at the top right.'],
+    action: () => showTab('preop') },
+  { title: 'How to send a Pre-Op Evaluation Request fax',
+    keywords: 'fax send pre-op evaluation request pcp doctor primary care provider',
+    steps: ['Save the Pre-Op record first.','Go to Pre-Op tab → click "📋 PRE-OP EVALUATION REQUEST".','Select the case ID from the dropdown at the top.','Fill in the PCP name and fax number.','Click "Confirm & Send Fax" at the bottom.'],
+    action: () => showTab('preop') },
+  { title: 'How to send a Facsimile Cover Sheet',
+    keywords: 'fax cover sheet send records general purpose',
+    steps: ['Open the Pre-Op tab and select the case.','Click "📠 Facsimile Cover Fax".','Enter recipient name, fax number, and requested documents.','Click "Confirm & Send Fax".'],
+    action: () => showTab('preop') },
+  { title: 'How to finalize a case',
+    keywords: 'finalize case complete supplies inventory cs controlled substance',
+    steps: ['Go to Mid-Case → click "Finalize Case →" on the right case.','Add all supplies used in the "Supplies Used This Case" section.','Add any controlled substances (Propofol, Fentanyl, etc.) in the CS section.','Optionally add a photo of the paper case log.','Click "✓ Finalize Case & Update Inventory" at the top.'],
+    action: () => showTab('mid-case') },
+  { title: 'How to send a deposit link to a patient',
+    keywords: 'deposit stripe payment $500 patient link send',
+    steps: ['Open the Pre-Op tab → make sure Deposit Email is filled in.','Click "💰 Send Deposit Link".','Confirm or update the patient email.','Click Send. A Stripe payment link is emailed automatically.'],
+    action: () => showTab('preop') },
+  { title: 'How to add a new inventory item',
+    keywords: 'inventory new item add supply drug medication stock',
+    steps: ['Go to Inventory (in the Setup menu).','Click "+ Add New Item" in the top right.','Fill in item code, name, category, supplier, unit size, price, and stock levels.','Set a restock alert level so you get warned when stock runs low.','Click "Add Item".'],
+    action: () => showTab('inventory') },
+  { title: 'How to update stock quickly',
+    keywords: 'stock add inventory quick adjust restock receive',
+    steps: ['Go to Inventory tab.','Click "⚡ Quick Add Stock" at the top.','Enter how many units to add for each item (leave blank to skip).','Click "✓ Save All" when done.'],
+    action: () => showTab('inventory') },
+  { title: 'How to mark a case as invoiced or deposit paid',
+    keywords: 'invoice paid deposit mark payment received',
+    steps: ['Go to Case History.','Click the "Actions ▾" dropdown on the case.','For invoiced manually: there is a Mark Invoiced option.','Deposit paid: check the deposit status pill on the row.'],
+    action: () => showTab('history') },
+  { title: 'How to use Surgery Mode',
+    keywords: 'surgery mode screen on keep awake live case ipad tablet',
+    steps: ['Click the "🏥 Surgery Mode" button in the top-right header.','A yellow banner will appear at top — screen stays on, auto-logout paused.','You will be auto-navigated to the Live Case tab.','To exit: click "Turn Off" on the yellow banner.'],
+    action: () => toggleSurgeryMode() },
+  { title: 'How to track supplies during a live case',
+    keywords: 'live case surgery mode track real time supplies cs portal',
+    steps: ['Activate Surgery Mode (header button).','You will land on Live Case tab.','Pick the active case from the dropdown.','Tap "📦 Add Supplies" or "💊 Add Controlled Substances" as you use them.','Notes auto-save. Click "Go to Finalize Case →" when surgery ends.'],
+    action: () => { toggleSurgeryMode(); } },
+  { title: 'How to send a patient their appointment link',
+    keywords: 'patient portal link share appointment deposit',
+    steps: ['Go to Mid-Case tab.','Click "Actions ▾" on the case.','Click "🔗 Patient Portal Link". A URL is copied to your clipboard.','Text or email the link to the patient.','They can see their date/time/deposit status and pay if needed.'],
+    action: () => showTab('mid-case') },
+  { title: 'How to view the Surgery Center booking portal',
+    keywords: 'surgery center portal tidycal book schedule view public link',
+    steps: ['Click "🌐 Surgery Center Portal" in the header user menu.','You will see what dental partners see — provider bios, TidyCal booking calendars, contact form.','Share the URL with surgery centers.'],
+    action: () => window.open('portal-center.html', '_blank') },
+  { title: 'How to view the audit log',
+    keywords: 'audit log history activity who did what hipaa compliance',
+    steps: ['Click the Reports ▾ menu.','Click "Audit Log".','Filter by date or action type if needed.','Every PHI access, edit, login, and reveal is recorded here.'],
+    action: () => { if(typeof openAuditLogModal === 'function') openAuditLogModal(); } },
+  { title: 'Bug codes reference (copy these when reporting issues)',
+    keywords: 'bug codes errors error codes reference list debugging report issue',
+    steps: [
+      'INV-001 / INV-002 — Inventory save failed or did not persist.',
+      'CASE-001 / CASE-002 — Case save failed or supplies did not persist.',
+      'CASE-003 / CASE-004 — Case not found, or inventory deduction failed.',
+      'PREOP-001 / 002 / 003 — Pre-Op save / lookup / pill update failed.',
+      'FAX-001 / 002 / 003 — Fax send / invalid number / scheduler error.',
+      'EMAIL-001 / 002 — Email send failed or recipient not verified (SES sandbox).',
+      'AUTH-001 / 002 / 003 — Sign-in / session / permission errors.',
+      'PHI-001 / 002 — PHI reveal wrong password or unauthorized user.',
+      'PAY-001 / 002 — Payment row save or delete failed.',
+      'PORTAL-001 / 002 — Portal token create / expired or invalid.',
+      'BACKUP-001 / 002 — Backup download or daily-backup write failed.',
+      'NET-001 / SYNC-001 — Network or real-time sync issue.',
+      'When you see a code in a toast, click the "copy" button and paste it to me — it includes the technical detail too.'
+    ],
+    action: () => {} },
+  { title: 'How to reveal hidden patient details (old cases)',
+    keywords: 'phi hidden reveal show patient details unlock password',
+    steps: ['Old cases (3+ days post-surgery) hide patient info automatically.','In Mid-Case or Case History, look for a "🔒 Show Patient Details" button.','Click it and enter your account password.','Details unlock for this session only. The reveal is audit-logged.'],
+    action: () => {} },
+  { title: 'How to send an insurance fax sheet',
+    keywords: 'insurance fax sheet send cdt codes flat fee',
+    steps: ['Go to Finalize Case after completing a case.','Click "📋 Insurance Sheet".','Pick Flat Fee or CDT Codes mode.','Fill in the recipient fax number and details.','Click Send.'],
+    action: () => showTab('new-case') },
+  { title: 'How to schedule a fax for later',
+    keywords: 'schedule fax later future date send',
+    steps: ['Open the fax composer (Cover Sheet or Pre-Op Evaluation).','At the bottom, switch the toggle from "Send Now" to "Schedule".','Pick a date and time.','Click Confirm. The fax sends automatically at the chosen time.'],
+    action: () => showTab('preop') },
+  { title: 'What does HIPAA Compliant mean here',
+    keywords: 'hipaa compliant compliance security what does badge means',
+    steps: ['The green ✓ HIPAA badge shows Atlas is configured for HIPAA: encrypted database (Firestore), audit logging of all PHI access, automatic 20-minute logout, signed Business Associate Agreements (Google, AWS, FAXAGE, Stripe), and PHI redaction 3 days after surgery.','Compliance is a process — running the annual HHS Security Risk Assessment and maintaining policies are still required.'],
+    action: () => {} },
+  { title: 'How to manage Surgery Centers',
+    keywords: 'surgery center add edit manage location',
+    steps: ['Click Setup ▾ → Surgery Centers.','Add new centers with name, address, contacts, billing info.','Each center can be linked to pre-op records so cases roll up by location.'],
+    action: () => showTab('analytics') }
+];
+
+function _buildCommandPaletteIndex() {
+  const items = [];
+  // Help topics
+  HELP_TOPICS.forEach(topic => {
+    items.push({
+      type: 'help',
+      label: topic.title,
+      sub: 'Help · ' + (topic.keywords.split(' ').slice(0, 5).join(' ')),
+      icon: '💡',
+      action: () => _showHelpTopic(topic),
+      _searchExtra: topic.keywords
+    });
+  });
+  // Navigation actions
+  const navs = [
+    { type:'nav', label:'Go to Home', icon:'🏠', action:() => showTab('home') },
+    { type:'nav', label:'Go to Pre-Op', icon:'📝', action:() => showTab('preop') },
+    { type:'nav', label:'Go to Mid-Case', icon:'🩺', action:() => showTab('mid-case') },
+    { type:'nav', label:'Go to Finalize Case', icon:'✓', action:() => showTab('new-case') },
+    { type:'nav', label:'Go to Inventory', icon:'📦', action:() => showTab('inventory') },
+    { type:'nav', label:'Go to Calendar', icon:'📅', action:() => showTab('calendar') },
+    { type:'nav', label:'Go to Surgery Centers', icon:'🏥', action:() => showTab('analytics') },
+    { type:'nav', label:'Go to Payments', icon:'💰', action:() => showTab('payments') },
+    { type:'nav', label:'Go to Case History', icon:'📜', action:() => showTab('history') },
+    { type:'nav', label:'Go to Audit Log', icon:'🔍', action:() => { if(typeof openAuditLogModal === 'function') openAuditLogModal(); } },
+    { type:'action', label:'Toggle Surgery Mode', icon:'🏥', action:() => toggleSurgeryMode() },
+    { type:'action', label:'Open Surgery Center Portal', icon:'🌐', action:() => window.open('portal-center.html','_blank') },
+    { type:'action', label:'Download Backup', icon:'⬇', action:() => { if(typeof window.downloadFullBackup === 'function') window.downloadFullBackup(); } },
+    { type:'action', label:'Sign Out', icon:'⤴', action:() => { if(typeof doLogout === 'function') doLogout(); } }
+  ];
+  items.push(...navs);
+  // Cases (from window.cases)
+  (window.cases || []).forEach(c => {
+    const displayId = (typeof window.getCaseDisplayIdFromCase === 'function') ? window.getCaseDisplayIdFromCase(c) : c.caseId;
+    items.push({
+      type: 'case',
+      label: displayId,
+      sub: `${fmtDate(c.date)} · ${c.provider || '—'} · ${c.worker === 'dev' ? 'Dev' : 'Josh'}`,
+      icon: c.draft ? '✏' : '✓',
+      action: () => { showTab('history'); }
+    });
+  });
+  // Pre-op records (from window._rawPreopRecords)
+  (window._rawPreopRecords || []).forEach(r => {
+    const displayId = (typeof window.getCaseDisplayIdFromPreop === 'function') ? window.getCaseDisplayIdFromPreop(r) : r['po-caseId'];
+    items.push({
+      type: 'preop',
+      label: displayId,
+      sub: `Pre-Op · ${fmtDate(r['po-surgeryDate'])} · ${r['po-provider'] || '—'}`,
+      icon: '📝',
+      action: () => { showTab('mid-case'); }
+    });
+  });
+  // Inventory items
+  (window.items || []).slice(0, 100).forEach(i => {
+    items.push({
+      type: 'inventory',
+      label: i.generic || i.name || 'Untitled',
+      sub: `Inventory · ${i.category || 'Item'}${i.stockDev != null ? ' · Dev: '+i.stockDev : ''}${i.stockJosh != null ? ' · Josh: '+i.stockJosh : ''}`,
+      icon: '📦',
+      action: () => showTab('inventory')
+    });
+  });
+  // Surgery centers
+  (window.surgeryCenters || []).forEach(c => {
+    items.push({
+      type: 'center',
+      label: c.name || 'Untitled',
+      sub: `Surgery Center${c.address ? ' · '+c.address : ''}`,
+      icon: '🏥',
+      action: () => showTab('analytics')
+    });
+  });
+  return items;
+}
+
+function _fuzzyScore(query, text) {
+  if(!query) return 0;
+  if(!text) return -1;
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  if(t === q) return 1000;
+  if(t.startsWith(q)) return 500;
+  if(t.includes(q)) return 200;
+  // Letter-by-letter fuzzy match
+  let qi = 0, score = 0;
+  for(let i = 0; i < t.length && qi < q.length; i++) {
+    if(t[i] === q[qi]) { score += 5; qi++; }
+  }
+  return qi === q.length ? score : -1;
+}
+
+let _cmdPaletteIndex = [];
+let _cmdPaletteSelected = 0;
+let _cmdPaletteFiltered = [];
+
+function _renderCommandPaletteResults(query) {
+  const resultsEl = document.getElementById('cmd-palette-results');
+  if(!resultsEl) return;
+  const q = (query || '').trim();
+  let filtered;
+  if(!q) {
+    filtered = _cmdPaletteIndex.slice(0, 20);
+  } else {
+    const scored = _cmdPaletteIndex.map(item => ({
+      item,
+      score: Math.max(
+        _fuzzyScore(q, item.label),
+        _fuzzyScore(q, item.sub || ''),
+        _fuzzyScore(q, item._searchExtra || '')
+      )
+    })).filter(x => x.score > 0)
+      .sort((a,b) => b.score - a.score)
+      .slice(0, 30);
+    filtered = scored.map(x => x.item);
+  }
+  _cmdPaletteFiltered = filtered;
+  _cmdPaletteSelected = 0;
+  if(!filtered.length) {
+    resultsEl.innerHTML = '<div style="padding:30px 20px;text-align:center;color:#94a3b8;font-size:13px">No results for "'+q.replace(/</g,'&lt;')+'"</div>';
+    return;
+  }
+  resultsEl.innerHTML = filtered.map((item, idx) => `
+    <div class="cmd-palette-result" data-idx="${idx}" onclick="window._runCmdPaletteItem(${idx})" style="padding:9px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;background:${idx===0?'#f1f5f9':'transparent'}">
+      <span style="font-size:16px;width:22px;text-align:center;flex-shrink:0">${item.icon || '•'}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(item.label||'').replace(/</g,'&lt;')}</div>
+        ${item.sub ? `<div style="font-size:11px;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.sub.replace(/</g,'&lt;')}</div>` : ''}
+      </div>
+      <span style="font-size:10px;color:#cbd5e1;text-transform:uppercase;letter-spacing:.5px">${item.type || ''}</span>
+    </div>
+  `).join('');
+}
+
+function _updateCmdPaletteSelection() {
+  const items = document.querySelectorAll('.cmd-palette-result');
+  items.forEach((el, i) => {
+    el.style.background = i === _cmdPaletteSelected ? '#f1f5f9' : 'transparent';
+    if(i === _cmdPaletteSelected) {
+      el.scrollIntoView({ block: 'nearest' });
+    }
+  });
+}
+
+function _commandPaletteKeyHandler(e) {
+  if(e.key === 'ArrowDown') {
+    e.preventDefault();
+    _cmdPaletteSelected = Math.min(_cmdPaletteSelected + 1, _cmdPaletteFiltered.length - 1);
+    _updateCmdPaletteSelection();
+  } else if(e.key === 'ArrowUp') {
+    e.preventDefault();
+    _cmdPaletteSelected = Math.max(_cmdPaletteSelected - 1, 0);
+    _updateCmdPaletteSelection();
+  } else if(e.key === 'Enter') {
+    e.preventDefault();
+    window._runCmdPaletteItem(_cmdPaletteSelected);
+  } else if(e.key === 'Escape') {
+    e.preventDefault();
+    closeCommandPalette();
+  }
+}
+
+window._runCmdPaletteItem = function(idx) {
+  const item = _cmdPaletteFiltered[idx];
+  if(!item) return;
+  closeCommandPalette();
+  try { item.action(); } catch(err) { console.error('Command palette action failed:', err); }
+};
+
+function _showHelpTopic(topic) {
+  const overlay = document.createElement('div');
+  overlay.id = 'help-topic-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:540px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.35)">
+      <div style="padding:22px 26px 18px;background:#1d3557;color:#fff;border-radius:14px 14px 0 0">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">💡 Help Topic</div>
+        <div style="font-size:19px;font-weight:700">${topic.title.replace(/</g,'&lt;')}</div>
+      </div>
+      <div style="padding:22px 26px">
+        <ol style="margin:0 0 22px;padding-left:22px;font-size:14px;color:#1e293b;line-height:1.7">
+          ${topic.steps.map(s => `<li style="margin-bottom:8px">${s.replace(/</g,'&lt;')}</li>`).join('')}
+        </ol>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="_closeHelpTopic()" style="padding:9px 18px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Close</button>
+          ${topic.action ? `<button id="help-topic-go" style="padding:9px 18px;background:#1d3557;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Take me there →</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) _closeHelpTopic(); });
+  const goBtn = document.getElementById('help-topic-go');
+  if(goBtn) goBtn.addEventListener('click', () => { _closeHelpTopic(); try { topic.action(); } catch(e){} });
+  document.addEventListener('keydown', _helpTopicKeyHandler);
+}
+function _closeHelpTopic() {
+  const overlay = document.getElementById('help-topic-overlay');
+  if(overlay) overlay.remove();
+  document.removeEventListener('keydown', _helpTopicKeyHandler);
+}
+window._closeHelpTopic = _closeHelpTopic;
+function _helpTopicKeyHandler(e) { if(e.key === 'Escape') _closeHelpTopic(); }
+
+window.openCommandPalette = function() {
+  _ensureCommandPaletteDOM();
+  _cmdPaletteIndex = _buildCommandPaletteIndex();
+  const overlay = document.getElementById('cmd-palette-overlay');
+  if(overlay) overlay.style.display = 'flex';
+  const input = document.getElementById('cmd-palette-input');
+  if(input) { input.value = ''; input.focus(); }
+  _renderCommandPaletteResults('');
+};
+window.closeCommandPalette = function() {
+  const overlay = document.getElementById('cmd-palette-overlay');
+  if(overlay) overlay.style.display = 'none';
+};
+
+// Cmd+K / Ctrl+K opens palette globally
+document.addEventListener('keydown', function(e) {
+  if((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    if(window.currentUser) openCommandPalette();
+  }
 });
+
+// ── DARK MODE ─────────────────────────────────────────────────────────────────
+window.toggleDarkMode = function() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('atlas-theme', next); } catch(e){}
+  const btn = document.getElementById('user-menu-theme');
+  if(btn) btn.innerHTML = next === 'dark' ? '☀ Switch to Light Mode' : '🌙 Switch to Dark Mode';
+};
+// Apply saved theme on load
+(function() {
+  try {
+    const saved = localStorage.getItem('atlas-theme');
+    if(saved === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      setTimeout(() => {
+        const btn = document.getElementById('user-menu-theme');
+        if(btn) btn.innerHTML = '☀ Switch to Light Mode';
+      }, 100);
+    }
+  } catch(e){}
+})();
+
+window.toggleUserMenu = function() {
+  const menu = document.getElementById('user-menu-dropdown');
+  if(!menu) return;
+  const open = menu.style.display === 'block';
+  menu.style.display = open ? 'none' : 'block';
+  // Populate the date when opening
+  if(!open) {
+    const dateEl = document.getElementById('user-menu-date');
+    const headerDate = document.getElementById('dateDisplay');
+    if(dateEl) dateEl.textContent = (headerDate && headerDate.textContent) || new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  }
+};
+window.closeUserMenu = function() {
+  const menu = document.getElementById('user-menu-dropdown');
+  if(menu) menu.style.display = 'none';
+};
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('user-menu-dropdown');
+  const btn = document.getElementById('user-menu-btn');
+  if(menu && menu.style.display === 'block' && !menu.contains(e.target) && !(btn && btn.contains(e.target))) {
+    menu.style.display = 'none';
+  }
+});
+
+window.toggleSetupDropdown = function() {
+const btn = document.getElementById('setup-dropdown-btn');
+const menu = document.getElementById('setup-dropdown-menu');
+closeReportsDropdown(); closeWorkflowDropdown();
+if(btn) btn.classList.toggle('open');
+if(menu) menu.classList.toggle('open');
+};
+window.closeSetupDropdown = function() {
+const btn = document.getElementById('setup-dropdown-btn');
+const menu = document.getElementById('setup-dropdown-menu');
+if(btn) btn.classList.remove('open');
+if(menu) menu.classList.remove('open');
+};
+
+// Close dropdowns when clicking outside any of them
+document.addEventListener('click', function(e) {
+const r = document.getElementById('reports-dropdown');
+const w = document.getElementById('workflow-dropdown');
+const s = document.getElementById('setup-dropdown');
+if(r && !r.contains(e.target)) closeReportsDropdown();
+if(w && !w.contains(e.target)) closeWorkflowDropdown();
+if(s && !s.contains(e.target)) closeSetupDropdown();
+});
+
+// Update the dropdown parent buttons to show "active" when one of their
+// children is the currently shown tab. Hooked into showTab below.
+// ── UPDATE DETECTION ──────────────────────────────────────────────────────────
+// Checks if a newer version of the app has been deployed (by polling
+// index.html for a fresh cache version string). When it detects a mismatch,
+// it shows a persistent banner so Dev/Josh know to hard-refresh.
+const APP_VERSION = '20260515ag'; // bump this when deploying — must match app.js?v=... in index.html
+const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
+
+async function _checkForAppUpdate() {
+  try {
+    // Fetch index.html with cache-bust, extract the app.js cache version
+    const res = await fetch('/index.html?_t=' + Date.now(), { cache: 'no-store' });
+    if(!res.ok) return;
+    const html = await res.text();
+    const match = html.match(/app\.js\?v=([a-zA-Z0-9-]+)/);
+    if(!match) return;
+    const latestVersion = match[1];
+    if(latestVersion && latestVersion !== APP_VERSION) {
+      _showUpdateBanner(latestVersion);
+    }
+  } catch(e) { /* network blip, ignore */ }
+}
+
+function _showUpdateBanner(latestVersion) {
+  if(document.getElementById('update-banner')) return; // already shown
+  const banner = document.createElement('div');
+  banner.id = 'update-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99998;background:#1d3557;color:#fff;padding:10px 18px;display:flex;align-items:center;justify-content:center;gap:14px;font-size:13px;font-weight:500;box-shadow:0 2px 12px rgba(0,0,0,.25);animation:fadeIn .3s ease';
+  banner.innerHTML = `
+    <span>🆕 A new version of Atlas Tracker is available (${latestVersion}). Please refresh to get the latest features.</span>
+    <button onclick="location.reload(true)" style="background:#fef3c7;color:#92400e;border:none;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Refresh Now</button>
+    <button onclick="document.getElementById('update-banner').remove()" title="Dismiss for now" style="background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer">Later</button>
+  `;
+  document.body.insertBefore(banner, document.body.firstChild);
+  document.body.style.paddingTop = '46px';
+}
+
+// Start polling when user is logged in
+function _startUpdateChecker() {
+  if(window._updateCheckerStarted) return;
+  window._updateCheckerStarted = true;
+  // Initial check after 30 seconds (give the app time to load)
+  setTimeout(_checkForAppUpdate, 30000);
+  // Then poll regularly
+  setInterval(_checkForAppUpdate, UPDATE_CHECK_INTERVAL_MS);
+}
+
+// ── ERROR CODES ───────────────────────────────────────────────────────────────
+// Standardized codes so users can quote them when reporting an issue.
+// Format: <AREA>-<NUMBER>. Each code maps to a one-line explanation that
+// gets shown alongside the technical error message in toasts.
+const ERROR_CODES = {
+  // Inventory
+  'INV-001': 'Inventory save failed — Firestore write rejected',
+  'INV-002': 'Inventory save did not persist — write succeeded locally but server has different data',
+  // Cases (Finalize, supplies, CS log)
+  'CASE-001': 'Case save failed — Firestore write rejected',
+  'CASE-002': 'Case save did not persist — supplies/CS data may be lost',
+  'CASE-003': 'Could not find case to update — refresh and try again',
+  'CASE-004': 'Inventory deduction failed during case save',
+  // Pre-Op
+  'PREOP-001': 'Pre-Op save failed',
+  'PREOP-002': 'Pre-Op record not found',
+  'PREOP-003': 'Pre-Op status update failed (call/invoice/payment pills)',
+  // Fax
+  'FAX-001': 'Fax send failed via FAXAGE',
+  'FAX-002': 'Invalid fax number',
+  'FAX-003': 'Fax scheduler error',
+  // Email
+  'EMAIL-001': 'Email send failed via AWS SES',
+  'EMAIL-002': 'Email address not verified (SES sandbox mode)',
+  // Authentication
+  'AUTH-001': 'Sign-in failed',
+  'AUTH-002': 'Session expired — please sign in again',
+  'AUTH-003': 'Permission denied for this action',
+  // PHI redaction
+  'PHI-001': 'PHI reveal failed — incorrect password',
+  'PHI-002': 'PHI reveal failed — user not authorized to reveal',
+  // Payments
+  'PAY-001': 'Payment row save failed',
+  'PAY-002': 'Payment row delete failed',
+  // Portal / external
+  'PORTAL-001': 'Portal token creation failed',
+  'PORTAL-002': 'Portal token expired or invalid',
+  // Backup / data
+  'BACKUP-001': 'Backup download failed',
+  'BACKUP-002': 'Daily backup write to Firestore failed',
+  // Network / sync
+  'NET-001': 'Network error — check your internet connection',
+  'SYNC-001': 'Real-time sync interrupted'
+};
+
+// Throw a coded error or show a coded toast
+// Convert any value to a readable string. Prevents "[object Object]"
+// from showing up in error toasts.
+function _formatErrorDetail(detail) {
+  if(detail == null) return '';
+  if(typeof detail === 'string') return detail;
+  if(detail instanceof Error) return detail.message || detail.toString();
+  if(typeof detail === 'object') {
+    if(detail.message) return String(detail.message);
+    if(detail.error) return String(detail.error);
+    try { return JSON.stringify(detail).slice(0, 500); } catch(e) { return '[unserializable error object]'; }
+  }
+  return String(detail);
+}
+
+window.atlasError = function(code, detail, opts) {
+  const msg = ERROR_CODES[code] || 'Unknown error';
+  const detailStr = _formatErrorDetail(detail);
+  const fullMessage = `[${code}] ${msg}` + (detailStr ? '\n→ ' + detailStr : '');
+  console.error(fullMessage, detail);
+  // Audit log so we can correlate the user's report with what actually happened
+  try { if(typeof logAudit === 'function') logAudit('error-' + code, '', detailStr.slice(0, 500)); } catch(e){}
+  if(typeof toastError === 'function') {
+    toastError(fullMessage, Object.assign({ persist: true }, opts || {}));
+  } else if(typeof alert === 'function') {
+    alert(fullMessage);
+  }
+  return new Error(fullMessage);
+};
+
+// ── TOAST NOTIFICATIONS ───────────────────────────────────────────────────────
+// Slide-in non-blocking notifications that replace many alert() calls.
+// Errors PERSIST (no auto-dismiss) so users can read error codes carefully.
+// Each toast has a copy button to copy the full message to clipboard.
+function _ensureToastContainer() {
+  let c = document.getElementById('toast-container');
+  if(!c) {
+    c = document.createElement('div');
+    c.id = 'toast-container';
+    c.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:99999;display:flex;flex-direction:column;gap:8px;max-width:380px;pointer-events:none';
+    document.body.appendChild(c);
+  }
+  return c;
+}
+
+// toast(message, type, options)
+//   type: 'success' | 'error' | 'warn' | 'info'
+//   options.persist: true to keep visible until manually dismissed
+//   options.duration: ms before auto-dismiss (default 4500 for non-errors)
+window.toast = function(message, type, options) {
+  type = type || 'info';
+  options = options || {};
+  const persist = options.persist !== undefined ? options.persist : (type === 'error');
+  const duration = options.duration || 4500;
+  const container = _ensureToastContainer();
+  const toast = document.createElement('div');
+  toast.className = 'atlas-toast atlas-toast-' + type;
+  const palette = {
+    success: { bg:'#dcfce7', border:'#86efac', text:'#14532d', icon:'✓' },
+    error:   { bg:'#fee2e2', border:'#fca5a5', text:'#991b1b', icon:'✕' },
+    warn:    { bg:'#fef3c7', border:'#fde68a', text:'#78350f', icon:'⚠' },
+    info:    { bg:'#dbeafe', border:'#bfdbfe', text:'#1e3a8a', icon:'ⓘ' }
+  };
+  const c = palette[type] || palette.info;
+  toast.style.cssText = `background:${c.bg};border:1px solid ${c.border};border-left:4px solid ${c.border};border-radius:8px;padding:12px 14px;box-shadow:0 6px 20px rgba(15,23,42,.12);pointer-events:auto;display:flex;align-items:flex-start;gap:10px;font-size:13px;color:${c.text};animation:toastSlideIn .25s ease;max-width:380px`;
+  const escaped = String(message).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  toast.innerHTML = `
+    <div style="font-size:16px;line-height:1;margin-top:2px;flex-shrink:0">${c.icon}</div>
+    <div style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;line-height:1.5">${escaped}</div>
+    <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;margin-left:4px">
+      <button title="Copy message to clipboard" style="background:transparent;border:1px solid ${c.border};color:${c.text};font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;font-family:inherit">copy</button>
+      <button title="Dismiss" style="background:transparent;border:none;color:${c.text};font-size:14px;line-height:1;padding:2px 6px;cursor:pointer;opacity:.7">✕</button>
+    </div>`;
+  const [copyBtn, closeBtn] = toast.querySelectorAll('button');
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(String(message));
+      copyBtn.textContent = 'copied';
+      setTimeout(() => { copyBtn.textContent = 'copy'; }, 1200);
+    } catch(e) { copyBtn.textContent = 'err'; }
+  });
+  closeBtn.addEventListener('click', () => _removeToast(toast));
+  container.appendChild(toast);
+  if(!persist) {
+    setTimeout(() => _removeToast(toast), duration);
+  }
+  return toast;
+};
+function _removeToast(toast) {
+  if(!toast || !toast.parentNode) return;
+  toast.style.animation = 'toastSlideOut .2s ease forwards';
+  setTimeout(() => { if(toast.parentNode) toast.remove(); }, 200);
+}
+// Convenience shorthands
+window.toastSuccess = (msg, opts) => window.toast(msg, 'success', opts);
+window.toastError   = (msg, opts) => window.toast(msg, 'error', opts);
+window.toastWarn    = (msg, opts) => window.toast(msg, 'warn', opts);
+window.toastInfo    = (msg, opts) => window.toast(msg, 'info', opts);
+
+// ── TEST CASE ─────────────────────────────────────────────────────────────────
+// Creates a clearly-labeled test pre-op record so users can test features
+// without polluting real data. Test records are excluded from Dashboard
+// stats, reports, and any aggregations (filter by !r.isTest).
+window.createTestCase = async function() {
+  if(!confirm('Create a TEST CASE? It will be clearly labeled and excluded from stats. You can delete it anytime.')) return;
+  try {
+    const snap = await getDoc(doc(db, 'atlas', 'preop'));
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    const today = todayStr();
+    const tomorrow = addDays(today, 1);
+    const worker = currentWorker || 'josh';
+    // Generate a TEST case ID
+    const ts = Date.now().toString(36).slice(-5).toUpperCase();
+    const caseId = `TEST-${worker.toUpperCase()}-${ts}`;
+    const testRecord = {
+      id: uid(),
+      isTest: true, // KEY FLAG: excludes this from stats
+      worker,
+      savedAt: new Date().toISOString(),
+      'po-caseId': caseId,
+      'po-patientFirstName': 'Test',
+      'po-patientLastName': 'Patient',
+      'po-patientPhone': '(555) 123-4567',
+      'po-patientDOB': '1980-01-01',
+      'po-patientEmail': 'test@atlasanesthesia.co',
+      'po-surgeryDate': tomorrow,
+      'po-startTime': '09:00',
+      'po-callDateTime': today + 'T10:00',
+      'po-procedureType': '🧪 TEST — Sample Procedure',
+      'po-provider': 'Dr. Test',
+      'po-est-hours': 2,
+      'po-allergies': 'NKDA (test data)',
+      'po-medications': 'None (test data)',
+      'po-surgicalHistory': 'None reported',
+      'po-comments': 'This is a TEST CASE for app feature testing. Safe to delete.',
+      'po-driverName': 'Test Driver',
+      'po-driverRel': 'Family',
+      'po-weight-lbs': 165,
+      'po-height-ft': 5,
+      'po-height-in': 10,
+      'po-weight-kg-val': '74.8',
+      'po-height-cm-val': '177.8',
+      'po-bmi-val': '23.7',
+      'mallampati': 'II',
+      'po-npo': true,
+      'po-driver': true,
+      'po-pulm-neg': true,
+      'po-cv-neg': true,
+      'po-gastro-neg': true,
+      'po-renal-neg': true,
+      'po-neuro-neg': true,
+      'po-meta-neg': true,
+      'po-teeth-intact': true
+    };
+    records.unshift(testRecord);
+    await savePreopRecords(records);
+    toastSuccess('Test case created: ' + caseId + '\nAppears in Mid-Case with a 🧪 TEST badge. Excluded from stats.');
+    if(typeof renderDashboard === 'function') renderDashboard();
+  } catch(err) {
+    alert('Error creating test case: ' + err.message);
+    console.error(err);
+  }
+};
+
+// ── CUSTOMIZABLE QUICK ACTIONS ────────────────────────────────────────────────
+// All available actions. User picks which appear (and in what order) on Home.
+const QUICK_ACTIONS_CATALOG = [
+  { id: 'preop',       icon: '📝', label: 'New Pre-Op Assessment', action: () => showTab('preop') },
+  { id: 'mid-case',    icon: '🩺', label: 'View Mid-Case',         action: () => showTab('mid-case') },
+  { id: 'new-case',    icon: '✓',  label: 'Finalize a Case',       action: () => showTab('new-case') },
+  { id: 'inventory',   icon: '📦', label: 'Manage Inventory',      action: () => showTab('inventory') },
+  { id: 'payments',    icon: '💰', label: 'Payments',              action: () => { showTab('payments'); if(typeof loadPaymentRows === 'function') loadPaymentRows(); } },
+  { id: 'calendar',    icon: '📅', label: 'Calendar',              action: () => showTab('calendar') },
+  { id: 'centers',     icon: '🏥', label: 'Surgery Centers',       action: () => showTab('analytics') },
+  { id: 'history',     icon: '📜', label: 'Case History',          action: () => showTab('history') },
+  { id: 'reports',     icon: '📊', label: 'Inventory Reports',     action: () => showTab('reports') },
+  { id: 'audit-log',   icon: '🔍', label: 'Audit Log',             action: () => { if(typeof openAuditLogModal === 'function') openAuditLogModal(); } },
+  { id: 'surgery-mode',icon: '🏥', label: 'Toggle Surgery Mode',   action: () => { if(typeof toggleSurgeryMode === 'function') toggleSurgeryMode(); } },
+  { id: 'backup',      icon: '⬇',  label: 'Download Backup',       action: () => { if(typeof window.downloadFullBackup === 'function') window.downloadFullBackup(); } },
+  { id: 'portal',      icon: '🌐', label: 'Surgery Center Portal', action: () => window.open('portal-center.html','_blank') },
+  { id: 'test-case',   icon: '🧪', label: 'Create Test Case',      action: () => { if(typeof createTestCase === 'function') createTestCase(); } },
+  { id: 'cs-log',      icon: '⚠',  label: 'Controlled Substance Log', action: () => showTab('cs-log') }
+];
+const DEFAULT_QUICK_ACTIONS = ['preop','mid-case','new-case','inventory','test-case'];
+
+function _getQuickActions() {
+  try {
+    const saved = localStorage.getItem('atlas-quick-actions');
+    if(saved) {
+      const ids = JSON.parse(saved);
+      if(Array.isArray(ids) && ids.length) return ids;
+    }
+  } catch(e){}
+  return DEFAULT_QUICK_ACTIONS.slice();
+}
+function _saveQuickActions(ids) {
+  try { localStorage.setItem('atlas-quick-actions', JSON.stringify(ids)); } catch(e){}
+}
+
+window.renderQuickActions = function() {
+  const container = document.getElementById('quick-actions-list');
+  if(!container) return;
+  const ids = _getQuickActions();
+  if(!ids.length) {
+    container.innerHTML = '<div style="font-size:13px;color:var(--text-faint);font-style:italic;padding:10px 0">No quick actions configured. Click <strong>⚙ Customize</strong> to add some.</div>';
+    return;
+  }
+  container.innerHTML = ids.map((id, idx) => {
+    const a = QUICK_ACTIONS_CATALOG.find(x => x.id === id);
+    if(!a) return '';
+    const cls = idx === 0 ? 'btn btn-primary' : 'btn btn-ghost';
+    return `<button class="${cls}" onclick="window._runQuickAction('${id}')" style="justify-content:flex-start">${a.icon} ${a.label}</button>`;
+  }).join('');
+};
+
+window._runQuickAction = function(id) {
+  const a = QUICK_ACTIONS_CATALOG.find(x => x.id === id);
+  if(a) try { a.action(); } catch(e) { console.error('Quick action failed:', e); }
+};
+
+window.openQuickActionsCustomize = function() {
+  const current = _getQuickActions();
+  const existing = document.getElementById('qa-customize-modal');
+  if(existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'qa-customize-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">
+    <div style="background:#1d3557;color:#fff;padding:18px 22px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Customize</div>
+      <div style="font-size:17px;font-weight:700">Quick Actions</div>
+      <div style="font-size:12px;color:#a8c4e0;margin-top:4px">Pick which actions appear on your Home page. The first action is shown as the primary (highlighted) button.</div>
+    </div>
+    <div style="padding:18px 22px;overflow-y:auto;flex:1">
+      <div id="qa-options-list" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+    <div style="padding:14px 22px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;gap:8px">
+      <button onclick="window._qaResetDefaults()" style="background:transparent;color:#64748b;border:1px solid #cbd5e1;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Reset to Default</button>
+      <div style="display:flex;gap:8px">
+        <button onclick="document.getElementById('qa-customize-modal').remove()" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
+        <button onclick="window._qaSaveCustomization()" style="background:#1d3557;color:#fff;border:none;padding:9px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Save</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+  _renderQuickActionsOptions(current);
+};
+
+function _renderQuickActionsOptions(currentIds) {
+  const list = document.getElementById('qa-options-list');
+  if(!list) return;
+  // Show selected items first (in order), then unselected
+  const selected = currentIds.map(id => QUICK_ACTIONS_CATALOG.find(a => a.id === id)).filter(Boolean);
+  const unselected = QUICK_ACTIONS_CATALOG.filter(a => !currentIds.includes(a.id));
+  const renderRow = (a, isSelected, order) => `<div data-action="${a.id}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${isSelected?'#f0f9ff':'#fafaf9'};border:1px solid ${isSelected?'#bae6fd':'#e2e8f0'};border-radius:8px">
+    <input type="checkbox" data-qa-cb="${a.id}" ${isSelected?'checked':''} onchange="window._qaToggleAction('${a.id}')" style="width:16px;height:16px;cursor:pointer;flex-shrink:0">
+    <span style="font-size:16px;width:22px;text-align:center">${a.icon}</span>
+    <span style="flex:1;font-size:13px;color:#1e293b;font-weight:${isSelected?'600':'500'}">${a.label}</span>
+    ${isSelected ? `<div style="display:flex;gap:4px">
+      <button onclick="window._qaMove('${a.id}',-1)" title="Move up" style="background:transparent;border:1px solid #cbd5e1;color:#475569;width:24px;height:24px;border-radius:5px;cursor:pointer;font-size:12px;padding:0">↑</button>
+      <button onclick="window._qaMove('${a.id}',1)" title="Move down" style="background:transparent;border:1px solid #cbd5e1;color:#475569;width:24px;height:24px;border-radius:5px;cursor:pointer;font-size:12px;padding:0">↓</button>
+    </div>` : ''}
+  </div>`;
+  list.innerHTML =
+    (selected.length ? '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:.5px;margin:0 0 6px">Showing on Home</div>' : '') +
+    selected.map((a,i) => renderRow(a, true, i)).join('') +
+    (unselected.length ? '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px;margin:14px 0 6px">Available</div>' : '') +
+    unselected.map(a => renderRow(a, false)).join('');
+}
+
+let _qaWorking = null; // working copy of the IDs while modal is open
+window._qaToggleAction = function(id) {
+  if(!_qaWorking) _qaWorking = _getQuickActions();
+  if(_qaWorking.includes(id)) _qaWorking = _qaWorking.filter(x => x !== id);
+  else _qaWorking.push(id);
+  _renderQuickActionsOptions(_qaWorking);
+};
+window._qaMove = function(id, dir) {
+  if(!_qaWorking) _qaWorking = _getQuickActions();
+  const i = _qaWorking.indexOf(id);
+  if(i === -1) return;
+  const j = i + dir;
+  if(j < 0 || j >= _qaWorking.length) return;
+  [_qaWorking[i], _qaWorking[j]] = [_qaWorking[j], _qaWorking[i]];
+  _renderQuickActionsOptions(_qaWorking);
+};
+window._qaResetDefaults = function() {
+  _qaWorking = DEFAULT_QUICK_ACTIONS.slice();
+  _renderQuickActionsOptions(_qaWorking);
+};
+window._qaSaveCustomization = function() {
+  const ids = _qaWorking || _getQuickActions();
+  _saveQuickActions(ids);
+  _qaWorking = null;
+  const overlay = document.getElementById('qa-customize-modal');
+  if(overlay) overlay.remove();
+  if(typeof renderQuickActions === 'function') renderQuickActions();
+  if(typeof toastSuccess === 'function') toastSuccess('Quick Actions saved');
+};
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+// Safety: if data isn't loaded yet on first call, retry shortly.
+let _dashboardRetried = false;
+window.renderDashboard = function() {
+  // If preop data hasn't loaded yet on initial render, retry once data arrives
+  if(!_dashboardRetried && (!window._rawPreopRecords || window._rawPreopRecords.length === 0) && (!window.cases || window.cases.length === 0)) {
+    _dashboardRetried = true;
+    setTimeout(() => { _dashboardRetried = false; if(typeof renderDashboard === 'function') renderDashboard(); }, 1500);
+  }
+  // Continue with normal render (handles both empty and loaded cases)
+  return _renderDashboardImpl();
+};
+function _renderDashboardImpl() {
+  // Greeting + date
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const name = (window.currentUser && window.currentWorker === 'dev') ? 'Dev' : (window.currentWorker === 'josh' ? 'Josh' : '');
+  const greetEl = document.getElementById('dashboard-greeting');
+  if(greetEl) greetEl.textContent = name ? `${greeting}, ${name}` : greeting;
+  const dateEl = document.getElementById('dashboard-date');
+  if(dateEl) dateEl.textContent = now.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+
+  const today = (typeof todayStr === 'function') ? todayStr() : new Date().toISOString().split('T')[0];
+  const weekOut = (typeof addDays === 'function') ? addDays(today, 7) : '';
+
+  // Today's cases (from pre-op records, since pre-ops have surgery dates)
+  // Filter out test cases — they should never count toward real stats.
+  const allPreops = (window._rawPreopRecords || []).filter(r => !r.isTest);
+  const todayCases = allPreops.filter(r => r['po-surgeryDate'] === today);
+  const weekCases = allPreops.filter(r => {
+    const d = r['po-surgeryDate'];
+    return d && d >= today && d <= weekOut;
+  });
+  const todayCountEl = document.getElementById('dash-today-count');
+  if(todayCountEl) todayCountEl.textContent = todayCases.length;
+  const todaySubEl = document.getElementById('dash-today-sub');
+  if(todaySubEl) todaySubEl.textContent = todayCases.length === 0 ? 'No cases today' : (todayCases.length === 1 ? '1 case scheduled' : `${todayCases.length} cases scheduled`);
+  const weekCountEl = document.getElementById('dash-week-count');
+  if(weekCountEl) weekCountEl.textContent = weekCases.length;
+
+  // Today's list
+  const todayListEl = document.getElementById('dash-today-list');
+  if(todayListEl) {
+    if(todayCases.length === 0) {
+      todayListEl.innerHTML = '<div style="color:var(--text-faint);font-style:italic;padding:8px 0">No cases scheduled for today.</div>';
+    } else {
+      todayListEl.innerHTML = todayCases.map(r => {
+        const id = (typeof window.getCaseDisplayIdFromPreop === 'function') ? window.getCaseDisplayIdFromPreop(r) : r['po-caseId'];
+        const time = r['po-startTime'] || '';
+        const provider = r['po-provider'] || '';
+        const workerName = r.worker === 'dev' ? 'Dev' : 'Josh';
+        const pillClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
+        return `<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px"><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-faint);min-width:60px">${time || '—'}</span><div style="flex:1"><div style="font-size:13px;font-weight:600">${id || '—'}</div><div style="font-size:11px;color:var(--text-faint)">${provider || '—'}</div></div><span class="worker-pill ${pillClass}" style="font-size:10px">${workerName}</span></div>`;
+      }).join('');
+    }
+  }
+
+  // Unpaid deposits count
+  const deposits = (window._depositsCache || []);
+  const unpaidCount = deposits.filter(d => !d.paid).length;
+  const unpaidEl = document.getElementById('dash-unpaid-count');
+  if(unpaidEl) unpaidEl.textContent = unpaidCount;
+
+  // Low inventory
+  const items = (window.items || []);
+  let lowCount = 0;
+  items.forEach(i => {
+    const alert = parseFloat(i.alert) || 0;
+    const stockDev = parseFloat(i.stockDev) || 0;
+    const stockJosh = parseFloat(i.stockJosh) || 0;
+    if(alert > 0 && (stockDev <= alert || stockJosh <= alert)) lowCount++;
+  });
+  const lowEl = document.getElementById('dash-lowstock-count');
+  if(lowEl) lowEl.textContent = lowCount;
+
+  // Ensure payment rows are loaded so the deposit / remaining toggles work
+  // from the Home page's Follow-up Tracker (they're only auto-loaded when
+  // navigating to the Payments tab otherwise).
+  if((!window._paymentRows || !window._paymentRows.length) && typeof window.loadPaymentRows === 'function') {
+    window.loadPaymentRows().then(() => {
+      if(typeof window.renderFollowupTab === 'function') window.renderFollowupTab();
+    }).catch(() => {});
+  }
+  // Render customizable Quick Actions
+  if(typeof window.renderQuickActions === 'function') {
+    try { window.renderQuickActions(); } catch(e) { console.warn('renderQuickActions failed:', e); }
+  }
+  // Render the embedded Follow-up Tracker (now on Home instead of Recent Activity)
+  if(typeof window.renderFollowupTab === 'function') {
+    try { window.renderFollowupTab(); } catch(e) { console.warn('renderFollowupTab failed:', e); }
+  }
+  // Recent activity (kept for backward compatibility if the element exists)
+  const auditList = document.getElementById('dash-activity-list');
+  if(auditList) {
+    const log = window._auditLogCache || [];
+    if(!log.length) {
+      auditList.innerHTML = '<div style="color:var(--text-faint);font-style:italic;padding:8px 0">Activity will appear here as you use the app.</div>';
+    } else {
+      auditList.innerHTML = log.slice(0, 12).map(e => {
+        const when = e.timestamp ? new Date(e.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+        const who = (e.email || '').split('@')[0] || '—';
+        const targetHTML = e.target ? ` <span style="color:var(--text-muted);font-family:monospace">${e.target}</span>` : '';
+        return `<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:10px;font-size:12px"><div><span style="color:var(--text-faint)">${who}</span> <span style="color:var(--text)">${e.action || ''}</span>${targetHTML}</div><span style="color:var(--text-faint);font-size:11px;white-space:nowrap">${when}</span></div>`;
+      }).join('');
+    }
+  }
+};
+
+const _DROPDOWN_GROUPS = {
+  'setup-dropdown-btn': ['inventory','calendar','analytics','payout'],
+  'reports-dropdown-btn': ['history','caselog','cs-log','reports']
+};
+function _updateNavActiveState(tabName) {
+  Object.entries(_DROPDOWN_GROUPS).forEach(([btnId, tabs]) => {
+    const btn = document.getElementById(btnId);
+    if(btn) btn.classList.toggle('active', tabs.includes(tabName));
+  });
+  // Standalone (visible) nav buttons
+  const standaloneTabs = { 'nav-home':'home', 'nav-preop':'preop', 'nav-mid-case':'mid-case', 'nav-new-case':'new-case', 'nav-payments':'payments', 'nav-live-case':'live-case' };
+  Object.entries(standaloneTabs).forEach(([btnId, tab]) => {
+    const btn = document.getElementById(btnId);
+    if(btn) btn.classList.toggle('active', tabName === tab);
+  });
+  // Refresh dashboard data when navigating to it
+  if(tabName === 'home' && typeof window.renderDashboard === 'function') {
+    window.renderDashboard();
+  }
+}
+// Wrap showTab to update active state on the dropdown parent
+const _origShowTab = window.showTab;
+window.showTab = function(name, pushState) {
+  if(typeof _origShowTab === 'function') _origShowTab(name, pushState);
+  _updateNavActiveState(name);
+};
+// Initialize active state for whatever tab is showing on load
+setTimeout(() => {
+  const activeSection = document.querySelector('.section.active');
+  if(activeSection) _updateNavActiveState(activeSection.id.replace('tab-', ''));
+}, 100);
 
 
 
