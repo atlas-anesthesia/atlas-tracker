@@ -20,6 +20,10 @@ async function _loadDeposits() {
     return records;
   } catch(e) { return []; }
 }
+// Exposed so app.js can prime _depositsCache on startup. Without this, a fresh
+// page load shows "Not Sent" pills on cases that already have paid deposits
+// because nothing has triggered the deposits doc to be fetched yet.
+window._loadDeposits = _loadDeposits;
 
 async function _saveDeposits(records) {
   window.setSyncing(true);
@@ -421,10 +425,29 @@ window._depositDelete = async function(id) {
 async function _syncDepositToPayments(depositRecord, stripeResult) {
   try {
     const snap = await window.getDoc(window.doc(window.db, 'atlas', 'payments'));
-    if(!snap.exists()) return;
-    const rows = snap.data().rows || [];
-    const rowIdx = rows.findIndex(r => r.caseId === depositRecord.caseId);
-    if(rowIdx === -1) return;
+    const existing = snap.exists() ? snap.data() : {};
+    const rows = existing.rows || [];
+    let rowIdx = rows.findIndex(r => r.caseId === depositRecord.caseId);
+
+    // No payments row yet — try to create one from the matching pre-op so the
+    // paid status is persisted instead of silently dropped.
+    if(rowIdx === -1) {
+      const preop = (window._rawPreopRecords || []).find(p => p['po-caseId'] === depositRecord.caseId);
+      if(preop && typeof window._createPaymentRowFromPreop === 'function') {
+        const created = window._createPaymentRowFromPreop(preop);
+        if(created) {
+          // _createPaymentRowFromPreop unshifts to window._paymentRows but we
+          // need this fresh row in the array we're about to write. Push and
+          // recompute the index.
+          rows.unshift(created);
+          rowIdx = 0;
+        }
+      }
+      if(rowIdx === -1) {
+        console.warn('Could not sync deposit to Payments — no row & no pre-op for', depositRecord.caseId);
+        return;
+      }
+    }
 
     // $500 deposit
     if(stripeResult?.paid || depositRecord.paid) {
@@ -445,7 +468,10 @@ async function _syncDepositToPayments(depositRecord, stripeResult) {
       console.log('Remainder balance confirmed for', depositRecord.caseId, '$'+stripeResult.remainderAmount);
     }
 
-    await window.setDoc(window.doc(window.db, 'atlas', 'payments'), { rows });
+    // Preserve the rest of the payments doc (excludedCaseIds, PI formula, etc.)
+    // instead of overwriting it with only { rows }.
+    await window.setDoc(window.doc(window.db, 'atlas', 'payments'), { ...existing, rows });
+    window._paymentRows = rows;
     console.log('Payments tab updated for', depositRecord.caseId);
   } catch(e) {
     console.warn('Could not sync deposit to Payments:', e);

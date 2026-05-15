@@ -9126,7 +9126,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515aq'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515ar'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
@@ -9598,6 +9598,16 @@ function _renderDashboardImpl() {
   // navigating to the Payments tab otherwise).
   if((!window._paymentRows || !window._paymentRows.length) && typeof window.loadPaymentRows === 'function') {
     window.loadPaymentRows().then(() => {
+      if(typeof window.renderFollowupTab === 'function') window.renderFollowupTab();
+    }).catch(() => {});
+  }
+  // Prime the deposits cache so the Follow-up Tracker can show "Sent /
+  // awaiting" and "Paid" pills on first paint after a page reload. Without
+  // this, _depositsCache is only populated once the user opens the deposit
+  // modal, so cases that paid through Stripe would appear "Not Sent" again
+  // until the user opened that modal.
+  if((!window._depositsCache || !window._depositsCache.length) && typeof window._loadDeposits === 'function') {
+    window._loadDeposits().then(() => {
       if(typeof window.renderFollowupTab === 'function') window.renderFollowupTab();
     }).catch(() => {});
   }
