@@ -309,6 +309,33 @@ window.onLiveCaseChange = function() {
     if(caseRec) preopRec = (window._rawPreopRecords || []).find(p => p['po-caseId'] === caseRec.caseId);
   } else if(kind === 'preop') {
     preopRec = (window._rawPreopRecords || []).find(p => p.id === id);
+    // For pre-op-only selections: if no draft exists yet, look for one with
+    // the same caseId. If still none, kick off draft creation so the Add
+    // Supplies / Add CS buttons (which gate on _currentLiveCaseDraft) work.
+    if(preopRec) {
+      const cid = preopRec['po-caseId'];
+      caseRec = (window.cases || []).find(c => c.draft && c.caseId === cid);
+      if(!caseRec && typeof window.startCaseFromPreop === 'function') {
+        // Fire-and-forget — startCaseFromPreop creates the draft then calls
+        // resumeCase which navigates to Finalize. We swap back to live-case
+        // and re-trigger this picker change so we land on the new draft.
+        window.startCaseFromPreop(id).then(() => {
+          setTimeout(() => {
+            try { showTab('live-case'); } catch(e){}
+            const newDraft = (window.cases || []).find(c => c.draft && c.caseId === cid);
+            if(newDraft) {
+              const picker2 = document.getElementById('live-case-picker');
+              if(picker2) {
+                renderLiveCase();
+                picker2.value = 'draft:' + newDraft.id;
+                onLiveCaseChange();
+              }
+            }
+          }, 100);
+        });
+        return; // exit until the draft is ready
+      }
+    }
   }
   if(!caseRec && !preopRec) {
     empty.style.display = 'block';
@@ -3775,23 +3802,44 @@ console.error(e);
 }
 };
 window.toggleCase=function(id){document.getElementById('detail_'+id).classList.toggle('open');};
+// Lift the parent row above neighbors while a dropdown is open so menu items
+// don't fall behind buttons from the next row in the list (e.g. Patient Link
+// click landing on Finalize Case underneath).
+function _resetCaseItemZ(menu) {
+  if(!menu) return;
+  const row = menu.closest('.case-item');
+  if(row) { row.style.zIndex = ''; row.style.position = ''; }
+}
+function _liftCaseItem(menu) {
+  if(!menu) return;
+  const row = menu.closest('.case-item');
+  if(row) { row.style.position = 'relative'; row.style.zIndex = '500'; }
+}
 window.toggleMidCaseDropdown=function(id){
   document.querySelectorAll('[id^="midcase-menu-"]').forEach(m=>{
-    if(m.id!=='midcase-menu-'+id) m.style.display='none';
+    if(m.id!=='midcase-menu-'+id) { m.style.display='none'; _resetCaseItemZ(m); }
   });
   const m=document.getElementById('midcase-menu-'+id);
-  if(m) m.style.display=m.style.display==='none'?'block':'none';
+  if(!m) return;
+  const wasOpen = m.style.display === 'block';
+  m.style.display = wasOpen ? 'none' : 'block';
+  if(wasOpen) _resetCaseItemZ(m); else _liftCaseItem(m);
 };
 window.toggleHistoryDropdown=function(id){
-  // Close all other open menus first
   document.querySelectorAll('[id^="history-menu-"]').forEach(m=>{
-    if(m.id!=='history-menu-'+id) m.style.display='none';
+    if(m.id!=='history-menu-'+id) { m.style.display='none'; _resetCaseItemZ(m); }
   });
   const m=document.getElementById('history-menu-'+id);
-  if(m) m.style.display=m.style.display==='none'?'block':'none';
+  if(!m) return;
+  const wasOpen = m.style.display === 'block';
+  m.style.display = wasOpen ? 'none' : 'block';
+  if(wasOpen) _resetCaseItemZ(m); else _liftCaseItem(m);
 };
 document.addEventListener('click',function(){
-  document.querySelectorAll('[id^="history-menu-"],[id^="midcase-menu-"]').forEach(m=>m.style.display='none');
+  document.querySelectorAll('[id^="history-menu-"],[id^="midcase-menu-"]').forEach(m=>{
+    m.style.display='none';
+    _resetCaseItemZ(m);
+  });
 });
 window.openLightbox=function(caseId, idx){
 const c=cases.find(x=>x.id===caseId);
@@ -6571,7 +6619,7 @@ ${hasDraft && draft
 }
 <div style="position:relative;display:inline-block">
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">Actions ▾</button>
-<div id="midcase-menu-${r.id}" style="display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;min-width:150px;overflow:hidden">
+<div id="midcase-menu-${r.id}" style="display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;min-width:150px;overflow:hidden">
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');previewDraft('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">👁 Preview</button>
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');editPreopRecord('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">✏ Edit Draft</button>
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');generatePatientPortalLink('${caseId}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:#2d6a4f;font-family:inherit">🔗 Patient Portal Link</button>
@@ -8834,7 +8882,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515aj'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515ak'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
