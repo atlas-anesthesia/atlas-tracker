@@ -548,15 +548,24 @@
   window.qa_updateTotal = updateQuickAddTotal;
   function updateQuickAddTotal() {
     const allItems = window.items || [];
-    let total = 0, count = 0;
+    // Persist every visible input's qty into _qaInitial so quantities survive
+    // search/filter changes (which destroy and recreate the input DOM).
+    if(!window._qaInitial) window._qaInitial = {};
     document.querySelectorAll('#suppliesQuickAddModal .qa-qty-input').forEach(input => {
+      const itemId = input.dataset.itemId;
       const qty = parseFloat(input.value) || 0;
-      if(qty > 0) {
-        const item = allItems.find(i => i.id === input.dataset.itemId);
-        if(item) {
-          total += (item.costPerUnit || 0) * qty;
-          count++;
-        }
+      if(!itemId) return;
+      if(qty > 0) window._qaInitial[itemId] = qty;
+      else delete window._qaInitial[itemId];
+    });
+    // Compute total + count from the persisted state (visible + filtered-out)
+    let total = 0, count = 0;
+    Object.entries(window._qaInitial).forEach(([itemId, qty]) => {
+      if(qty <= 0) return;
+      const item = allItems.find(i => i.id === itemId);
+      if(item) {
+        total += (item.costPerUnit || 0) * qty;
+        count++;
       }
     });
     const totalEl = document.getElementById('quickAddTotal');
@@ -572,29 +581,46 @@
   };
 
   window.applyQuickAddSupplies = function() {
-    const selected = readQuickAddItemQuantities();
-    const allItems = window.items || [];
-    const worker = window.currentWorker || 'dev';
-    const getStock = window.getStock || (() => 0);
-    if(!selected.length) {
-      if(!confirm('No quantities are set. Apply anyway? This will clear any supplies already on the case.')) return;
+    try {
+      // Sync DOM inputs into _qaInitial one last time so we capture anything
+      // the user typed since the last keystroke event.
+      updateQuickAddTotal();
+      const allItems = window.items || [];
+      const worker = window.currentWorker || 'dev';
+      const getStock = window.getStock || (() => 0);
+      const state = window._qaInitial || {};
+      const selected = Object.entries(state)
+        .map(([itemId, qty]) => ({ itemId, qty: parseFloat(qty) || 0 }))
+        .filter(s => s.qty > 0);
+      if(!selected.length) {
+        if(!confirm('No quantities are set. Apply anyway? This will clear any supplies already on the case.')) return;
+      }
+      const newCaseItems = selected.map(({itemId, qty}) => {
+        const inv = allItems.find(i => i.id === itemId);
+        if(!inv) return null;
+        return {
+          id: inv.id,
+          generic: inv.generic,
+          name: inv.name,
+          cost: inv.costPerUnit || 0,
+          qty,
+          stock: getStock(inv, worker)
+        };
+      }).filter(Boolean);
+      if(selected.length && !newCaseItems.length) {
+        // Should never happen — every selected itemId came from window.items —
+        // but if it does, surface a code instead of silently clearing the case.
+        if(typeof window.atlasError === 'function') window.atlasError('SUPPLY-002', 'All ' + selected.length + ' selected items dropped — inventory cache stale?');
+        return;
+      }
+      window.caseItems = newCaseItems;
+      window.closeSuppliesQuickAddModal();
+      if(typeof window.renderCaseSupplies === 'function') window.renderCaseSupplies();
+      if(typeof window.refreshItemSelect === 'function') window.refreshItemSelect();
+    } catch(err) {
+      if(typeof window.atlasError === 'function') window.atlasError('SUPPLY-001', err);
+      else alert('Failed to apply supplies: ' + (err.message || err));
     }
-    const newCaseItems = selected.map(({itemId, qty}) => {
-      const inv = allItems.find(i => i.id === itemId);
-      if(!inv) return null;
-      return {
-        id: inv.id,
-        generic: inv.generic,
-        name: inv.name,
-        cost: inv.costPerUnit || 0,
-        qty,
-        stock: getStock(inv, worker)
-      };
-    }).filter(Boolean);
-    window.caseItems = newCaseItems;
-    window.closeSuppliesQuickAddModal();
-    if(typeof window.renderCaseSupplies === 'function') window.renderCaseSupplies();
-    if(typeof window.refreshItemSelect === 'function') window.refreshItemSelect();
   };
 
   // ── QUICK ADD CONTROLLED SUBSTANCES MODAL ───────────────────────────────────

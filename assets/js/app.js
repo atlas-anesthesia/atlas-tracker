@@ -8810,7 +8810,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515ah'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515ai'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
@@ -8865,6 +8865,9 @@ const ERROR_CODES = {
   'CASE-002': 'Case save did not persist — supplies/CS data may be lost',
   'CASE-003': 'Could not find case to update — refresh and try again',
   'CASE-004': 'Inventory deduction failed during case save',
+  // Supplies (Quick Add modal on Finalize/Live)
+  'SUPPLY-001': 'Applying supplies failed — please reopen the supplies modal',
+  'SUPPLY-002': 'Selected supplies could not be matched to inventory — try refreshing the page',
   // Pre-Op
   'PREOP-001': 'Pre-Op save failed',
   'PREOP-002': 'Pre-Op record not found',
