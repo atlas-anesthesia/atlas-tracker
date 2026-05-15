@@ -154,6 +154,8 @@ window.toggleSurgeryMode = async function() {
     _releaseWakeLock();
     resetInactivityTimer();
     try { logAudit('surgery-mode-off'); } catch(e){}
+    // Refresh the live picker so any test cases drop back out of the list
+    try { if(typeof renderLiveCase === 'function') renderLiveCase(); } catch(e){}
     // Return to Mid-Case when leaving surgery mode (most natural landing spot)
     try { showTab('mid-case'); } catch(e){}
   }
@@ -241,12 +243,15 @@ window.resetLiveTimer = function() {
 window.renderLiveCase = function() {
   const picker = document.getElementById('live-case-picker');
   if(!picker) return;
-  const allCases = (window.cases || []).filter(c => !c.isTest);
+  // Surgery Mode ON → include test cases so the user can sandbox a full
+  // workflow. Surgery Mode OFF → hide them so real-day work isn't cluttered.
+  const includeTests = !!window._surgeryModeActive;
+  const allCases = (window.cases || []).filter(c => includeTests || !c.isTest);
   const drafts = allCases.filter(c => c.draft);
   // Case IDs that have already been finalized — used to hide their pre-ops
   // from the active dropdown (the live picker is for in-progress cases only).
   const finalizedCaseIds = new Set(allCases.filter(c => !c.draft).map(c => c.caseId));
-  const preops = (window._rawPreopRecords || []).filter(r => !r.isTest);
+  const preops = (window._rawPreopRecords || []).filter(r => includeTests || !r.isTest);
   // Show drafts first, then any pre-op without a draft (or finalized case) yet
   const allActive = [];
   drafts.forEach(d => allActive.push({ kind:'draft', id:d.id, caseId:d.caseId, date:d.date, worker:d.worker, ref:d }));
@@ -8901,7 +8906,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515al'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515am'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
