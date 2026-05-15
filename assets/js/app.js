@@ -3833,6 +3833,15 @@ renderCaseSupplies(); renderCSEntries(); refreshItemSelect(); updateCaseIdDispla
 window.deleteFinalizedCase = async function(btnEl) {
 const id = btnEl.getAttribute('data-id');
 const label = btnEl.getAttribute('data-label') || 'this case';
+// Test cases get the full purge so no pre-op shadow remains in Mid-Case.
+const _c = cases.find(c => c.id === id);
+if(_c && _c.caseId && _c.caseId.startsWith('TEST-')) {
+  if(!confirm('Delete TEST case "' + label + '"?\n\nThis will fully remove it from every part of the app.')) return;
+  await window._purgeCaseEverywhere(_c.caseId);
+  if(typeof _globalRefresh === 'function') _globalRefresh();
+  if(typeof toastSuccess === 'function') toastSuccess('Test case ' + _c.caseId + ' deleted everywhere.');
+  return;
+}
 const confirmed = confirm(
 'Are you sure you want to delete "' + label + '"?\n\nThis will permanently remove the case from Case History, Overview, and all Reports.\n\nThis cannot be undone.'
 );
@@ -4576,7 +4585,106 @@ el.innerHTML = '<div class="empty-state">Error loading records</div>';
 console.error(e);
 }
 }
+// Wipe every trace of a case ID from Firestore + local caches. Used as the
+// thorough cleanup for test cases (caseId starts with TEST-) so deleting one
+// from anywhere in the app removes it everywhere. Cleans: preop, cases (draft
+// + finalized), payments, cslog, deposits, saved_pdfs, payouts.
+window._purgeCaseEverywhere = async function(caseId) {
+  if(!caseId) return;
+  try {
+    setSyncing(true);
+    // 1. Pre-op
+    try {
+      const snap = await getDoc(doc(db,'atlas','preop'));
+      const records = snap.exists() ? (snap.data().records || []) : [];
+      const updated = records.filter(r => r['po-caseId'] !== caseId);
+      if(updated.length !== records.length) {
+        await savePreopRecords(updated);
+        window._rawPreopRecords = updated;
+        window._cachedPreopRecords = [...updated];
+      }
+    } catch(e) { console.warn('purge: preop', e); }
+    // 2. Cases (drafts + finalized)
+    try {
+      const before = cases.length;
+      cases = cases.filter(c => c.caseId !== caseId);
+      if(cases.length !== before) await saveCases();
+    } catch(e) { console.warn('purge: cases', e); }
+    // 3. Payments
+    try {
+      if(typeof _paymentRows !== 'undefined') {
+        const before = _paymentRows.length;
+        _paymentRows = _paymentRows.filter(r => r.caseId !== caseId);
+        if(_paymentRows.length !== before) {
+          await setDoc(doc(db,'atlas','payments'), { rows: _paymentRows });
+        }
+      }
+    } catch(e) { console.warn('purge: payments', e); }
+    // 4. CS log
+    try {
+      const snap = await getDoc(doc(db,'atlas','cslog'));
+      if(snap.exists()) {
+        const entries = snap.data().entries || [];
+        const updated = entries.filter(e => e.caseId !== caseId);
+        if(updated.length !== entries.length) {
+          await setDoc(doc(db,'atlas','cslog'), { entries: updated });
+        }
+      }
+    } catch(e) { console.warn('purge: cslog', e); }
+    // 5. Deposits
+    try {
+      const snap = await getDoc(doc(db,'atlas','deposits'));
+      if(snap.exists()) {
+        const records = snap.data().records || [];
+        const updated = records.filter(r => r.caseId !== caseId);
+        if(updated.length !== records.length) {
+          await setDoc(doc(db,'atlas','deposits'), { records: updated });
+        }
+      }
+    } catch(e) { console.warn('purge: deposits', e); }
+    // 6. Saved PDFs
+    try {
+      const snap = await getDoc(doc(db,'atlas','saved_pdfs'));
+      if(snap.exists()) {
+        const pdfs = snap.data().pdfs || [];
+        const updated = pdfs.filter(p => p.caseId !== caseId);
+        if(updated.length !== pdfs.length) {
+          await setDoc(doc(db,'atlas','saved_pdfs'), { pdfs: updated });
+        }
+      }
+    } catch(e) { console.warn('purge: saved_pdfs', e); }
+    // 7. Payouts (Expenses & Distributions)
+    try {
+      const snap = await getDoc(doc(db,'atlas','payouts'));
+      if(snap.exists()) {
+        const pdata = snap.data();
+        const entries = pdata.entries || [];
+        const updated = entries.filter(e => e.caseId !== caseId);
+        if(updated.length !== entries.length) {
+          await setDoc(doc(db,'atlas','payouts'), { ...pdata, entries: updated });
+        }
+      }
+    } catch(e) { console.warn('purge: payouts', e); }
+    setSyncing(false);
+    try { logAudit('purge-test-case', caseId, 'full delete across all collections'); } catch(e){}
+  } catch(err) {
+    setSyncing(false);
+    console.error('purge error:', err);
+    throw err;
+  }
+};
+
 window.deletePreopRecord = async function(id) {
+// Detect a test case and route through the bulletproof purge instead.
+const _rec = (window._rawPreopRecords || []).find(r => r.id === id);
+const _cid = _rec && _rec['po-caseId'];
+if(_cid && _cid.startsWith('TEST-')) {
+  if(!confirm('Delete TEST case ' + _cid + '?\n\nThis will fully remove it from every part of the app.')) return;
+  await window._purgeCaseEverywhere(_cid);
+  _globalRefresh(); renderPreopHistory();
+  if(typeof toastSuccess === 'function') toastSuccess('Test case ' + _cid + ' deleted everywhere.');
+  return;
+}
 if(!confirm('Delete this pre-op record?\n\nThis will also remove the linked case from Mid-Case and Case History.')) return;
 try {
   setSyncing(true);
@@ -6781,6 +6889,16 @@ document.getElementById('midcase-detail-'+id).classList.toggle('open');
 };
 window.deleteMidCase = async function(type, id, caseId) {
 const label = caseId || id;
+// Test cases get the full purge regardless of which dropdown was used.
+if(caseId && caseId.startsWith('TEST-')) {
+  if(!confirm('Delete TEST case "' + label + '"?\n\nThis will fully remove it from every part of the app.')) return;
+  await window._purgeCaseEverywhere(caseId);
+  if(typeof renderMidCase === 'function') renderMidCase();
+  if(typeof refreshDraftPicker === 'function') refreshDraftPicker();
+  if(typeof _globalRefresh === 'function') _globalRefresh();
+  if(typeof toastSuccess === 'function') toastSuccess('Test case ' + caseId + ' deleted everywhere.');
+  return;
+}
 const confirmed = confirm(`Are you sure you want to delete "${label}"?\n\nThis will remove the ${type === 'preop' ? 'pre-op record' : 'draft case'}. This cannot be undone.`);
 if(!confirmed) return;
 try {
@@ -8992,7 +9110,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515ao'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515ap'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
