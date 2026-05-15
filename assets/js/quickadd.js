@@ -617,6 +617,19 @@
       window.closeSuppliesQuickAddModal();
       if(typeof window.renderCaseSupplies === 'function') window.renderCaseSupplies();
       if(typeof window.refreshItemSelect === 'function') window.refreshItemSelect();
+      // Live Case path: also push into the active draft + persist + refresh the
+      // "Supplies & CS Logged This Case" panel so Surgery Mode reflects edits.
+      const liveDraft = window._currentLiveCaseDraft;
+      if(liveDraft) {
+        liveDraft.items = newCaseItems.map(i => ({
+          id: i.id, generic: i.generic, name: i.name,
+          cost: i.cost, qty: i.qty, lineTotal: (i.cost || 0) * (i.qty || 0)
+        }));
+        if(typeof window.saveCases === 'function') {
+          window.saveCases().catch(e => console.warn('saveCases after apply failed:', e));
+        }
+        if(typeof window.renderLiveLoggedList === 'function') window.renderLiveLoggedList();
+      }
     } catch(err) {
       if(typeof window.atlasError === 'function') window.atlasError('SUPPLY-001', err);
       else alert('Failed to apply supplies: ' + (err.message || err));
@@ -888,6 +901,16 @@
     window.closeCSQuickAddModal();
     if(typeof window.renderCSEntries === 'function') window.renderCSEntries();
     if(typeof window.renderCaseSupplies === 'function') window.renderCaseSupplies();
+    // Live Case path: mirror CS entries into the active draft so the
+    // "Supplies & CS Logged This Case" panel updates immediately.
+    const liveDraft = window._currentLiveCaseDraft;
+    if(liveDraft) {
+      liveDraft.savedCsEntries = newEntries.map(e => ({...e}));
+      if(typeof window.saveCases === 'function') {
+        window.saveCases().catch(e => console.warn('saveCases after CS apply failed:', e));
+      }
+      if(typeof window.renderLiveLoggedList === 'function') window.renderLiveLoggedList();
+    }
   };
 
   // Close modals on outside click

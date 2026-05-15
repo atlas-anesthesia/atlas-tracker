@@ -407,22 +407,9 @@ window.onLiveCaseChange = function() {
       patientCard.innerHTML = html || '<div style="color:var(--text-faint);font-style:italic">No medical details entered.</div>';
     }
   }
-  // Render the supplies/CS list from the draft
-  const loggedList = document.getElementById('live-logged-list');
-  if(loggedList) {
-    const items = (caseRec && caseRec.items) || [];
-    const cs = (caseRec && caseRec.savedCsEntries) || [];
-    let html = '';
-    if(items.length) {
-      html += `<div style="margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Supplies</div>`;
-      html += items.map(i => `<div style="padding:5px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between"><span>${i.generic} × ${i.qty}</span><span style="color:var(--text-muted)">$${(i.lineTotal||0).toFixed(2)}</span></div>`).join('');
-    }
-    if(cs.length) {
-      html += `<div style="margin-top:10px;margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:#d97706">Controlled Substances</div>`;
-      html += cs.map(e => `<div style="padding:5px 0;border-bottom:1px solid var(--border)">${e.drug || e.generic || '—'} ${e.dose ? '· '+e.dose : ''}${e.route ? ' · '+e.route : ''}</div>`).join('');
-    }
-    loggedList.innerHTML = html || '<div style="color:var(--text-faint);font-style:italic">Nothing logged yet. Use the buttons above to add supplies or controlled substances.</div>';
-  }
+  // Render the supplies/CS list. Now extracted so applyQuickAddSupplies /
+  // applyCSQuickAdd can re-render after the user adds something live.
+  window.renderLiveLoggedList();
   // Restore notes from the draft
   const notesEl = document.getElementById('live-notes');
   if(notesEl) notesEl.value = (caseRec && (caseRec.liveNotes || caseRec.caseComments)) || '';
@@ -433,6 +420,42 @@ window.onLiveCaseChange = function() {
     toggleBtn.style.background = window._surgeryModeActive ? '#d97706' : '';
     toggleBtn.style.color = window._surgeryModeActive ? '#fff' : '';
   }
+};
+
+// Refresh the Live Case "Supplies & CS Logged This Case" panel from whatever
+// is currently in the active draft + the live session arrays. Prefer session
+// state (window.caseItems / window.csEntries) when they have more entries than
+// the persisted draft — covers the moment right after Apply where the draft
+// has not yet been saved to Firestore.
+window.renderLiveLoggedList = function() {
+  const loggedList = document.getElementById('live-logged-list');
+  if(!loggedList) return;
+  const caseRec = window._currentLiveCaseDraft;
+  const sessionItems = (window.caseItems || []);
+  const sessionCS = (window.csEntries || []);
+  const draftItems = (caseRec && caseRec.items) || [];
+  const draftCS = (caseRec && caseRec.savedCsEntries) || [];
+  // Use whichever array is the freshest (session wins when populated)
+  const items = sessionItems.length ? sessionItems : draftItems;
+  const cs = sessionCS.length ? sessionCS : draftCS;
+  let html = '';
+  if(items.length) {
+    html += `<div style="margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-faint)">Supplies</div>`;
+    html += items.map(i => {
+      const line = (i.lineTotal != null) ? i.lineTotal : ((parseFloat(i.cost)||0) * (parseFloat(i.qty)||0));
+      return `<div style="padding:5px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between"><span>${i.generic||i.name||'—'} × ${i.qty}</span><span style="color:var(--text-muted)">$${(line||0).toFixed(2)}</span></div>`;
+    }).join('');
+  }
+  if(cs.length) {
+    html += `<div style="margin-top:10px;margin-bottom:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:#d97706">Controlled Substances</div>`;
+    html += cs.map(e => {
+      const drug = e.drug || e.generic || '—';
+      const amt = e.amountGiven ? ' · given ' + e.amountGiven : '';
+      const left = e.leftInVial ? ' · left ' + e.leftInVial : '';
+      return `<div style="padding:5px 0;border-bottom:1px solid var(--border)">${drug}${amt}${left}</div>`;
+    }).join('');
+  }
+  loggedList.innerHTML = html || '<div style="color:var(--text-faint);font-style:italic">Nothing logged yet. Use the buttons above to add supplies or controlled substances.</div>';
 };
 
 let _liveNotesSaveTimer = null;
@@ -8906,7 +8929,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515am'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515an'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
