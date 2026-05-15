@@ -3833,13 +3833,18 @@ renderCaseSupplies(); renderCSEntries(); refreshItemSelect(); updateCaseIdDispla
 window.deleteFinalizedCase = async function(btnEl) {
 const id = btnEl.getAttribute('data-id');
 const label = btnEl.getAttribute('data-label') || 'this case';
-// Test cases get the full purge so no pre-op shadow remains in Mid-Case.
 const _c = cases.find(c => c.id === id);
-if(_c && _c.caseId && _c.caseId.startsWith('TEST-')) {
-  if(!confirm('Delete TEST case "' + label + '"?\n\nThis will fully remove it from every part of the app.')) return;
-  await window._purgeCaseEverywhere(_c.caseId);
+const _cid = _c && _c.caseId;
+const _isTest = _cid && _cid.startsWith('TEST-');
+// Route every delete through the bulletproof purge.
+if(_cid) {
+  const prompt = _isTest
+    ? 'Delete TEST case "' + label + '"?\n\nThis will fully remove it from every part of the app.'
+    : 'Delete "' + label + '"?\n\nThis permanently removes the case, pre-op, payments row, CS log, deposits, saved PDFs, and payouts.\n\nThis cannot be undone.';
+  if(!confirm(prompt)) return;
+  await window._purgeCaseEverywhere(_cid);
   if(typeof _globalRefresh === 'function') _globalRefresh();
-  if(typeof toastSuccess === 'function') toastSuccess('Test case ' + _c.caseId + ' deleted everywhere.');
+  if(typeof toastSuccess === 'function') toastSuccess('Case ' + _cid + ' deleted everywhere.');
   return;
 }
 const confirmed = confirm(
@@ -4675,14 +4680,21 @@ window._purgeCaseEverywhere = async function(caseId) {
 };
 
 window.deletePreopRecord = async function(id) {
-// Detect a test case and route through the bulletproof purge instead.
 const _rec = (window._rawPreopRecords || []).find(r => r.id === id);
 const _cid = _rec && _rec['po-caseId'];
-if(_cid && _cid.startsWith('TEST-')) {
-  if(!confirm('Delete TEST case ' + _cid + '?\n\nThis will fully remove it from every part of the app.')) return;
+const _isTest = _cid && _cid.startsWith('TEST-');
+// Route every delete through the bulletproof purge so the case disappears
+// from every collection in one click (no orphan payments rows, CS log,
+// deposits, saved PDFs, or payouts left behind).
+if(_cid) {
+  const prompt = _isTest
+    ? 'Delete TEST case ' + _cid + '?\n\nThis will fully remove it from every part of the app.'
+    : 'Delete case ' + _cid + '?\n\nThis permanently removes the pre-op, the finalized case, payments row, CS log, deposits, saved PDFs, and payouts.\n\nThis cannot be undone.';
+  if(!confirm(prompt)) return;
   await window._purgeCaseEverywhere(_cid);
-  _globalRefresh(); renderPreopHistory();
-  if(typeof toastSuccess === 'function') toastSuccess('Test case ' + _cid + ' deleted everywhere.');
+  if(typeof _globalRefresh === 'function') _globalRefresh();
+  if(typeof renderPreopHistory === 'function') renderPreopHistory();
+  if(typeof toastSuccess === 'function') toastSuccess('Case ' + _cid + ' deleted everywhere.');
   return;
 }
 if(!confirm('Delete this pre-op record?\n\nThis will also remove the linked case from Mid-Case and Case History.')) return;
@@ -6889,14 +6901,18 @@ document.getElementById('midcase-detail-'+id).classList.toggle('open');
 };
 window.deleteMidCase = async function(type, id, caseId) {
 const label = caseId || id;
-// Test cases get the full purge regardless of which dropdown was used.
-if(caseId && caseId.startsWith('TEST-')) {
-  if(!confirm('Delete TEST case "' + label + '"?\n\nThis will fully remove it from every part of the app.')) return;
+const _isTest = caseId && caseId.startsWith('TEST-');
+// Route every delete through the bulletproof purge.
+if(caseId) {
+  const prompt = _isTest
+    ? 'Delete TEST case "' + label + '"?\n\nThis will fully remove it from every part of the app.'
+    : 'Delete "' + label + '"?\n\nThis permanently removes the pre-op, draft, finalized case, payments row, CS log, deposits, saved PDFs, and payouts.\n\nThis cannot be undone.';
+  if(!confirm(prompt)) return;
   await window._purgeCaseEverywhere(caseId);
   if(typeof renderMidCase === 'function') renderMidCase();
   if(typeof refreshDraftPicker === 'function') refreshDraftPicker();
   if(typeof _globalRefresh === 'function') _globalRefresh();
-  if(typeof toastSuccess === 'function') toastSuccess('Test case ' + caseId + ' deleted everywhere.');
+  if(typeof toastSuccess === 'function') toastSuccess('Case ' + caseId + ' deleted everywhere.');
   return;
 }
 const confirmed = confirm(`Are you sure you want to delete "${label}"?\n\nThis will remove the ${type === 'preop' ? 'pre-op record' : 'draft case'}. This cannot be undone.`);
@@ -9110,7 +9126,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515ap'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515aq'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
