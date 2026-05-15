@@ -241,27 +241,51 @@ window.resetLiveTimer = function() {
 window.renderLiveCase = function() {
   const picker = document.getElementById('live-case-picker');
   if(!picker) return;
-  const drafts = (window.cases || []).filter(c => c.draft);
-  const preops = (window._rawPreopRecords || []);
-  // Show drafts first, then any pre-op without a draft yet (so live tracking can start before Finalize)
+  const allCases = (window.cases || []).filter(c => !c.isTest);
+  const drafts = allCases.filter(c => c.draft);
+  // Case IDs that have already been finalized — used to hide their pre-ops
+  // from the active dropdown (the live picker is for in-progress cases only).
+  const finalizedCaseIds = new Set(allCases.filter(c => !c.draft).map(c => c.caseId));
+  const preops = (window._rawPreopRecords || []).filter(r => !r.isTest);
+  // Show drafts first, then any pre-op without a draft (or finalized case) yet
   const allActive = [];
   drafts.forEach(d => allActive.push({ kind:'draft', id:d.id, caseId:d.caseId, date:d.date, worker:d.worker, ref:d }));
   preops.forEach(p => {
-    if(!allActive.find(a => a.caseId === p['po-caseId'])) {
-      allActive.push({ kind:'preop', id:p.id, caseId:p['po-caseId'], date:p['po-surgeryDate'], worker:p.worker, ref:p });
+    const cid = p['po-caseId'];
+    if(!cid) return;
+    if(finalizedCaseIds.has(cid)) return; // skip already-finalized cases
+    if(!allActive.find(a => a.caseId === cid)) {
+      allActive.push({ kind:'preop', id:p.id, caseId:cid, date:p['po-surgeryDate'], worker:p.worker, ref:p });
     }
   });
-  allActive.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  // Sort: upcoming/today first (earliest first), then past (most recent first)
+  const today_ = todayStr();
+  allActive.sort((a,b) => {
+    const aDate = a.date || '';
+    const bDate = b.date || '';
+    const aFuture = aDate >= today_;
+    const bFuture = bDate >= today_;
+    if(aFuture && !bFuture) return -1;
+    if(!aFuture && bFuture) return 1;
+    if(aFuture && bFuture) return aDate.localeCompare(bDate);
+    return bDate.localeCompare(aDate);
+  });
   const currentVal = picker.value;
-  picker.innerHTML = '<option value="">— Select an active draft —</option>' +
+  picker.innerHTML = '<option value="">— Select an active case —</option>' +
     allActive.map(a => {
       const displayId = (typeof window.getCaseDisplayId === 'function')
         ? window.getCaseDisplayId(a.caseId, a.date,
             a.kind === 'preop' ? a.ref['po-patientFirstName'] : '',
             a.kind === 'preop' ? a.ref['po-patientLastName'] : '')
         : a.caseId;
-      const label = `${displayId}${a.kind==='draft' ? ' (Draft)' : ''}`;
-      return `<option value="${a.kind}:${a.id}" ${currentVal===a.kind+':'+a.id?'selected':''}>${label}</option>`;
+      const dateLabel = a.date ? fmtDate(a.date) : 'No date';
+      const isToday = a.date === today_;
+      const isPast = a.date && a.date < today_;
+      let prefix = dateLabel;
+      if(isToday) prefix = 'TODAY · ' + dateLabel;
+      else if(isPast) prefix = dateLabel + ' (past)';
+      const tag = a.kind === 'draft' ? ' [Draft]' : '';
+      return `<option value="${a.kind}:${a.id}" ${currentVal===a.kind+':'+a.id?'selected':''}>${prefix} — ${displayId}${tag}</option>`;
     }).join('');
   if(currentVal) onLiveCaseChange();
 };
@@ -8810,7 +8834,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515ai'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515aj'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
