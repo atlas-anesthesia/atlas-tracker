@@ -776,6 +776,35 @@ window.listInventoryBackups = async function() {
   }
 };
 
+// Dump the raw structure of a backup doc so we can find inventory data in
+// whatever shape the cron stored it. Prints top-level keys and a tree of
+// nested keys (1 level deep).
+window.inspectBackup = async function(dateStr) {
+  if(!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    console.log('Usage: inspectBackup("2026-05-12")');
+    return;
+  }
+  const snap = await getDoc(doc(db, 'atlas', 'backup_' + dateStr));
+  if(!snap.exists()) { console.log('No backup_' + dateStr + ' doc found.'); return; }
+  const data = snap.data();
+  console.log('%cTOP-LEVEL fields:', 'color:#1d3557;font-weight:600');
+  console.log(Object.keys(data));
+  Object.keys(data).forEach(k => {
+    const v = data[k];
+    if(v && typeof v === 'object' && !Array.isArray(v)) {
+      console.log('  ' + k + ' →', Object.keys(v).slice(0, 12).join(', '));
+    } else if(Array.isArray(v)) {
+      console.log('  ' + k + ' → Array(' + v.length + ')');
+    } else {
+      console.log('  ' + k + ' →', typeof v, JSON.stringify(v).slice(0, 60));
+    }
+  });
+  // Also stash on window for poking around
+  window._lastInspectedBackup = data;
+  console.log('%cStashed at window._lastInspectedBackup for further poking.', 'color:#666;font-style:italic');
+  return data;
+};
+
 window.restoreInventoryFrom = async function(dateStr) {
   if(!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     alert('Pass a date like restoreInventoryFrom("2026-05-14")');
@@ -9203,7 +9232,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515as'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515at'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
