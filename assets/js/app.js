@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, getDocs, onSnapshot, collection, addDoc, query, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 // -- FIREBASE CONFIG --
 const firebaseConfig = {
 apiKey: "AIzaSyAAY9Ajrx4PJRqhxW5MgRY3wgZni9rJhMo",
@@ -741,6 +741,83 @@ function calcPersonalIncome(worker) {
   });
   return total;
 }
+
+// ── EMERGENCY RECOVERY: list + restore from a daily Firestore backup ────────
+// Call from the browser console:
+//   window.listInventoryBackups()            → prints every backup_YYYY-MM-DD
+//   window.restoreInventoryFrom('2026-05-14')→ pulls that day's inventory back
+// Both are no-ops if no matching backup doc exists. Restore prompts before
+// writing so the user can bail.
+window.listInventoryBackups = async function() {
+  try {
+    const snap = await getDocs(collection(db, 'atlas'));
+    const backups = [];
+    snap.forEach(d => {
+      const id = d.id;
+      if(!id.startsWith('backup_')) return;
+      const data = d.data() || {};
+      // Backups may store inventory in different shapes — try a few.
+      const inv = data.inventory || data.data?.inventory || null;
+      const items = inv?.items || [];
+      const nonZero = items.filter(i => (i.stockDev > 0 || i.stockJosh > 0)).length;
+      backups.push({ id, date: id.replace('backup_', ''), itemCount: items.length, nonZeroCount: nonZero });
+    });
+    backups.sort((a, b) => b.date.localeCompare(a.date)); // newest first
+    if(!backups.length) {
+      console.log('%cNo daily backups found in Firestore (atlas/backup_*).', 'color:#dc2626;font-weight:600');
+      return [];
+    }
+    console.log('%cAvailable backups (newest first):', 'color:#1d3557;font-weight:600;font-size:13px');
+    console.table(backups);
+    console.log('%cTo restore: window.restoreInventoryFrom("YYYY-MM-DD")', 'color:#666;font-style:italic');
+    return backups;
+  } catch(e) {
+    console.error('listInventoryBackups failed:', e);
+  }
+};
+
+window.restoreInventoryFrom = async function(dateStr) {
+  if(!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    alert('Pass a date like restoreInventoryFrom("2026-05-14")');
+    return;
+  }
+  try {
+    const docRef = doc(db, 'atlas', 'backup_' + dateStr);
+    const snap = await getDoc(docRef);
+    if(!snap.exists()) {
+      alert('No backup found for ' + dateStr + '. Run window.listInventoryBackups() to see available dates.');
+      return;
+    }
+    const data = snap.data() || {};
+    const invData = data.inventory || data.data?.inventory || null;
+    const restoreItems = invData?.items;
+    if(!restoreItems || !restoreItems.length) {
+      alert('Backup for ' + dateStr + ' has no inventory data inside.');
+      return;
+    }
+    const nonZero = restoreItems.filter(i => (i.stockDev > 0 || i.stockJosh > 0)).length;
+    const yes = confirm(
+      'Restore inventory from ' + dateStr + '?\n\n' +
+      '• ' + restoreItems.length + ' items in the backup\n' +
+      '• ' + nonZero + ' items have non-zero stock\n\n' +
+      'This OVERWRITES your current atlas/inventory document. Cannot be undone without another backup.'
+    );
+    if(!yes) return;
+    // Snapshot current state first so the user can roll back if needed
+    const beforeSnap = await getDoc(doc(db, 'atlas', 'inventory'));
+    if(beforeSnap.exists()) {
+      const snapId = 'inventory_pre_restore_' + new Date().toISOString().replace(/[:.]/g, '-');
+      await setDoc(doc(db, 'atlas', snapId), beforeSnap.data());
+      console.log('%cSnapshot of current inventory saved at atlas/' + snapId, 'color:#1d3557');
+    }
+    await setDoc(doc(db, 'atlas', 'inventory'), { items: restoreItems });
+    try { logAudit('inventory-restored', '', 'from backup_' + dateStr); } catch(e){}
+    alert('✓ Inventory restored from ' + dateStr + '. Refresh the page if needed.');
+  } catch(e) {
+    alert('Restore failed: ' + (e.message || e));
+    console.error(e);
+  }
+};
 
 window.downloadFullBackup = async function() {
   const btn = document.getElementById('backup-download-btn');
@@ -9126,7 +9203,7 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515ar'; // bump this when deploying — must match app.js?v=... in index.html
+const APP_VERSION = '20260515as'; // bump this when deploying — must match app.js?v=... in index.html
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
