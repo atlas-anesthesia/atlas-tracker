@@ -17,7 +17,7 @@ const INSURANCE_PRESETS = [
 ];
 
 let _modalBuilt = false;
-let _mode = 'josh-receipt';   // 'josh-receipt' | 'flat' | 'cdt'
+let _mode = 'cdt';            // 'cdt' (itemized D9222) | 'flat' (single Anesthesia Services line)
 
 // Provider details printed on the Receipt sheet. Tax ID is shared (Atlas
 // Anesthesia, LLC) — NPI and phone are individual to each CRNA.
@@ -110,13 +110,17 @@ function fmtDate(iso) {
 // used as the dropdown's internal handle for matching records.
 function readCaseContext() {
   const r = _selectedPreop || {};
+  // Pre-op stores the patient as po-patientFirstName / po-patientLastName /
+  // po-patientDOB. Older records may also have legacy po-firstName etc., so we
+  // fall back to those when the modern fields are blank.
+  const first = r['po-patientFirstName'] || r['po-firstName'] || '';
+  const last  = r['po-patientLastName']  || r['po-lastName']  || '';
   return {
     provider:  r['po-provider'] || '',
     procedure: r['po-procedureType'] || '',
-    patientName: [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ').trim()
-              || r['po-patient'] || '',
-    patientDob:  r['po-dob'] || '',
-    patientPhone: r['po-contact-phone'] || '',
+    patientName: [first, last].filter(Boolean).join(' ').trim() || r['po-patient'] || '',
+    patientDob:  r['po-patientDOB'] || r['po-dob'] || '',
+    patientPhone: r['po-patientPhone'] || r['po-contact-phone'] || '',
     surgeryDate: r['po-surgeryDate'] || ''
   };
 }
@@ -154,6 +158,9 @@ window._insOnCaseChange = function() {
   const id = sel.value;
   const records = window._rawPreopRecords || [];
   _selectedPreop = records.find(r => r.id === id) || null;
+  // Re-render the form so Patient Name / DOB / Sex / Office Address auto-fill
+  // from the newly-selected pre-op record.
+  if(typeof window._insSetMode === 'function') window._insSetMode(_mode);
   refreshPreview();
 };
 
@@ -167,7 +174,7 @@ function buildModal() {
       <div style="background:#1d3557;color:#fff;padding:18px 24px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
         <div>
           <div style="font-size:16px;font-weight:600">📋 Insurance Sheet</div>
-          <div style="font-size:12px;opacity:.75;margin-top:2px">Send a flat-fee or CDT-code claim by email</div>
+          <div style="font-size:12px;opacity:.75;margin-top:2px">Anesthesia Receipt — pick CDT itemized or Flat Fee billing</div>
         </div>
         <button onclick="closeInsuranceSheetModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
       </div>
@@ -181,16 +188,14 @@ function buildModal() {
       </div>
 
       <div style="padding:14px 24px;border-bottom:1px solid var(--border);background:#f8fafc;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">Claim Type</span>
+        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">Billing Style</span>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-          <input type="radio" name="ins-mode" value="josh-receipt" checked onchange="window._insSetMode('josh-receipt')" style="margin:0"> Anesthesia Receipt
+          <input type="radio" name="ins-mode" value="cdt" checked onchange="window._insSetMode('cdt')" style="margin:0"> CDT Codes (D9222 itemized)
         </label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
           <input type="radio" name="ins-mode" value="flat" onchange="window._insSetMode('flat')" style="margin:0"> Flat Fee
         </label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-          <input type="radio" name="ins-mode" value="cdt" onchange="window._insSetMode('cdt')" style="margin:0"> CDT Codes
-        </label>
+        <span style="font-size:11px;color:var(--text-faint);font-style:italic;margin-left:auto">Anesthesia Receipt template — only the billing line differs</span>
       </div>
 
       <div style="padding:14px 24px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -242,7 +247,7 @@ function buildModal() {
 // ── Placeholder forms for each mode — replace with real fields once the PDFs
 // are shared. Both modes need at least: patient info, case info, fee total.
 
-function renderJoshReceiptForm() {
+function renderReceiptForm() {
   // Defaults for patient/office fields come from the selected pre-op record.
   // The user can override before sending if the chart is out of date.
   const ctx = readCaseContext();
@@ -250,6 +255,8 @@ function renderJoshReceiptForm() {
     || _selectedPreop?.['po-dentistAddress']
     || '';
   const defaultSex = _selectedPreop?.['po-sex'] || '';
+  const defaultName = (ctx.patientName || '').replace(/"/g,'&quot;');
+  const defaultDob  = ctx.patientDob || '';
   const procRows = JOSH_PROCEDURES.map(p =>
     `<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:2px 0">
       <input type="checkbox" class="ins-jr-proc" data-code="${p.code}" data-label="${p.label.replace(/"/g,'&quot;')}" oninput="window._insPreview()" style="margin:0;flex-shrink:0">
@@ -271,10 +278,18 @@ function renderJoshReceiptForm() {
   return `
     <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Anesthesia Receipt / Insurance Claim Form</div>
 
-    <div style="display:grid;grid-template-columns:130px 1fr;gap:12px;margin-bottom:14px;padding:10px;background:#f8fafc;border:1px solid var(--border);border-radius:6px;align-items:end">
+    <div style="display:grid;grid-template-columns:1fr 140px 130px;gap:10px;margin-bottom:10px;padding:10px;background:#f8fafc;border:1px solid var(--border);border-radius:6px;align-items:end">
+      <div>
+        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Patient Name <span style="font-size:10px;color:var(--text-faint);font-style:italic">(pre-fills from case)</span></label>
+        <input type="text" id="ins-jr-patient-name" value="${defaultName}" oninput="window._insPreview()" placeholder="e.g. John Smith" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);box-sizing:border-box;height:30px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">DOB</label>
+        <input type="date" id="ins-jr-patient-dob" value="${defaultDob}" oninput="window._insPreview()" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);box-sizing:border-box;height:30px">
+      </div>
       <div>
         <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Sex</label>
-        <div id="ins-jr-sex-group" style="display:inline-flex;align-items:stretch;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fff;font-size:13px;font-weight:500;height:30px;line-height:1">
+        <div id="ins-jr-sex-group" style="display:inline-flex;align-items:stretch;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#fff;font-size:13px;font-weight:500;height:30px;line-height:1;width:100%">
           <label style="flex:1;display:flex;align-items:center;justify-content:center;min-width:44px;padding:0;cursor:pointer;border-right:1px solid var(--border);user-select:none;margin:0;background:${defaultSex==='M'?'#1d3557':'#fff'};color:${defaultSex==='M'?'#fff':'var(--text)'}" onclick="this.parentNode.querySelectorAll('label').forEach(l=>{l.style.background='#fff';l.style.color='var(--text)'});this.style.background='#1d3557';this.style.color='#fff';this.querySelector('input').checked=true;window._insPreview()">
             <input type="radio" name="ins-jr-sex" value="M" ${defaultSex==='M'?'checked':''} style="display:none"><span>M</span>
           </label>
@@ -283,10 +298,10 @@ function renderJoshReceiptForm() {
           </label>
         </div>
       </div>
-      <div>
-        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Dentist Office Address</label>
-        <input type="text" id="ins-jr-office-address" value="${defaultOffice.replace(/"/g,'&quot;')}" oninput="window._insPreview()" placeholder="e.g. 123 Main St, Green Bay, WI 54301" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);box-sizing:border-box;height:30px">
-      </div>
+    </div>
+    <div style="margin-bottom:14px;padding:10px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
+      <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Dentist Office Address</label>
+      <input type="text" id="ins-jr-office-address" value="${defaultOffice.replace(/"/g,'&quot;')}" oninput="window._insPreview()" placeholder="e.g. 123 Main St, Green Bay, WI 54301" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);box-sizing:border-box;height:30px">
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:14px">
@@ -308,6 +323,22 @@ function renderJoshReceiptForm() {
         ${medicalRows}
       </div>
     </div>
+    ${_mode === 'flat' ? `
+    <div style="display:grid;grid-template-columns:1fr 130px 130px;gap:12px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
+      <div>
+        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Anesthesia Services Description</label>
+        <input type="text" id="ins-jr-flat-desc" value="General Anesthesia for Dental Procedure" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Flat Fee Amount ($)</label>
+        <input type="number" id="ins-jr-flat-amount" min="0" step="0.01" value="1200" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);font-family:'DM Mono',monospace">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">CC Transaction Fee %</label>
+        <input type="number" id="ins-jr-cc-pct" min="0" step="0.1" value="3.5" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
+      </div>
+    </div>
+    ` : `
     <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
       <div>
         <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">D9222 15-min Units</label>
@@ -326,6 +357,7 @@ function renderJoshReceiptForm() {
         <input type="number" id="ins-jr-medical-min" min="0" step="1" value="0" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)" placeholder="Optional">
       </div>
     </div>
+    `}
 
     <div style="margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:6px;background:#fafbfd">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1d3557;margin-bottom:8px;display:flex;align-items:center;gap:6px">
@@ -368,97 +400,19 @@ function renderJoshReceiptForm() {
   `;
 }
 
-function renderFlatFeeForm() {
-  return `
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Flat Fee Claim — placeholder fields</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div>
-        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Service Description</label>
-        <input type="text" id="ins-flat-desc" oninput="window._insPreview()" placeholder="e.g. General anesthesia for dental procedure" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Flat Fee Amount ($)</label>
-        <input type="number" id="ins-flat-amount" oninput="window._insPreview()" placeholder="0.00" min="0" step="0.01" style="width:100%;padding:7px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-      </div>
-    </div>
-    <div style="margin-top:10px">
-      <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Notes</label>
-      <textarea id="ins-flat-notes" oninput="window._insPreview()" rows="3" placeholder="Anything else the insurer needs to know" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;resize:vertical;font-family:'DM Sans',sans-serif"></textarea>
-    </div>
-    <div style="margin-top:8px;font-size:11px;color:#9b6d00;font-style:italic">⚠ Placeholder layout — final fields will match your Flat Fee sheet once you share the PDF.</div>
-  `;
-}
-
-function renderCdtForm() {
-  return `
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">CDT Code Claim — placeholder fields</div>
-    <div id="ins-cdt-lines"></div>
-    <button class="btn btn-ghost btn-sm" onclick="window._insAddCdtLine()" style="margin-top:8px;font-size:12px">+ Add CDT Line</button>
-    <div style="margin-top:10px;display:grid;grid-template-columns:1fr 200px;gap:10px;align-items:end">
-      <div>
-        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Notes</label>
-        <input type="text" id="ins-cdt-notes" oninput="window._insPreview()" placeholder="(optional)" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-      </div>
-      <div>
-        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Total ($)</label>
-        <div id="ins-cdt-total" style="padding:7px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--text)">0.00</div>
-      </div>
-    </div>
-    <div style="margin-top:8px;font-size:11px;color:#9b6d00;font-style:italic">⚠ Placeholder layout — final fields will match your CDT sheet once you share the PDF.</div>
-  `;
-}
-
-function renderCdtLineRow(idx) {
-  return `
-    <div class="ins-cdt-line" data-idx="${idx}" style="display:grid;grid-template-columns:90px 1fr 80px 90px 30px;gap:8px;align-items:center;margin-bottom:6px">
-      <input type="text" class="ins-cdt-code" placeholder="e.g. D9223" oninput="window._insCdtRecalc()" style="padding:6px 9px;font-size:12px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <input type="text" class="ins-cdt-desc" placeholder="Description" oninput="window._insCdtRecalc()" style="padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <input type="number" class="ins-cdt-qty"  placeholder="Qty" min="1" step="1" value="1" oninput="window._insCdtRecalc()" style="padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <input type="number" class="ins-cdt-fee"  placeholder="0.00" min="0" step="0.01" oninput="window._insCdtRecalc()" style="padding:6px 9px;font-size:12px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <button onclick="window._insRemoveCdtLine(${idx})" title="Remove" style="background:none;border:none;color:var(--warn);font-size:16px;cursor:pointer;padding:0">×</button>
-    </div>
-  `;
-}
-
-window._insAddCdtLine = function() {
-  const wrap = $('ins-cdt-lines');
-  if(!wrap) return;
-  const idx = wrap.children.length;
-  wrap.insertAdjacentHTML('beforeend', renderCdtLineRow(idx));
-  recalcCdt();
-};
-window._insRemoveCdtLine = function(idx) {
-  const wrap = $('ins-cdt-lines');
-  if(!wrap) return;
-  const row = wrap.querySelector(`.ins-cdt-line[data-idx="${idx}"]`);
-  if(row) row.remove();
-  recalcCdt();
-};
-function recalcCdt() {
-  let total = 0;
-  document.querySelectorAll('#ins-cdt-lines .ins-cdt-line').forEach(row => {
-    const qty = parseFloat(row.querySelector('.ins-cdt-qty')?.value) || 0;
-    const fee = parseFloat(row.querySelector('.ins-cdt-fee')?.value) || 0;
-    total += qty * fee;
-  });
-  const out = $('ins-cdt-total');
-  if(out) out.textContent = total.toFixed(2);
-  refreshPreview();
-}
-window._insCdtRecalc = recalcCdt;
+// (Removed renderFlatFeeForm, renderCdtForm, renderCdtLineRow, recalcCdt
+//  and their _insAddCdtLine / _insRemoveCdtLine / _insCdtRecalc helpers —
+//  the modal now uses a single Anesthesia Receipt template with a billing
+//  sub-toggle (CDT itemized vs Flat Fee single line).)
 
 window._insSetMode = function(mode) {
-  _mode = mode;
+  // Only two modes now: 'cdt' (itemized D9222) and 'flat' (single Anesthesia
+  // Services line). Both render the same Anesthesia Receipt template —
+  // renderReceiptForm branches its billing-input block on _mode.
+  _mode = (mode === 'flat') ? 'flat' : 'cdt';
   const area = $('ins-form-area');
   if(!area) return;
-  if(mode === 'josh-receipt') {
-    area.innerHTML = renderJoshReceiptForm();
-  } else if(mode === 'cdt') {
-    area.innerHTML = renderCdtForm();
-    window._insAddCdtLine();
-  } else {
-    area.innerHTML = renderFlatFeeForm();
-  }
+  area.innerHTML = renderReceiptForm();
   refreshPreview();
 };
 
@@ -487,15 +441,30 @@ function buildJoshReceiptHTML() {
   const dxChecks = Array.from(document.querySelectorAll('.ins-jr-dx'));
   const checkedDx = new Set(dxChecks.filter(c => c.checked).map(c => c.dataset.code));
 
-  const units    = parseInt($('ins-jr-units')?.value, 10) || 0;
-  const perUnit  = parseFloat($('ins-jr-per-unit')?.value) || 0;
-  const ccPct    = parseFloat($('ins-jr-cc-pct')?.value) || 0;
-  const medMin   = parseInt($('ins-jr-medical-min')?.value, 10) || 0;
-  const medUnits = medMin ? (medMin / 12) : 0;
+  // Patient Name / DOB are now editable in the form — fall back to ctx if the
+  // form fields don't exist yet (e.g. on first render before the form mounts).
+  const formName = $('ins-jr-patient-name')?.value.trim();
+  const formDob  = $('ins-jr-patient-dob')?.value.trim();
+  const patientName = formName || ctx.patientName || '';
+  const patientDob  = formDob  || ctx.patientDob  || '';
 
-  const subtotalCharges = units * perUnit;
-  const ccFee           = subtotalCharges * (ccPct / 100);
-  const total           = subtotalCharges + ccFee;
+  const ccPct    = parseFloat($('ins-jr-cc-pct')?.value) || 0;
+  let subtotalCharges = 0;
+  let units = 0, perUnit = 0, medMin = 0, medUnits = 0;
+  let flatDesc = '', flatAmount = 0;
+  if(_mode === 'flat') {
+    flatDesc   = $('ins-jr-flat-desc')?.value.trim() || 'Anesthesia Services';
+    flatAmount = parseFloat($('ins-jr-flat-amount')?.value) || 0;
+    subtotalCharges = flatAmount;
+  } else {
+    units    = parseInt($('ins-jr-units')?.value, 10) || 0;
+    perUnit  = parseFloat($('ins-jr-per-unit')?.value) || 0;
+    medMin   = parseInt($('ins-jr-medical-min')?.value, 10) || 0;
+    medUnits = medMin ? (medMin / 12) : 0;
+    subtotalCharges = units * perUnit;
+  }
+  const ccFee = subtotalCharges * (ccPct / 100);
+  const total = subtotalCharges + ccFee;
 
   const sexFromDob = document.querySelector('input[name="ins-jr-sex"]:checked')?.value || '';
   const dentistOffice = $('ins-jr-office-address')?.value.trim() || '';
@@ -528,28 +497,40 @@ function buildJoshReceiptHTML() {
   const dxBehavioralHtml = JOSH_DIAGNOSES_BEHAVIORAL.map(renderDxRow).join('');
   const dxMedicalHtml = JOSH_DIAGNOSES_MEDICAL.map(renderDxRow).join('');
 
-  // Billing rows — one D9222 row per unit. The PDF has 14 blank rows; we'll
-  // print rows for the checked unit count and leave the rest blank.
+  // Billing rows — branch on mode.
+  //  CDT  → itemized D9222 rows (one per 15-min unit), PDF-style table.
+  //  Flat → single "Anesthesia Services" row, no CDT code referenced.
   const billingRows = [];
-  for(let i = 0; i < Math.max(units, 14); i++) {
-    if(i < units) {
-      billingRows.push(`
-        <tr>
-          <td style="padding:3px 6px;border-bottom:1px solid #999;font-family:'DM Mono',monospace;font-size:10.5px">D9222</td>
-          <td style="padding:3px 6px;border-bottom:1px solid #999;font-size:10.5px">General Anesthesia First 15 Minutes</td>
-          <td style="padding:3px 6px;border-bottom:1px solid #999;text-align:center;font-size:10.5px">1 unit</td>
-          <td style="padding:3px 6px;border-bottom:1px solid #999;text-align:right;font-family:'DM Mono',monospace;font-size:10.5px">$${perUnit.toFixed(2)}</td>
-        </tr>
-      `);
-    } else {
-      billingRows.push(`
-        <tr>
-          <td style="padding:3px 6px;border-bottom:1px solid #999;font-family:'DM Mono',monospace;color:#bbb;font-size:10.5px">D9222</td>
-          <td style="padding:3px 6px;border-bottom:1px solid #999;color:#bbb;font-size:10.5px">General Anesthesia First 15 Minutes</td>
-          <td style="padding:3px 6px;border-bottom:1px solid #999;text-align:center;color:#bbb;font-size:10.5px">1 unit</td>
-          <td style="padding:3px 6px;border-bottom:1px solid #999;text-align:right;color:#bbb;font-size:10.5px">Charges $______</td>
-        </tr>
-      `);
+  if(_mode === 'flat') {
+    billingRows.push(`
+      <tr>
+        <td style="padding:6px 6px;border-bottom:1px solid #999;font-size:10.5px">&nbsp;</td>
+        <td style="padding:6px 6px;border-bottom:1px solid #999;font-size:10.5px">${flatDesc || 'Anesthesia Services'}</td>
+        <td style="padding:6px 6px;border-bottom:1px solid #999;text-align:center;font-size:10.5px">—</td>
+        <td style="padding:6px 6px;border-bottom:1px solid #999;text-align:right;font-family:'DM Mono',monospace;font-size:10.5px">$${flatAmount.toFixed(2)}</td>
+      </tr>
+    `);
+  } else {
+    for(let i = 0; i < Math.max(units, 14); i++) {
+      if(i < units) {
+        billingRows.push(`
+          <tr>
+            <td style="padding:3px 6px;border-bottom:1px solid #999;font-family:'DM Mono',monospace;font-size:10.5px">D9222</td>
+            <td style="padding:3px 6px;border-bottom:1px solid #999;font-size:10.5px">General Anesthesia First 15 Minutes</td>
+            <td style="padding:3px 6px;border-bottom:1px solid #999;text-align:center;font-size:10.5px">1 unit</td>
+            <td style="padding:3px 6px;border-bottom:1px solid #999;text-align:right;font-family:'DM Mono',monospace;font-size:10.5px">$${perUnit.toFixed(2)}</td>
+          </tr>
+        `);
+      } else {
+        billingRows.push(`
+          <tr>
+            <td style="padding:3px 6px;border-bottom:1px solid #999;font-family:'DM Mono',monospace;color:#bbb;font-size:10.5px">D9222</td>
+            <td style="padding:3px 6px;border-bottom:1px solid #999;color:#bbb;font-size:10.5px">General Anesthesia First 15 Minutes</td>
+            <td style="padding:3px 6px;border-bottom:1px solid #999;text-align:center;color:#bbb;font-size:10.5px">1 unit</td>
+            <td style="padding:3px 6px;border-bottom:1px solid #999;text-align:right;color:#bbb;font-size:10.5px">Charges $______</td>
+          </tr>
+        `);
+      }
     }
   }
 
@@ -567,10 +548,10 @@ function buildJoshReceiptHTML() {
 
     <div style="margin-bottom:10px">
       ${field('Date of Service', ctx.surgeryDate ? fmtDate(ctx.surgeryDate) : '', 110)}
-      ${field('Patient Name', ctx.patientName, 200)}
+      ${field('Patient Name', patientName, 200)}
     </div>
     <div style="margin-bottom:10px">
-      ${field('DOB', ctx.patientDob ? fmtDate(ctx.patientDob) : '', 110)}
+      ${field('DOB', patientDob ? fmtDate(patientDob) : '', 110)}
       ${field('Sex', sexFromDob, 60)}
       ${field('Dentist', ctx.provider, 200)}
     </div>
@@ -612,13 +593,13 @@ function buildJoshReceiptHTML() {
       <span style="float:right;font-family:'DM Mono',monospace">$${ccFee.toFixed(2)}</span>
     </div>
 
-    <div style="border:1px solid #999;padding:6px 10px;font-size:10.5px;margin-bottom:10px">
+    ${_mode === 'flat' ? '' : `<div style="border:1px solid #999;padding:6px 10px;font-size:10.5px;margin-bottom:10px">
       Medical Anesthesia Billing Code <strong>00170</strong> Intra-oral Procedure &nbsp;5 units&nbsp;+&nbsp;
       <span style="border-bottom:1px solid #555;display:inline-block;min-width:40px;padding:0 4px;text-align:center">${medMin || '&nbsp;'}</span>
       &nbsp;minutes / 12 =&nbsp;
       <span style="border-bottom:1px solid #555;display:inline-block;min-width:40px;padding:0 4px;text-align:center">${medUnits ? medUnits.toFixed(2) : '&nbsp;'}</span>
       &nbsp;Time Units
-    </div>
+    </div>`}
 
     <div style="background:#1d3557;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:bold;margin-bottom:14px">
       <span>TOTAL CHARGES</span>
@@ -651,8 +632,8 @@ function buildJoshReceiptHTML() {
       <div style="text-align:center;font-size:14px;font-weight:bold;letter-spacing:.8px;margin-bottom:14px;color:#1d3557">PAYOR DISCLOSURE</div>
 
       <div style="margin-bottom:14px">
-        ${field('Patient Name', ctx.patientName, 220)}
-        ${field('DOB', ctx.patientDob ? fmtDate(ctx.patientDob) : '', 110)}
+        ${field('Patient Name', patientName, 220)}
+        ${field('DOB', patientDob ? fmtDate(patientDob) : '', 110)}
       </div>
 
       <div style="border:1px solid #aaa;padding:12px;background:#fafafa;margin-bottom:14px">
@@ -663,7 +644,7 @@ function buildJoshReceiptHTML() {
 
       <div style="border:1px solid #aaa;padding:12px;background:#fafafa;margin-bottom:14px">
         <div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.4px;color:#1d3557;border-bottom:1px solid #1d3557;padding-bottom:3px;margin-bottom:8px">Subscriber Information</div>
-        <div style="margin-bottom:8px">${field('Subscriber Name', subscriberName || ctx.patientName, 260)} ${field('Relationship to Subscriber', relationship, 120)}</div>
+        <div style="margin-bottom:8px">${field('Subscriber Name', subscriberName || patientName, 260)} ${field('Relationship to Subscriber', relationship, 120)}</div>
         <div>${field('Subscriber ID / Member #', subscriberId, 180)} ${field('Group #', groupNum, 140)}</div>
       </div>
 
@@ -707,124 +688,10 @@ function buildJoshReceiptHTML() {
 }
 
 function buildPreviewHTML() {
-  if(_mode === 'josh-receipt') return buildJoshReceiptHTML();
-
-  const ctx = readCaseContext();
-  const w   = workerNow();
-  const to       = $('ins-to')?.value.trim()       || '';
-  const fax      = $('ins-email')?.value.trim()    || '';
-  const phone    = $('ins-phone')?.value.trim()    || '';
-  const today    = todayIso();
-  const labelVal = (lbl, val) => `<div style="margin-bottom:4px"><span style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase">${lbl}:</span> <span style="border-bottom:1px solid #888;display:inline-block;min-width:140px;padding-left:4px">${val||'&nbsp;'}</span></div>`;
-
-  let body = '';
-  if(_mode === 'flat') {
-    const desc = $('ins-flat-desc')?.value.trim() || '';
-    const amt  = parseFloat($('ins-flat-amount')?.value) || 0;
-    const notes = $('ins-flat-notes')?.value.trim() || '';
-    body = `
-      <div style="background:#eef2f7;padding:5px 10px;font-size:10px;font-weight:bold;color:#1d3557;letter-spacing:.5px;margin-top:8px">FLAT FEE CLAIM</div>
-      <div style="margin:8px 0">
-        ${labelVal('SERVICE', desc)}
-        ${labelVal('AMOUNT', amt ? '$'+amt.toFixed(2) : '')}
-      </div>
-      ${notes ? `<div style="margin-top:6px;font-size:11px"><strong>Notes:</strong> ${notes}</div>` : ''}
-    `;
-  } else {
-    const lines = Array.from(document.querySelectorAll('#ins-cdt-lines .ins-cdt-line')).map(row => ({
-      code: row.querySelector('.ins-cdt-code')?.value.trim() || '',
-      desc: row.querySelector('.ins-cdt-desc')?.value.trim() || '',
-      qty:  parseFloat(row.querySelector('.ins-cdt-qty')?.value) || 0,
-      fee:  parseFloat(row.querySelector('.ins-cdt-fee')?.value) || 0
-    })).filter(l => l.code || l.desc || l.qty || l.fee);
-    const total = lines.reduce((s,l) => s + (l.qty * l.fee), 0);
-    const notes = $('ins-cdt-notes')?.value.trim() || '';
-    body = `
-      <div style="background:#eef2f7;padding:5px 10px;font-size:10px;font-weight:bold;color:#1d3557;letter-spacing:.5px;margin-top:8px">CDT CODE CLAIM</div>
-      <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:11px">
-        <tr style="background:#f5f5f5">
-          <th style="text-align:left;padding:4px 6px;border-bottom:1px solid #ccc;width:80px">Code</th>
-          <th style="text-align:left;padding:4px 6px;border-bottom:1px solid #ccc">Description</th>
-          <th style="text-align:right;padding:4px 6px;border-bottom:1px solid #ccc;width:50px">Qty</th>
-          <th style="text-align:right;padding:4px 6px;border-bottom:1px solid #ccc;width:80px">Fee</th>
-          <th style="text-align:right;padding:4px 6px;border-bottom:1px solid #ccc;width:90px">Line Total</th>
-        </tr>
-        ${lines.map(l => `
-          <tr>
-            <td style="padding:4px 6px;font-family:'DM Mono',monospace">${l.code}</td>
-            <td style="padding:4px 6px">${l.desc}</td>
-            <td style="padding:4px 6px;text-align:right">${l.qty || ''}</td>
-            <td style="padding:4px 6px;text-align:right;font-family:'DM Mono',monospace">${l.fee ? '$'+l.fee.toFixed(2) : ''}</td>
-            <td style="padding:4px 6px;text-align:right;font-family:'DM Mono',monospace">${(l.qty*l.fee) ? '$'+(l.qty*l.fee).toFixed(2) : ''}</td>
-          </tr>
-        `).join('')}
-        <tr>
-          <td colspan="4" style="padding:6px;text-align:right;font-weight:bold;border-top:2px solid #444">TOTAL</td>
-          <td style="padding:6px;text-align:right;font-weight:bold;font-family:'DM Mono',monospace;border-top:2px solid #444">$${total.toFixed(2)}</td>
-        </tr>
-      </table>
-      ${notes ? `<div style="margin-top:6px;font-size:11px"><strong>Notes:</strong> ${notes}</div>` : ''}
-    `;
-  }
-
-  return `
-    <div style="background:#1d3557;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;margin:-24px -24px 14px">
-      <div>
-        <div style="font-size:18px;font-weight:bold;letter-spacing:.5px">ATLAS ANESTHESIA</div>
-        <div style="font-size:10px;opacity:.85;margin-top:1px">Mobile Office-Based Anesthesia</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:18px;font-weight:bold">INSURANCE CLAIM</div>
-        <div style="font-size:10px;opacity:.85;margin-top:1px">Email Submission</div>
-      </div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:12px">
-      <div>
-        ${labelVal('TO', to)}
-        ${labelVal('EMAIL', fax)}
-        ${labelVal('PHONE', phone)}
-      </div>
-      <div>
-        ${labelVal('FROM', 'Atlas Anesthesia')}
-        ${labelVal('PROVIDER', providerName(w))}
-        ${labelVal('DATE', fmtDate(today))}
-        ${labelVal('REPLY TO', 'admin@atlasanesthesia.co')}
-      </div>
-    </div>
-
-    <div style="background:#eef2f7;padding:5px 10px;font-size:10px;font-weight:bold;color:#1d3557;letter-spacing:.5px">PATIENT &amp; CASE INFO</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:8px 0 12px">
-      <div>
-        ${labelVal('NAME', ctx.patientName)}
-        ${labelVal('DOB', ctx.patientDob ? fmtDate(ctx.patientDob) : '')}
-        ${labelVal('PHONE', ctx.patientPhone)}
-      </div>
-      <div>
-        ${labelVal('PROCEDURE', ctx.procedure)}
-        ${labelVal('SURGERY DATE', ctx.surgeryDate ? fmtDate(ctx.surgeryDate) : '')}
-        ${labelVal('DENTIST', ctx.provider)}
-      </div>
-    </div>
-
-    ${body}
-
-    <div style="margin-top:18px;display:grid;grid-template-columns:1fr 200px;gap:18px;align-items:end">
-      <div>
-        <div style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase;margin-bottom:2px">Provider Signature</div>
-        <img src="assets/signatures/${w === 'josh' ? 'josh' : 'dev'}.png" style="height:46px;mix-blend-mode:multiply;display:block" alt="Signature" onerror="this.style.display='none'">
-        <div style="border-top:1px solid #000;width:240px;font-size:10px;padding-top:2px;margin-top:2px">${providerName(w)} &middot; Atlas Anesthesia</div>
-      </div>
-      <div style="text-align:right;font-size:10px;color:#555">DATE: <span style="border-bottom:1px solid #888;padding:0 6px">${fmtDate(today)}</span></div>
-    </div>
-
-    <div style="margin-top:14px;background:#fdecec;border:1px solid #f5b5b5;border-radius:3px;padding:6px 10px;font-size:9px;color:#444;line-height:1.4">
-      <strong style="color:#a13030">CONFIDENTIALITY &amp; AUTHORIZATION NOTICE</strong><br>
-      This claim contains protected health information privileged and confidential under HIPAA and applicable state law. It is intended only for the addressee. If you received this email in error, please notify Atlas Anesthesia immediately and destroy all copies.
-    </div>
-
-    <div style="margin-top:8px;font-size:9px;color:#888;text-align:center">Atlas Anesthesia · Insurance Claim · Page 1 of 1</div>
-  `;
+  // Single Anesthesia Receipt template now drives both CDT and Flat modes —
+  // only the billing block inside differs. The old standalone fallback
+  // template has been removed.
+  return buildJoshReceiptHTML();
 }
 
 function refreshPreview() {
@@ -840,9 +707,9 @@ window.openInsuranceSheetModal = function() {
     const el = $(id); if(el) el.value = '';
   });
   // Always default back to Josh's Receipt Form on open
-  document.querySelectorAll('input[name="ins-mode"]').forEach(r => r.checked = (r.value === 'josh-receipt'));
-  _mode = 'josh-receipt';
-  window._insSetMode('josh-receipt');
+  document.querySelectorAll('input[name="ins-mode"]').forEach(r => r.checked = (r.value === 'cdt'));
+  _mode = 'cdt';
+  window._insSetMode('cdt');
   // Refresh + pre-select the case the user is currently finalizing.
   populateCaseDropdown();
   const formCaseId = $('caseId')?.value || $('caseId-display')?.textContent?.trim() || '';
@@ -920,20 +787,15 @@ window._insSend = async function() {
     if(rsp.ok && data.success) {
       // Build a compact log entry of what was sent. Total is best-effort.
       let total = 0;
-      if(_mode === 'josh-receipt') {
+      const ccPct = parseFloat($('ins-jr-cc-pct')?.value) || 0;
+      if(_mode === 'flat') {
+        const sub = parseFloat($('ins-jr-flat-amount')?.value) || 0;
+        total = sub + sub * (ccPct / 100);
+      } else {
         const units   = parseInt($('ins-jr-units')?.value, 10) || 0;
         const perUnit = parseFloat($('ins-jr-per-unit')?.value) || 0;
-        const ccPct   = parseFloat($('ins-jr-cc-pct')?.value) || 0;
         const sub     = units * perUnit;
         total = sub + sub * (ccPct / 100);
-      } else if(_mode === 'flat') {
-        total = parseFloat($('ins-flat-amount')?.value) || 0;
-      } else {
-        total = Array.from(document.querySelectorAll('#ins-cdt-lines .ins-cdt-line')).reduce((s, row) => {
-          const qty = parseFloat(row.querySelector('.ins-cdt-qty')?.value) || 0;
-          const fee = parseFloat(row.querySelector('.ins-cdt-fee')?.value) || 0;
-          return s + qty * fee;
-        }, 0);
       }
       const ctx = readCaseContext();
       await logSentInsurance({
@@ -1025,7 +887,7 @@ async function loadHistoryRows() {
     </div>
     ${entries.map(e => {
       const date = new Date(e.sentAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
-      const mode = e.mode === 'cdt' ? 'CDT' : e.mode === 'josh-receipt' ? 'Receipt' : 'Flat Fee';
+      const mode = e.mode === 'flat' ? 'Flat Fee' : 'CDT';
       const total = e.total ? '$'+Number(e.total).toFixed(2) : '—';
       const insPhiHidden = typeof window.isPHIHidden === 'function' && window.isPHIHidden(e.surgeryDate, e.caseId);
       const insPatient = insPhiHidden ? '<span style="color:#94a3b8;font-style:italic">[hidden]</span>' : (e.patientName || '—');
