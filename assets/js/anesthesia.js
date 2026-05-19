@@ -62,9 +62,9 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   // MR# intentionally left blank — Atlas Case IDs aren't medical record numbers.
 
   // SURGEON / CRNA / (OPERATION left blank — not in pre-op data)
-  drawT1(val('po-provider'), 65, 619, 7.5);   // SURGEON
+  drawT1(val('po-provider'), 65, 617, 7.5);   // SURGEON
   const workerForChart = r.worker || (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'josh');
-  drawT1(workerForChart === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA', 52, 632, 7.5); // CRNA
+  drawT1(workerForChart === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA', 52, 630, 7.5); // CRNA
 
   // DATE row (top of vitals header)
   let surgDateFmt = '';
