@@ -192,21 +192,6 @@ function buildModal() {
         <span style="font-size:11px;color:var(--text-faint);font-style:italic;margin-left:auto">Anesthesia Receipt template — only the billing line differs</span>
       </div>
 
-      <div style="padding:14px 24px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div>
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Insurer / Recipient</label>
-          <input type="text" id="ins-to" oninput="window._insPreview()" placeholder="e.g. Delta Dental" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-        </div>
-        <div>
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Recipient Email</label>
-          <input type="email" id="ins-email" oninput="window._insPreview()" placeholder="claims@insurer.com" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-        </div>
-        <div>
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Recipient Phone</label>
-          <input type="tel" id="ins-phone" oninput="window._insPreview()" placeholder="(555) 555-5555" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-        </div>
-      </div>
-
       <div id="ins-form-area" style="padding:14px 24px;border-bottom:1px solid var(--border)">
         <!-- Filled in by setMode() based on Flat Fee vs CDT Codes -->
       </div>
@@ -214,10 +199,10 @@ function buildModal() {
       <div style="padding:10px 24px;border-bottom:1px solid var(--border)">${(typeof window.scheduleToggleHTML==='function')?window.scheduleToggleHTML('ins'):''}</div>
 
       <div style="padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-        <div style="font-size:12px;color:var(--text-faint)">Patient info pulls from the current case being finalized.</div>
+        <div style="font-size:12px;color:var(--text-faint)">Receipt will be emailed to the patient's Deposit Email on the Pre-Op record.</div>
         <div style="display:flex;gap:10px">
           <button class="btn btn-ghost" onclick="closeInsuranceSheetModal()">Cancel</button>
-          <button id="ins-send-btn" class="btn btn-primary" onclick="window._insSend()" style="background:#1d3557;border-color:#1d3557">📧 Send Insurance Email</button>
+          <button id="ins-send-btn" class="btn btn-primary" onclick="window._insSend()" style="background:#1d3557;border-color:#1d3557">📧 Email Receipt to Patient</button>
         </div>
       </div>
 
@@ -244,6 +229,8 @@ function renderReceiptForm() {
   const defaultSex = _selectedPreop?.['po-sex'] || '';
   const defaultName = (ctx.patientName || '').replace(/"/g,'&quot;');
   const defaultDob  = ctx.patientDob || '';
+  const defaultProvider = (ctx.provider || '').replace(/"/g,'&quot;');
+  const defaultSurgeryDate = ctx.surgeryDate || '';
   const procRows = JOSH_PROCEDURES.map(p =>
     `<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:2px 0">
       <input type="checkbox" class="ins-jr-proc" data-code="${p.code}" data-label="${p.label.replace(/"/g,'&quot;')}" oninput="window._insPreview()" style="margin:0;flex-shrink:0">
@@ -284,6 +271,16 @@ function renderReceiptForm() {
             <input type="radio" name="ins-jr-sex" value="F" ${defaultSex==='F'?'checked':''} style="display:none"><span>F</span>
           </label>
         </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:10px;padding:10px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
+      <div>
+        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Date of Service</label>
+        <input type="date" id="ins-jr-surgery-date" value="${defaultSurgeryDate}" oninput="window._insPreview()" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);box-sizing:border-box;height:30px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Dentist</label>
+        <input type="text" id="ins-jr-provider" value="${defaultProvider}" oninput="window._insPreview()" placeholder="e.g. Dr. Smith" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);box-sizing:border-box;height:30px">
       </div>
     </div>
     <div style="margin-bottom:14px;padding:10px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
@@ -397,6 +394,8 @@ function buildJoshReceiptHTML() {
 
   const sexFromDob = document.querySelector('input[name="ins-jr-sex"]:checked')?.value || '';
   const dentistOffice = $('ins-jr-office-address')?.value.trim() || '';
+  const dentistName = $('ins-jr-provider')?.value.trim() || ctx.provider || '';
+  const serviceDate = $('ins-jr-surgery-date')?.value.trim() || ctx.surgeryDate || '';
 
   // Procedure rows: render every item with a ☐ or ☒
   const renderProcRow = (p) => {
@@ -466,13 +465,13 @@ function buildJoshReceiptHTML() {
     <div style="text-align:center;font-size:14px;font-weight:bold;letter-spacing:.8px;margin-bottom:12px;color:#1d3557">RECEIPT / INSURANCE CLAIM INFORMATION</div>
 
     <div style="margin-bottom:10px">
-      ${field('Date of Service', ctx.surgeryDate ? fmtDate(ctx.surgeryDate) : '', 110)}
+      ${field('Date of Service', serviceDate ? fmtDate(serviceDate) : '', 110)}
       ${field('Patient Name', patientName, 200)}
     </div>
     <div style="margin-bottom:10px">
       ${field('DOB', patientDob ? fmtDate(patientDob) : '', 110)}
       ${field('Sex', sexFromDob, 60)}
-      ${field('Dentist', ctx.provider, 200)}
+      ${field('Dentist', dentistName, 200)}
     </div>
     <div style="margin-bottom:14px">
       ${field('Dentist Office Address', dentistOffice, 400)}
@@ -554,9 +553,6 @@ window._insPreview = refreshPreview;
 window.openInsuranceSheetModal = function() {
   buildModal();
   // Reset transient fields each open
-  ['ins-to','ins-email','ins-phone'].forEach(id => {
-    const el = $(id); if(el) el.value = '';
-  });
   // Always default back to Josh's Receipt Form on open
   document.querySelectorAll('input[name="ins-mode"]').forEach(r => r.checked = (r.value === 'cdt'));
   _mode = 'cdt';
@@ -608,11 +604,9 @@ window._insSend = async function() {
     if(sel) sel.focus();
     return;
   }
-  const email = $('ins-email')?.value.trim() || '';
-  const to    = $('ins-to')?.value.trim()  || '';
-  if(!email) { alert('Please enter a Recipient Email.'); return; }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Please enter a valid email address (e.g. claims@insurer.com).'); return; }
-  if(!to)    { alert('Please enter the Insurer / Recipient name.'); return; }
+  const email = (_selectedPreop['po-patientEmail'] || '').trim();
+  if(!email) { alert('No patient email on file for this case. Add a Deposit Email on the Pre-Op record first.'); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('The patient email on the Pre-Op record looks invalid: ' + email); return; }
 
   const btn = $('ins-send-btn');
   const origLabel = btn?.textContent;
@@ -622,6 +616,8 @@ window._insSend = async function() {
     const html = buildPreviewHTML();
     const w = workerNow();
     const caseId = _selectedPreop['po-caseId'] || '';
+    const ctx = readCaseContext();
+    const recipientLabel = ctx.patientName || 'patient';
     // Use the existing /invoice email endpoint on the worker. It expects
     // { to, invoiceNum, html } and emails via AWS SES.
     const INVOICE_URL = FAX_WORKER_URL.replace('/fax', '/invoice');
@@ -630,7 +626,7 @@ window._insSend = async function() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: email,
-        invoiceNum: 'Insurance Claim — ' + (caseId || to),
+        invoiceNum: 'Anesthesia Receipt — ' + (caseId || recipientLabel),
         html
       })
     });
@@ -645,7 +641,6 @@ window._insSend = async function() {
         const perUnit = parseFloat($('ins-jr-per-unit')?.value) || 0;
         total = units * perUnit;
       }
-      const ctx = readCaseContext();
       await logSentInsurance({
         id: Math.random().toString(36).slice(2, 11),
         sentAt: new Date().toISOString(),
@@ -654,14 +649,14 @@ window._insSend = async function() {
         caseId,
         patientName: ctx.patientName,
         surgeryDate: ctx.surgeryDate,
-        recipient: to,
+        recipient: recipientLabel,
         recipientEmail: email,
         total,
         html
       });
-      try { window.logAudit && window.logAudit('insurance-email-sent', caseId, `to ${to} <${email}>`); } catch(e){}
-      if(typeof window.toastSuccess === 'function') window.toastSuccess('Insurance claim emailed to ' + email);
-      else alert('✅ Insurance email sent to ' + email);
+      try { window.logAudit && window.logAudit('insurance-email-sent', caseId, `to ${recipientLabel} <${email}>`); } catch(e){}
+      if(typeof window.toastSuccess === 'function') window.toastSuccess('Receipt emailed to ' + email);
+      else alert('✅ Receipt emailed to ' + email);
       window.closeInsuranceSheetModal();
     } else {
       const errMsg = data.error || 'Unknown error';
@@ -672,7 +667,7 @@ window._insSend = async function() {
     if(typeof window.toastError === 'function') window.toastError('Error sending email: ' + e.message, { persist: true });
     else alert('❌ Error sending email: ' + e.message);
   } finally {
-    if(btn) { btn.textContent = origLabel || '📧 Send Insurance Email'; btn.disabled = false; }
+    if(btn) { btn.textContent = origLabel || '📧 Email Receipt to Patient'; btn.disabled = false; }
   }
 };
 
