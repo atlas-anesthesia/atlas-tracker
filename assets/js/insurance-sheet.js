@@ -10,12 +10,6 @@ const RETURN_FAX = {
   dev:  '262-228-1623'
 };
 
-// Insurance presets can be filled in here later — same idea as the Pre-Op fax
-// modal's Bellin Prep Team preset. Each entry auto-fills Insurer + Fax #.
-const INSURANCE_PRESETS = [
-  // { id: 'delta-dental', name: 'Delta Dental', fax: '+18005551234' }
-];
-
 let _modalBuilt = false;
 let _mode = 'cdt';            // 'cdt' (itemized D9222) | 'flat' (single Anesthesia Services line)
 
@@ -200,13 +194,6 @@ function buildModal() {
 
       <div style="padding:14px 24px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Insurer Preset</label>
-          <select id="ins-preset" onchange="window._insApplyPreset()" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-            <option value="">— Custom recipient —</option>
-            ${INSURANCE_PRESETS.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-          </select>
-        </div>
-        <div>
           <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Insurer / Recipient</label>
           <input type="text" id="ins-to" oninput="window._insPreview()" placeholder="e.g. Delta Dental" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
         </div>
@@ -367,16 +354,6 @@ window._insSetMode = function(mode) {
   const area = $('ins-form-area');
   if(!area) return;
   area.innerHTML = renderReceiptForm();
-  refreshPreview();
-};
-
-window._insApplyPreset = function() {
-  const sel = $('ins-preset');
-  if(!sel) return;
-  const preset = INSURANCE_PRESETS.find(p => p.id === sel.value);
-  if(!preset) return;
-  $('ins-to').value  = preset.name;
-  if($('ins-email')) $('ins-email').value = preset.email || preset.fax || '';
   refreshPreview();
 };
 
@@ -577,7 +554,7 @@ window._insPreview = refreshPreview;
 window.openInsuranceSheetModal = function() {
   buildModal();
   // Reset transient fields each open
-  ['ins-preset','ins-to','ins-email','ins-phone'].forEach(id => {
+  ['ins-to','ins-email','ins-phone'].forEach(id => {
     const el = $(id); if(el) el.value = '';
   });
   // Always default back to Josh's Receipt Form on open
@@ -635,7 +612,7 @@ window._insSend = async function() {
   const to    = $('ins-to')?.value.trim()  || '';
   if(!email) { alert('Please enter a Recipient Email.'); return; }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Please enter a valid email address (e.g. claims@insurer.com).'); return; }
-  if(!to)    { alert('Please enter the Insurer / Recipient name (or pick a preset).'); return; }
+  if(!to)    { alert('Please enter the Insurer / Recipient name.'); return; }
 
   const btn = $('ins-send-btn');
   const origLabel = btn?.textContent;
