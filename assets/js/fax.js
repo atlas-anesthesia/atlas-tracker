@@ -59,6 +59,46 @@ window.onFaxCenterChange = function() {
   } catch(e) { console.warn('onFaxCenterChange:', e); }
 };
 
+// Picker that lets the user choose which cover letter to send before opening
+// the appropriate underlying modal. Replaces two separate "send a fax" entry
+// points with a single button on the Pre-Op tab.
+window.openFaxPicker = function() {
+  const prior = document.getElementById('faxPickerModal');
+  if(prior) prior.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'faxPickerModal';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
+  wrap.innerHTML = `
+    <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="min-width:0">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">Send Fax</div>
+          <div style="font-size:16px;font-weight:600">Choose a Cover Letter</div>
+        </div>
+        <button onclick="document.getElementById('faxPickerModal')?.remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;flex-shrink:0">✕</button>
+      </div>
+      <div style="padding:22px;display:grid;gap:12px">
+        <button onclick="document.getElementById('faxPickerModal')?.remove();if(typeof openPreopFaxModal==='function')openPreopFaxModal()" style="padding:18px 20px;background:#fff;border:2px solid #0369a1;color:#0369a1;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font-family:inherit">
+          <span style="font-size:22px">📋</span>
+          <div style="flex:1;min-width:0">
+            <div>Pre-Op Records Request</div>
+            <div style="font-size:12px;font-weight:400;color:var(--text-muted);margin-top:2px">Ask the PCP / Bellin office to send records back</div>
+          </div>
+        </button>
+        <button onclick="document.getElementById('faxPickerModal')?.remove();if(typeof openFaxModalFromForm==='function')openFaxModalFromForm()" style="padding:18px 20px;background:#1d3557;border:2px solid #1d3557;color:#fff;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font-family:inherit">
+          <span style="font-size:22px">📄</span>
+          <div style="flex:1;min-width:0">
+            <div>Generic Fax Cover Sheet</div>
+            <div style="font-size:12px;font-weight:400;color:#a8c4e0;margin-top:2px">Standard cover letter to any recipient</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+};
+
 window.openFaxModalFromForm = function() {
   window._populateFaxCenterDropdown();
   // Read all form fields directly — no save, no clear, nothing changes
