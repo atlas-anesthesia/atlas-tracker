@@ -9389,19 +9389,28 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
 // it shows a persistent banner so Dev/Josh know to hard-refresh.
-const APP_VERSION = '20260515at'; // bump this when deploying — must match app.js?v=... in index.html
+// APP_VERSION is read dynamically from the currently-loaded <script> tag so
+// it always matches whatever app.js?v=... the page was served with — no
+// manual bump needed when the cache key changes.
+const APP_VERSION = (() => {
+  const tag = document.querySelector('script[src*="assets/js/app.js"]');
+  const m = tag && tag.src.match(/app\.js\?v=([a-zA-Z0-9-]+)/);
+  return m ? m[1] : 'unknown';
+})();
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000; // poll every 3 minutes
 
 async function _checkForAppUpdate() {
   try {
-    // Fetch index.html with cache-bust, extract the app.js cache version
-    const res = await fetch('/index.html?_t=' + Date.now(), { cache: 'no-store' });
+    // Fetch index.html with cache-bust, extract the app.js cache version.
+    // Use a relative path so it resolves correctly under both root hosting
+    // (atlasanesthesia.co) and project-page hosting (.../atlas-tracker/).
+    const res = await fetch('index.html?_t=' + Date.now(), { cache: 'no-store' });
     if(!res.ok) return;
     const html = await res.text();
     const match = html.match(/app\.js\?v=([a-zA-Z0-9-]+)/);
     if(!match) return;
     const latestVersion = match[1];
-    if(latestVersion && latestVersion !== APP_VERSION) {
+    if(latestVersion && APP_VERSION !== 'unknown' && latestVersion !== APP_VERSION) {
       _showUpdateBanner(latestVersion);
     }
   } catch(e) { /* network blip, ignore */ }
