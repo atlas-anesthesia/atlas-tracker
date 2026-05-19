@@ -1010,6 +1010,12 @@ onAuthStateChanged(auth, async (user) => {
 document.getElementById('loadingScreen').style.display='none';
 if(user) {
 const isNewLogin = !currentUser;
+// Snapshot the saved tab BEFORE any showTab() call clobbers localStorage.
+// On a hard refresh, Firebase auth restores the session and isNewLogin
+// fires (currentUser is module-scoped and reset by the page load), so without
+// this snapshot the "land on Home" block below would overwrite the user's
+// last active tab.
+const _savedTabSnapshot = window.location.hash.replace('#','').trim() || localStorage.getItem('atlas_active_tab') || '';
 currentUser = user;
 if(isNewLogin) {
   try { logAudit('login'); } catch(e){}
@@ -1017,9 +1023,12 @@ if(isNewLogin) {
 resetInactivityTimer();
 document.getElementById('loginScreen').style.display='none';
 document.getElementById('appScreen').style.display='block';
-// Always land on Home (Dashboard) when logging in
+// Always land on Home (Dashboard) when logging in — but skip when a saved
+// tab exists (i.e. on a hard refresh restoring a Firebase session).
 if(isNewLogin) {
-  try { showTab('home'); if(typeof renderDashboard === 'function') renderDashboard(); } catch(e){}
+  if(!_savedTabSnapshot) {
+    try { showTab('home'); if(typeof renderDashboard === 'function') renderDashboard(); } catch(e){}
+  }
   // Start checking for app updates so Dev/Josh see a banner if a new version is deployed
   try { _startUpdateChecker(); } catch(e){}
   // Show today's follow-ups / overdue reminders as a notification panel
@@ -1076,8 +1085,9 @@ setInvoiceProvider();
 setTimeout(wireEKGDetection, 600);
 loadSurgeryCenters();
 loadAtlasFormula(); // pre-load PI formula at startup
-// Restore last active tab
-const _savedTab = window.location.hash.replace('#','').trim() || localStorage.getItem('atlas_active_tab') || 'preop';
+// Restore last active tab — uses the snapshot captured at the top of the
+// auth handler so a hard refresh keeps the user on whatever tab they were on.
+const _savedTab = _savedTabSnapshot || 'preop';
 showTab(_savedTab, false);
 // Re-apply after data loads (onSnapshot can briefly re-render UI)
 [500, 1000, 2000].forEach(ms => setTimeout(() => {
