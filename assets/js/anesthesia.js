@@ -22,7 +22,9 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   const pdfBytes = await _loadAnesPdf();
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const page = pdfDoc.getPages()[1]; // Page 2 = back side
+  const page1 = pdfDoc.getPages()[0]; // Page 1 = front side
   const H = page.getHeight();
+  const H1 = page1.getHeight();
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -30,6 +32,75 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   const chk = k => !!r[k];
   const val = k => String(r[k] || '');
   const Y = py => H - py;
+  const Y1 = py => H1 - py;
+
+  // Mirror of drawT for page 1
+  const drawT1 = (text, x, py, size, bold) => {
+    if(!text) return;
+    page1.drawText(String(text).substring(0, 90), {
+      x, y: Y1(py) - 1, size: size || 7.5,
+      font: bold ? fontBold : font, color: rgb(0,0,0)
+    });
+  };
+
+  // ── PAGE 1 — PATIENT IDENTIFICATION HEADER ────────────────────────────────
+  // Auto-fills the patient-info section at the top + the operation/surgeon/
+  // CRNA block at the bottom-left. Vitals, anesthesia times, drugs etc. are
+  // filled during/after the procedure and are intentionally left blank.
+  const fullName = [val('po-patientFirstName'), val('po-patientLastName')].filter(Boolean).join(' ');
+  drawT1(fullName, 367, 603.3, 7.5);     // NAME
+
+  const dobRaw = val('po-patientDOB');
+  let dobFmt = '';
+  if(dobRaw) {
+    try { dobFmt = new Date(dobRaw + 'T12:00:00Z').toLocaleDateString('en-US'); } catch(e) {}
+  }
+  drawT1(dobFmt, 362, 616.5, 7.5);       // DOB
+  drawT1(val('po-caseId'), 362, 629.7, 7.5); // MR# (uses our Case ID)
+
+  // SURGEON / CRNA / (OPERATION left blank — not in pre-op data)
+  drawT1(val('po-provider'), 65, 611.9, 7.5);
+  const workerForChart = r.worker || (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'josh');
+  drawT1(workerForChart === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA', 52, 624.4, 7.5);
+
+  // ANESTHESIA TECHNIQUE (po-procedureType is the anesthesia type)
+  drawT1(val('po-procedureType'), 125, 581.7, 7.5);
+
+  // DATE row (top of vitals header)
+  let surgDateFmt = '';
+  if(val('po-surgeryDate')) {
+    try { surgDateFmt = new Date(val('po-surgeryDate') + 'T12:00:00Z').toLocaleDateString('en-US'); } catch(e) {}
+  }
+  drawT1(surgDateFmt, 48, 131.7, 7.5);
+
+  // DIAGNOSIS / AGE / SEX / HT / WT / NPO / PRE-MED row (top=147)
+  // Diagnosis is not captured in pre-op so it stays blank.
+  let ageStr = '';
+  if(dobRaw) {
+    try {
+      const d = new Date(dobRaw + 'T12:00:00Z');
+      const t = new Date();
+      let a = t.getFullYear() - d.getFullYear();
+      const m = t.getMonth() - d.getMonth();
+      if(m < 0 || (m === 0 && t.getDate() < d.getDate())) a--;
+      if(a >= 0 && a < 130) ageStr = String(a);
+    } catch(e) {}
+  }
+  drawT1(ageStr, 218, 147.3, 7.5);                       // AGE
+  drawT1(val('po-sex'), 283, 147.3, 7.5);                // SEX
+
+  // Height — prefer feet/inches, else cm
+  const ftV = val('po-height-ft'), inV = val('po-height-in'), cmV = val('po-height-cm-val');
+  const htStr = ftV ? `${ftV}'${inV||0}"` : (cmV ? `${cmV}cm` : '');
+  drawT1(htStr, 343, 147.3, 7.5);                        // HT
+
+  // Weight — prefer lbs, else kg
+  const lbsV = val('po-weight-lbs'), kgV = val('po-weight-kg-val');
+  const wtStr = lbsV ? `${lbsV} lbs` : (kgV ? `${kgV} kg` : '');
+  drawT1(wtStr, 410, 147.3, 7.5);                        // WT
+
+  // NPO — Yes if confirmed on pre-op call
+  if(chk('po-npo')) drawT1('Yes', 478, 147.3, 7.5);      // NPO
 
   // Draw X inside checkbox — tx/ty are the label text position in pymupdf coords
   // Offset: x = label_x - 12 (checkbox is left of label)
