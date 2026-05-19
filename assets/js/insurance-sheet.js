@@ -152,6 +152,9 @@ window._insOnCaseChange = function() {
   const id = sel.value;
   const records = window._rawPreopRecords || [];
   _selectedPreop = records.find(r => r.id === id) || null;
+  // Pre-fill recipient email from the selected patient's Pre-Op record.
+  const emailInput = $('ins-recipient-email');
+  if(emailInput) emailInput.value = (_selectedPreop?.['po-patientEmail'] || '').trim();
   // Re-render the form so Patient Name / DOB / Sex / Office Address auto-fill
   // from the newly-selected pre-op record.
   if(typeof window._insSetMode === 'function') window._insSetMode(_mode);
@@ -181,6 +184,12 @@ function buildModal() {
         <div style="font-size:11px;color:var(--text-faint);margin-top:6px;font-style:italic">Patient info will be pulled from whichever case is selected. (Case ID is hidden on the printed sheet.)</div>
       </div>
 
+      <div style="padding:14px 24px;border-bottom:1px solid var(--border)">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Send Receipt To <span style="color:var(--warn)">*</span></label>
+        <input type="email" id="ins-recipient-email" placeholder="patient@email.com" style="width:100%;padding:9px 11px;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+        <div style="font-size:11px;color:var(--text-faint);margin-top:6px;font-style:italic">Pre-fills from the patient's Pre-Op Deposit Email. You can edit before sending.</div>
+      </div>
+
       <div style="padding:14px 24px;border-bottom:1px solid var(--border);background:#f8fafc;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
         <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">Billing Style</span>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
@@ -200,8 +209,9 @@ function buildModal() {
 
       <div style="padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
         <div style="font-size:12px;color:var(--text-faint)">Receipt will be emailed to the patient's Deposit Email on the Pre-Op record.</div>
-        <div style="display:flex;gap:10px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn btn-ghost" onclick="closeInsuranceSheetModal()">Cancel</button>
+          <button id="ins-download-btn" class="btn btn-ghost" onclick="window._insDownloadPDF()" style="color:#1d3557;border-color:#1d3557">⬇ Download PDF</button>
           <button id="ins-send-btn" class="btn btn-primary" onclick="window._insSend()" style="background:#1d3557;border-color:#1d3557">📧 Email Receipt to Patient</button>
         </div>
       </div>
@@ -550,6 +560,67 @@ function refreshPreview() {
 }
 window._insPreview = refreshPreview;
 
+// Render the current preview as a PDF (Letter, portrait). Returns a jsPDF doc.
+async function _insBuildPDF() {
+  if(typeof window.html2canvas !== 'function' || !window.jspdf?.jsPDF) {
+    throw new Error('PDF libraries (jsPDF / html2canvas) are not loaded.');
+  }
+  const src = $('ins-preview');
+  if(!src) throw new Error('No preview to export.');
+  // Snapshot at 2x for a crisper PDF
+  const canvas = await window.html2canvas(src, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+  const imgData = canvas.toDataURL('image/jpeg', 0.92);
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation:'portrait', unit:'pt', format:'letter' });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const margin = 24;
+  const availW = pageW - margin * 2;
+  const imgRatio = canvas.height / canvas.width;
+  const imgW = availW;
+  const imgH = availW * imgRatio;
+  // If the rendered receipt is taller than one page, split across pages.
+  if(imgH <= pageH - margin * 2) {
+    pdf.addImage(imgData, 'JPEG', margin, margin, imgW, imgH);
+  } else {
+    const pageContentH = pageH - margin * 2;
+    let yOffset = 0;
+    while(yOffset < imgH) {
+      pdf.addImage(imgData, 'JPEG', margin, margin - yOffset, imgW, imgH);
+      yOffset += pageContentH;
+      if(yOffset < imgH) pdf.addPage();
+    }
+  }
+  return pdf;
+}
+
+function _insPDFFilename() {
+  const ctx = readCaseContext();
+  const safe = (s) => (s || '').replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  const name = safe(ctx.patientName) || 'patient';
+  const date = ctx.surgeryDate || todayIso();
+  return `Atlas-Anesthesia-Receipt_${name}_${date}.pdf`;
+}
+
+window._insDownloadPDF = async function() {
+  if(!_selectedPreop) {
+    alert('Pick a case from the dropdown at the top before downloading.');
+    return;
+  }
+  const btn = $('ins-download-btn');
+  const origLabel = btn?.textContent;
+  if(btn) { btn.textContent = 'Generating...'; btn.disabled = true; }
+  try {
+    const pdf = await _insBuildPDF();
+    pdf.save(_insPDFFilename());
+  } catch(e) {
+    if(typeof window.toastError === 'function') window.toastError('PDF generation failed: ' + e.message, { persist: true });
+    else alert('PDF generation failed: ' + e.message);
+  } finally {
+    if(btn) { btn.textContent = origLabel || '⬇ Download PDF'; btn.disabled = false; }
+  }
+};
+
 window.openInsuranceSheetModal = function() {
   buildModal();
   // Reset transient fields each open
@@ -573,6 +644,8 @@ window.openInsuranceSheetModal = function() {
     if(sel) sel.value = '';
     _selectedPreop = null;
   }
+  const emailInput = $('ins-recipient-email');
+  if(emailInput) emailInput.value = (_selectedPreop?.['po-patientEmail'] || '').trim();
   $('insSheetModal').style.display = 'flex';
   refreshPreview();
 };
@@ -604,9 +677,10 @@ window._insSend = async function() {
     if(sel) sel.focus();
     return;
   }
-  const email = (_selectedPreop['po-patientEmail'] || '').trim();
-  if(!email) { alert('No patient email on file for this case. Add a Deposit Email on the Pre-Op record first.'); return; }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('The patient email on the Pre-Op record looks invalid: ' + email); return; }
+  const emailInput = $('ins-recipient-email');
+  const email = (emailInput?.value || '').trim();
+  if(!email) { alert('Please enter the email address to send this receipt to.'); emailInput?.focus(); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('That email address looks invalid: ' + email); emailInput?.focus(); return; }
 
   const btn = $('ins-send-btn');
   const origLabel = btn?.textContent;
@@ -618,8 +692,20 @@ window._insSend = async function() {
     const caseId = _selectedPreop['po-caseId'] || '';
     const ctx = readCaseContext();
     const recipientLabel = ctx.patientName || 'patient';
-    // Use the existing /invoice email endpoint on the worker. It expects
-    // { to, invoiceNum, html } and emails via AWS SES.
+    // Generate the receipt as a PDF and attach it to the email.
+    let pdfBase64 = '', pdfFilename = '';
+    try {
+      const pdf = await _insBuildPDF();
+      pdfFilename = _insPDFFilename();
+      // jsPDF datauristring format: "data:application/pdf;filename=...;base64,XXXX"
+      const dataUri = pdf.output('datauristring');
+      pdfBase64 = dataUri.split('base64,')[1] || '';
+    } catch(pdfErr) {
+      console.warn('PDF attachment generation failed:', pdfErr);
+      // Fall through — worker will send HTML-only if pdfBase64 is empty.
+    }
+    // Use the existing /invoice email endpoint on the worker. It now also
+    // accepts { pdfBase64, pdfFilename } to attach a PDF receipt via SES.
     const INVOICE_URL = FAX_WORKER_URL.replace('/fax', '/invoice');
     const rsp = await fetch(INVOICE_URL, {
       method: 'POST',
@@ -627,7 +713,9 @@ window._insSend = async function() {
       body: JSON.stringify({
         to: email,
         invoiceNum: 'Anesthesia Receipt — ' + (caseId || recipientLabel),
-        html
+        html,
+        pdfBase64,
+        pdfFilename
       })
     });
     const data = await rsp.json();
