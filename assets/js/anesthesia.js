@@ -56,15 +56,12 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
     try { dobFmt = new Date(dobRaw + 'T12:00:00Z').toLocaleDateString('en-US'); } catch(e) {}
   }
   drawT1(dobFmt, 362, 616.5, 7.5);       // DOB
-  drawT1(val('po-caseId'), 362, 629.7, 7.5); // MR# (uses our Case ID)
+  // MR# intentionally left blank — Atlas Case IDs aren't medical record numbers.
 
   // SURGEON / CRNA / (OPERATION left blank — not in pre-op data)
   drawT1(val('po-provider'), 65, 611.9, 7.5);
   const workerForChart = r.worker || (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'josh');
   drawT1(workerForChart === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA', 52, 624.4, 7.5);
-
-  // ANESTHESIA TECHNIQUE (po-procedureType is the anesthesia type)
-  drawT1(val('po-procedureType'), 125, 581.7, 7.5);
 
   // DATE row (top of vitals header)
   let surgDateFmt = '';
