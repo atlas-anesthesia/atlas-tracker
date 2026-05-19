@@ -324,7 +324,7 @@ function renderReceiptForm() {
       </div>
     </div>
     ${_mode === 'flat' ? `
-    <div style="display:grid;grid-template-columns:1fr 130px 130px;gap:12px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
+    <div style="display:grid;grid-template-columns:1fr 130px;gap:12px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
       <div>
         <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Anesthesia Services Description</label>
         <input type="text" id="ins-jr-flat-desc" value="General Anesthesia for Dental Procedure" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
@@ -333,13 +333,9 @@ function renderReceiptForm() {
         <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Flat Fee Amount ($)</label>
         <input type="number" id="ins-jr-flat-amount" min="0" step="0.01" value="1200" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);font-family:'DM Mono',monospace">
       </div>
-      <div>
-        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">CC Transaction Fee %</label>
-        <input type="number" id="ins-jr-cc-pct" min="0" step="0.1" value="3.5" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
-      </div>
     </div>
     ` : `
-    <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
+    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
       <div>
         <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">D9222 15-min Units</label>
         <input type="number" id="ins-jr-units" min="1" max="20" value="4" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
@@ -349,54 +345,12 @@ function renderReceiptForm() {
         <input type="number" id="ins-jr-per-unit" min="0" step="0.01" value="240" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
       </div>
       <div>
-        <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">CC Transaction Fee %</label>
-        <input type="number" id="ins-jr-cc-pct" min="0" step="0.1" value="3.5" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
-      </div>
-      <div>
         <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Medical 00170 (Min)</label>
         <input type="number" id="ins-jr-medical-min" min="0" step="1" value="0" oninput="window._insPreview()" style="width:100%;padding:5px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)" placeholder="Optional">
       </div>
     </div>
     `}
 
-    <div style="margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:6px;background:#fafbfd">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1d3557;margin-bottom:8px;display:flex;align-items:center;gap:6px">
-        <span>📄 Page 2 — Payor Disclosure</span>
-        <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:var(--text-faint);font-style:italic">(optional — only sent when filled in)</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div>
-          <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Insurance Carrier / Payor Name</label>
-          <input type="text" id="ins-jr-payor-name" oninput="window._insPreview()" placeholder="e.g. Delta Dental of Wisconsin" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Payor Mailing Address</label>
-          <input type="text" id="ins-jr-payor-address" oninput="window._insPreview()" placeholder="Street, City, State, ZIP" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Subscriber Name</label>
-          <input type="text" id="ins-jr-subscriber-name" oninput="window._insPreview()" placeholder="If different from patient" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Relationship to Subscriber</label>
-          <select id="ins-jr-relationship" onchange="window._insPreview()" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
-            <option value="">— Select —</option>
-            <option value="Self">Self</option>
-            <option value="Spouse">Spouse</option>
-            <option value="Child">Child</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Subscriber ID / Member #</label>
-          <input type="text" id="ins-jr-subscriber-id" oninput="window._insPreview()" placeholder="Member or Policy #" style="width:100%;padding:6px 9px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:3px">Group #</label>
-          <input type="text" id="ins-jr-group-num" oninput="window._insPreview()" placeholder="Group # (if applicable)" style="width:100%;padding:6px 9px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text)">
-        </div>
-      </div>
-    </div>
   `;
 }
 
@@ -448,7 +402,6 @@ function buildJoshReceiptHTML() {
   const patientName = formName || ctx.patientName || '';
   const patientDob  = formDob  || ctx.patientDob  || '';
 
-  const ccPct    = parseFloat($('ins-jr-cc-pct')?.value) || 0;
   let subtotalCharges = 0;
   let units = 0, perUnit = 0, medMin = 0, medUnits = 0;
   let flatDesc = '', flatAmount = 0;
@@ -463,21 +416,10 @@ function buildJoshReceiptHTML() {
     medUnits = medMin ? (medMin / 12) : 0;
     subtotalCharges = units * perUnit;
   }
-  const ccFee = subtotalCharges * (ccPct / 100);
-  const total = subtotalCharges + ccFee;
+  const total = subtotalCharges;
 
   const sexFromDob = document.querySelector('input[name="ins-jr-sex"]:checked')?.value || '';
   const dentistOffice = $('ins-jr-office-address')?.value.trim() || '';
-  // Page 2 payor disclosure inputs (all optional)
-  const payorName       = $('ins-jr-payor-name')?.value.trim()       || '';
-  const payorAddress    = $('ins-jr-payor-address')?.value.trim()    || '';
-  const subscriberName  = $('ins-jr-subscriber-name')?.value.trim()  || '';
-  const subscriberId    = $('ins-jr-subscriber-id')?.value.trim()    || '';
-  const groupNum        = $('ins-jr-group-num')?.value.trim()        || '';
-  const relationship    = $('ins-jr-relationship')?.value            || '';
-  // Page 2 always renders. Empty fields render as blank underlines so the form
-  // can be filled by hand or by the payor's office if needed.
-  const hasPage2 = true;
 
   // Procedure rows: render every item with a ☐ or ☒
   const renderProcRow = (p) => {
@@ -588,11 +530,6 @@ function buildJoshReceiptHTML() {
       </tbody>
     </table>
 
-    <div style="background:#fff3cd;border:1px solid #d4a017;padding:6px 10px;font-size:10.5px;margin-bottom:6px">
-      <strong>x ${ccPct.toFixed(1)}% CC Transaction Fee</strong>
-      <span style="float:right;font-family:'DM Mono',monospace">$${ccFee.toFixed(2)}</span>
-    </div>
-
     ${_mode === 'flat' ? '' : `<div style="border:1px solid #999;padding:6px 10px;font-size:10.5px;margin-bottom:10px">
       Medical Anesthesia Billing Code <strong>00170</strong> Intra-oral Procedure &nbsp;5 units&nbsp;+&nbsp;
       <span style="border-bottom:1px solid #555;display:inline-block;min-width:40px;padding:0 4px;text-align:center">${medMin || '&nbsp;'}</span>
@@ -620,70 +557,7 @@ function buildJoshReceiptHTML() {
       This receipt contains protected health information privileged and confidential under HIPAA and applicable state law. It is intended only for the addressee. If you received this email in error, please notify Atlas Anesthesia immediately and destroy all copies.
     </div>
 
-    <div style="margin-top:8px;font-size:9px;color:#888;text-align:center">Atlas Anesthesia, LLC · Receipt / Insurance Claim · Page 1 of ${hasPage2 ? '2' : '1'}</div>
-
-    ${hasPage2 ? `
-    <div style="page-break-before:always;margin-top:30px;padding-top:24px;border-top:3px double #1d3557">
-      <div style="text-align:center;border-bottom:2px solid #1d3557;padding-bottom:10px;margin-bottom:14px">
-        <div style="font-size:22px;font-weight:bold;letter-spacing:1px;color:#1d3557">Atlas Anesthesia, LLC</div>
-        <div style="font-size:10.5px;margin-top:4px;color:#333">Federal Tax ID #${pInfo.taxId} &nbsp;·&nbsp; NPI #${pInfo.npi}</div>
-      </div>
-
-      <div style="text-align:center;font-size:14px;font-weight:bold;letter-spacing:.8px;margin-bottom:14px;color:#1d3557">PAYOR DISCLOSURE</div>
-
-      <div style="margin-bottom:14px">
-        ${field('Patient Name', patientName, 220)}
-        ${field('DOB', patientDob ? fmtDate(patientDob) : '', 110)}
-      </div>
-
-      <div style="border:1px solid #aaa;padding:12px;background:#fafafa;margin-bottom:14px">
-        <div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.4px;color:#1d3557;border-bottom:1px solid #1d3557;padding-bottom:3px;margin-bottom:8px">Insurance Carrier</div>
-        <div style="margin-bottom:8px">${field('Payor Name', payorName, 280)}</div>
-        <div style="margin-bottom:8px">${field('Mailing Address', payorAddress, 380)}</div>
-      </div>
-
-      <div style="border:1px solid #aaa;padding:12px;background:#fafafa;margin-bottom:14px">
-        <div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.4px;color:#1d3557;border-bottom:1px solid #1d3557;padding-bottom:3px;margin-bottom:8px">Subscriber Information</div>
-        <div style="margin-bottom:8px">${field('Subscriber Name', subscriberName || patientName, 260)} ${field('Relationship to Subscriber', relationship, 120)}</div>
-        <div>${field('Subscriber ID / Member #', subscriberId, 180)} ${field('Group #', groupNum, 140)}</div>
-      </div>
-
-      <div style="border:1px solid #aaa;padding:12px;background:#fff;margin-bottom:16px;font-size:10.5px;line-height:1.5">
-        <div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.4px;color:#1d3557;border-bottom:1px solid #1d3557;padding-bottom:3px;margin-bottom:8px">Payor Agreement</div>
-        <div style="margin-bottom:8px">Anesthesia charges will be collected as follows on the day of services:</div>
-        <ul style="margin:0 0 0 18px;padding:0;list-style-type:disc">
-          <li style="margin-bottom:6px"><strong>Thank you for trusting Atlas Anesthesia with your care. We want to be as transparent as possible about anesthesia fees so there are no surprises on the day of your procedure.</strong></li>
-          <li style="margin-bottom:6px">If you have already made a deposit, it will be applied to the total amount. All procedures include a one-hour minimum anesthesia charge.</li>
-          <li style="margin-bottom:6px">Payment &amp; Accepted Methods
-            <ul style="margin:4px 0 0 18px;padding:0;list-style-type:circle">
-              <li style="margin-bottom:3px">The remaining balance is due in full on the day of your procedure.</li>
-              <li style="margin-bottom:3px">We accept debit and credit cards only.</li>
-              <li style="margin-bottom:3px">A 3.5% processing fee applies to credit card payments.</li>
-              <li style="margin-bottom:3px">We do not accept checks or CareCredit.</li>
-            </ul>
-          </li>
-          <li style="margin-bottom:6px">If a patient is unable to proceed due to NPO status or does not arrive for their appointment, a one-hour anesthesia fee may apply. All insurance billing is the responsibility of the insured.</li>
-          <li style="margin-bottom:6px">Any delinquent or accrued charges may be sent to collections and will incur an additional 50% collection fee.</li>
-          <li style="margin-bottom:6px">If missed appointment, no-show, failure to follow NPO guidelines/one hour charge will be assessed.</li>
-          <li><strong>I have read, understand, and agree to the above Payor Agreement.</strong></li>
-        </ul>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 200px;gap:18px;align-items:end;margin-top:24px">
-        <div>
-          <div style="border-top:1px solid #000;width:300px;font-size:10px;padding-top:3px">Patient / Subscriber Signature</div>
-        </div>
-        <div style="text-align:right;font-size:10px;color:#555">DATE: <span style="border-bottom:1px solid #888;padding:0 6px;display:inline-block;min-width:90px">&nbsp;</span></div>
-      </div>
-
-      <div style="margin-top:16px;background:#fdecec;border:1px solid #f5b5b5;border-radius:3px;padding:6px 10px;font-size:9px;color:#444;line-height:1.4">
-        <strong style="color:#a13030">CONFIDENTIALITY &amp; AUTHORIZATION NOTICE</strong><br>
-        This disclosure contains protected health information privileged and confidential under HIPAA and applicable state law. It is intended only for the addressee.
-      </div>
-
-      <div style="margin-top:8px;font-size:9px;color:#888;text-align:center">Atlas Anesthesia, LLC · Payor Disclosure · Page 2 of 2</div>
-    </div>
-    ` : ''}
+    <div style="margin-top:8px;font-size:9px;color:#888;text-align:center">Atlas Anesthesia, LLC · Receipt / Insurance Claim</div>
   `;
 }
 
@@ -787,15 +661,12 @@ window._insSend = async function() {
     if(rsp.ok && data.success) {
       // Build a compact log entry of what was sent. Total is best-effort.
       let total = 0;
-      const ccPct = parseFloat($('ins-jr-cc-pct')?.value) || 0;
       if(_mode === 'flat') {
-        const sub = parseFloat($('ins-jr-flat-amount')?.value) || 0;
-        total = sub + sub * (ccPct / 100);
+        total = parseFloat($('ins-jr-flat-amount')?.value) || 0;
       } else {
         const units   = parseInt($('ins-jr-units')?.value, 10) || 0;
         const perUnit = parseFloat($('ins-jr-per-unit')?.value) || 0;
-        const sub     = units * perUnit;
-        total = sub + sub * (ccPct / 100);
+        total = units * perUnit;
       }
       const ctx = readCaseContext();
       await logSentInsurance({
