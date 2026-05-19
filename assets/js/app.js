@@ -7777,8 +7777,13 @@ const center = surgeryCenters.find(c => c.id === sel.value);
 if(!center) return;
 const providerEl = document.getElementById('po-provider');
 const emailEl = document.getElementById('po-patientEmail');
+const addressEl = document.getElementById('po-officeAddress');
 if(providerEl && !providerEl.value && center.provider) providerEl.value = center.provider;
 if(emailEl && !emailEl.value && center.invoiceEmail) emailEl.value = center.invoiceEmail;
+// Auto-fill the Dentist Office Address from the surgery center's address.
+// This field flows into the Insurance Sheet modal (and any future modal that
+// reads po-officeAddress), so the address propagates everywhere it's needed.
+if(addressEl && !addressEl.value && center.address) addressEl.value = center.address;
 };
 window.onInvoiceCenterChange = function() {
   var sel=document.getElementById('inv-location-select');
@@ -7836,6 +7841,11 @@ if(center.invoiceEmail) {
 const emailEl = document.getElementById('po-patientEmail');
 if(emailEl && !emailEl.value) emailEl.value = center.invoiceEmail;
 }
+// Auto-fill office address if center has one
+if(center.address) {
+const addrEl = document.getElementById('po-officeAddress');
+if(addrEl && !addrEl.value) addrEl.value = center.address;
+}
 }
 };
 window.showAddCenterForm = function() {
@@ -7846,6 +7856,7 @@ window.showAddCenterForm = function() {
   if(document.getElementById('sc-per-15')) document.getElementById('sc-per-15').value = '';
   if(document.getElementById('sc-provider')) document.getElementById('sc-provider').value = '';
   if(document.getElementById('sc-invoice-email')) document.getElementById('sc-invoice-email').value = '';
+  if(document.getElementById('sc-address')) document.getElementById('sc-address').value = '';
   if(document.getElementById('sc-fr-proc')) document.getElementById('sc-fr-proc').value = '';
   if(document.getElementById('sc-fr-amt')) document.getElementById('sc-fr-amt').value = '';
   document.getElementById('add-center-form').style.display = 'block';
@@ -7853,7 +7864,7 @@ window.showAddCenterForm = function() {
 };
 window.hideAddCenterForm = function() {
 document.getElementById('add-center-form').style.display = 'none';
-['sc-name','sc-first-hour','sc-per-15','sc-provider','sc-invoice-email'].forEach(id => {
+['sc-name','sc-first-hour','sc-per-15','sc-provider','sc-invoice-email','sc-address'].forEach(id => {
 const el = document.getElementById(id);
 if(el) el.value = '';
 });
@@ -7867,6 +7878,7 @@ window.saveCenter = async function() {
   const provider = document.getElementById('sc-provider')?.value.trim() || '';
   const invoiceEmail = document.getElementById('sc-invoice-email')?.value.trim() || '';
   const faxNumber = document.getElementById('sc-fax-number')?.value.trim() || '';
+  const address = document.getElementById('sc-address')?.value.trim() || '';
   const billingType = document.querySelector('input[name="sc-billing-type"]:checked')?.value || 'patient';
   const hasJosh = document.getElementById('sc-worker-josh')?.checked || false;
   const hasDev  = document.getElementById('sc-worker-dev')?.checked  || false;
@@ -7874,9 +7886,9 @@ window.saveCenter = async function() {
   const flatRates = window._editingFlatRates || [];
   if(window._editingCenterId) {
     const idx = surgeryCenters.findIndex(c => c.id === window._editingCenterId);
-    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, faxNumber, flatRates, billingType, hasJosh, hasDev };
+    if(idx !== -1) surgeryCenters[idx] = { ...surgeryCenters[idx], name, firstHour, per15, provider, invoiceEmail, faxNumber, address, flatRates, billingType, hasJosh, hasDev };
   } else {
-    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, faxNumber, flatRates, billingType, hasJosh, hasDev });
+    surgeryCenters.push({ id: uid(), name, firstHour, per15, provider, invoiceEmail, faxNumber, address, flatRates, billingType, hasJosh, hasDev });
   }
   setSyncing(true);
   await saveSurgeryCenters();
@@ -7900,6 +7912,7 @@ window.editCenter = function(id) {
   document.getElementById('sc-provider').value = c.provider || '';
   document.getElementById('sc-invoice-email').value = c.invoiceEmail || '';
   document.getElementById('sc-fax-number') && (document.getElementById('sc-fax-number').value = c.faxNumber || '');
+  document.getElementById('sc-address') && (document.getElementById('sc-address').value = c.address || '');
   const billingRadio = document.querySelector(`input[name="sc-billing-type"][value="${c.billingType||'patient'}"]`);
   if(billingRadio) billingRadio.checked = true;
   const joshBox = document.getElementById('sc-worker-josh'); if(joshBox) joshBox.checked = !!c.hasJosh;
@@ -7945,6 +7958,7 @@ ${surgeryCenters.map(c => {
   return `<div style="display:grid;grid-template-columns:1fr 120px 120px 80px;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);align-items:center"><div><div style="font-size:14px;font-weight:500;display:flex;align-items:center">${c.name}${frBadge}${billingBadge}${workerBadges}</div>
 ${c.provider?`<div style="font-size:11px;color:var(--text-faint)">👤 ${c.provider}</div>`:''}
 ${c.invoiceEmail?`<div style="font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace">📧 ${c.invoiceEmail}</div>`:''}
+${c.address?`<div style="font-size:11px;color:var(--text-faint)">📍 ${c.address}</div>`:''}
 </div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.firstHour.toFixed(2)}</div><div style="font-size:14px;font-family:'DM Mono',monospace">$${c.per15.toFixed(2)}</div><div style="display:flex;gap:6px"><button onclick="editCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="deleteCenter('${c.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑</button></div></div>`;
 }).join('')}`;
 }
