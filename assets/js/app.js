@@ -9877,23 +9877,38 @@ function _renderDashboardImpl() {
   const weekCountEl = document.getElementById('dash-week-count');
   if(weekCountEl) weekCountEl.textContent = weekCases.length;
 
-  // Today's list
+  // Today + Tomorrow list — same card, two sections separated by a divider.
   const todayListEl = document.getElementById('dash-today-list');
   if(todayListEl) {
-    if(todayCases.length === 0) {
-      todayListEl.innerHTML = '<div style="color:var(--text-faint);font-style:italic;padding:8px 0">No cases scheduled for today.</div>';
-    } else {
-      todayListEl.innerHTML = todayCases.map(r => {
-        const id = (typeof window.getCaseDisplayIdFromPreop === 'function') ? window.getCaseDisplayIdFromPreop(r) : r['po-caseId'];
-        const time = r['po-startTime'] || '';
-        const provider = r['po-provider'] || '';
-        const workerName = r.worker === 'dev' ? 'Dev' : 'Josh';
-        const pillClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
-        const caseId = r['po-caseId'] || '';
-        const label = (id || caseId || '—').replace(/'/g, '&#39;');
-        return `<div onclick="openCaseActionModal('${r.id}','${caseId}','${label}')" style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'" title="Open Pre-Op or Finalize Case"><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-faint);min-width:60px">${time || '—'}</span><div style="flex:1"><div style="font-size:13px;font-weight:600">${id || '—'}</div><div style="font-size:11px;color:var(--text-faint)">${provider || '—'}</div></div><span class="worker-pill ${pillClass}" style="font-size:10px">${workerName}</span></div>`;
-      }).join('');
-    }
+    const _addDays = (yyyymmdd, n) => {
+      const d = new Date(yyyymmdd + 'T00:00:00');
+      d.setDate(d.getDate() + n);
+      return d.toISOString().split('T')[0];
+    };
+    const tomorrow = _addDays(today, 1);
+    const tomorrowCases = allPreops.filter(r => r['po-surgeryDate'] === tomorrow);
+    const byTime = (a, b) => (a['po-startTime']||'').localeCompare(b['po-startTime']||'');
+    todayCases.sort(byTime);
+    tomorrowCases.sort(byTime);
+
+    const renderRow = (r) => {
+      const id = (typeof window.getCaseDisplayIdFromPreop === 'function') ? window.getCaseDisplayIdFromPreop(r) : r['po-caseId'];
+      const time = r['po-startTime'] || '';
+      const provider = r['po-provider'] || '';
+      const workerName = r.worker === 'dev' ? 'Dev' : 'Josh';
+      const pillClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
+      const caseId = r['po-caseId'] || '';
+      const label = (id || caseId || '—').replace(/'/g, '&#39;');
+      return `<div onclick="openCaseActionModal('${r.id}','${caseId}','${label}')" style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'" title="Open Pre-Op or Finalize Case"><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-faint);min-width:60px">${time || '—'}</span><div style="flex:1"><div style="font-size:13px;font-weight:600">${id || '—'}</div><div style="font-size:11px;color:var(--text-faint)">${provider || '—'}</div></div><span class="worker-pill ${pillClass}" style="font-size:10px">${workerName}</span></div>`;
+    };
+    const sectionHeader = (label, top) => `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);padding:${top?'12px 0 4px':'4px 0'};${top?'border-top:1px dashed var(--border);margin-top:6px':''}">${label}</div>`;
+    const emptyRow = (label) => `<div style="color:var(--text-faint);font-style:italic;padding:8px 0">No cases scheduled for ${label}.</div>`;
+
+    let html = sectionHeader('Today', false);
+    html += todayCases.length ? todayCases.map(renderRow).join('') : emptyRow('today');
+    html += sectionHeader('Tomorrow', true);
+    html += tomorrowCases.length ? tomorrowCases.map(renderRow).join('') : emptyRow('tomorrow');
+    todayListEl.innerHTML = html;
   }
 
   // Unpaid deposits count
