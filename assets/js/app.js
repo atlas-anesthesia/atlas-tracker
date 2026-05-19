@@ -848,6 +848,93 @@ window.restoreInventoryFrom = async function(dateStr) {
   }
 };
 
+// ── CASES MONTHLY-CHUNKED STORAGE ─────────────────────────────────────────────
+// atlas/cases used to hold a single { cases: [...] } array. Once cases + their
+// embedded photo data crossed ~1MB total, Firestore started rejecting writes.
+// Cases are now sharded by month: each calendar month lives in its own doc at
+// atlas/cases_YYYY-MM, and atlas/cases becomes a tiny manifest:
+//   { format: 'monthly-v2', months: ['2026-04','2026-05',...], updatedAt }
+// The format flag lets the code keep working for users still on the legacy
+// single-doc layout until they run migrateCasesToMonthly() once.
+let _casesFormat = 'legacy';
+
+function _monthKey(c) {
+  return ((c?.date || '').slice(0, 7)) || 'unknown';
+}
+
+async function _loadAllCases() {
+  const meta = await getDoc(doc(db, 'atlas', 'cases'));
+  if(!meta.exists()) { _casesFormat = 'legacy'; return []; }
+  const data = meta.data();
+  if(data.format === 'monthly-v2' && Array.isArray(data.months)) {
+    _casesFormat = 'monthly-v2';
+    const snaps = await Promise.all(data.months.map(m => getDoc(doc(db, 'atlas', 'cases_' + m))));
+    return snaps.flatMap(s => s.exists() ? (s.data().cases || []) : []);
+  }
+  _casesFormat = 'legacy';
+  return data.cases || [];
+}
+
+async function _saveAllCases(casesArray) {
+  if(_casesFormat === 'monthly-v2') {
+    const byMonth = {};
+    for(const c of casesArray) {
+      const m = _monthKey(c);
+      if(!byMonth[m]) byMonth[m] = [];
+      byMonth[m].push(c);
+    }
+    const months = Object.keys(byMonth).sort();
+    const now = new Date().toISOString();
+    await Promise.all(months.map(m =>
+      setDoc(doc(db, 'atlas', 'cases_' + m), { cases: byMonth[m], updatedAt: now })
+    ));
+    return setDoc(doc(db, 'atlas', 'cases'), { format: 'monthly-v2', months, updatedAt: now });
+  }
+  return setDoc(doc(db, 'atlas', 'cases'), { cases: casesArray });
+}
+
+// One-time migration: splits the legacy atlas/cases.cases array into per-month
+// docs and flips atlas/cases to the new manifest format. Safe to run twice —
+// the second call detects monthly-v2 and exits without changes. Console-only;
+// not exposed in the UI to avoid accidental clicks.
+window.migrateCasesToMonthly = async function() {
+  const metaSnap = await getDoc(doc(db, 'atlas', 'cases'));
+  if(!metaSnap.exists()) { alert('No atlas/cases doc exists — nothing to migrate.'); return; }
+  const data = metaSnap.data();
+  if(data.format === 'monthly-v2') { alert('Already migrated to monthly format (' + (data.months?.length || 0) + ' month docs).'); return; }
+  const legacy = data.cases || [];
+  if(!legacy.length) { alert('atlas/cases has no cases to migrate.'); return; }
+  const byMonth = {};
+  for(const c of legacy) {
+    const m = _monthKey(c);
+    if(!byMonth[m]) byMonth[m] = [];
+    byMonth[m].push(c);
+  }
+  const months = Object.keys(byMonth).sort();
+  const sizes = months.map(m => ({ m, n: byMonth[m].length }));
+  const yes = confirm(
+    'Migrate ' + legacy.length + ' cases into ' + months.length + ' monthly buckets?\n\n' +
+    sizes.map(s => '  • ' + s.m + ' — ' + s.n + ' case' + (s.n === 1 ? '' : 's')).join('\n') + '\n\n' +
+    'A backup of the current atlas/cases will be saved to atlas/cases_pre_migration_<ts> first. ' +
+    'After migration, atlas/cases becomes a small manifest doc and the case data lives in atlas/cases_YYYY-MM.'
+  );
+  if(!yes) return;
+  // Pre-migration snapshot
+  const snapId = 'cases_pre_migration_' + new Date().toISOString().replace(/[:.]/g, '-');
+  await setDoc(doc(db, 'atlas', snapId), data);
+  console.log('%cPre-migration snapshot saved at atlas/' + snapId, 'color:#1d3557;font-weight:600');
+  // Write per-month docs
+  const now = new Date().toISOString();
+  await Promise.all(months.map(m =>
+    setDoc(doc(db, 'atlas', 'cases_' + m), { cases: byMonth[m], updatedAt: now })
+  ));
+  // Flip atlas/cases to manifest form (this also wipes the legacy .cases array)
+  await setDoc(doc(db, 'atlas', 'cases'), { format: 'monthly-v2', months, updatedAt: now });
+  _casesFormat = 'monthly-v2';
+  try { logAudit('cases-migrated-monthly', '', legacy.length + ' cases → ' + months.length + ' month docs'); } catch(e){}
+  alert('✓ Migrated ' + legacy.length + ' cases into ' + months.length + ' monthly buckets.\n\nMonths: ' + months.join(', ') + '\n\nRefresh the page to verify everything loads correctly.');
+};
+
 // Restore atlas/inventory from a local atlas-backup-*.json file on disk.
 // Opens a file picker, validates the JSON, snapshots the current inventory
 // to atlas/inventory_pre_restore_<timestamp> first (so we can roll back if
@@ -1227,17 +1314,26 @@ renderInventory();
 renderReports();
 });
 // Listen to cases in real time
-onSnapshot(doc(db,'atlas','cases'), (snap) => {
+onSnapshot(doc(db,'atlas','cases'), async (snap) => {
 if(snap.exists()) {
-cases = snap.data().cases || [];
+const data = snap.data();
+if(data.format === 'monthly-v2' && Array.isArray(data.months)) {
+  _casesFormat = 'monthly-v2';
+  const snaps = await Promise.all(data.months.map(m => getDoc(doc(db,'atlas','cases_'+m))));
+  cases = snaps.flatMap(s => s.exists() ? (s.data().cases || []) : []);
+} else {
+  _casesFormat = 'legacy';
+  cases = data.cases || [];
+}
   const beforeLen = cases.length;
   deduplicateCases();
   // If dedup removed entries, save cleaned data back to Firestore immediately
   if(cases.length < beforeLen) {
-    setDoc(doc(db,'atlas','cases'), {cases}).catch(()=>{});
+    _saveAllCases(cases).catch(()=>{});
     console.log('Auto-cleaned', beforeLen - cases.length, 'duplicate case(s) from database');
   }
 } else {
+_casesFormat = 'legacy';
 cases = [];
 }
 // Pre-load preop records for calendar (store raw separately)
@@ -1426,7 +1522,7 @@ try {
 }
 safeCases = sanitizeForFirestore(safeCases) || [];
 try {
-  await setDoc(doc(db,'atlas','cases'),{cases: safeCases});
+  await _saveAllCases(safeCases);
 } catch(setErr) {
   // Log the actual cases payload so we can identify the offending field in dev tools.
   console.error('saveCases setDoc failed:', setErr);
@@ -1440,8 +1536,7 @@ try {
 // CASE-002 verification: read back to confirm the write actually persisted.
 // This is the critical guard against "I saved supplies but they're gone."
 try {
-  const verify = await getDoc(doc(db,'atlas','cases'));
-  const persisted = verify.exists() ? (verify.data().cases || []) : [];
+  const persisted = await _loadAllCases();
   const persistedById = new Map(persisted.map(c => [c.id, c]));
   let mismatches = 0;
   let detail = '';
@@ -2649,7 +2744,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     else await loadAtlasFormula();
     // Load cases + preop if not yet available
     if(!window.cases || !window.cases.length) {
-      try { const s = await getDoc(doc(db,'atlas','cases')); if(s.exists()) window.cases = s.data().cases||[]; } catch(e) {}
+      try { window.cases = await _loadAllCases(); } catch(e) {}
     }
     if(!window._rawPreopRecords || !window._rawPreopRecords.length) {
       try { const s = await getDoc(doc(db,'atlas','preop')); if(s.exists()) window._rawPreopRecords = s.data().records||[]; } catch(e) {}
@@ -4390,8 +4485,7 @@ window.cleanupPreopDuplicates = async function() {
     const preopRemoved = preopBefore - preopCleaned.length;
 
     // ─ CASES (drafts may also be duplicated) ─────────────────────────────────
-    const casesSnap = await getDoc(doc(db,'atlas','cases'));
-    const allCases = casesSnap.exists() ? (casesSnap.data().cases || []) : [];
+    const allCases = await _loadAllCases();
     const casesBefore = allCases.length;
 
     const casesByKey = new Map();
@@ -4446,7 +4540,7 @@ window.cleanupPreopDuplicates = async function() {
       window._cachedPreopRecords = [...preopCleaned];
     }
     if(casesRemoved > 0) {
-      await setDoc(doc(db,'atlas','cases'), { cases: casesCleaned });
+      await _saveAllCases(casesCleaned);
       // Sync local `cases` array used by the rest of the app
       if(typeof cases !== 'undefined' && Array.isArray(cases)) {
         cases.length = 0;
@@ -4882,12 +4976,11 @@ try {
   // 2. Remove linked case from cases array (matched by caseId)
   if(deletedRecord?.['po-caseId']) {
     const deletedCaseId = deletedRecord['po-caseId'];
-    const casesSnap = await getDoc(doc(db,'atlas','cases'));
-    const allCases = casesSnap.exists() ? (casesSnap.data().cases||[]) : [];
+    const allCases = await _loadAllCases();
     const updatedCases = allCases.filter(c => c.caseId !== deletedCaseId);
     if(updatedCases.length !== allCases.length) {
       cases = updatedCases;
-      await setDoc(doc(db,'atlas','cases'), { cases });
+      await _saveAllCases(cases);
     }
     // 3. Remove from payments rows
     if(typeof _paymentRows !== 'undefined') {
