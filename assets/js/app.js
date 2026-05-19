@@ -5793,18 +5793,13 @@ window.generateInvoicePDF = function() {
   var provider=document.getElementById('inv-provider')?document.getElementById('inv-provider').value:'';
   if(!location||!date){alert('Please select a surgery center and date.');return;}
   if(bt==='flat'){
-    var proc='',amt=0;
-    if(cVal==='__custom__'||!center){
-      var cpEl=document.getElementById('inv-custom-procedure');
-      var caEl=document.getElementById('inv-custom-amount');
-      proc=cpEl?cpEl.value.trim():'';
-      amt=caEl?parseFloat(caEl.value)||0:0;
-    } else {
-      var frSel=document.getElementById('inv-flat-rate-select');
-      var opt=frSel?frSel.options[frSel.selectedIndex]:null;
-      amt=opt&&opt.value?parseFloat(opt.getAttribute('data-amount'))||0:0;
-      proc=opt&&opt.value?opt.text.split('—')[0].split('--')[0].trim():'';
-    }
+    // Read from the editable Procedure / Amount inputs. The preset dropdown
+    // populates them on selection but the user can override before
+    // generating — supports cases like "1.5 Arch @ $3250".
+    var cpEl=document.getElementById('inv-custom-procedure');
+    var caEl=document.getElementById('inv-custom-amount');
+    var proc=cpEl?cpEl.value.trim():'';
+    var amt=caEl?parseFloat(caEl.value)||0:0;
     if(!proc||!amt){alert('Please enter a procedure and amount.');return;}
     _generateFlatRateInvoicePDF(location,date,provider,proc,amt);
     return;
@@ -8574,24 +8569,24 @@ window.onFlatRateSelect = function() {
   // Get procedure name — everything before the dash separator
   var text=opt.textContent||opt.innerText||opt.text||'';
   var proc=text.split('—')[0].split('--')[0].split('$')[0].trim();
+  // Populate the editable inputs so the user can override before generating.
+  var pInput=document.getElementById('inv-custom-procedure');
+  var aInput=document.getElementById('inv-custom-amount');
+  if(pInput) pInput.value = proc;
+  if(aInput) aInput.value = amount;
   _updateFlatSummary(proc,amount);
 };
 
 window.updateInvoiceTotalDisplay = function() {
   const type = document.getElementById('inv-billing-type')?.value || 'hourly';
-  const totalEl = document.getElementById('inv-total');
-  const summaryEl = document.getElementById('inv-summary');
   if(type === 'flat') {
-    const sel = document.getElementById('inv-flat-rate-select');
-    const opt = sel ? sel.options[sel.selectedIndex] : null;
-    const amount = opt ? parseFloat(opt.getAttribute('data-amount'))||0 : 0;
-    if(totalEl) totalEl.textContent = amount > 0 ? '$'+amount.toFixed(2) : '$0.00';
-    if(summaryEl && amount > 0) {
-      const proc = opt ? opt.text.split(' — ')[0] : '';
-      summaryEl.innerHTML = '<div style="font-size:12px;color:var(--text-faint)">Flat rate billing</div><div style="font-size:13px;font-weight:500;margin-top:4px">'+proc+'</div>';
-    } else if(summaryEl) {
-      summaryEl.innerHTML = 'Select a procedure above';
-    }
+    // Always pull from the editable inputs so the live total reflects user
+    // edits to the preset (or fully-custom entries).
+    const procEl = document.getElementById('inv-custom-procedure');
+    const amtEl  = document.getElementById('inv-custom-amount');
+    const proc = procEl ? procEl.value.trim() : '';
+    const amount = amtEl ? parseFloat(amtEl.value)||0 : 0;
+    _updateFlatSummary(proc, amount);
   } else {
     if(typeof calculateInvoice === 'function') calculateInvoice();
   }
@@ -8772,24 +8767,32 @@ window.populateFlatRateDropdown = function() {
 };
 
 window.onFlatRateSelect = function() {
+  // Copy the selected preset's procedure + amount into the editable inputs
+  // so the user can override either before generating the invoice.
+  const sel = document.getElementById('inv-flat-rate-select');
+  const opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+  if(opt && opt.value) {
+    const amount = parseFloat(opt.getAttribute('data-amount')) || 0;
+    const text = opt.textContent || opt.innerText || opt.text || '';
+    const proc = text.split('—')[0].split('--')[0].split('$')[0].trim();
+    const pInput = document.getElementById('inv-custom-procedure');
+    const aInput = document.getElementById('inv-custom-amount');
+    if(pInput) pInput.value = proc;
+    if(aInput) aInput.value = amount;
+  }
   updateInvoiceTotalDisplay();
 };
 
 window.updateInvoiceTotalDisplay = function() {
   const type = document.getElementById('inv-billing-type')?.value || 'hourly';
-  const totalEl = document.getElementById('inv-total');
-  const summaryEl = document.getElementById('inv-summary');
   if(type === 'flat') {
-    const sel = document.getElementById('inv-flat-rate-select');
-    const opt = sel ? sel.options[sel.selectedIndex] : null;
-    const amount = opt ? parseFloat(opt.getAttribute('data-amount'))||0 : 0;
-    if(totalEl) totalEl.textContent = amount > 0 ? '$'+amount.toFixed(2) : '$0.00';
-    if(summaryEl && amount > 0) {
-      const proc = opt ? opt.text.split(' — ')[0] : '';
-      summaryEl.innerHTML = '<div style="font-size:12px;color:var(--text-faint)">Flat rate billing</div><div style="font-size:13px;font-weight:500;margin-top:4px">'+proc+'</div>';
-    } else if(summaryEl) {
-      summaryEl.innerHTML = 'Select a procedure above';
-    }
+    // Always pull from the editable inputs so the live total reflects user
+    // edits to the preset (or fully-custom entries).
+    const procEl = document.getElementById('inv-custom-procedure');
+    const amtEl  = document.getElementById('inv-custom-amount');
+    const proc = procEl ? procEl.value.trim() : '';
+    const amount = amtEl ? parseFloat(amtEl.value)||0 : 0;
+    _updateFlatSummary(proc, amount);
   } else {
     if(typeof calculateInvoice === 'function') calculateInvoice();
   }
@@ -8908,8 +8911,11 @@ function _refreshFlatRatePanel() {
     if(tt) tt.textContent= val==='__custom__' ? 'Custom Flat Rate' : 'Flat Rates';
     if(rowsEl) rowsEl.innerHTML='<div style="padding:16px;font-size:13px;color:var(--text-faint);text-align:center;font-style:italic">'+(val==='__custom__'?'Enter procedure and rate on the left':'Select a surgery center to see flat rates')+'</div>';
   } else if(center){
+    // Known center: show BOTH the preset dropdown and the editable inputs.
+    // The dropdown is a starting point — the user can override either field
+    // before generating the PDF (e.g. "1.5 Arch" at $3250).
     if(knownDiv) knownDiv.style.display='';
-    if(customDiv) customDiv.style.display='none';
+    if(customDiv) customDiv.style.display='';
     if(tt) tt.textContent='Flat Rates — '+center.name;
     if(!frs.length){
       if(rowsEl) rowsEl.innerHTML='<div style="padding:16px;font-size:13px;color:var(--text-faint);text-align:center;font-style:italic">No flat rates. Edit this center in Analytics to add.</div>';

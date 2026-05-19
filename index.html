@@ -127,17 +127,19 @@ Reports <span class="arrow">▼</span></button><div class="nav-dropdown-menu" id
   <label>End Time</label><input type="time" id="inv-end" oninput="calculateInvoice()" onchange="calculateInvoice()">
 </div>
 
-<!-- Flat rate: procedure dropdown OR custom entry -->
+<!-- Flat rate: preset picker auto-fills the editable Procedure/Amount inputs.
+     The user can override either before generating the PDF — handles cases
+     like "1.5 Arch @ $3250" where the boss adjusts the preset on the fly. -->
 <div id="inv-flat-fields" style="display:none">
   <div id="inv-flat-known" style="display:none">
-    <label>Procedure</label>
+    <label>Preset Rate <span style="font-size:11px;color:var(--text-faint);font-weight:400">(picking one fills the fields below — you can still edit)</span></label>
     <select id="inv-flat-rate-select" onchange="onFlatRateSelect()" style="width:100%;padding:8px 11px;font-size:14px;font-family:inherit;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">
-      <option value="">— Select a procedure —</option>
+      <option value="">— Select a preset (optional) —</option>
     </select>
   </div>
   <div id="inv-flat-custom" style="display:none">
-    <label>Procedure Name</label>
-    <input type="text" id="inv-custom-procedure" placeholder="e.g. Dual Arch" oninput="onCustomFlatChange()">
+    <label>Procedure</label>
+    <input type="text" id="inv-custom-procedure" placeholder="e.g. Dual Arch or 1.5 Arch" oninput="onCustomFlatChange()">
     <label>Flat Rate Amount ($)</label>
     <input type="number" id="inv-custom-amount" placeholder="e.g. 4000" min="0" step="0.01" oninput="onCustomFlatChange()">
   </div>
@@ -413,7 +415,7 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
 
 
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
-<script src="assets/js/phi-redaction.js?v=20260515b"></script><script type="module" src="assets/js/app.js?v=20260519l"></script>
+<script src="assets/js/phi-redaction.js?v=20260515b"></script><script type="module" src="assets/js/app.js?v=20260519m"></script>
   <script type="module" src="assets/js/fax.js?v=20260513a"></script>
   <script type="module" src="assets/js/preop-fax.js?v=20260513af"></script>
   <script type="module" src="assets/js/insurance-sheet.js?v=20260519d"></script>
