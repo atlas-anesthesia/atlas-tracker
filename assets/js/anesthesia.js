@@ -47,30 +47,36 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   // Auto-fills the patient-info section at the top + the operation/surgeon/
   // CRNA block at the bottom-left. Vitals, anesthesia times, drugs etc. are
   // filled during/after the procedure and are intentionally left blank.
+  // Y values below were tuned against the rendered template — values sit
+  // below each label so they land in the middle of the cell (header row) or
+  // on the underline (OPERATION/SURGEON/CRNA/NAME/DOB lines).
   const fullName = [val('po-patientFirstName'), val('po-patientLastName')].filter(Boolean).join(' ');
-  drawT1(fullName, 367, 603.3, 7.5);     // NAME
+  drawT1(fullName, 367, 611, 7.5);       // NAME (label top=603, shifted down to underline)
 
   const dobRaw = val('po-patientDOB');
   let dobFmt = '';
   if(dobRaw) {
     try { dobFmt = new Date(dobRaw + 'T12:00:00Z').toLocaleDateString('en-US'); } catch(e) {}
   }
-  drawT1(dobFmt, 362, 616.5, 7.5);       // DOB
+  drawT1(dobFmt, 362, 624, 7.5);         // DOB (label top=616, shifted)
   // MR# intentionally left blank — Atlas Case IDs aren't medical record numbers.
 
   // SURGEON / CRNA / (OPERATION left blank — not in pre-op data)
-  drawT1(val('po-provider'), 65, 611.9, 7.5);
+  drawT1(val('po-provider'), 65, 619, 7.5);   // SURGEON (label top=611)
   const workerForChart = r.worker || (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'josh');
-  drawT1(workerForChart === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA', 52, 624.4, 7.5);
+  drawT1(workerForChart === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA', 52, 632, 7.5); // CRNA (label top=624)
 
-  // DATE row (top of vitals header)
+  // DATE row (top of vitals header) — label top=131.7, cell extends to ~145
   let surgDateFmt = '';
   if(val('po-surgeryDate')) {
     try { surgDateFmt = new Date(val('po-surgeryDate') + 'T12:00:00Z').toLocaleDateString('en-US'); } catch(e) {}
   }
-  drawT1(surgDateFmt, 48, 131.7, 7.5);
+  drawT1(surgDateFmt, 48, 140, 7.5);
 
-  // DIAGNOSIS / AGE / SEX / HT / WT / NPO / PRE-MED row (top=147)
+  // DIAGNOSIS / AGE / SEX / HT / WT / NPO / PRE-MED row.
+  // Labels are at top=147 (top of cell); cell extends to ~163 (next sub-row).
+  // Drop values to py=160 to sit just above the cell's lower edge — visually
+  // centered in the cell rather than crowding the label.
   // Diagnosis is not captured in pre-op so it stays blank.
   let ageStr = '';
   if(dobRaw) {
@@ -83,21 +89,21 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
       if(a >= 0 && a < 130) ageStr = String(a);
     } catch(e) {}
   }
-  drawT1(ageStr, 218, 147.3, 7.5);                       // AGE
-  drawT1(val('po-sex'), 283, 147.3, 7.5);                // SEX
+  drawT1(ageStr, 218, 160, 7.5);                       // AGE
+  drawT1(val('po-sex'), 283, 160, 7.5);                // SEX
 
   // Height — prefer feet/inches, else cm
   const ftV = val('po-height-ft'), inV = val('po-height-in'), cmV = val('po-height-cm-val');
   const htStr = ftV ? `${ftV}'${inV||0}"` : (cmV ? `${cmV}cm` : '');
-  drawT1(htStr, 343, 147.3, 7.5);                        // HT
+  drawT1(htStr, 343, 160, 7.5);                        // HT
 
   // Weight — prefer lbs, else kg
   const lbsV = val('po-weight-lbs'), kgV = val('po-weight-kg-val');
   const wtStr = lbsV ? `${lbsV} lbs` : (kgV ? `${kgV} kg` : '');
-  drawT1(wtStr, 410, 147.3, 7.5);                        // WT
+  drawT1(wtStr, 410, 160, 7.5);                        // WT
 
   // NPO — Yes if confirmed on pre-op call
-  if(chk('po-npo')) drawT1('Yes', 478, 147.3, 7.5);      // NPO
+  if(chk('po-npo')) drawT1('Yes', 478, 160, 7.5);      // NPO
 
   // Draw X inside checkbox — tx/ty are the label text position in pymupdf coords
   // Offset: x = label_x - 12 (checkbox is left of label)
