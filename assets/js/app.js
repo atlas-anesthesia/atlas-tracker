@@ -9752,13 +9752,17 @@ function _renderDashboardImpl() {
   if(unpaidEl) unpaidEl.textContent = unpaidCount;
 
   // Low inventory
+  // Scope the low-inventory count to the logged-in worker only — each CRNA
+  // manages their own stock and doesn't need the other person's alerts on
+  // their home screen.
   const items = (window.items || []);
+  const me = (typeof currentWorker !== 'undefined' ? currentWorker : '') || 'dev';
+  const myStockKey = me === 'josh' ? 'stockJosh' : 'stockDev';
   let lowCount = 0;
   items.forEach(i => {
     const alert = parseFloat(i.alert) || 0;
-    const stockDev = parseFloat(i.stockDev) || 0;
-    const stockJosh = parseFloat(i.stockJosh) || 0;
-    if(alert > 0 && (stockDev <= alert || stockJosh <= alert)) lowCount++;
+    const myStock = parseFloat(i[myStockKey]) || 0;
+    if(alert > 0 && myStock <= alert) lowCount++;
   });
   const lowEl = document.getElementById('dash-lowstock-count');
   if(lowEl) lowEl.textContent = lowCount;
