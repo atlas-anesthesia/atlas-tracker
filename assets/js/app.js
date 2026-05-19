@@ -848,6 +848,60 @@ window.restoreInventoryFrom = async function(dateStr) {
   }
 };
 
+// Restore atlas/inventory from a local atlas-backup-*.json file on disk.
+// Opens a file picker, validates the JSON, snapshots the current inventory
+// to atlas/inventory_pre_restore_<timestamp> first (so we can roll back if
+// the restore is wrong), then overwrites atlas/inventory with the backup.
+window.restoreInventoryFromFile = async function() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = async (e) => {
+    const file = e.target.files?.[0];
+    if(!file) return;
+    try {
+      const text = await file.text();
+      let parsed;
+      try { parsed = JSON.parse(text); }
+      catch(parseErr) { alert('That file isn\'t valid JSON: ' + parseErr.message); return; }
+      // Accept both shapes: full export { data: { inventory: { items } } } or
+      // the bare { inventory: { items } } / { items } variants.
+      const invData = parsed?.data?.inventory || parsed?.inventory || parsed;
+      const restoreItems = invData?.items;
+      if(!Array.isArray(restoreItems) || !restoreItems.length) {
+        alert('That file has no inventory.items array inside (or it\'s empty).');
+        return;
+      }
+      const nonZero = restoreItems.filter(i => (Number(i.stockDev)||0) > 0 || (Number(i.stockJosh)||0) > 0).length;
+      const exportedAt = parsed.exportedAt || '(unknown date)';
+      const yes = confirm(
+        'Restore inventory from local backup?\n\n' +
+        '• File: ' + file.name + '\n' +
+        '• Exported at: ' + exportedAt + '\n' +
+        '• ' + restoreItems.length + ' items in the backup\n' +
+        '• ' + nonZero + ' items have non-zero stock\n\n' +
+        'This OVERWRITES your current atlas/inventory document.\n' +
+        'A snapshot of the current inventory will be saved first so you can roll back.'
+      );
+      if(!yes) return;
+      // Snapshot current state first
+      const beforeSnap = await getDoc(doc(db, 'atlas', 'inventory'));
+      if(beforeSnap.exists()) {
+        const snapId = 'inventory_pre_restore_' + new Date().toISOString().replace(/[:.]/g, '-');
+        await setDoc(doc(db, 'atlas', snapId), beforeSnap.data());
+        console.log('%cSnapshot of pre-restore inventory saved at atlas/' + snapId, 'color:#1d3557;font-weight:600');
+      }
+      await setDoc(doc(db, 'atlas', 'inventory'), { items: restoreItems });
+      try { logAudit('inventory-restored', '', 'from local file ' + file.name + ' (exportedAt ' + exportedAt + ')'); } catch(e){}
+      alert('✓ Inventory restored from ' + file.name + '.\n\nRefresh the page if the table doesn\'t update on its own.');
+    } catch(err) {
+      alert('Restore failed: ' + (err.message || err));
+      console.error(err);
+    }
+  };
+  input.click();
+};
+
 window.downloadFullBackup = async function() {
   const btn = document.getElementById('backup-download-btn');
   if(btn) { btn.textContent = '⏳...'; btn.disabled = true; }
