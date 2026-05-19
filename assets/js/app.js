@@ -6660,10 +6660,15 @@ window.renderFollowupTab = function() {
       : reminderOverdue ? '<span title="Reminder overdue" style="color:#dc2626;font-size:13px;margin-right:4px;flex-shrink:0">⏰</span>'
       : reminderToday   ? '<span title="Reminder today" style="color:#d97706;font-size:13px;margin-right:4px;flex-shrink:0">⏰</span>'
       : '';
+    const fuLabel = (displayId || caseId || '—').replace(/'/g, '&#39;');
+    // First three cells (Case ID / Patient / Surgery) are clickable — opens
+    // the Pre-Op vs Finalize Case picker. The remaining cells are interactive
+    // status buttons and keep their own behavior.
+    const openOC = `onclick="openCaseActionModal('${r.id}','${caseId}','${fuLabel}')"`;
     html += `<div style="display:grid;grid-template-columns:${COLS};gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;background:${rowBg};transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${rowBg||'transparent'}'">
-      <div style="${cellCSS};font-size:12px;font-weight:600;overflow:hidden;min-width:0;cursor:help" title="${displayId === caseId ? caseId : displayId + '\\n' + caseId}">${inlineIndicator}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayId}</span></div>
-      <div style="${cellCSS};font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;min-width:0">${patientName}</div>
-      <div style="${cellCSS};font-size:12px;color:var(--text-muted)">${surgDateFmt}${isPast?' <span style="font-size:9px;color:var(--text-faint);margin-left:4px">(past)</span>':''}</div>
+      <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;font-weight:600;overflow:hidden;min-width:0;cursor:pointer">${inlineIndicator}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayId}</span></div>
+      <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;min-width:0;cursor:pointer">${patientName}</div>
+      <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;color:var(--text-muted);cursor:pointer">${surgDateFmt}${isPast?' <span style="font-size:9px;color:var(--text-faint);margin-left:4px">(past)</span>':''}</div>
       <div style="${cellCSS};justify-content:center"><span class="worker-pill ${workerClass}" style="font-size:10px;padding:2px 8px">${worker}</span></div>
       <div style="${cellCSS};justify-content:center"><button onclick="openCallStatusModal('${r.id}')" style="background:${callC.bg};color:${callC.color};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${CALL_LABELS[callStatus] || '📞 Pending'}</button></div>
       <div style="${cellCSS};justify-content:center"><button onclick="togglePreopDepositStatus('${r.id}')" style="background:${depBg};color:${depColor};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${depLabel}</button></div>
@@ -9385,6 +9390,48 @@ if(s && !s.contains(e.target)) closeSetupDropdown();
 
 // Update the dropdown parent buttons to show "active" when one of their
 // children is the currently shown tab. Hooked into showTab below.
+// ── HOME-PAGE CASE QUICK ACTION MODAL ────────────────────────────────────────
+// Shared modal used by both "Today's Schedule" and the Follow-up Tracker on
+// the Home tab — clicking a case row opens this picker so the user can jump
+// straight to either the Pre-Op record or the Finalize Case form.
+window.openCaseActionModal = function(preopId, caseId, label) {
+  // Remove any prior instance so back-to-back clicks don't pile up overlays.
+  const prior = document.getElementById('caseActionModal');
+  if(prior) prior.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'caseActionModal';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
+  wrap.innerHTML = `
+    <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="min-width:0">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">Open Case</div>
+          <div style="font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label || caseId || '—'}</div>
+        </div>
+        <button onclick="document.getElementById('caseActionModal')?.remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;flex-shrink:0">✕</button>
+      </div>
+      <div style="padding:22px;display:grid;gap:12px">
+        <button onclick="document.getElementById('caseActionModal')?.remove();if(typeof editPreopRecord==='function')editPreopRecord('${preopId}')" style="padding:18px 20px;background:#fff;border:2px solid #1d3557;color:#1d3557;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font-family:inherit">
+          <span style="font-size:22px">📋</span>
+          <div style="flex:1;min-width:0">
+            <div>Pre-Op</div>
+            <div style="font-size:12px;font-weight:400;color:var(--text-muted);margin-top:2px">Edit the pre-op assessment</div>
+          </div>
+        </button>
+        <button onclick="document.getElementById('caseActionModal')?.remove();if(typeof loadDraftCaseById==='function')loadDraftCaseById('${caseId}')" style="padding:18px 20px;background:#1d3557;border:2px solid #1d3557;color:#fff;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font-family:inherit">
+          <span style="font-size:22px">✓</span>
+          <div style="flex:1;min-width:0">
+            <div>Finalize Case</div>
+            <div style="font-size:12px;font-weight:400;color:#a8c4e0;margin-top:2px">Log supplies / CS and finalize</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+};
+
 // ── UPDATE DETECTION ──────────────────────────────────────────────────────────
 // Checks if a newer version of the app has been deployed (by polling
 // index.html for a fresh cache version string). When it detects a mismatch,
@@ -9842,7 +9889,9 @@ function _renderDashboardImpl() {
         const provider = r['po-provider'] || '';
         const workerName = r.worker === 'dev' ? 'Dev' : 'Josh';
         const pillClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
-        return `<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px"><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-faint);min-width:60px">${time || '—'}</span><div style="flex:1"><div style="font-size:13px;font-weight:600">${id || '—'}</div><div style="font-size:11px;color:var(--text-faint)">${provider || '—'}</div></div><span class="worker-pill ${pillClass}" style="font-size:10px">${workerName}</span></div>`;
+        const caseId = r['po-caseId'] || '';
+        const label = (id || caseId || '—').replace(/'/g, '&#39;');
+        return `<div onclick="openCaseActionModal('${r.id}','${caseId}','${label}')" style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'" title="Open Pre-Op or Finalize Case"><span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-faint);min-width:60px">${time || '—'}</span><div style="flex:1"><div style="font-size:13px;font-weight:600">${id || '—'}</div><div style="font-size:11px;color:var(--text-faint)">${provider || '—'}</div></div><span class="worker-pill ${pillClass}" style="font-size:10px">${workerName}</span></div>`;
       }).join('');
     }
   }
