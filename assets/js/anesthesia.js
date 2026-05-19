@@ -62,9 +62,9 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
   // MR# intentionally left blank — Atlas Case IDs aren't medical record numbers.
 
   // SURGEON / CRNA / (OPERATION left blank — not in pre-op data)
-  drawT1(val('po-provider'), 65, 615, 7.5);   // SURGEON
+  drawT1(val('po-provider'), 65, 619, 7.5);   // SURGEON
   const workerForChart = r.worker || (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'josh');
-  drawT1(workerForChart === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA', 52, 628, 7.5); // CRNA
+  drawT1(workerForChart === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA', 52, 632, 7.5); // CRNA
 
   // DATE row (top of vitals header)
   let surgDateFmt = '';
@@ -89,21 +89,21 @@ window.generateAnesthesiaRecord = async function(record, previewOnly) {
       if(a >= 0 && a < 130) ageStr = String(a);
     } catch(e) {}
   }
-  drawT1(ageStr, 218, 156, 7.5);                       // AGE
-  drawT1(val('po-sex'), 283, 156, 7.5);                // SEX
+  drawT1(ageStr, 218, 152, 7.5);                       // AGE
+  drawT1(val('po-sex'), 283, 152, 7.5);                // SEX
 
   // Height — prefer feet/inches, else cm
   const ftV = val('po-height-ft'), inV = val('po-height-in'), cmV = val('po-height-cm-val');
   const htStr = ftV ? `${ftV}'${inV||0}"` : (cmV ? `${cmV}cm` : '');
-  drawT1(htStr, 343, 156, 7.5);                        // HT
+  drawT1(htStr, 343, 152, 7.5);                        // HT
 
   // Weight — prefer lbs, else kg
   const lbsV = val('po-weight-lbs'), kgV = val('po-weight-kg-val');
   const wtStr = lbsV ? `${lbsV} lbs` : (kgV ? `${kgV} kg` : '');
-  drawT1(wtStr, 410, 156, 7.5);                        // WT
+  drawT1(wtStr, 410, 152, 7.5);                        // WT
 
   // NPO — Yes if confirmed on pre-op call
-  if(chk('po-npo')) drawT1('Yes', 478, 156, 7.5);      // NPO
+  if(chk('po-npo')) drawT1('Yes', 478, 152, 7.5);      // NPO
 
   // Draw X inside checkbox — tx/ty are the label text position in pymupdf coords
   // Offset: x = label_x - 12 (checkbox is left of label)
