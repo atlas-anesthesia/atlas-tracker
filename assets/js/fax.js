@@ -337,6 +337,7 @@ function buildFaxHTML(r) {
     || (r['po-dob'] ? new Date(r['po-dob']+'T12:00:00Z').toLocaleDateString('en-US') : '');
   const surgDate = r['po-surgeryDate'] ? new Date(r['po-surgeryDate']+'T12:00:00Z').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '';
   const centerName = document.getElementById('fax-to')?.value.trim()
+    || document.getElementById('fax-to-custom')?.value.trim()
     || (window.surgeryCenters||window.surgeryCenters||[]).find(c=>c.id===r['po-surgery-center'])?.name
     || r['po-surgery-center']||'';
   const attn = document.getElementById('fax-attn')?.value.trim() || '';
