@@ -1200,6 +1200,9 @@ wbtnDev.title = 'You can only log cases for your own inventory';
 const ind = document.getElementById('workerIndicator');
 ind.className = 'worker-pill ' + (mappedWorker==='dev' ? 'pill-dev' : 'pill-josh');
 ind.textContent = (mappedWorker==='dev' ? 'Devarsh' : 'Josh') + "'s inventory will be updated";
+// Footer city — Josh works out of Fox Valley, Dev out of Stevens Point.
+const _brandCityEl = document.getElementById('branding-city');
+if(_brandCityEl) _brandCityEl.textContent = mappedWorker === 'josh' ? 'Fox Valley, WI' : 'Stevens Point, WI';
 // Default inventory tab to their own
 ['dev','josh','combined'].forEach(x => document.getElementById('itab-'+x).classList.toggle('active', x===mappedWorker));
 document.getElementById('userLabel').textContent = mappedWorker === 'dev' ? 'Devarsh' : 'Josh';
