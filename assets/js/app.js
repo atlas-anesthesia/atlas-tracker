@@ -142,6 +142,13 @@ function _applySurgeryModeNav() {
 
 window.toggleSurgeryMode = async function() {
   window._surgeryModeActive = !window._surgeryModeActive;
+  // Persist so an iPad sleep/wake that triggers a page reload doesn't drop
+  // the user out of surgery mode mid-case — the inactivity timer would then
+  // start ticking and log them out 20 min later.
+  try {
+    if(window._surgeryModeActive) localStorage.setItem('atlas_surgery_mode', '1');
+    else localStorage.removeItem('atlas_surgery_mode');
+  } catch(e) {}
   if(window._surgeryModeActive) {
     await _acquireWakeLock();
     clearTimeout(_inactivityTimer);
@@ -1233,6 +1240,14 @@ loadAtlasFormula(); // pre-load PI formula at startup
 // auth handler so a hard refresh keeps the user on whatever tab they were on.
 const _savedTab = _savedTabSnapshot || 'preop';
 showTab(_savedTab, false);
+// Restore Surgery Mode if it was active before a page reload (iPad sleep,
+// network blip, etc.). Without this, the inactivity timer would resume and
+// log the user out 20 min later — mid-case.
+try {
+  if(localStorage.getItem('atlas_surgery_mode') === '1' && !window._surgeryModeActive) {
+    setTimeout(() => { try { window.toggleSurgeryMode(); } catch(e){} }, 800);
+  }
+} catch(e) {}
 // Re-apply after data loads (onSnapshot can briefly re-render UI)
 [500, 1000, 2000].forEach(ms => setTimeout(() => {
   const active = document.querySelector('.section.active');
@@ -1330,6 +1345,13 @@ if(data.format === 'monthly-v2' && Array.isArray(data.months)) {
 }
   const beforeLen = cases.length;
   deduplicateCases();
+  // After replacing `cases`, repoint the live-case draft reference so the
+  // Add Supplies / Add CS flows mutate the CURRENT in-array object rather
+  // than a stale orphan that won't get persisted on the next saveCases().
+  if(window._currentLiveCaseDraft) {
+    const refreshed = cases.find(c => c.id === window._currentLiveCaseDraft.id);
+    if(refreshed) window._currentLiveCaseDraft = refreshed;
+  }
   // If dedup removed entries, save cleaned data back to Firestore immediately
   if(cases.length < beforeLen) {
     _saveAllCases(cases).catch(()=>{});
@@ -9442,7 +9464,7 @@ window.openCaseActionModal = function(preopId, caseId, label) {
             <div style="font-size:12px;font-weight:400;color:var(--text-muted);margin-top:2px">Edit the pre-op assessment</div>
           </div>
         </button>
-        <button onclick="document.getElementById('caseActionModal')?.remove();if(typeof loadDraftCaseById==='function')loadDraftCaseById('${caseId}')" style="padding:18px 20px;background:#1d3557;border:2px solid #1d3557;color:#fff;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font-family:inherit">
+        <button onclick="document.getElementById('caseActionModal')?.remove();if(typeof startCaseFromPreop==='function')startCaseFromPreop('${preopId}');else if(typeof loadDraftCaseById==='function')loadDraftCaseById('${caseId}')" style="padding:18px 20px;background:#1d3557;border:2px solid #1d3557;color:#fff;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font-family:inherit">
           <span style="font-size:22px">✓</span>
           <div style="flex:1;min-width:0">
             <div>Finalize Case</div>

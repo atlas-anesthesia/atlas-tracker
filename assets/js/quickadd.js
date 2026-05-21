@@ -624,10 +624,17 @@
       const onLiveTab = !!document.getElementById('tab-live-case')?.classList.contains('active');
       const liveDraft = window._currentLiveCaseDraft;
       if(onLiveTab && liveDraft) {
-        liveDraft.items = newCaseItems.map(i => ({
+        // Firestore onSnapshot replaces window.cases with new objects after
+        // each save, so window._currentLiveCaseDraft can be a stale orphan
+        // not actually in the current cases array. Find the live reference
+        // by id and mutate THAT — otherwise saveCases serializes the cases
+        // array without these items and the user "loses" what they logged.
+        const inArray = (window.cases || []).find(c => c.id === liveDraft.id) || liveDraft;
+        inArray.items = newCaseItems.map(i => ({
           id: i.id, generic: i.generic, name: i.name,
           cost: i.cost, qty: i.qty, lineTotal: (i.cost || 0) * (i.qty || 0)
         }));
+        window._currentLiveCaseDraft = inArray;
         if(typeof window.saveCases === 'function') {
           window.saveCases().catch(e => console.warn('saveCases after apply failed:', e));
         }
@@ -910,7 +917,11 @@
     const onLiveTab = !!document.getElementById('tab-live-case')?.classList.contains('active');
     const liveDraft = window._currentLiveCaseDraft;
     if(onLiveTab && liveDraft) {
-      liveDraft.savedCsEntries = newEntries.map(e => ({...e}));
+      // Same stale-reference defense as the supplies path above — find the
+      // live in-array case by id so saveCases serializes the latest entries.
+      const inArray = (window.cases || []).find(c => c.id === liveDraft.id) || liveDraft;
+      inArray.savedCsEntries = newEntries.map(e => ({...e}));
+      window._currentLiveCaseDraft = inArray;
       if(typeof window.saveCases === 'function') {
         window.saveCases().catch(e => console.warn('saveCases after CS apply failed:', e));
       }
