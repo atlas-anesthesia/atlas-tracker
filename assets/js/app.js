@@ -61,14 +61,42 @@ function _showInactivityWarning() {
   div.innerHTML = '<strong>⏰ Inactivity warning</strong><br>You will be logged out in about 1 minute. Click or move the mouse to stay logged in.';
 }
 function _autoLogout() {
+  // Final guard: if we somehow reached here while the user is mid-case
+  // (Surgery Mode on OR sitting on the Live Case tab), don't log out. Just
+  // reset the timer instead so a stale schedule from before surgery doesn't
+  // boot the CRNA in the middle of a procedure.
+  if(_isInActiveSurgery()) {
+    try { logAudit('inactivity-logout-suppressed', '', 'mid-case'); } catch(e){}
+    clearTimeout(_inactivityTimer);
+    clearTimeout(_inactivityWarnTimer);
+    _hideInactivityWarning();
+    return;
+  }
   _hideInactivityWarning();
   try { logAudit('auto-logout-inactivity'); } catch(e){}
   alert('You have been logged out due to inactivity.');
   signOut(auth).catch(()=>{});
 }
+// Returns true if the user is mid-procedure on the Live Case tab. Used as a
+// safety net so even if Surgery Mode was never toggled on, the inactivity
+// timer can't fire and boot the CRNA mid-case.
+function _isInActiveSurgery() {
+  if(window._surgeryModeActive) return true;
+  const liveTab = document.getElementById('tab-live-case');
+  if(liveTab && liveTab.classList.contains('active')) return true;
+  return false;
+}
+
 function resetInactivityTimer() {
   if(!currentUser) return;
-  if(window._surgeryModeActive) return; // Surgery Mode pauses auto-logout
+  if(_isInActiveSurgery()) {
+    // Belt-and-suspenders: also clear any pending timers that may have been
+    // scheduled before the user navigated into Live Case.
+    clearTimeout(_inactivityTimer);
+    clearTimeout(_inactivityWarnTimer);
+    _hideInactivityWarning();
+    return;
+  }
   clearTimeout(_inactivityTimer);
   clearTimeout(_inactivityWarnTimer);
   _hideInactivityWarning();
