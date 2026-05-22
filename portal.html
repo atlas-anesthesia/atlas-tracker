@@ -208,7 +208,7 @@
   <div class="container">
     <div class="brand">
       <div class="brand-name">ATLAS ANESTHESIA</div>
-      <div class="brand-tag">Mobile Dental Anesthesia &middot; <span id="brand-tag-city">Stevens Point, WI</span></div>
+      <div class="brand-tag">Mobile Dental Anesthesia &middot; <span id="brand-tag-city">Fox Valley, WI</span></div>
     </div>
 
     <div id="loading" class="loading">
@@ -231,7 +231,7 @@
 
     <div class="footer">
       Questions? Email <a href="mailto:admin@atlasanesthesia.co" style="color:var(--primary)">admin@atlasanesthesia.co</a> or call (262) 573-9095<br>
-      Atlas Anesthesia LLC · <span id="portal-footer-address">1257 Main Street, Stevens Point, WI 54481</span>
+      Atlas Anesthesia LLC · <span id="portal-footer-address">Fox Valley, WI</span>
     </div>
   </div>
 
@@ -264,15 +264,11 @@
 
     function renderPatientPortal(data) {
       const c = data.case || {};
-      // Swap branding city based on which CRNA owns this case — Josh's cases
-      // show Fox Valley, Dev's cases show Stevens Point.
-      const isJosh = c.worker === 'josh';
-      const cityShort = isJosh ? 'Fox Valley, WI' : 'Stevens Point, WI';
-      const footerAddr = isJosh ? 'Fox Valley, WI' : '1257 Main Street, Stevens Point, WI 54481';
+      // Brand the patient portal as Fox Valley for both CRNAs.
       const ctEl = document.getElementById('brand-tag-city');
-      if(ctEl) ctEl.textContent = cityShort;
+      if(ctEl) ctEl.textContent = 'Fox Valley, WI';
       const ftEl = document.getElementById('portal-footer-address');
-      if(ftEl) ftEl.textContent = footerAddr;
+      if(ftEl) ftEl.textContent = 'Fox Valley, WI';
       const depositPaid = !!c.depositPaid;
       const depositLink = c.depositLink || 'https://buy.stripe.com/00wfZgh0refXfSIarfejK00';
       const surgDate = fmtDate(c.surgeryDate);
