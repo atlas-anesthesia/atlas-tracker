@@ -617,19 +617,6 @@ window.generatePatientPortalLink = async function(caseId) {
   }
 };
 
-window.generateCenterPortalLink = async function(centerId, centerName) {
-  try {
-    // Center portal doesn't need a specific case — use centerId as the "case" for token tracking
-    const result = await _createPortalToken(centerId || 'general', 'center', centerId);
-    const url = `${PORTAL_PAGE_BASE}/portal-center.html?t=${result.token}`;
-    const copied = await _copyToClipboard(url);
-    try { logAudit('portal-link-generated', centerId || '', 'center link created for ' + (centerName||'')); } catch(e){}
-    alert(`Surgery Center portal link created${copied ? ' and copied to clipboard' : ''}:\n\n${url}\n\nExpires in 60 days. Share with the surgery center contact.`);
-  } catch(err) {
-    alert('Failed to generate center link: ' + err.message);
-  }
-};
-
 window.goToFinalizeFromLive = function() {
   if(!window._currentLiveCaseDraft) {
     if(window._currentLivePreop) {
@@ -9117,10 +9104,6 @@ const HELP_TOPICS = [
     keywords: 'patient portal link share appointment deposit',
     steps: ['Go to Mid-Case tab.','Click "Actions ▾" on the case.','Click "🔗 Patient Portal Link". A URL is copied to your clipboard.','Text or email the link to the patient.','They can see their date/time/deposit status and pay if needed.'],
     action: () => showTab('mid-case') },
-  { title: 'How to view the Surgery Center booking portal',
-    keywords: 'surgery center portal tidycal book schedule view public link',
-    steps: ['Click "🌐 Surgery Center Portal" in the header user menu.','You will see what dental partners see — provider bios, TidyCal booking calendars, contact form.','Share the URL with surgery centers.'],
-    action: () => window.open('portal-center.html', '_blank') },
   { title: 'How to view the audit log',
     keywords: 'audit log history activity who did what hipaa compliance',
     steps: ['Click the Reports ▾ menu.','Click "Audit Log".','Filter by date or action type if needed.','Every PHI access, edit, login, and reveal is recorded here.'],
@@ -9191,7 +9174,6 @@ function _buildCommandPaletteIndex() {
     { type:'nav', label:'Go to Case History', icon:'📜', action:() => showTab('history') },
     { type:'nav', label:'Go to Audit Log', icon:'🔍', action:() => { if(typeof openAuditLogModal === 'function') openAuditLogModal(); } },
     { type:'action', label:'Toggle Surgery Mode', icon:'🏥', action:() => toggleSurgeryMode() },
-    { type:'action', label:'Open Surgery Center Portal', icon:'🌐', action:() => window.open('portal-center.html','_blank') },
     { type:'action', label:'Download Backup', icon:'⬇', action:() => { if(typeof window.downloadFullBackup === 'function') window.downloadFullBackup(); } },
     { type:'action', label:'Sign Out', icon:'⤴', action:() => { if(typeof doLogout === 'function') doLogout(); } }
   ];
@@ -9787,7 +9769,6 @@ const QUICK_ACTIONS_CATALOG = [
   { id: 'audit-log',   icon: '🔍', label: 'Audit Log',             action: () => { if(typeof openAuditLogModal === 'function') openAuditLogModal(); } },
   { id: 'surgery-mode',icon: '🏥', label: 'Toggle Surgery Mode',   action: () => { if(typeof toggleSurgeryMode === 'function') toggleSurgeryMode(); } },
   { id: 'backup',      icon: '⬇',  label: 'Download Backup',       action: () => { if(typeof window.downloadFullBackup === 'function') window.downloadFullBackup(); } },
-  { id: 'portal',      icon: '🌐', label: 'Surgery Center Portal', action: () => window.open('portal-center.html','_blank') },
   { id: 'test-case',   icon: '🧪', label: 'Create Test Case',      action: () => { if(typeof createTestCase === 'function') createTestCase(); } },
   { id: 'cs-log',      icon: '⚠',  label: 'Controlled Substance Log', action: () => showTab('cs-log') }
 ];

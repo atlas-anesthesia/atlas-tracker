@@ -350,7 +350,6 @@
         const data = await res.json();
         if(data.error) { showError(data.error); return; }
         if(data.type === 'patient') { renderPatientPortal(data); }
-        else if(data.type === 'center') { window.location.href = `portal-center.html?t=${encodeURIComponent(token)}`; }
         else { showError('Unknown portal type.'); }
       } catch(err) {
         console.error(err);
