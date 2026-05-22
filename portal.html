@@ -152,8 +152,6 @@
       color: #78350f;
       line-height: 1.6;
     }
-    .greeting { font-size:16px;color:var(--text-muted);margin:0 0 4px;font-weight:500 }
-    .greeting strong { color:var(--text);font-weight:700 }
     /* Two-stage payment progress bar */
     .progress-wrap { margin-top:6px }
     .progress-bar { display:flex;height:10px;border-radius:999px;overflow:hidden;background:#e2e8f0;margin-bottom:10px }
@@ -304,9 +302,6 @@
       const surgDate = fmtDate(c.surgeryDate);
       const timeStr = fmtTime(c.startTime);
       const escHtml = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      // First-name greeting
-      const first = (c.patientFirstName||'').trim();
-      const greeting = first ? `<p class="greeting">Hi <strong>${escHtml(first)}</strong>, here are the details for your upcoming appointment.</p>` : '';
       // Progress bar segments — Stripe-driven when available, else manual flag
       const segDep = depositPaid ? 'done' : (remainderPaid ? 'done' : 'next');
       const segRem = remainderPaid ? 'done' : (depositPaid ? 'next' : '');
@@ -318,7 +313,6 @@
             <div class="card-header-tag">Your upcoming appointment</div>
             <div class="card-header-title">Dental Anesthesia</div>
           </div>
-          ${greeting}
           <div class="detail-row">
             <div class="detail-label">Date</div>
             <div class="detail-value"><strong>${surgDate}</strong>${timeStr ? ' at <strong>'+timeStr+'</strong>' : ''}</div>
