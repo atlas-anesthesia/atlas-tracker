@@ -10,6 +10,27 @@ const WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
 // Change this to your real Stripe payment link URL
 const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/00wfZgh0refXfSIarfejK00';
 
+// Where the patient portal lives. Has to match PORTAL_PAGE_BASE in app.js.
+const PORTAL_PAGE_BASE = 'https://atlas-anesthesia.github.io/atlas-tracker';
+
+// Create (or reuse) a tokenized patient-portal URL for a given case. Mirrors
+// _createPortalToken in app.js — kept here so deposits.js doesn't depend on a
+// module-scoped helper there. Returns null on any error so the deposit email
+// can still go out without the portal link.
+async function _createPortalUrlForCase(caseId) {
+  if(!caseId) return null;
+  try {
+    const res = await fetch(WORKER_URL + '/portal-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caseId, expiresInDays: 60 })
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data.token ? `${PORTAL_PAGE_BASE}/portal.html?t=${data.token}` : null;
+  } catch(e) { return null; }
+}
+
 // -- Firestore helpers --------------------------------------------------------
 async function _loadDeposits() {
   try {
@@ -59,10 +80,20 @@ function _statusPill(record) {
 
 // -- Build email HTML ---------------------------------------------------------
 function _buildDepositEmailHTML(opts) {
-  const { firstName, provider, surgDate, isReminder } = opts;
+  const { firstName, provider, surgDate, isReminder, portalUrl } = opts;
   const greeting = isReminder
     ? `<p>Hi${firstName ? ' '+firstName : ''},</p><p>We wanted to follow up regarding your upcoming procedure${surgDate ? ' scheduled for <strong>'+surgDate+'</strong>' : ''}. We noticed your initial deposit of <strong>$500</strong> has not yet been received.</p>`
     : `<p>Hi${firstName ? ' '+firstName : ''},</p><p>Thank you so much for speaking with us today about your upcoming procedure${surgDate ? ' scheduled for <strong>'+surgDate+'</strong>' : ''}. It was a pleasure connecting with you, and we look forward to providing you with exceptional anesthesia care.</p><p>To secure your appointment, an initial deposit of <strong>$500</strong> is required. Please submit it securely online using the link below.</p>`;
+
+  // Optional patient-portal section — included only when we successfully
+  // minted a tokenized link for this case. Each link is unique per case.
+  const portalBlock = portalUrl ? `
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 18px;margin:18px 0 0">
+      <div style="font-size:14px;font-weight:700;color:#1d3557;margin-bottom:6px">Your Personal Portal</div>
+      <div style="font-size:13px;color:#1e3a8a;line-height:1.55;margin:0 0 10px">View your appointment details, track your payment progress, and message your anesthesia provider with any pre-surgery questions.</div>
+      <a href="${portalUrl}" style="display:inline-block;background:#fff;border:2px solid #1d3557;color:#1d3557;text-decoration:none;padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600">Open My Portal →</a>
+      <div style="font-size:11px;color:#64748b;margin-top:8px">Link is unique to your appointment. Please don't share.</div>
+    </div>` : '';
 
   return `
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#000">
@@ -83,6 +114,7 @@ function _buildDepositEmailHTML(opts) {
     ${isReminder
       ? '<p>If you have any questions or need to reschedule, please don\'t hesitate to reach out. We want to make this process as easy as possible for you.</p>'
       : '<p>If you have any questions before your procedure, please don\'t hesitate to reach out. We\'re here to make sure you feel comfortable and well-prepared.</p>'}
+    ${portalBlock}
     <p>Warm regards,<br><strong>${provider||'Atlas Anesthesia'}</strong><br>Atlas Anesthesia</p>
     <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#888">
       This is a secure payment request. Your payment is processed safely via Stripe.
@@ -93,10 +125,31 @@ function _buildDepositEmailHTML(opts) {
 
 // -- Send deposit email -------------------------------------------------------
 async function _sendDepositEmail(record, isReminder, firstName) {
+  // Per-case patient portal link. Reuse whatever is already saved on the
+  // record (so reminders point to the same URL as the original send).
+  // Mint a fresh token if there isn't one yet, then persist back to Firestore
+  // so the next reminder reuses the same link.
+  if(!record.portalUrl && record.caseId) {
+    const url = await _createPortalUrlForCase(record.caseId);
+    if(url) {
+      record.portalUrl = url;
+      try {
+        const records = await _loadDeposits();
+        const idx = records.findIndex(r => r.id === record.id);
+        if(idx !== -1) {
+          records[idx] = { ...records[idx], portalUrl: url };
+          await _saveDeposits(records);
+        }
+      } catch(e) { /* non-fatal — email still goes out with the link */ }
+    }
+  }
+
   const html = _buildDepositEmailHTML({
-        provider: (record.worker || window.currentWorker || 'josh') === 'josh' ? 'Joshua Condado, CRNA' : 'Dev Murthy, CRNA',
+    firstName,
+    provider: (record.worker || window.currentWorker || 'josh') === 'josh' ? 'Joshua Condado, CRNA' : 'Dev Murthy, CRNA',
     surgDate: _fmtDate(record.surgDate),
     stripeLink: record.stripeLink || STRIPE_PAYMENT_LINK,
+    portalUrl: record.portalUrl || '',
     isReminder
   });
 
@@ -106,7 +159,7 @@ async function _sendDepositEmail(record, isReminder, firstName) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: record.patientEmail,
-                caseId: record.caseId,
+        caseId: record.caseId,
         provider: (record.worker || window.currentWorker || 'josh') === 'josh' ? 'Joshua Condado, CRNA' : 'Dev Murthy, CRNA',
         stripeLink: record.stripeLink || STRIPE_PAYMENT_LINK,
         worker: record.worker || window.currentWorker || 'josh',
@@ -119,7 +172,7 @@ async function _sendDepositEmail(record, isReminder, firstName) {
   } catch(e) {
     // Fallback: open mailto
     const subject = encodeURIComponent(isReminder ? 'Reminder: $500 Deposit for Upcoming Procedure' : 'Thank You + $500 Deposit Request');
-    const body = encodeURIComponent(`Please see the attached deposit request link: ${record.stripeLink || STRIPE_PAYMENT_LINK}`);
+    const body = encodeURIComponent(`Please see the attached deposit request link: ${record.stripeLink || STRIPE_PAYMENT_LINK}${record.portalUrl ? '\n\nYour patient portal: '+record.portalUrl : ''}`);
     window.open(`mailto:${record.patientEmail}?subject=${subject}&body=${body}`);
     return false;
   }
