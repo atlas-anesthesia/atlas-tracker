@@ -152,6 +152,35 @@
       color: #78350f;
       line-height: 1.6;
     }
+    .greeting { font-size:16px;color:var(--text-muted);margin:0 0 4px;font-weight:500 }
+    .greeting strong { color:var(--text);font-weight:700 }
+    /* Two-stage payment progress bar */
+    .progress-wrap { margin-top:6px }
+    .progress-bar { display:flex;height:10px;border-radius:999px;overflow:hidden;background:#e2e8f0;margin-bottom:10px }
+    .progress-seg { flex:1;background:#e2e8f0;transition:background .3s }
+    .progress-seg.done { background:#16a34a }
+    .progress-seg.next { background:repeating-linear-gradient(90deg,#fbbf24 0 8px,#fde68a 8px 16px) }
+    .progress-divider { width:2px;background:#fff }
+    .progress-row { display:flex;gap:12px;align-items:flex-start;font-size:13px }
+    .progress-step { flex:1;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#fafafa }
+    .progress-step.done { background:#dcfce7;border-color:#86efac }
+    .progress-step.next { background:#fef3c7;border-color:#fcd34d }
+    .progress-step-label { font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:.4px;margin-bottom:3px }
+    .progress-step.done .progress-step-label { color:#166534 }
+    .progress-step.next .progress-step-label { color:#92400e }
+    .progress-step-value { font-size:13px;color:var(--text);font-weight:600 }
+    /* Question form */
+    .qform { display:flex;flex-direction:column;gap:10px;margin-top:10px }
+    .qform textarea { width:100%;min-height:96px;padding:12px;font:inherit;font-size:14px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);outline:none;resize:vertical;box-sizing:border-box }
+    .qform textarea:focus { border-color:var(--accent) }
+    .qform input { padding:10px 12px;font:inherit;font-size:14px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);outline:none;box-sizing:border-box }
+    .qform .row { display:grid;grid-template-columns:1fr 1fr;gap:10px }
+    .qform .btn { background:var(--accent);color:#fff;border:none;padding:13px 18px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:transform .1s,opacity .15s }
+    .qform .btn:hover { transform:translateY(-1px) }
+    .qform .btn:disabled { opacity:.5;cursor:wait;transform:none }
+    .qform .status { font-size:13px;padding:8px 0;line-height:1.5 }
+    .qform .status.ok { color:#166534 }
+    .qform .status.err { color:#b91c1c }
     .checklist {
       list-style: none;
       padding: 0;
@@ -270,40 +299,71 @@
       const ftEl = document.getElementById('portal-footer-address');
       if(ftEl) ftEl.textContent = 'Fox Valley, WI';
       const depositPaid = !!c.depositPaid;
+      const remainderPaid = !!c.remainderPaid;
       const depositLink = c.depositLink || 'https://buy.stripe.com/00wfZgh0refXfSIarfejK00';
       const surgDate = fmtDate(c.surgeryDate);
       const timeStr = fmtTime(c.startTime);
+      const escHtml = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      // First-name greeting
+      const first = (c.patientFirstName||'').trim();
+      const greeting = first ? `<p class="greeting">Hi <strong>${escHtml(first)}</strong>, here are the details for your upcoming appointment.</p>` : '';
+      // Progress bar segments — Stripe-driven when available, else manual flag
+      const segDep = depositPaid ? 'done' : (remainderPaid ? 'done' : 'next');
+      const segRem = remainderPaid ? 'done' : (depositPaid ? 'next' : '');
+      const askingFor = depositPaid ? 'Remaining balance' : '$500 deposit';
+      const anesthesia = c.anesthesiaProvider || 'your CRNA';
       const html = `
         <div class="card">
           <div class="card-header">
             <div class="card-header-tag">Your upcoming appointment</div>
             <div class="card-header-title">Dental Anesthesia</div>
           </div>
-
+          ${greeting}
           <div class="detail-row">
             <div class="detail-label">Date</div>
             <div class="detail-value"><strong>${surgDate}</strong>${timeStr ? ' at <strong>'+timeStr+'</strong>' : ''}</div>
           </div>
-          ${c.provider ? `<div class="detail-row"><div class="detail-label">Dentist</div><div class="detail-value">${c.provider}</div></div>` : ''}
-          ${c.surgeryCenter ? `<div class="detail-row"><div class="detail-label">Location</div><div class="detail-value">${c.surgeryCenter}</div></div>` : ''}
-          ${c.anesthesiaProvider ? `<div class="detail-row"><div class="detail-label">Anesthesia By</div><div class="detail-value">${c.anesthesiaProvider}</div></div>` : ''}
-          <div class="detail-row">
-            <div class="detail-label">Deposit</div>
-            <div class="detail-value">
-              ${depositPaid
-                ? '<span class="pill-paid">✓ PAID</span><div style="font-size:12px;color:var(--text-faint);margin-top:6px">Thank you — your $500 deposit has been received.</div>'
-                : '<span class="pill-unpaid">⏳ NOT YET RECEIVED</span><div style="font-size:13px;color:var(--text-muted);margin-top:8px">A $500 deposit is required to confirm your appointment. The remaining balance is collected 7–8 days before surgery.</div>'}
-            </div>
-          </div>
+          ${c.provider ? `<div class="detail-row"><div class="detail-label">Dentist</div><div class="detail-value">${escHtml(c.provider)}</div></div>` : ''}
+          ${c.surgeryCenter ? `<div class="detail-row"><div class="detail-label">Location</div><div class="detail-value">${escHtml(c.surgeryCenter)}</div></div>` : ''}
+          ${c.anesthesiaProvider ? `<div class="detail-row"><div class="detail-label">Anesthesia By</div><div class="detail-value">${escHtml(c.anesthesiaProvider)}</div></div>` : ''}
         </div>
 
-        ${!depositPaid ? `
         <div class="card">
-          <h3 style="font-size:18px;color:var(--text);margin-bottom:8px">Complete Your Deposit</h3>
-          <p style="font-size:14px;color:var(--text-muted);margin-bottom:8px">Click the button below to pay your $500 deposit securely via Stripe.</p>
-          <a href="${depositLink}" class="btn-deposit" target="_blank">Pay $500 Deposit →</a>
+          <h3 style="font-size:18px;color:var(--text);margin:0 0 4px">Payment Progress</h3>
+          <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px;line-height:1.5">${remainderPaid ? 'You are fully paid — thank you.' : (depositPaid ? 'Deposit received. The remaining balance is collected 7–8 days before surgery.' : 'A $500 deposit confirms your appointment. The remaining balance is collected 7–8 days before surgery.')}</p>
+          <div class="progress-wrap">
+            <div class="progress-bar">
+              <div class="progress-seg ${segDep}"></div>
+              <div class="progress-divider"></div>
+              <div class="progress-seg ${segRem}"></div>
+            </div>
+            <div class="progress-row">
+              <div class="progress-step ${depositPaid ? 'done' : 'next'}">
+                <div class="progress-step-label">${depositPaid ? '✓ $500 Deposit' : '⏳ $500 Deposit'}</div>
+                <div class="progress-step-value">${depositPaid ? 'Paid' : 'Awaiting'}</div>
+              </div>
+              <div class="progress-step ${remainderPaid ? 'done' : (depositPaid ? 'next' : '')}">
+                <div class="progress-step-label">${remainderPaid ? '✓ Remaining' : '○ Remaining'}</div>
+                <div class="progress-step-value">${remainderPaid ? 'Paid' : (depositPaid ? 'Collected 7–8 days before' : 'After deposit')}</div>
+              </div>
+            </div>
+          </div>
+          ${!depositPaid ? `<a href="${depositLink}" class="btn-deposit" target="_blank">Pay $500 Deposit →</a>` : ''}
         </div>
-        ` : ''}
+
+        <div class="card">
+          <h3 style="font-size:18px;color:var(--text);margin:0 0 6px">Have a Question?</h3>
+          <p style="font-size:13px;color:var(--text-muted);margin:0 0 4px;line-height:1.5">Send a quick message to ${escHtml(anesthesia)} before your procedure — they'll reply by email.</p>
+          <form class="qform" onsubmit="return submitQuestion(event)">
+            <div class="row">
+              <input type="text" id="q-name" placeholder="Your name (optional)" autocomplete="name">
+              <input type="email" id="q-email" placeholder="Your email for reply (optional)" autocomplete="email">
+            </div>
+            <textarea id="q-message" placeholder="Type your question here — e.g. medications I take, what to expect, day-of logistics..." required></textarea>
+            <div id="q-status" class="status" style="display:none"></div>
+            <button id="q-send" type="submit" class="btn">Send Question</button>
+          </form>
+        </div>
 
         <div class="card">
           <h3 style="font-size:18px;color:var(--text);margin-bottom:14px">Important Reminders</h3>
@@ -329,6 +389,54 @@
       document.getElementById('loading').style.display = 'none';
       document.getElementById('content').style.display = 'block';
     }
+
+    window.submitQuestion = async function(e) {
+      e.preventDefault();
+      const token = getParam('t');
+      const msgEl = document.getElementById('q-message');
+      const nameEl = document.getElementById('q-name');
+      const emailEl = document.getElementById('q-email');
+      const btn = document.getElementById('q-send');
+      const status = document.getElementById('q-status');
+      const message = (msgEl?.value || '').trim();
+      if(!message) { msgEl?.focus(); return false; }
+      if(!token) {
+        status.style.display = 'block'; status.className = 'status err';
+        status.textContent = 'Missing portal token — please reopen this link.';
+        return false;
+      }
+      btn.disabled = true;
+      const orig = btn.textContent;
+      btn.textContent = 'Sending...';
+      status.style.display = 'none';
+      try {
+        const res = await fetch(`${WORKER_URL}/portal-ask`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            message,
+            name: nameEl?.value || '',
+            email: emailEl?.value || ''
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if(res.ok && data.success) {
+          msgEl.value = '';
+          status.style.display = 'block'; status.className = 'status ok';
+          status.textContent = `✓ Sent to ${data.sentTo || 'your CRNA'}. They'll reply by email.`;
+        } else {
+          status.style.display = 'block'; status.className = 'status err';
+          status.textContent = (data.error || 'Could not send. Please try again, or call the office.');
+        }
+      } catch(err) {
+        status.style.display = 'block'; status.className = 'status err';
+        status.textContent = 'Network problem — please try again.';
+      } finally {
+        btn.disabled = false; btn.textContent = orig;
+      }
+      return false;
+    };
 
     async function loadPortal() {
       const token = getParam('t');
