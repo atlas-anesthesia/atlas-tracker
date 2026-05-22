@@ -156,7 +156,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .card-title{font-size:10px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--text-faint);margin-bottom:14px;}
 label{display:block;font-size:12px;font-weight:500;color:var(--text-muted);margin-bottom:4px;margin-top:11px;}
 label:first-of-type{margin-top:0;}
-input[type="text"],input[type="number"],input[type="date"],select{width:100%;padding:8px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;transition:border-color .15s;}
+input[type="text"],input[type="number"],input[type="date"],input[type="email"],input[type="tel"],input[type="time"],input[type="datetime-local"],input[type="password"],input[type="search"],input[type="url"],select{width:100%;padding:8px 11px;font-family:'DM Sans',sans-serif;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;transition:border-color .15s;}
 input:focus,select:focus{border-color:var(--accent-mid);background:#fff;}
 .btn{display:inline-flex;align-items:center;gap:5px;padding:8px 16px;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .15s;}
 .btn-primary{background:var(--info);color:#fff;}.btn-primary:hover{background:#152d49;}
