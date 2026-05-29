@@ -1169,6 +1169,80 @@ const EMAIL_WORKER_MAP = {
 'jxcondado@gmail.com': 'josh',
 'murthy.devarsh@gmail.com': 'dev'
 };
+// Role map — controls what each login can see.
+//   'crna'      → full access (Josh, Dev)
+//   'assistant' → pre-op admin only (Pre-Op, Mid-Case, Calendar + deposit emails)
+// Add the assistant's Firebase login email below, lowercase, mapped to 'assistant'.
+const EMAIL_ROLE_MAP = {
+'jxcondado@gmail.com': 'crna',
+'murthy.devarsh@gmail.com': 'crna'
+// , 'assistant@example.com': 'assistant'   ← replace with the real assistant email
+};
+// Unknown emails default to the restricted 'assistant' role (least privilege).
+function getUserRole(email) {
+  return EMAIL_ROLE_MAP[(email||'').toLowerCase()] || 'assistant';
+}
+// Tabs an assistant is allowed to open.
+const ASSISTANT_TABS = ['preop','mid-case','calendar','preop-history'];
+
+// Hide/show UI based on role. Assistant gets a stripped-down, pre-op-focused
+// view with a distinct teal header; CRNAs get everything.
+function applyRoleRestrictions(role) {
+  const isAssistant = role === 'assistant';
+  document.body.classList.toggle('assistant-mode', isAssistant);
+
+  // Top-level nav buttons that assistants should NOT see.
+  const hideNavIds = ['nav-home','nav-new-case','nav-payments'];
+  hideNavIds.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = isAssistant ? 'none' : ''; });
+
+  // Reports dropdown — hidden entirely for assistants.
+  const reportsDd = document.getElementById('reports-dropdown');
+  if(reportsDd) reportsDd.style.display = isAssistant ? 'none' : '';
+
+  // Setup ("More") dropdown — keep visible for Calendar, hide the rest.
+  const setupHideIds = ['subnav-inventory','subnav-analytics','subnav-outreach','subnav-payout'];
+  setupHideIds.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = isAssistant ? 'none' : ''; });
+
+  // Assistant header badge + the CRNA-assignment toggle on the Pre-Op form.
+  _renderAssistantBadge(isAssistant);
+  const crnaPick = document.getElementById('po-assign-crna-row');
+  if(crnaPick) crnaPick.style.display = isAssistant ? '' : 'none';
+
+  // If an assistant somehow landed on a restricted tab (saved hash, etc.),
+  // bounce them to Pre-Op.
+  if(isAssistant) {
+    const active = document.querySelector('.section.active');
+    const activeTab = active ? active.id.replace('tab-','') : '';
+    if(!ASSISTANT_TABS.includes(activeTab)) {
+      try { showTab('preop'); } catch(e){}
+    }
+  }
+}
+
+// Assistant picks which CRNA a pre-op is assigned to (since they aren't one).
+// Defaults to 'josh'. Stored on window so savePreop can read it.
+window._assistantCrna = 'josh';
+window._assistantSetCrna = function(w) {
+  window._assistantCrna = (w === 'dev') ? 'dev' : 'josh';
+  const jb = document.getElementById('po-assign-josh');
+  const db_ = document.getElementById('po-assign-dev');
+  if(jb) jb.className = 'worker-btn' + (window._assistantCrna === 'josh' ? ' active-josh' : '');
+  if(db_) db_.className = 'worker-btn' + (window._assistantCrna === 'dev' ? ' active-dev' : '');
+};
+
+function _renderAssistantBadge(show) {
+  let badge = document.getElementById('assistant-badge');
+  if(show) {
+    if(!badge) {
+      badge = document.createElement('div');
+      badge.id = 'assistant-badge';
+      badge.innerHTML = '👤 Assistant View · Pre-Op access';
+      document.body.appendChild(badge);
+    }
+  } else if(badge) {
+    badge.remove();
+  }
+}
 onAuthStateChanged(auth, async (user) => {
 document.getElementById('loadingScreen').style.display='none';
 if(user) {
@@ -1197,6 +1271,8 @@ if(isNewLogin) {
   // Show today's follow-ups / overdue reminders as a notification panel
   try { if(typeof showLoginNotifications === 'function') showLoginNotifications(); } catch(e){}
 }
+// Determine role (crna vs assistant) — drives what the user can see.
+window._userRole = getUserRole(user.email);
 // Auto-set worker based on email
 const mappedWorker = EMAIL_WORKER_MAP[user.email.toLowerCase()] || 'dev';
 currentWorker = mappedWorker;
@@ -1227,10 +1303,12 @@ const _brandCityEl = document.getElementById('branding-city');
 if(_brandCityEl) _brandCityEl.textContent = mappedWorker === 'josh' ? 'Fox Valley, WI' : 'Stevens Point, WI';
 // Default inventory tab to their own
 ['dev','josh','combined'].forEach(x => document.getElementById('itab-'+x).classList.toggle('active', x===mappedWorker));
-document.getElementById('userLabel').textContent = mappedWorker === 'dev' ? 'Devarsh' : 'Josh';
+document.getElementById('userLabel').textContent = window._userRole === 'assistant' ? 'Assistant' : (mappedWorker === 'dev' ? 'Devarsh' : 'Josh');
 // Show payout tab only for Josh (now lives inside the Setup dropdown)
 const payoutNavBtn = document.getElementById('subnav-payout');
 if(payoutNavBtn) payoutNavBtn.style.display = '';
+// Apply role-based UI restrictions (assistant = pre-op only)
+try { applyRoleRestrictions(window._userRole); } catch(e) { console.warn('applyRoleRestrictions:', e); }
 // Default Case Log, CS Log, and Case History to logged-in user's perspective
 currentCaseLogTab = mappedWorker;
 ['dev','josh'].forEach(x => { const el=document.getElementById('cltab-'+x); if(el) el.classList.toggle('active', x===mappedWorker); });
@@ -4686,8 +4764,11 @@ return;
 // SINGLE Firestore read — generate ID and dedupe atomically
 const snap0 = await getDoc(doc(db,'atlas','preop'));
 const existingRecs = snap0.exists() ? (snap0.data().records||[]) : [];
+// An assistant isn't a CRNA, so the pre-op is assigned to whichever CRNA they
+// picked in the "Assign to CRNA" toggle. CRNAs use their own worker.
+const effectiveWorker = (window._userRole === 'assistant') ? (window._assistantCrna || 'josh') : currentWorker;
 // Always generate a fresh unique case ID — multiple cases on same day are allowed
-const generatedId = generateCaseId(currentWorker, surgeryDate);
+const generatedId = generateCaseId(effectiveWorker, surgeryDate);
 textData['po-caseId'] = generatedId;
 // Update the display too
 const display = document.getElementById('po-caseId-display');
@@ -4695,18 +4776,18 @@ const input = document.getElementById('po-caseId');
 if(display) display.textContent = generatedId;
 if(input) input.value = generatedId;
 // If a record already exists with this caseId+worker, preserve its internal id
-const existingMatch = existingRecs.find(r => r['po-caseId'] === generatedId && (r.worker||'dev') === currentWorker);
+const existingMatch = existingRecs.find(r => r['po-caseId'] === generatedId && (r.worker||'dev') === effectiveWorker);
 const record = {
 id: existingMatch ? existingMatch.id : uid(),
 savedAt: new Date().toISOString(),
-worker: currentWorker,
+worker: effectiveWorker,
 ...textData,
 ...checkData
 };
 // HARDENED: filter out ALL records with same caseId+worker (not just findIndex
 // the first one) — this cleans up any pre-existing duplicates on every save.
 const cleaned = existingRecs.filter(r =>
-  !(r['po-caseId'] === generatedId && (r.worker||'dev') === currentWorker)
+  !(r['po-caseId'] === generatedId && (r.worker||'dev') === effectiveWorker)
 );
 cleaned.unshift(record);
 setSyncing(true);
@@ -4751,7 +4832,7 @@ procedure: '',
 provider: record['po-provider'] || '',
 date: record['po-surgeryDate'] || todayStr(),
 notes: '',
-worker: currentWorker,
+worker: effectiveWorker,
 items: [],
 total: 0,
 imageData: null,
@@ -10053,6 +10134,12 @@ function _updateNavActiveState(tabName) {
 // Wrap showTab to update active state on the dropdown parent
 const _origShowTab = window.showTab;
 window.showTab = function(name, pushState) {
+  // Assistant role guard — only pre-op tabs are reachable. Any attempt to open
+  // a restricted tab (deep link, saved hash, stray button) redirects to Pre-Op.
+  if(window._userRole === 'assistant' && !ASSISTANT_TABS.includes(name)) {
+    name = 'preop';
+    pushState = false;
+  }
   if(typeof _origShowTab === 'function') _origShowTab(name, pushState);
   _updateNavActiveState(name);
 };

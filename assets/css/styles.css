@@ -163,6 +163,13 @@ input:focus,select:focus{border-color:var(--accent-mid);background:#fff;}
 .btn-success{background:var(--accent);color:#fff;}.btn-success:hover{background:#1f5235;}
 .btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border);}.btn-ghost:hover{background:var(--surface2);}
 .btn-sm{padding:5px 11px;font-size:12px;}
+/* Assistant role — distinct teal-accented view */
+#assistant-badge{position:fixed;top:0;left:0;right:0;z-index:9997;background:#0d9488;color:#fff;text-align:center;font-size:12px;font-weight:700;letter-spacing:.4px;padding:5px 14px;box-shadow:0 1px 6px rgba(0,0,0,.15);}
+body.assistant-mode{padding-top:28px;}
+body.assistant-mode .nav{border-top:3px solid #0d9488;}
+body.assistant-mode #dashboard-greeting::after,body.assistant-mode .app-title-suffix{content:'';}
+/* Tint the primary action buttons teal in assistant mode so the view reads differently */
+body.assistant-mode .action-bar h2{color:#0f766e;}
 .worker-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;width:fit-content;margin-bottom:20px;}
 .worker-btn{background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:8px 20px;cursor:pointer;transition:all .15s;color:var(--text-muted);}
 .worker-btn.active-dev{background:var(--dev);color:#fff;}
