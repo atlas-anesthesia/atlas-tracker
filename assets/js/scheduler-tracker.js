@@ -66,6 +66,96 @@
   ];
   const _callStateByKey = Object.fromEntries(CALL_STATES.map(s => [s.key, s]));
 
+  // Build the inner HTML for a single tracker row. When `phiHidden` is true
+  // (entry sits in the History section, > 3 days post-surgery), patient name +
+  // contact info + PDF link are masked behind the HIPAA "[hidden]" placeholder
+  // and a Show details button. Status pills + surgery metadata remain so
+  // pipeline stats stay legible without exposing PHI.
+  function _buildTrackerRow(e, COLS, phiHidden) {
+    const isScheduler = (window._userRole === 'scheduler');
+    const isAssistant = (window._userRole === 'assistant');
+    const hiddenSpan = '<span style="color:#94a3b8;font-style:italic;font-size:12px;background:#f1f5f9;padding:1px 8px;border-radius:8px">[hidden]</span>';
+
+    // Patient block — masked when phiHidden.
+    const nameHtml = phiHidden ? hiddenSpan : _esc([e.patientFirst, e.patientLast].filter(Boolean).join(' ') || '—');
+    const phoneLine   = phiHidden ? '' : (e.patientPhone ? `<div style="font-size:11px;color:var(--text-faint)">📞 ${_esc(e.patientPhone)}</div>` : '');
+    const emailLine   = phiHidden ? '' : (e.patientEmail ? `<div style="font-size:11px;color:var(--text-faint);font-family:monospace">${_esc(e.patientEmail)}</div>` : '');
+    const pcpLine     = phiHidden ? '' : (e.pcp ? `<div style="font-size:11px;color:var(--text-faint)">🩺 PCP: ${_esc(e.pcp)}</div>` : '');
+    const surgeryLine = e.surgeryDate
+      ? `<div style="font-size:11px;color:#9a3412;font-weight:600">🔴 Surgery: ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}${e.surgeryCenterName ? ' · ' + _esc(e.surgeryCenterName) : ''}</div>`
+      : '';
+    let pdfLine = '';
+    if(!phiHidden) {
+      pdfLine = e.pdfFilename
+        ? `<div style="font-size:11px;margin-top:3px"><a href="javascript:void(0)" onclick="window._strViewPDF('${e.id}')" style="color:#1d4ed8;text-decoration:none">📎 ${_esc(e.pdfFilename)}</a> <a href="javascript:void(0)" onclick="window._strRemovePDF('${e.id}')" title="Remove PDF" style="color:var(--warn);text-decoration:none;margin-left:6px">✕</a></div>`
+        : `<div style="font-size:11px;margin-top:3px"><a href="javascript:void(0)" onclick="window._strAttachPDF('${e.id}')" style="color:var(--text-faint);text-decoration:none">📎 Attach pre-op PDF</a></div>`;
+    } else if(e.pdfFilename) {
+      pdfLine = `<div style="font-size:11px;margin-top:3px;color:var(--text-faint)">📎 ${hiddenSpan}</div>`;
+    }
+
+    // Pre-Op Visit column — scheduled date stays visible (no PHI), Schedule
+    // button is scheduler-only.
+    const scheduledCell = e.scheduledAt
+      ? `<div style="font-size:12px;color:var(--text)">${_esc(_fmtDate(e.date))}${e.time ? '<br><span style="color:var(--text-faint)">' + _esc(_fmtTime(e.time)) + '</span>' : ''}</div>`
+      : (isScheduler
+          ? `<button onclick="window._strOpenSchedule('${e.id}')" class="btn btn-primary btn-sm" style="background:#1d3557;border-color:#1d3557;font-size:11px;padding:5px 10px;white-space:nowrap">📅 Schedule</button>`
+          : `<div style="font-size:12px;color:var(--text-faint);font-style:italic">Not scheduled yet</div>`);
+
+    const cs = _callStateByKey[e.callStatus || 'none'] || _callStateByKey.none;
+    const callPill = `<button onclick="window._strCycleCallStatus('${e.id}')" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap">${cs.label}</button>`;
+
+    const pill = (done, onLabel, offLabel, color, toggleFn) =>
+      done
+        ? `<button onclick="${toggleFn}('${e.id}', false)" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border};font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">${onLabel}</button>`
+        : `<button onclick="${toggleFn}('${e.id}', true)"  style="background:#fff;color:#64748b;border:1px dashed #cbd5e1;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">${offLabel}</button>`;
+    const green  = { bg:'#dcfce7', fg:'#166534', border:'#86efac' };
+    const indigo = { bg:'#e0e7ff', fg:'#3730a3', border:'#a5b4fc' };
+    const nurseCalled = !!e.nurseCalledAt;
+    const cleared     = !!e.clearedAt;
+
+    const stripe = _stripeStatus[(e.patientEmail||'').toLowerCase()] || {};
+    const stripePaid = !!stripe.preopVisitPaid;
+    const manualPaid = !!e.manualPaidAt;
+    const paidPill = stripePaid
+      ? `<button onclick="window._strToggleManualPaid('${e.id}')" title="Confirmed via Stripe — tap to override" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">✓ Paid · Stripe</button>`
+      : manualPaid
+        ? `<button onclick="window._strToggleManualPaid('${e.id}')" title="Marked paid manually — tap to unmark" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">✓ Paid · Phone</button>`
+        : `<button onclick="window._strToggleManualPaid('${e.id}')" title="Tap to mark paid (e.g. card taken over phone)" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">⏳ Pending</button>`;
+
+    let linkedPreopId = e.preopRecordId || '';
+    if(!linkedPreopId) {
+      const recs = window._rawPreopRecords || [];
+      const match = recs.find(r => r && r['po-preopVisitId'] === e.id);
+      if(match) linkedPreopId = match.id;
+    }
+    const openPreopBtn = (isAssistant && linkedPreopId)
+      ? `<button onclick="window._strOpenPreop('${linkedPreopId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:3px 7px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`
+      : '';
+    // Show patient details button — only on history rows (where PHI is masked).
+    const revealCaseId = e.preopCaseId || e.id;
+    const revealBtn = (phiHidden && typeof window.phiRevealButtonHTML === 'function')
+      ? window.phiRevealButtonHTML(revealCaseId, 'renderSchedulerTracker')
+      : '';
+    const editBtn = (!phiHidden && isScheduler)
+      ? `<button onclick="window._strOpenAddPatient('${e.id}')" class="btn btn-ghost btn-sm" title="Edit patient info" style="font-size:11px;padding:3px 7px">✏</button>`
+      : '';
+    const delBtn = (!phiHidden && isScheduler)
+      ? `<button onclick="window._strDelete('${e.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>`
+      : '';
+
+    return `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center${phiHidden ? ';opacity:.85' : ''}">
+      <div><div style="font-size:14px;font-weight:600;color:var(--text)">${nameHtml}</div>${phoneLine}${emailLine}${pcpLine}${surgeryLine}${pdfLine}${revealBtn ? '<div style=\"margin-top:6px\">' + revealBtn + '</div>' : ''}</div>
+      <div>${scheduledCell}</div>
+      <div>${callPill}</div>
+      <div>${paidPill}</div>
+      <div>${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled')}</div>
+      <div>${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared')}</div>
+      <div style="text-align:right;display:flex;gap:4px;justify-content:flex-end">
+        ${openPreopBtn}${editBtn}${delBtn}
+      </div>
+    </div>`;
+  }
+
   window.renderSchedulerTracker = async function() {
     const body = _$('str-body');
     if(!body) return;
@@ -74,103 +164,63 @@
       body.innerHTML = '<div class="empty-state" style="margin:0;padding:30px"><span class="empty-state-icon">📋</span><div class="empty-state-title">No patients yet</div><div class="empty-state-sub">Click <strong>+ Add Patient</strong> to load one in from the surgery center pre-op sheet.</div></div>';
       return;
     }
-    // Sort by surgery date (soonest first), patients with no surgery date last.
-    const rows = _entries.slice().sort((a, b) => {
-      const ad = a.surgeryDate || '9999-12-31';
-      const bd = b.surgeryDate || '9999-12-31';
-      return ad.localeCompare(bd);
+    // HIPAA: split entries into Current (recent / future) and History (surgery
+    // > 3 days ago). History rows mask patient identifiers behind [hidden]
+    // until a reveal action, mirroring the same window the pre-op record
+    // PHI gate uses.
+    const PHI_HIDE_DAYS = 3;
+    const cutoffMs = Date.now() - (PHI_HIDE_DAYS * 86400000);
+    const cutoffIso = new Date(cutoffMs).toISOString().split('T')[0];
+    const isPhi = e => {
+      if(!e.surgeryDate) return false;
+      if(e.surgeryDate >= cutoffIso) return false;
+      const cid = e.preopCaseId || e.id;
+      if(window._revealedCases && window._revealedCases.has && window._revealedCases.has(cid)) return false;
+      return true;
+    };
+
+    const allRows = _entries.slice();
+    const active = [];
+    const history = [];
+    allRows.forEach(e => {
+      if(isPhi(e)) history.push(e);
+      else active.push(e);
     });
-    // Columns: patient | scheduled / schedule btn | call status | $100 paid | jordan called | cleared | actions
+    // Sort: active soonest-first by surgery date; history newest-first.
+    active.sort((a, b) => (a.surgeryDate || '9999-12-31').localeCompare(b.surgeryDate || '9999-12-31'));
+    history.sort((a, b) => (b.surgeryDate || '').localeCompare(a.surgeryDate || ''));
+
     const COLS = '1.6fr 150px 130px 110px 110px 110px 70px';
-    let html = `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">
-      <span>Patient</span><span>Pre-Op Visit</span><span>Nicole's Call</span><span>$100 Paid</span><span>Jordan Called</span><span>Cleared</span><span></span>
+    const headerRow = `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">
+      <span>Patient</span><span>Pre-Op Visit</span><span>Nicole's Call</span><span>$100 Paid</span><span>Jordan Called</span><span>Cleared</span><span style="text-align:right">Pre-Op</span>
     </div>`;
-    rows.forEach(e => {
-      const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || '—';
-      const phoneLine = e.patientPhone ? `<div style="font-size:11px;color:var(--text-faint)">📞 ${_esc(e.patientPhone)}</div>` : '';
-      const emailLine = e.patientEmail ? `<div style="font-size:11px;color:var(--text-faint);font-family:monospace">${_esc(e.patientEmail)}</div>` : '';
-      const pcpLine   = e.pcp ? `<div style="font-size:11px;color:var(--text-faint)">🩺 PCP: ${_esc(e.pcp)}</div>` : '';
-      const surgeryLine = e.surgeryDate
-        ? `<div style="font-size:11px;color:#9a3412;font-weight:600">🔴 Surgery: ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}${e.surgeryCenterName ? ' · ' + _esc(e.surgeryCenterName) : ''}</div>`
-        : '';
-      const pdfLine = e.pdfFilename
-        ? `<div style="font-size:11px;margin-top:3px"><a href="javascript:void(0)" onclick="window._strViewPDF('${e.id}')" style="color:#1d4ed8;text-decoration:none">📎 ${_esc(e.pdfFilename)}</a> <a href="javascript:void(0)" onclick="window._strRemovePDF('${e.id}')" title="Remove PDF" style="color:var(--warn);text-decoration:none;margin-left:6px">✕</a></div>`
-        : `<div style="font-size:11px;margin-top:3px"><a href="javascript:void(0)" onclick="window._strAttachPDF('${e.id}')" style="color:var(--text-faint);text-decoration:none">📎 Attach pre-op PDF</a></div>`;
 
-      // Pre-Op Visit column. Scheduler sees the Schedule button on pending rows;
-      // anyone else (Jordan) just sees "Not scheduled yet" so they don't try to
-      // book without the patient's email/visit time agreed.
-      const isScheduler = (window._userRole === 'scheduler');
-      const scheduledCell = e.scheduledAt
-        ? `<div style="font-size:12px;color:var(--text)">${_esc(_fmtDate(e.date))}${e.time ? '<br><span style="color:var(--text-faint)">' + _esc(_fmtTime(e.time)) + '</span>' : ''}</div>`
-        : (isScheduler
-            ? `<button onclick="window._strOpenSchedule('${e.id}')" class="btn btn-primary btn-sm" style="background:#1d3557;border-color:#1d3557;font-size:11px;padding:5px 10px;white-space:nowrap">📅 Schedule</button>`
-            : `<div style="font-size:12px;color:var(--text-faint);font-style:italic">Not scheduled yet</div>`);
+    let html = '';
+    if(active.length) {
+      html += headerRow;
+      active.forEach(e => { html += _buildTrackerRow(e, COLS, false); });
+    } else {
+      html += '<div class="empty-state" style="margin:0;padding:30px"><span class="empty-state-icon">📋</span><div class="empty-state-title">No active patients</div><div class="empty-state-sub">Patients move to History 3 days after their surgery.</div></div>';
+    }
 
-      // Call-status pill (multi-state, cycles through none → called → voicemail → failed)
-      const cs = _callStateByKey[e.callStatus || 'none'] || _callStateByKey.none;
-      const callPill = `<button onclick="window._strCycleCallStatus('${e.id}')" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap">${cs.label}</button>`;
-
-      // Status pills (jordan called, cleared) — kept as simple toggles
-      const pill = (done, onLabel, offLabel, color, toggleFn) =>
-        done
-          ? `<button onclick="${toggleFn}('${e.id}', false)" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border};font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">${onLabel}</button>`
-          : `<button onclick="${toggleFn}('${e.id}', true)"  style="background:#fff;color:#64748b;border:1px dashed #cbd5e1;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">${offLabel}</button>`;
-      const green  = { bg:'#dcfce7', fg:'#166534', border:'#86efac' };
-      const indigo = { bg:'#e0e7ff', fg:'#3730a3', border:'#a5b4fc' };
-      const nurseCalled = !!e.nurseCalledAt;
-      const cleared     = !!e.clearedAt;
-
-      // $100 paid: either Stripe saw a successful $100 charge, OR Nicole
-      // manually marked it paid (typical when the card was taken over the
-      // phone and run through a non-Stripe processor). Stripe-confirmed
-      // status overrides manual state for the label so it's obvious which
-      // source flagged it.
-      const stripe = _stripeStatus[(e.patientEmail||'').toLowerCase()] || {};
-      const stripePaid = !!stripe.preopVisitPaid;
-      const manualPaid = !!e.manualPaidAt;
-      const paidPill = stripePaid
-        ? `<button onclick="window._strToggleManualPaid('${e.id}')" title="Confirmed via Stripe — tap to override" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">✓ Paid · Stripe</button>`
-        : manualPaid
-          ? `<button onclick="window._strToggleManualPaid('${e.id}')" title="Marked paid manually — tap to unmark" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">✓ Paid · Phone</button>`
-          : `<button onclick="window._strToggleManualPaid('${e.id}')" title="Tap to mark paid (e.g. card taken over phone)" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">⏳ Pending</button>`;
-
-      // Jordan sees an "Open Pre-Op" button whenever a pre-op record has been
-      // auto-created for this entry — taps it to open the assessment directly.
-      // We accept either an explicit preopRecordId stamped on the entry (new
-      // flow) OR a pre-op record whose po-preopVisitId points back at us
-      // (covers entries booked before the stamping was added).
-      const isAssistant = (window._userRole === 'assistant');
-      let linkedPreopId = e.preopRecordId || '';
-      if(!linkedPreopId) {
-        const recs = window._rawPreopRecords || [];
-        const match = recs.find(r => r && r['po-preopVisitId'] === e.id);
-        if(match) linkedPreopId = match.id;
+    if(history.length) {
+      const open = !!window._strHistoryOpen;
+      html += `<div style="border-top:6px solid var(--border-strong,#cbd5e1);margin-top:8px"></div>
+        <button onclick="window._strToggleHistory()" style="width:100%;text-align:left;background:#f8fafc;border:none;border-bottom:1px solid var(--border);padding:12px 14px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between">
+          <span>🔒 History (PHI hidden) · ${history.length} ${history.length===1?'patient':'patients'}</span>
+          <span style="font-size:11px;color:var(--text-faint)">${open ? '▼ Hide' : '▶ Show'}</span>
+        </button>`;
+      if(open) {
+        html += headerRow;
+        history.forEach(e => { html += _buildTrackerRow(e, COLS, true); });
       }
-      const openPreopBtn = (isAssistant && linkedPreopId)
-        ? `<button onclick="window._strOpenPreop('${linkedPreopId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:3px 7px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`
-        : '';
-      // Only the scheduler edits patient info or deletes rows; Jordan is
-      // read-only on those (she still toggles her own pills + opens pre-op).
-      const editBtn = isScheduler
-        ? `<button onclick="window._strOpenAddPatient('${e.id}')" class="btn btn-ghost btn-sm" title="Edit patient info" style="font-size:11px;padding:3px 7px">✏</button>`
-        : '';
-      const delBtn = isScheduler
-        ? `<button onclick="window._strDelete('${e.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>`
-        : '';
-      html += `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center">
-        <div><div style="font-size:14px;font-weight:600;color:var(--text)">${_esc(name)}</div>${phoneLine}${emailLine}${pcpLine}${surgeryLine}${pdfLine}</div>
-        <div>${scheduledCell}</div>
-        <div>${callPill}</div>
-        <div>${paidPill}</div>
-        <div>${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled')}</div>
-        <div>${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared')}</div>
-        <div style="text-align:right;display:flex;gap:4px;justify-content:flex-end">
-          ${openPreopBtn}${editBtn}${delBtn}
-        </div>
-      </div>`;
-    });
+    }
     body.innerHTML = html;
+  };
+
+  window._strToggleHistory = function() {
+    window._strHistoryOpen = !window._strHistoryOpen;
+    window.renderSchedulerTracker();
   };
 
   // ── Add / Edit Patient modal ────────────────────────────────────────────────

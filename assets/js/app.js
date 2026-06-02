@@ -1255,6 +1255,12 @@ function applyRoleRestrictions(role) {
     const jordanLegend = document.getElementById('cal-legend-jordan-avail');
     if(jordanLegend) jordanLegend.style.display = 'flex';
   }
+  // Jordan's Calendar: only her scheduled 📞 calls are plotted, so every
+  // legend/colorkey/days-input on the Calendar tab is noise. Hide it all.
+  if(isAssistant) {
+    ['cal-legend-bar','cal-worker-key','cal-controls-card']
+      .forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+  }
 
   // CRNA-assignment toggle on the Pre-Op form — only relevant for assistants.
   const crnaPick = document.getElementById('po-assign-crna-row');
