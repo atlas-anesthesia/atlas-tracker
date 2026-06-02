@@ -1330,7 +1330,7 @@ window.openSchedulePreopVisitModal = function() {
           <button type="button" id="spv-preview-toggle" onclick="window._spvTogglePreview()" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px">🔼 Hide preview</button>
         </div>
         <div id="spv-preview-box" style="border-top:1px solid var(--border);background:#f1f5f9">
-          <iframe id="spv-preview-iframe" sandbox="" style="width:100%;height:420px;border:none;display:block"></iframe>
+          <iframe id="spv-preview-iframe" sandbox="allow-same-origin" style="width:100%;height:420px;border:none;display:block"></iframe>
         </div>
       </div>
       <div id="spv-status" style="font-size:13px;padding:6px 0;min-height:18px"></div>
