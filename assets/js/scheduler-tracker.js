@@ -143,14 +143,15 @@
       ? `<button onclick="window._strDelete('${e.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>`
       : '';
 
+    const centerCell = 'display:flex;justify-content:center;align-items:center';
     return `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center${phiHidden ? ';opacity:.85' : ''}">
       <div><div style="font-size:14px;font-weight:600;color:var(--text)">${nameHtml}</div>${phoneLine}${emailLine}${pcpLine}${surgeryLine}${pdfLine}${revealBtn ? '<div style=\"margin-top:6px\">' + revealBtn + '</div>' : ''}</div>
       <div>${scheduledCell}</div>
-      <div>${callPill}</div>
-      <div>${paidPill}</div>
-      <div>${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled')}</div>
-      <div>${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared')}</div>
-      <div style="text-align:right;display:flex;gap:4px;justify-content:flex-end">
+      <div style="${centerCell}">${callPill}</div>
+      <div style="${centerCell}">${paidPill}</div>
+      <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled')}</div>
+      <div style="${centerCell}">${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared')}</div>
+      <div style="display:flex;gap:4px;justify-content:center;align-items:center">
         ${openPreopBtn}${editBtn}${delBtn}
       </div>
     </div>`;
@@ -192,7 +193,7 @@
 
     const COLS = '1.6fr 150px 130px 110px 110px 110px 70px';
     const headerRow = `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">
-      <span>Patient</span><span>Pre-Op Visit</span><span>Nicole's Call</span><span>$100 Paid</span><span>Jordan Called</span><span>Cleared</span><span style="text-align:right">Pre-Op</span>
+      <span>Patient</span><span>Pre-Op Visit</span><span style="text-align:center">Nicole's Call</span><span style="text-align:center">$100 Paid</span><span style="text-align:center">Jordan Called</span><span style="text-align:center">Cleared</span><span style="text-align:center">Pre-Op</span>
     </div>`;
 
     let html = '';
