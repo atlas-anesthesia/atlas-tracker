@@ -1207,7 +1207,7 @@ function getUserDisplayName(email, role) {
 const ASSISTANT_TABS = ['preop','mid-case','availability','scheduler-tracker','preop-history'];
 // Scheduler (Nicole) sees Jordan's availability calendar and the same Tracker
 // table — she manages "Called" + watches $100 Stripe + Jordan's clearance.
-const SCHEDULER_TABS = ['calendar','scheduler-tracker'];
+const SCHEDULER_TABS = ['scheduler-tracker','calendar'];
 
 // Hide nav / forms based on role. Assistant (Jordan) only sees pre-op tabs.
 // Scheduler (Nicole) only sees the calendar. View looks otherwise normal.
@@ -1398,8 +1398,6 @@ window._spvRenderScript = function() {
   const host = document.getElementById('spv-script');
   if(!host) return;
   const e = window._spvEntry || {};
-  const userName = (window.currentUser?.displayName) || ((window.currentUser?.email || '').split('@')[0]) || '____';
-  const patientFirst = e.patientFirst || '____';
   const center = e.surgeryCenterName || '____';
   const fmtDate = iso => iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }) : '____';
   const fmtTime = t => t ? new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }) : '____';
@@ -1407,10 +1405,10 @@ window._spvRenderScript = function() {
   const surgT = fmtTime(e.surgeryTime);
   const hl = s => `<strong style="background:#dcfce7;border-radius:4px;padding:1px 5px;color:#166534">${s}</strong>`;
   host.innerHTML = `
-    <p style="margin:0 0 10px"><em>Hi, my name is ${hl(userName)} calling from Atlas Anesthesia.</em></p>
-    <p style="margin:0 0 10px"><em>I see ${hl(patientFirst)} has an upcoming procedure scheduled at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</em></p>
+    <p style="margin:0 0 10px"><em>Hi, my name is ${hl('Nicole')} calling from Atlas Anesthesia.</em></p>
+    <p style="margin:0 0 10px"><em>I see ${hl('you')} have an upcoming procedure scheduled at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</em></p>
     <p style="margin:0 0 10px"><em>We wanted to call to schedule anesthesia clearance.</em></p>
-    <p style="margin:0 0 10px"><em>We have our own nurse practitioner who can clear them via Zoom.</em></p>
+    <p style="margin:0 0 10px"><em>We have our own nurse practitioner who can clear you via Zoom.</em></p>
     <p style="margin:0 0 10px"><em>We can schedule that today. It's a <strong>$100 fee</strong> that can be charged over the phone right now or sent as a payment link — but it must be paid before the visit.</em></p>
     <hr style="border:0;border-top:1px solid #e2e8f0;margin:14px 0">
     <div style="font-size:11px;color:var(--text-faint)">Once they agree, drop their email in the form to the left and pick a visit time from Jordan's open slots. The confirmation email goes out as soon as you book.</div>
