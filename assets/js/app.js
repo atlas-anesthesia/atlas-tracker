@@ -1175,8 +1175,8 @@ const EMAIL_WORKER_MAP = {
 // Add the assistant's Firebase login email below, lowercase, mapped to 'assistant'.
 const EMAIL_ROLE_MAP = {
 'jxcondado@gmail.com': 'crna',
-'murthy.devarsh@gmail.com': 'crna'
-// , 'assistant@example.com': 'assistant'   ← replace with the real assistant email
+'murthy.devarsh@gmail.com': 'crna',
+'vallieresjordan@gmail.com': 'assistant' // Jordan — pre-op nurse
 };
 // Unknown emails default to the restricted 'assistant' role (least privilege).
 function getUserRole(email) {
@@ -1236,7 +1236,7 @@ function _renderAssistantBadge(show) {
     if(!badge) {
       badge = document.createElement('div');
       badge.id = 'assistant-badge';
-      badge.innerHTML = '👤 Assistant View · Pre-Op access';
+      badge.innerHTML = '👤 Jordan · Pre-Op access';
       document.body.appendChild(badge);
     }
   } else if(badge) {
@@ -1303,7 +1303,7 @@ const _brandCityEl = document.getElementById('branding-city');
 if(_brandCityEl) _brandCityEl.textContent = mappedWorker === 'josh' ? 'Fox Valley, WI' : 'Stevens Point, WI';
 // Default inventory tab to their own
 ['dev','josh','combined'].forEach(x => document.getElementById('itab-'+x).classList.toggle('active', x===mappedWorker));
-document.getElementById('userLabel').textContent = window._userRole === 'assistant' ? 'Assistant' : (mappedWorker === 'dev' ? 'Devarsh' : 'Josh');
+document.getElementById('userLabel').textContent = window._userRole === 'assistant' ? 'Jordan' : (mappedWorker === 'dev' ? 'Devarsh' : 'Josh');
 // Show payout tab only for Josh (now lives inside the Setup dropdown)
 const payoutNavBtn = document.getElementById('subnav-payout');
 if(payoutNavBtn) payoutNavBtn.style.display = '';
