@@ -1677,9 +1677,9 @@ window._spvSend = async function() {
       } catch(e) { console.warn('Could not auto-create pre-op case:', e); }
     }
     try { logAudit && logAudit('preop-visit-scheduled', '', patientLabel + ' @ ' + (date||'?') + ' / ' + crna); } catch(e){}
-    // Fire-and-forget: notify Jordan so she sees a fresh patient lined up
-    // for her clearance call. Uses /outreach-email (which already accepts a
-    // custom subject) so no worker redeploy is needed.
+    // Fire-and-forget internal notifications: Jordan (so she sees the fresh
+    // patient lined up for her clearance call) AND admin (audit trail of
+    // every booking). Both use /outreach-email so no worker redeploy needed.
     try {
       const jordanHtml = _spvBuildJordanNotificationHTML({
         first, last, email, phone, pcp,
@@ -1687,16 +1687,15 @@ window._spvSend = async function() {
         visitDate: date, visitTime: time,
         crna, note
       });
-      fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/outreach-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: 'jordan@atlasanesthesia.co',
-          subject: 'New pre-op visit scheduled — ' + (patientLabel || 'patient'),
-          html: jordanHtml
-        })
-      }).catch(() => {});
-    } catch(e) { console.warn('Jordan notification skipped:', e); }
+      const internalSubject = 'New pre-op visit scheduled — ' + (patientLabel || 'patient');
+      ['jordan@atlasanesthesia.co', 'admin@atlasanesthesia.co'].forEach(addr => {
+        fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/outreach-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: addr, subject: internalSubject, html: jordanHtml })
+        }).catch(() => {});
+      });
+    } catch(e) { console.warn('Internal booking notifications skipped:', e); }
     if(status) { status.textContent = '✓ Visit booked. Confirmation emailed to ' + email + '.'; status.style.color = '#166534'; }
     setTimeout(() => { document.getElementById('schedulePreopVisitModal')?.remove(); if(window.buildCalendar) window.buildCalendar(); }, 1500);
   } catch(err) {
