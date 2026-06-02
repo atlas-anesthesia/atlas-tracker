@@ -1179,6 +1179,10 @@ const EMAIL_ROLE_MAP = {
 'vallieresjordan@gmail.com': 'assistant', // Jordan — pre-op nurse
 'condadonicole@gmail.com':   'scheduler'  // Nicole — schedules pre-op visits
 };
+// Stripe link the patient can use to pay the $100 pre-op fee directly, used
+// only as a backup when card info couldn't be collected over the phone.
+const PREOP_VISIT_STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
+
 // Unknown emails default to the restricted 'assistant' role (least privilege).
 function getUserRole(email) {
   return EMAIL_ROLE_MAP[(email||'').toLowerCase()] || 'assistant';
@@ -1326,6 +1330,7 @@ window.openSchedulePreopVisitModal = function() {
         <div><label style="margin-top:0">Time</label><input type="time" id="spv-time" value="${prefillTime}" oninput="window._spvRefreshPreview()"></div>
       </div>
       <div style="margin-bottom:14px"><label style="margin-top:0">Assign to CRNA <span style="color:var(--warn)">*</span></label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-josh" onclick="window._spvSetCrna('josh')">Josh</button><button type="button" class="worker-btn" id="spv-dev" onclick="window._spvSetCrna('dev')">Devarsh</button></div></div>
+      <div style="margin-bottom:14px"><label style="margin-top:0">$100 collection</label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-pay-phone" onclick="window._spvSetPayMethod('phone')">📞 By phone</button><button type="button" class="worker-btn" id="spv-pay-email" onclick="window._spvSetPayMethod('email')">📧 Email link</button></div><div style="font-size:11px;color:var(--text-faint);margin-top:4px;font-style:italic">Switch to "Email link" if the patient couldn't give a card over the phone.</div></div>
       <div style="margin-bottom:14px"><label style="margin-top:0">Note for patient (optional)</label><textarea id="spv-note" placeholder="Anything the patient should know about the visit..." oninput="window._spvRefreshPreview()" style="width:100%;min-height:72px;padding:10px 12px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;color:var(--text);outline:none;resize:vertical"></textarea></div>
       <div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;background:#fafafa">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
@@ -1345,11 +1350,23 @@ window.openSchedulePreopVisitModal = function() {
   </div>`;
   document.body.appendChild(wrap);
   window._spvCrna = 'josh';
+  window._spvPayMethod = 'phone'; // 'phone' (default) | 'email' (send Stripe link)
   setTimeout(() => {
     document.getElementById('spv-first')?.focus();
     window._spvRenderOpenSlots();
     window._spvRefreshPreview();
   }, 60);
+};
+
+// Toggle between phone-collected card info (default) and emailing the Stripe
+// link as a backup. Drives the "What to expect" copy in the patient email.
+window._spvSetPayMethod = function(m) {
+  window._spvPayMethod = (m === 'email') ? 'email' : 'phone';
+  const phoneBtn = document.getElementById('spv-pay-phone');
+  const emailBtn = document.getElementById('spv-pay-email');
+  if(phoneBtn) phoneBtn.className = 'worker-btn' + (window._spvPayMethod === 'phone' ? ' active-josh' : '');
+  if(emailBtn) emailBtn.className = 'worker-btn' + (window._spvPayMethod === 'email' ? ' active-josh' : '');
+  window._spvRefreshPreview();
 };
 
 // Render Jordan's open availability slots as tap-to-fill chips inside the
@@ -1478,9 +1495,16 @@ function _spvBuildEmailHTML() {
   const time  = $('spv-time')?.value || '';
   const note  = $('spv-note')?.value.trim() || '';
   const crna  = window._spvCrna || 'josh';
+  const payMethod = window._spvPayMethod || 'phone';
   const dateFmt = date ? new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
   const timeFmt = time ? new Date('2000-01-01T' + time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Payment copy + (if applicable) the Stripe button. Phone path matches the
+  // existing flow; email path replaces it with a "please pay this link" CTA.
+  const paymentBlock = payMethod === 'email'
+    ? `<div style="font-size:13px;color:#1e293b;line-height:1.55;margin-top:8px"><strong>$100 Pre-Op Clearance Fee</strong> — we weren't able to take your card over the phone, so please use the secure link below to pay before your visit. Your payment is processed safely via Stripe.</div>
+       <div style="text-align:center;margin:16px 0 4px"><a href="${PREOP_VISIT_STRIPE_LINK}" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:13px 28px;border-radius:6px;font-size:15px;font-weight:600">Pay $100 Pre-Op Fee</a></div>`
+    : `<div style="font-size:13px;color:#1e293b;line-height:1.55;margin-top:8px">The $100 pre-op clearance fee will be billed to the card we collected over the phone — no action is needed from you on the day of the visit.</div>`;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">
     <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
@@ -1496,14 +1520,14 @@ function _spvBuildEmailHTML() {
             <li>Your full medical history</li>
             <li>A current list of all medications you take (including dosages)</li>
           </ul>
-          <div style="font-size:13px;color:#1e293b;line-height:1.55;margin-top:8px">The $100 pre-op clearance fee will be billed to the card we collected over the phone — no action is needed from you on the day of the visit.</div>
+          ${paymentBlock}
         </div>
         <p style="margin:14px 0 0;font-size:13px;color:#475569">After your clearance call, ${crna === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA'} will follow up separately to discuss your anesthesia plan.</p>
         ${note ? `<div style="background:#f1f5f9;border-left:3px solid #1d3557;padding:10px 14px;margin-top:18px;font-size:13px;color:#1e293b;line-height:1.5">${esc(note).replace(/\n/g,'<br>')}</div>` : ''}
         <p style="margin:18px 0 0">If you need to reschedule or have questions before the visit, just reply to this email.</p>
         <p style="margin:14px 0 0">Talk soon,<br><strong>Atlas Anesthesia</strong></p>
       </td></tr>
-      <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">This is a confirmation message from Atlas Anesthesia.</div></td></tr>
+      <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">${payMethod === 'email' ? 'This message includes a secure payment request processed via Stripe.' : 'This is a confirmation message from Atlas Anesthesia.'}</div></td></tr>
     </table></td></tr></table></body></html>`;
 }
 
