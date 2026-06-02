@@ -78,8 +78,13 @@
         ? `<span title="Confirmed via Stripe" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px">✓ Paid</span>`
         : `<span title="No $100 charge yet" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px">⏳ Pending</span>`;
       const emailLine = e.patientEmail ? `<div style="font-size:11px;color:var(--text-faint);font-family:monospace">${_esc(e.patientEmail)}</div>` : '';
+      const phoneLine = e.patientPhone ? `<div style="font-size:11px;color:var(--text-faint)">📞 ${_esc(e.patientPhone)}</div>` : '';
+      const pcpLine   = e.pcp ? `<div style="font-size:11px;color:var(--text-faint)">🩺 PCP: ${_esc(e.pcp)}</div>` : '';
+      const surgeryLine = e.surgeryDate
+        ? `<div style="font-size:11px;color:#9a3412;font-weight:600">🔴 Surgery: ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}</div>`
+        : '';
       html += `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center">
-        <div><div style="font-size:14px;font-weight:600;color:var(--text)">${_esc(name)}</div>${emailLine}</div>
+        <div><div style="font-size:14px;font-weight:600;color:var(--text)">${_esc(name)}</div>${emailLine}${phoneLine}${pcpLine}${surgeryLine}</div>
         <div style="font-size:12px;color:var(--text-muted)">${_esc(dateTxt)}</div>
         <div>${pill(called,     '✓ Called',    '○ Not yet', green,  'window._strToggleCalled')}</div>
         <div>${paidPill}</div>

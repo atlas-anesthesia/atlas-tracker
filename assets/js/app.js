@@ -1303,6 +1303,17 @@ window.openSchedulePreopVisitModal = function() {
         <div><label style="margin-top:0">Patient last name</label><input type="text" id="spv-last" placeholder="e.g. Smith" oninput="window._spvRefreshPreview()"></div>
       </div>
       <div style="margin-bottom:14px"><label style="margin-top:0">Patient email <span style="color:var(--warn)">*</span></label><input type="email" id="spv-email" placeholder="patient@email.com"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <div><label style="margin-top:0">Patient phone</label><input type="tel" id="spv-phone" placeholder="(555) 123-4567"></div>
+        <div><label style="margin-top:0">PCP <span style="font-weight:400;color:var(--text-faint);font-size:11px">(if any)</span></label><input type="text" id="spv-pcp" placeholder="Dr. Smith"></div>
+      </div>
+      <div style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9a3412;margin-bottom:8px">Surgery details</div>
+        <div style="display:grid;grid-template-columns:1fr 140px;gap:14px">
+          <div><label style="margin-top:0">Surgery date</label><input type="date" id="spv-surgery-date"></div>
+          <div><label style="margin-top:0">Start time</label><input type="time" id="spv-surgery-time"></div>
+        </div>
+      </div>
       <div id="spv-open-slots" style="margin-bottom:14px"></div>
       <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:14px">
         <div><label style="margin-top:0">Pre-op visit date</label><input type="date" id="spv-date" value="${todayIso}" oninput="window._spvRefreshPreview()"></div>
@@ -1452,6 +1463,10 @@ window._spvSend = async function() {
   const first = $('spv-first')?.value.trim() || '';
   const last  = $('spv-last')?.value.trim() || '';
   const email = $('spv-email')?.value.trim() || '';
+  const phone = $('spv-phone')?.value.trim() || '';
+  const pcp   = $('spv-pcp')?.value.trim() || '';
+  const surgeryDate = $('spv-surgery-date')?.value || '';
+  const surgeryTime = $('spv-surgery-time')?.value || '';
   const date  = $('spv-date')?.value || '';
   const time  = $('spv-time')?.value || '';
   const note  = $('spv-note')?.value.trim() || '';
@@ -1485,6 +1500,9 @@ window._spvSend = async function() {
         patientFirst: first,
         patientLast: last,
         patientEmail: email,
+        patientPhone: phone,
+        pcp,
+        surgeryDate, surgeryTime,
         date, time, note,
         bookedAt: new Date().toISOString()
       });
