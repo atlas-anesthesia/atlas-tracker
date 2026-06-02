@@ -1667,7 +1667,7 @@ window._spvSend = async function() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: 'vallieresjordan@gmail.com',
+          to: 'jordan@atlasanesthesia.co',
           subject: 'New pre-op visit scheduled — ' + (patientLabel || 'patient'),
           html: jordanHtml
         })
