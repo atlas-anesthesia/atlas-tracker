@@ -7429,15 +7429,17 @@ ${allFlags.map(f=>`<span style="background:var(--info-light);color:var(--info);f
 </div>` : ''}
 ${typeof window.buildPreopFollowupPills === 'function' ? window.buildPreopFollowupPills(r) : ''}
 </div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-${hasDraft && draft
-? `<button onclick="event.stopPropagation();resumeCase('${draft.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button>`
-: `<button onclick="event.stopPropagation();startCaseFromPreop('${r.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button>`
+${window._userRole === 'assistant'
+? `<button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-primary btn-sm" style="font-size:11px">✏ Edit Pre-Op</button>`
+: (hasDraft && draft
+  ? `<button onclick="event.stopPropagation();resumeCase('${draft.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button>`
+  : `<button onclick="event.stopPropagation();startCaseFromPreop('${r.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button>`)
 }
 <div style="position:relative;display:inline-block">
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">Actions ▾</button>
 <div id="midcase-menu-${r.id}" style="display:none;position:absolute;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;min-width:150px;overflow:hidden">
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');previewDraft('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">👁 Preview</button>
-<button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');editPreopRecord('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">✏ Edit Draft</button>
+<button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');editPreopRecord('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit">✏ Edit Pre-Op</button>
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');generatePatientPortalLink('${caseId}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:#2d6a4f;font-family:inherit">🔗 Patient Portal Link</button>
 <button onclick="event.stopPropagation();toggleMidCaseDropdown('${r.id}');deleteMidCase('preop','${r.id}','${caseId}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--warn);font-family:inherit">🗑 Delete</button>
 </div>
@@ -7453,8 +7455,10 @@ ${draft.items.map(i=>`<div class="case-item-row"><span>${i.generic} × ${i.qty}<
 </div>` : ''}
 </div></div>`;
 }).join('');
-// Also show drafts that have no matching pre-op
-const orphanDrafts = drafts
+// Also show drafts that have no matching pre-op. Jordan (assistant) doesn't
+// see these — orphan drafts are case-side work and are surfaced for CRNAs
+// to finalize, which isn't his job.
+const orphanDrafts = (window._userRole === 'assistant') ? [] : drafts
   .filter(d => !preopRecords.find(r => r['po-caseId'] === d.caseId))
   .sort((a,b) => {
     if((a.date||'') !== (b.date||'')) return (a.date||'').localeCompare(b.date||'');
@@ -7997,7 +8001,7 @@ ${r['po-iv-difficulty']?`<div style="margin-top:4px;font-size:12px;color:var(--w
 ${ekgRequired?`<div style="margin-top:4px;font-size:12px;color:var(--warn)">⚠ EKG Required</div>`:''}
 ${allFlags.length?`<div style="margin-top:6px">${allFlags.map(f=>`<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;margin-right:4px">${f}</span>`).join('')}</div>`:''}
 ${r['po-medications']?`<div style="margin-top:6px;font-size:12px;color:var(--text-muted)"><strong>Meds:</strong> ${r['po-medications']}</div>`:''}
-</div><div style="display:flex;gap:6px;align-items:center"><button onclick="previewDraft('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">👁 Preview</button><div style="position:relative;display:inline-block"><button onclick="toggleTomorrowActions('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">Actions ▾</button><div id="tomorrow-actions-${r.id}" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;min-width:160px"><button onclick="editPreopRecord('${r.id}');toggleTomorrowActions('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">✏ Edit Pre-Op</button><button onclick="loadDraftCaseById('${r['po-caseId']}');toggleTomorrowActions('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">✓ Finalize Case</button><div style="border-top:1px solid var(--border);margin:4px 0"></div><button onclick="deletePreopRecord('${r.id}');toggleTomorrowActions('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:#dc2626;font-family:inherit" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">🗑 Delete</button></div></div></div></div></div>`;
+</div><div style="display:flex;gap:6px;align-items:center"><button onclick="previewDraft('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">👁 Preview</button><div style="position:relative;display:inline-block"><button onclick="toggleTomorrowActions('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">Actions ▾</button><div id="tomorrow-actions-${r.id}" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:100;min-width:160px"><button onclick="editPreopRecord('${r.id}');toggleTomorrowActions('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">✏ Edit Pre-Op</button>${window._userRole === 'assistant' ? '' : `<button onclick="loadDraftCaseById('${r['po-caseId']}');toggleTomorrowActions('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">✓ Finalize Case</button>`}<div style="border-top:1px solid var(--border);margin:4px 0"></div><button onclick="deletePreopRecord('${r.id}');toggleTomorrowActions('${r.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;background:none;border:none;cursor:pointer;color:#dc2626;font-family:inherit" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">🗑 Delete</button></div></div></div></div></div>`;
 }).join('');
 } catch(e) { console.error(e); }
 }
