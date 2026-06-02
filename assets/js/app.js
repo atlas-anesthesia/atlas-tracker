@@ -1358,6 +1358,17 @@ window.openSchedulePreopVisitModal = function() {
 // Render Jordan's open availability slots as tap-to-fill chips inside the
 // Schedule Pre-Op Visit modal. Pulls from window._availabilitySlots which is
 // kept in sync by availability.js.
+// Jordan's availability was entered in Central time, but she lives in Eastern.
+// For Nicole's view we shift Central → Eastern (+1 hour) so the displayed
+// time matches Jordan's actual local clock. Wraps cleanly across midnight.
+function _centralToEastern(time) {
+  if(!time || !time.includes(':')) return time || '';
+  const [h, m] = time.split(':').map(Number);
+  if(Number.isNaN(h) || Number.isNaN(m)) return time;
+  const total = (h * 60 + m + 60) % (24 * 60);
+  return String(Math.floor(total/60)).padStart(2,'0') + ':' + String(total%60).padStart(2,'0');
+}
+
 // Break a "HH:MM"–"HH:MM" availability window into 15-minute start times.
 // Each entry is a valid pre-op visit start; final increment must fit inside.
 function _spvExpand15(start, end) {
@@ -1396,11 +1407,15 @@ window._spvRenderOpenSlots = async function() {
   } catch(e) { /* fall through — show all 15-min slots if we can't load bookings */ }
 
   // For each upcoming day, build the de-duped sorted list of free 15-min starts.
+  // Stored slots are Central → convert each 15-min start to Eastern before
+  // showing to Nicole and before checking against existing (Eastern) bookings.
   const grouped = {};
   Object.keys(slots).sort().forEach(date => {
     if(date < todayIso) return;
     const all = new Set();
-    (slots[date] || []).forEach(s => _spvExpand15(s.start, s.end).forEach(t => all.add(t)));
+    (slots[date] || []).forEach(s =>
+      _spvExpand15(s.start, s.end).forEach(t => all.add(_centralToEastern(t)))
+    );
     const free = [...all].filter(t => !taken.has(date + ' ' + t)).sort();
     if(free.length) grouped[date] = free;
   });
@@ -1429,7 +1444,7 @@ window._spvRenderOpenSlots = async function() {
   }).join('');
 
   host.innerHTML = `
-    <label style="margin-top:0">Jordan’s open slots <span style="font-weight:400;color:var(--text-faint);font-size:11px">(15-min increments)</span></label>
+    <label style="margin-top:0">Jordan’s open slots <span style="font-weight:400;color:var(--text-faint);font-size:11px">(15-min increments · Eastern Time)</span></label>
     <div style="max-height:220px;overflow-y:auto;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#f8fafc">${dayBlocks}</div>
     <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Tap a slot to fill the date and time below.</div>
   `;
@@ -2266,17 +2281,20 @@ if(window._userRole === 'scheduler') {
     try { return new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }); }
     catch(e) { return t; }
   };
-  // 1) Availability slots
+  // 1) Availability slots — Jordan's times are stored in Central but she lives
+  //    in Eastern, so we display the shifted Eastern times to Nicole.
   Object.keys(slots).forEach(iso => {
     (slots[iso] || []).forEach(s => {
+      const startEt = _centralToEastern(s.start);
+      const endEt   = _centralToEastern(s.end);
       out.push({
         type: 'availability',
         date: iso,
-        label: `✓ Jordan Available · ${fmtTime(s.start)}–${fmtTime(s.end)}`,
+        label: `✓ Jordan Available · ${fmtTime(startEt)}–${fmtTime(endEt)} ET`,
         worker: 'josh',
         _availability: true,
-        _slotStart: s.start,
-        _slotEnd: s.end
+        _slotStart: startEt,
+        _slotEnd: endEt
       });
     });
   });
