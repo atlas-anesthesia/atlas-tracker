@@ -1489,8 +1489,14 @@ function _spvBuildEmailHTML() {
         <p style="margin:0 0 16px;font-size:18px;font-weight:600;color:#0f172a">Hi${first ? ' ' + esc(first) : ' there'},</p>
         <p style="margin:0 0 14px">This is a confirmation of your pre-op clearance visit with our nurse Jordan${dateFmt ? ' on <strong>' + dateFmt + (timeFmt ? ' at ' + timeFmt : '') + '</strong>' : ''}. During this visit Jordan will collect your medical history and any prior clearances so we can safely plan your anesthesia.</p>
         <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin:18px 0">
-          <div style="font-size:14px;font-weight:700;color:#1e3a8a;margin-bottom:4px">What to expect</div>
-          <div style="font-size:13px;color:#1e293b;line-height:1.55">Jordan will reach out by phone at the scheduled time from a <strong>317 area code</strong> number — please answer or save it to your contacts so the call doesn’t get flagged as spam. Have your medical history handy. The $100 pre-op clearance fee will be billed to the card we collected over the phone — no action is needed from you on the day of the visit.</div>
+          <div style="font-size:14px;font-weight:700;color:#1e3a8a;margin-bottom:6px">What to expect</div>
+          <div style="font-size:13px;color:#1e293b;line-height:1.55">Jordan will reach out by phone at the scheduled time from a <strong>317 area code</strong> number — please answer or save it to your contacts so the call doesn’t get flagged as spam.</div>
+          <div style="font-size:13px;color:#1e293b;line-height:1.55;margin-top:8px"><strong>Before the call, please have ready:</strong></div>
+          <ul style="font-size:13px;color:#1e293b;line-height:1.55;margin:4px 0 0;padding-left:22px">
+            <li>Your full medical history</li>
+            <li>A current list of all medications you take (including dosages)</li>
+          </ul>
+          <div style="font-size:13px;color:#1e293b;line-height:1.55;margin-top:8px">The $100 pre-op clearance fee will be billed to the card we collected over the phone — no action is needed from you on the day of the visit.</div>
         </div>
         <p style="margin:14px 0 0;font-size:13px;color:#475569">After your clearance call, ${crna === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA'} will follow up separately to discuss your anesthesia plan.</p>
         ${note ? `<div style="background:#f1f5f9;border-left:3px solid #1d3557;padding:10px 14px;margin-top:18px;font-size:13px;color:#1e293b;line-height:1.5">${esc(note).replace(/\n/g,'<br>')}</div>` : ''}
