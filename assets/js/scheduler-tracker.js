@@ -135,6 +135,20 @@
           ? `<button onclick="window._strToggleManualPaid('${e.id}')" title="Marked paid manually — tap to unmark" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">✓ Paid · Phone</button>`
           : `<button onclick="window._strToggleManualPaid('${e.id}')" title="Tap to mark paid (e.g. card taken over phone)" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">⏳ Pending</button>`;
 
+      // Jordan sees an "Open Pre-Op" button whenever a pre-op record has been
+      // auto-created for this entry — taps it to open the assessment directly.
+      const isAssistant = (window._userRole === 'assistant');
+      const openPreopBtn = (isAssistant && e.preopRecordId)
+        ? `<button onclick="window._strOpenPreop('${e.preopRecordId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:3px 7px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`
+        : '';
+      // Only the scheduler edits patient info or deletes rows; Jordan is
+      // read-only on those (she still toggles her own pills + opens pre-op).
+      const editBtn = isScheduler
+        ? `<button onclick="window._strOpenAddPatient('${e.id}')" class="btn btn-ghost btn-sm" title="Edit patient info" style="font-size:11px;padding:3px 7px">✏</button>`
+        : '';
+      const delBtn = isScheduler
+        ? `<button onclick="window._strDelete('${e.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>`
+        : '';
       html += `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center">
         <div><div style="font-size:14px;font-weight:600;color:var(--text)">${_esc(name)}</div>${phoneLine}${emailLine}${pcpLine}${surgeryLine}${pdfLine}</div>
         <div>${scheduledCell}</div>
@@ -143,8 +157,7 @@
         <div>${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled')}</div>
         <div>${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared')}</div>
         <div style="text-align:right;display:flex;gap:4px;justify-content:flex-end">
-          <button onclick="window._strOpenAddPatient('${e.id}')" class="btn btn-ghost btn-sm" title="Edit patient info" style="font-size:11px;padding:3px 7px">✏</button>
-          <button onclick="window._strDelete('${e.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>
+          ${openPreopBtn}${editBtn}${delBtn}
         </div>
       </div>`;
     });
@@ -363,6 +376,17 @@
     window.openSchedulePreopVisitModal(id);
   };
 
+  // Open the pre-op record linked to this tracker entry — used by Jordan's
+  // "📋 Pre-Op" button so she jumps straight into the assessment.
+  window._strOpenPreop = function(recordId) {
+    if(!recordId) { alert('No pre-op assessment is linked to this patient yet.'); return; }
+    if(typeof window.editPreopRecord !== 'function') {
+      alert('Pre-op editor not loaded yet — give the page a moment and try again.');
+      return;
+    }
+    window.editPreopRecord(recordId);
+  };
+
   // Manual paid toggle — for the case when the $100 was collected outside
   // Stripe (e.g. card taken over the phone via a different processor). Stripe-
   // confirmed paid status is read-only from here; this flag is independent.
@@ -475,6 +499,12 @@
   // can pre-fill (and lock) the patient/surgery fields.
   window._strGetEntry = function(id) {
     return _entries.find(e => e.id === id) || null;
+  };
+
+  // Read the full entries list (used by Jordan's Calendar in app.js to plot
+  // every scheduled pre-op visit call as an event).
+  window._strGetAllEntries = function() {
+    return _entries.slice();
   };
 
   // Update an entry from outside (e.g. the Schedule modal stamping it with

@@ -1204,7 +1204,10 @@ function getUserDisplayName(email, role) {
 // Tabs an assistant (Jordan) is allowed to open. He has his own Availability
 // tab + shared Tracker so he can see what Nicole booked and update his own
 // clearance progress pills on each row.
-const ASSISTANT_TABS = ['preop','mid-case','availability','scheduler-tracker','preop-history'];
+// Jordan works exclusively from the Tracker: she opens the linked Pre-Op
+// from each row, manages her Availability, and now has her own Calendar
+// view showing her scheduled clearance calls. Mid-Case is CRNA-only.
+const ASSISTANT_TABS = ['scheduler-tracker','calendar','preop','availability','preop-history'];
 // Scheduler (Nicole) sees Jordan's availability calendar and the same Tracker
 // table — she manages "Called" + watches $100 Stripe + Jordan's clearance.
 const SCHEDULER_TABS = ['scheduler-tracker','calendar'];
@@ -1217,9 +1220,9 @@ function applyRoleRestrictions(role) {
   const restricted = isAssistant || isScheduler;
 
   // Top-level nav buttons assistants/schedulers shouldn't see.
-  // Jordan: no direct Pre-Op nav entry — she can only reach a pre-op by
-  // opening a Nicole-created case from the Mid-Case list, never start fresh.
-  const assistantHide = ['nav-home','nav-preop','nav-new-case','nav-payments'];
+  // Jordan: no Pre-Op nav entry (she opens pre-ops from the Tracker row),
+  //         no Mid-Case (her workflow lives entirely on the Tracker).
+  const assistantHide = ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'];
   const schedulerHide = ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'];
   const toHide = isScheduler ? schedulerHide : (isAssistant ? assistantHide : []);
   ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'].forEach(id => {
@@ -1232,11 +1235,11 @@ function applyRoleRestrictions(role) {
   if(reportsDd) reportsDd.style.display = restricted ? 'none' : '';
   const setupDd = document.getElementById('setup-dropdown');
   if(setupDd) setupDd.style.display = restricted ? 'none' : '';
-  // Top-level Calendar (case schedule) — shown to Nicole only. Jordan gets
-  // his own Availability tab instead; CRNAs reach Calendar via the Setup
+  // Top-level Calendar — shown to Nicole and Jordan (each gets a role-
+  // tailored event set via getCalEvents). CRNAs reach Calendar via the Setup
   // dropdown like before.
   const navCalendar = document.getElementById('nav-calendar');
-  if(navCalendar) navCalendar.style.display = isScheduler ? '' : 'none';
+  if(navCalendar) navCalendar.style.display = (isScheduler || isAssistant) ? '' : 'none';
   // Availability tab — Jordan only.
   const navAvail = document.getElementById('nav-availability');
   if(navAvail) navAvail.style.display = isAssistant ? '' : 'none';
@@ -1274,6 +1277,23 @@ function applyRoleRestrictions(role) {
   // Tracker's "+ Add Patient" entry — only Nicole adds patients.
   const strAddBtn = document.getElementById('str-add-patient-btn');
   if(strAddBtn) strAddBtn.style.display = isScheduler ? '' : 'none';
+  // Tracker's "Send Fax" button — Jordan's workflow lives on the Tracker,
+  // so the fax entry point lives there for her (and stays available to
+  // CRNAs too, who can also pop into the tab if needed).
+  const strFaxBtn = document.getElementById('str-fax-btn');
+  if(strFaxBtn) strFaxBtn.style.display = isScheduler ? 'none' : '';
+  // Move Mid-Case header's fax entry away — only CRNAs need it (and they
+  // already have access via Pre-Op).
+  const midFaxBtn = document.getElementById('mid-case-fax-btn');
+  if(midFaxBtn) midFaxBtn.style.display = isAssistant ? 'none' : '';
+  // Pre-Op tab's fax / scheduled-faxes buttons — Jordan reaches the fax
+  // picker from the Tracker header instead, so hide them from her view.
+  if(isAssistant) {
+    document.querySelectorAll('#tab-preop .action-bar button').forEach(b => {
+      const txt = (b.textContent || '').trim();
+      if(txt.includes('Send Fax') || txt.includes('Scheduled Faxes')) b.style.display = 'none';
+    });
+  }
 
   // Bounce restricted roles off any tab they shouldn't be on.
   if(restricted) {
@@ -1714,8 +1734,9 @@ window._spvSend = async function() {
       const existing = preSnap.exists() ? (preSnap.data().records || []) : [];
       window._cachedPreopRecords = existing;
       const newCaseId = generateCaseId(crna, surgeryDate);
+      const newRecordId = uid ? uid() : Math.random().toString(36).slice(2,11);
       const newRecord = {
-        id: uid ? uid() : Math.random().toString(36).slice(2,11),
+        id: newRecordId,
         worker: crna,
         savedAt: new Date().toISOString(),
         createdBy: 'nicole',
@@ -1735,6 +1756,16 @@ window._spvSend = async function() {
       };
       existing.unshift(newRecord);
       await savePreopRecords(existing);
+      // Stamp the tracker entry with a pointer to the new pre-op so Jordan's
+      // "Open Pre-Op" button on the Tracker row can jump straight to it.
+      try {
+        if(typeof window._strUpdateEntry === 'function') {
+          await window._strUpdateEntry(entryId, {
+            preopRecordId: newRecordId,
+            preopCaseId: newCaseId
+          });
+        }
+      } catch(_) {}
       try { logAudit && logAudit('preop-autocreated-by-nicole', newCaseId, patientLabel); } catch(e){}
     } catch(e) { console.warn('Could not auto-create pre-op case:', e); }
 
@@ -2356,6 +2387,43 @@ if(calMonth < 0) { calMonth=11; calYear--; }
 buildCalendar();
 };
 function getCalEvents() {
+// Jordan (assistant) sees her own published availability + every scheduled
+// pre-op visit she's expected to make (pulled from the Tracker entries that
+// have a visit time set). Lets her see her week at a glance.
+if(window._userRole === 'assistant') {
+  const slots = window._availabilitySlots || {};
+  const out = [];
+  const fmtTime = t => t ? new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }) : '';
+  Object.keys(slots).forEach(iso => {
+    (slots[iso] || []).forEach(s => {
+      out.push({
+        type: 'availability',
+        date: iso,
+        label: `🟢 Open · ${fmtTime(s.start)}–${fmtTime(s.end)}`,
+        worker: 'josh',
+        _availability: true,
+        _slotStart: s.start,
+        _slotEnd: s.end
+      });
+    });
+  });
+  // Scheduled pre-op visit calls — each booked Tracker entry becomes a blue
+  // event on the day Jordan is supposed to call the patient.
+  const entries = (typeof window._strGetAllEntries === 'function') ? window._strGetAllEntries() : [];
+  entries.forEach(e => {
+    if(!e.scheduledAt || !e.date) return;
+    const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || 'Patient';
+    out.push({
+      type: 'preop-call',
+      date: e.date,
+      label: `📞 ${fmtTime(e.time)} · ${name}`,
+      worker: 'josh',
+      _trackerEntryId: e.id,
+      detail: `Call ${name} (${e.patientPhone || 'no phone'}) for pre-op clearance`
+    });
+  });
+  return out;
+}
 // Nicole (scheduler role) sees Jordan's availability slots (green, clickable)
 // + the surgery dates Josh/Dev have on the books (so she avoids double-booking
 // pre-op visits onto surgery days). NO preop-call or deposit events — those
