@@ -1267,13 +1267,13 @@ function applyRoleRestrictions(role) {
   const surgeryModeBtn = document.getElementById('surgery-mode-toggle');
   if(surgeryModeBtn) surgeryModeBtn.style.display = (isAssistant || isScheduler) ? 'none' : '';
 
-  // Schedule Pre-Op Visit button — Nicole only.
-  const schedBtn = document.getElementById('schedule-preop-visit-btn');
-  if(schedBtn) schedBtn.style.display = isScheduler ? '' : 'none';
   // "+ New Pre-Op" shortcut on Mid-Case — hide for restricted roles since
   // they shouldn't be creating fresh pre-ops from scratch.
   const midNewPreop = document.getElementById('mid-case-new-preop-btn');
   if(midNewPreop) midNewPreop.style.display = restricted ? 'none' : '';
+  // Tracker's "+ Add Patient" entry — only Nicole adds patients.
+  const strAddBtn = document.getElementById('str-add-patient-btn');
+  if(strAddBtn) strAddBtn.style.display = isScheduler ? '' : 'none';
 
   // Bounce restricted roles off any tab they shouldn't be on.
   if(restricted) {
@@ -1290,72 +1290,131 @@ function applyRoleRestrictions(role) {
 // Used by Nicole (and Jordan) to book a pre-op clearance visit + email the
 // patient a $100 Stripe link. The patient pays the $100 BEFORE Jordan does
 // the clearance, per the agreed workflow.
-window.openSchedulePreopVisitModal = function() {
+window.openSchedulePreopVisitModal = function(entryId) {
+  // The modal is only useful when called from a Tracker row — that's where the
+  // patient + surgery info lives. Block ad-hoc opens to keep the flow tidy.
+  if(!entryId) {
+    alert('Open a patient from the Tracker to schedule their pre-op visit.');
+    if(typeof showTab === 'function') showTab('scheduler-tracker');
+    return;
+  }
+  const entry = (typeof window._strGetEntry === 'function') ? window._strGetEntry(entryId) : null;
+  if(!entry) {
+    alert('Could not find this patient on the Tracker. Reload and try again.');
+    return;
+  }
+  window._spvEntryId = entryId;
+  window._spvEntry = entry;
   const prior = document.getElementById('schedulePreopVisitModal');
   if(prior) prior.remove();
   const wrap = document.createElement('div');
   wrap.id = 'schedulePreopVisitModal';
   wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto';
   wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
-  const todayIso = window._spvPrefillDate || new Date().toISOString().split('T')[0];
-  const prefillTime = window._spvPrefillTime || '';
-  window._spvPrefillDate = null;
-  window._spvPrefillTime = null;
-  wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
+  const todayIso = new Date().toISOString().split('T')[0];
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtDate = iso => iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' }) : '—';
+  const fmtTime = t => t ? new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }) : '';
+  const patientName = [entry.patientFirst, entry.patientLast].filter(Boolean).join(' ') || '—';
+  // Surgery date - 1 day; visit date input clamps below this.
+  let visitMax = '';
+  if(entry.surgeryDate) {
+    const d = new Date(entry.surgeryDate + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 1);
+    visitMax = d.toISOString().split('T')[0];
+  }
+  const lockedCss = 'background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;cursor:not-allowed';
+
+  wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:920px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
     <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
-      <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">Schedule</div><div style="font-size:16px;font-weight:600">Pre-Op Visit with Jordan</div></div>
+      <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">Schedule</div><div style="font-size:16px;font-weight:600">Pre-Op Visit with Jordan · ${esc(patientName)}</div></div>
       <button onclick="document.getElementById('schedulePreopVisitModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px">✕</button>
     </div>
-    <div style="padding:20px 22px">
-      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1e3a8a;line-height:1.5">Books a pre-op clearance visit with Jordan and emails the patient a confirmation. Take the $100 card info over the phone separately.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-        <div><label style="margin-top:0">Patient first name <span style="color:var(--warn)">*</span></label><input type="text" id="spv-first" placeholder="e.g. John" oninput="window._spvRefreshPreview()"></div>
-        <div><label style="margin-top:0">Patient last name</label><input type="text" id="spv-last" placeholder="e.g. Smith"></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-        <div><label style="margin-top:0">Patient phone</label><input type="tel" id="spv-phone" placeholder="(555) 123-4567"></div>
-        <div><label style="margin-top:0">Patient email <span style="color:var(--warn)">*</span></label><input type="email" id="spv-email" placeholder="patient@email.com"></div>
-      </div>
-      <div style="margin-bottom:14px"><label style="margin-top:0">PCP <span style="font-weight:400;color:var(--text-faint);font-size:11px">(if any)</span></label><input type="text" id="spv-pcp" placeholder="Dr. Smith"></div>
-      <div style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9a3412;margin-bottom:8px">Surgery details</div>
-        <div style="display:grid;grid-template-columns:1fr 140px;gap:14px">
-          <div><label style="margin-top:0">Surgery date</label><input type="date" id="spv-surgery-date" min="${todayIso}" oninput="window._spvSyncSurgeryDate()"></div>
-          <div><label style="margin-top:0">Start time</label><input type="time" id="spv-surgery-time"></div>
+    <div class="spv-body" style="display:flex;gap:0;flex-wrap:wrap">
+
+      <!-- LEFT: form -->
+      <div style="flex:1.4 1 360px;min-width:0;padding:20px 22px;border-right:1px solid var(--border)">
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1e3a8a;line-height:1.5">Patient info below comes from the Tracker — tap ✏ on the row to edit it. Here, just add the email and the pre-op visit time you agreed on with the patient.</div>
+
+        <!-- Locked patient + surgery info -->
+        <div style="border:1px solid #e2e8f0;background:#f8fafc;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">From Tracker</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;font-size:13px">
+            <div><div style="font-size:11px;color:var(--text-faint)">Patient</div><div style="font-weight:600">${esc(patientName)}</div></div>
+            <div><div style="font-size:11px;color:var(--text-faint)">Phone</div><div style="font-weight:600">${esc(entry.patientPhone || '—')}</div></div>
+            <div><div style="font-size:11px;color:var(--text-faint)">PCP</div><div style="font-weight:600">${esc(entry.pcp || '—')}</div></div>
+            <div><div style="font-size:11px;color:var(--text-faint)">Surgery Center</div><div style="font-weight:600">${esc(entry.surgeryCenterName || '—')}</div></div>
+            <div><div style="font-size:11px;color:var(--text-faint)">Surgery Date</div><div style="font-weight:600;color:#9a3412">${esc(fmtDate(entry.surgeryDate))}</div></div>
+            <div><div style="font-size:11px;color:var(--text-faint)">Surgery Start</div><div style="font-weight:600;color:#9a3412">${esc(fmtTime(entry.surgeryTime)) || '—'}</div></div>
+          </div>
+        </div>
+
+        <!-- Editable fields -->
+        <div style="margin-bottom:14px"><label style="margin-top:0">Patient email <span style="color:var(--warn)">*</span></label><input type="email" id="spv-email" placeholder="patient@email.com" value="${esc(entry.patientEmail || '')}" oninput="window._spvRefreshPreview()"></div>
+        <div id="spv-open-slots" style="margin-bottom:14px"></div>
+        <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:14px">
+          <div><label style="margin-top:0">Pre-op visit date <span style="font-size:11px;color:var(--text-faint)">(must be before surgery)</span></label><input type="date" id="spv-date" value="${esc(entry.date || '')}" ${visitMax ? `max="${visitMax}"` : ''} oninput="window._spvRefreshPreview()"></div>
+          <div><label style="margin-top:0">Time</label><input type="time" id="spv-time" value="${esc(entry.time || '')}" oninput="window._spvRefreshPreview()"></div>
+        </div>
+        <div style="margin-bottom:14px"><label style="margin-top:0">Assign to CRNA <span style="color:var(--warn)">*</span></label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-josh" onclick="window._spvSetCrna('josh')">Josh</button><button type="button" class="worker-btn" id="spv-dev" onclick="window._spvSetCrna('dev')">Devarsh</button></div></div>
+        <div style="margin-bottom:14px"><label style="margin-top:0">$100 collection</label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-pay-phone" onclick="window._spvSetPayMethod('phone')">📞 By phone</button><button type="button" class="worker-btn" id="spv-pay-email" onclick="window._spvSetPayMethod('email')">📧 Email link</button></div><div style="font-size:11px;color:var(--text-faint);margin-top:4px;font-style:italic">Switch to "Email link" if the patient couldn't give a card over the phone.</div></div>
+        <div style="margin-bottom:14px"><label style="margin-top:0">Note for patient (optional)</label><textarea id="spv-note" placeholder="Anything the patient should know about the visit..." oninput="window._spvRefreshPreview()" style="width:100%;min-height:72px;padding:10px 12px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;color:var(--text);outline:none;resize:vertical"></textarea></div>
+        <div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;background:#fafafa">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
+            <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text-faint)">Confirmation email preview</div>
+            <button type="button" id="spv-preview-toggle" onclick="window._spvTogglePreview()" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px">👁 Show preview</button>
+          </div>
+          <div id="spv-preview-box" style="display:none;border-top:1px solid var(--border);background:#f1f5f9">
+            <iframe id="spv-preview-iframe" sandbox="allow-same-origin" style="width:100%;height:380px;border:none;display:block"></iframe>
+          </div>
+        </div>
+        <div id="spv-status" style="font-size:13px;padding:6px 0;min-height:18px"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--border)">
+          <button class="btn btn-ghost" onclick="document.getElementById('schedulePreopVisitModal').remove()">Cancel</button>
+          <button id="spv-send-btn" class="btn btn-primary" onclick="window._spvSend()" style="background:#1d3557;border-color:#1d3557">📧 Book & Send Confirmation</button>
         </div>
       </div>
-      <div id="spv-open-slots" style="margin-bottom:14px"></div>
-      <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:14px">
-        <div><label style="margin-top:0">Pre-op visit date <span style="font-size:11px;color:var(--text-faint)">(must be before surgery)</span></label><input type="date" id="spv-date" value="${todayIso}" oninput="window._spvRefreshPreview()"></div>
-        <div><label style="margin-top:0">Time</label><input type="time" id="spv-time" value="${prefillTime}" oninput="window._spvRefreshPreview()"></div>
-      </div>
-      <div style="margin-bottom:14px"><label style="margin-top:0">Assign to CRNA <span style="color:var(--warn)">*</span></label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-josh" onclick="window._spvSetCrna('josh')">Josh</button><button type="button" class="worker-btn" id="spv-dev" onclick="window._spvSetCrna('dev')">Devarsh</button></div></div>
-      <div style="margin-bottom:14px"><label style="margin-top:0">$100 collection</label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-pay-phone" onclick="window._spvSetPayMethod('phone')">📞 By phone</button><button type="button" class="worker-btn" id="spv-pay-email" onclick="window._spvSetPayMethod('email')">📧 Email link</button></div><div style="font-size:11px;color:var(--text-faint);margin-top:4px;font-style:italic">Switch to "Email link" if the patient couldn't give a card over the phone.</div></div>
-      <div style="margin-bottom:14px"><label style="margin-top:0">Note for patient (optional)</label><textarea id="spv-note" placeholder="Anything the patient should know about the visit..." oninput="window._spvRefreshPreview()" style="width:100%;min-height:72px;padding:10px 12px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;color:var(--text);outline:none;resize:vertical"></textarea></div>
-      <div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;background:#fafafa">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
-          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text-faint)">Confirmation email preview</div>
-          <button type="button" id="spv-preview-toggle" onclick="window._spvTogglePreview()" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px">👁 Show preview</button>
-        </div>
-        <div id="spv-preview-box" style="display:none;border-top:1px solid var(--border);background:#f1f5f9">
-          <iframe id="spv-preview-iframe" sandbox="allow-same-origin" style="width:100%;height:380px;border:none;display:block"></iframe>
-        </div>
-      </div>
-      <div id="spv-status" style="font-size:13px;padding:6px 0;min-height:18px"></div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--border)">
-        <button class="btn btn-ghost" onclick="document.getElementById('schedulePreopVisitModal').remove()">Cancel</button>
-        <button id="spv-send-btn" class="btn btn-primary" onclick="window._spvSend()" style="background:#1d3557;border-color:#1d3557">📧 Book & Send Confirmation</button>
+
+      <!-- RIGHT: call script panel -->
+      <div style="flex:1 1 280px;min-width:0;background:#f8fafc;padding:20px 22px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#1d3557;margin-bottom:10px">📞 Call script</div>
+        <div id="spv-script" style="font-size:13px;color:#1e293b;line-height:1.6"></div>
       </div>
     </div>
   </div>`;
   document.body.appendChild(wrap);
   window._spvCrna = 'josh';
-  window._spvPayMethod = 'phone'; // 'phone' (default) | 'email' (send Stripe link)
+  window._spvPayMethod = 'phone';
   setTimeout(() => {
-    document.getElementById('spv-first')?.focus();
+    document.getElementById('spv-email')?.focus();
     window._spvRenderOpenSlots();
     window._spvRefreshPreview();
+    window._spvRenderScript();
   }, 60);
+};
+
+// Render the call-script panel with the patient/surgery info filled in.
+window._spvRenderScript = function() {
+  const host = document.getElementById('spv-script');
+  if(!host) return;
+  const e = window._spvEntry || {};
+  const userName = (window.currentUser?.displayName) || ((window.currentUser?.email || '').split('@')[0]) || '____';
+  const patientFirst = e.patientFirst || '____';
+  const center = e.surgeryCenterName || '____';
+  const fmtDate = iso => iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }) : '____';
+  const fmtTime = t => t ? new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }) : '____';
+  const surgD = fmtDate(e.surgeryDate);
+  const surgT = fmtTime(e.surgeryTime);
+  const hl = s => `<strong style="background:#dcfce7;border-radius:4px;padding:1px 5px;color:#166534">${s}</strong>`;
+  host.innerHTML = `
+    <p style="margin:0 0 10px"><em>Hi, my name is ${hl(userName)} calling from Atlas Anesthesia.</em></p>
+    <p style="margin:0 0 10px"><em>I see ${hl(patientFirst)} has an upcoming procedure scheduled at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</em></p>
+    <p style="margin:0 0 10px"><em>We wanted to call to schedule anesthesia clearance.</em></p>
+    <p style="margin:0 0 10px"><em>We have our own nurse practitioner who can clear them via Zoom.</em></p>
+    <p style="margin:0 0 10px"><em>We can schedule that today. It's a <strong>$100 fee</strong> that can be charged over the phone right now or sent as a payment link — but it must be paid before the visit.</em></p>
+    <hr style="border:0;border-top:1px solid #e2e8f0;margin:14px 0">
+    <div style="font-size:11px;color:var(--text-faint)">Once they agree, drop their email in the form to the left and pick a visit time from Jordan's open slots. The confirmation email goes out as soon as you book.</div>
+  `;
 };
 
 // Toggle between phone-collected card info (default) and emailing the Stripe
@@ -1490,7 +1549,8 @@ window._spvSetCrna = function(w) {
 // pre-op visit time with Jordan. Card info is handled separately by phone.
 function _spvBuildEmailHTML() {
   const $ = id => document.getElementById(id);
-  const first = $('spv-first')?.value.trim() || '';
+  // Patient first name comes from the locked Tracker entry, not a form field.
+  const first = (window._spvEntry?.patientFirst) || '';
   const date  = $('spv-date')?.value || '';
   const time  = $('spv-time')?.value || '';
   const note  = $('spv-note')?.value.trim() || '';
@@ -1584,27 +1644,29 @@ function _spvBuildJordanNotificationHTML(p) {
 
 window._spvSend = async function() {
   const $ = id => document.getElementById(id);
-  const first = $('spv-first')?.value.trim() || '';
-  const last  = $('spv-last')?.value.trim() || '';
+  const entryId = window._spvEntryId;
+  const entry = window._spvEntry;
+  if(!entryId || !entry) { alert('Tracker entry not loaded — close the modal and try again.'); return; }
+  // Locked fields come straight from the Tracker entry.
+  const first = entry.patientFirst || '';
+  const last  = entry.patientLast || '';
+  const phone = entry.patientPhone || '';
+  const pcp   = entry.pcp || '';
+  const surgeryDate = entry.surgeryDate || '';
+  const surgeryTime = entry.surgeryTime || '';
+  // Editable fields.
   const email = $('spv-email')?.value.trim() || '';
-  const phone = $('spv-phone')?.value.trim() || '';
-  const pcp   = $('spv-pcp')?.value.trim() || '';
-  const surgeryDate = $('spv-surgery-date')?.value || '';
-  const surgeryTime = $('spv-surgery-time')?.value || '';
   const date  = $('spv-date')?.value || '';
   const time  = $('spv-time')?.value || '';
   const note  = $('spv-note')?.value.trim() || '';
   const status = $('spv-status');
   const btn = $('spv-send-btn');
-  if(!first) { alert('Patient first name is required.'); return; }
   if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Valid patient email required (a confirmation will be sent there).'); return; }
-  if(!surgeryDate) { alert('Surgery date is required so the CRNA has a case to review.'); return; }
-  // Pre-op visit must happen BEFORE the day of surgery (no same-day, no after).
+  if(!surgeryDate) { alert('Surgery date is missing on the Tracker entry — edit the patient first.'); return; }
   if(!date) { alert('Pre-op visit date is required.'); return; }
   if(date >= surgeryDate) { alert('The pre-op visit date must be before the surgery date.'); return; }
-  // Don't let a booking get scheduled for a surgery that already happened.
   const todayIso = new Date().toISOString().split('T')[0];
-  if(surgeryDate < todayIso) { alert('Surgery date is in the past — pick a future date.'); return; }
+  if(surgeryDate < todayIso) { alert('Surgery date is in the past — fix it on the Tracker first.'); return; }
   btn.disabled = true; btn.textContent = 'Sending...';
   if(status) { status.textContent = ''; status.style.color = ''; }
   const crna = window._spvCrna || 'josh';
@@ -1621,65 +1683,57 @@ window._spvSend = async function() {
     });
     const data = await res.json().catch(() => ({}));
     if(!res.ok || !data.success) throw new Error(data.error || 'send failed');
-    // Save the booking to Firestore so it shows up on the calendar.
-    let preopVisitId = '';
+
+    // Stamp the existing Tracker entry — don't create a new one. The entry
+    // started as a "pending" patient and is now marked scheduled.
     try {
-      const docRef = doc(db, 'atlas', 'preop_visits');
-      const snap = await getDoc(docRef);
-      const entries = snap.exists() ? (snap.data().entries || []) : [];
-      preopVisitId = uid ? uid() : Math.random().toString(36).slice(2,11);
-      entries.unshift({
-        id: preopVisitId,
-        bookedBy: currentUser?.email || 'unknown',
-        crna,
-        patientFirst: first,
-        patientLast: last,
-        patientEmail: email,
-        patientPhone: phone,
-        pcp,
-        surgeryDate, surgeryTime,
-        date, time, note,
-        bookedAt: new Date().toISOString()
-      });
-      await setDoc(docRef, { entries });
-    } catch(e) { console.warn('Could not save preop visit booking:', e); }
+      if(typeof window._strUpdateEntry === 'function') {
+        await window._strUpdateEntry(entryId, {
+          patientEmail: email,
+          date, time, note,
+          crna,
+          payMethod: window._spvPayMethod || 'phone',
+          scheduledAt: new Date().toISOString(),
+          scheduledBy: (currentUser?.email) || ''
+        });
+      }
+    } catch(e) { console.warn('Could not update tracker entry:', e); }
+
     // Auto-create a pre-op case for Josh/Dev pre-filled with what Nicole knows,
     // tagged "to review by Nicole" so the CRNA sees who created it and that
     // Jordan still needs to do the clearance.
-    if(surgeryDate) {
-      try {
-        const preSnap = await getDoc(doc(db, 'atlas', 'preop'));
-        const existing = preSnap.exists() ? (preSnap.data().records || []) : [];
-        // Make generateCaseId() see all current records, then compute a fresh ID.
-        window._cachedPreopRecords = existing;
-        const newCaseId = generateCaseId(crna, surgeryDate);
-        const newRecord = {
-          id: uid ? uid() : Math.random().toString(36).slice(2,11),
-          worker: crna,
-          savedAt: new Date().toISOString(),
-          createdBy: 'nicole',
-          'po-reviewStatus': 'by-nicole',
-          'po-caseId': newCaseId,
-          'po-surgeryDate': surgeryDate,
-          'po-startTime': surgeryTime || '',
-          'po-patientFirstName': first,
-          'po-patientLastName': last,
-          'po-patientEmail': email,
-          'po-patientPhone': phone,
-          'po-pcp-name': pcp,
-          'po-preopVisitId': preopVisitId,
-          'po-preopVisitDate': date,
-          'po-preopVisitTime': time
-        };
-        existing.unshift(newRecord);
-        await savePreopRecords(existing);
-        try { logAudit && logAudit('preop-autocreated-by-nicole', newCaseId, patientLabel); } catch(e){}
-      } catch(e) { console.warn('Could not auto-create pre-op case:', e); }
-    }
+    try {
+      const preSnap = await getDoc(doc(db, 'atlas', 'preop'));
+      const existing = preSnap.exists() ? (preSnap.data().records || []) : [];
+      window._cachedPreopRecords = existing;
+      const newCaseId = generateCaseId(crna, surgeryDate);
+      const newRecord = {
+        id: uid ? uid() : Math.random().toString(36).slice(2,11),
+        worker: crna,
+        savedAt: new Date().toISOString(),
+        createdBy: 'nicole',
+        'po-reviewStatus': 'by-nicole',
+        'po-caseId': newCaseId,
+        'po-surgeryDate': surgeryDate,
+        'po-startTime': surgeryTime || '',
+        'po-surgery-center': entry.surgeryCenterId || '',
+        'po-patientFirstName': first,
+        'po-patientLastName': last,
+        'po-patientEmail': email,
+        'po-patientPhone': phone,
+        'po-pcp-name': pcp,
+        'po-preopVisitId': entryId,
+        'po-preopVisitDate': date,
+        'po-preopVisitTime': time
+      };
+      existing.unshift(newRecord);
+      await savePreopRecords(existing);
+      try { logAudit && logAudit('preop-autocreated-by-nicole', newCaseId, patientLabel); } catch(e){}
+    } catch(e) { console.warn('Could not auto-create pre-op case:', e); }
+
     try { logAudit && logAudit('preop-visit-scheduled', '', patientLabel + ' @ ' + (date||'?') + ' / ' + crna); } catch(e){}
-    // Fire-and-forget internal notifications: Jordan (so she sees the fresh
-    // patient lined up for her clearance call) AND admin (audit trail of
-    // every booking). Both use /outreach-email so no worker redeploy needed.
+
+    // Fire-and-forget internal notifications: Jordan + admin.
     try {
       const jordanHtml = _spvBuildJordanNotificationHTML({
         first, last, email, phone, pcp,
@@ -1696,6 +1750,7 @@ window._spvSend = async function() {
         }).catch(() => {});
       });
     } catch(e) { console.warn('Internal booking notifications skipped:', e); }
+
     if(status) { status.textContent = '✓ Visit booked. Confirmation emailed to ' + email + '.'; status.style.color = '#166534'; }
     setTimeout(() => { document.getElementById('schedulePreopVisitModal')?.remove(); if(window.buildCalendar) window.buildCalendar(); }, 1500);
   } catch(err) {
@@ -2436,14 +2491,12 @@ if(fcEl && typeof FullCalendar !== 'undefined') {
       editable: false, // events are not draggable — dates are fixed
       eventClick: function(info) {
         const raw = info.event.extendedProps._raw;
-        // Scheduler click on an availability event → open booking modal
-        // pre-filled with that exact slot (date + start time).
+        // Scheduler clicks an availability event → bounce them to the Tracker
+        // since booking now requires a patient row. A toast hint is friendlier
+        // than silently doing nothing.
         if(raw && raw._availability && window._userRole === 'scheduler') {
-          window._spvPrefillDate = raw.date;
-          window._spvPrefillTime = raw._slotStart || '';
-          if(typeof window.openSchedulePreopVisitModal === 'function') {
-            window.openSchedulePreopVisitModal();
-          }
+          alert('Open a patient from the Tracker to book this slot.');
+          if(typeof showTab === 'function') showTab('scheduler-tracker');
           return;
         }
         if(raw && typeof showCalDetail === 'function') {
@@ -10759,6 +10812,7 @@ setTimeout(() => {
 // Firebase functions needed by fax.js and payments.js
 window.getDoc = getDoc;
 window.setDoc = setDoc;
+window.deleteDoc = deleteDoc;
 window.doc = doc;
 window.onSnapshot = onSnapshot;
 // fax.js, payments.js, anesthesia.js access these via window.*
