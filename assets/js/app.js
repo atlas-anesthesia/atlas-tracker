@@ -1216,7 +1216,9 @@ function applyRoleRestrictions(role) {
   const restricted = isAssistant || isScheduler;
 
   // Top-level nav buttons assistants/schedulers shouldn't see.
-  const assistantHide = ['nav-home','nav-new-case','nav-payments'];
+  // Jordan: no direct Pre-Op nav entry — she can only reach a pre-op by
+  // opening a Nicole-created case from the Mid-Case list, never start fresh.
+  const assistantHide = ['nav-home','nav-preop','nav-new-case','nav-payments'];
   const schedulerHide = ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'];
   const toHide = isScheduler ? schedulerHide : (isAssistant ? assistantHide : []);
   ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'].forEach(id => {
@@ -5083,6 +5085,13 @@ window.cleanupPreopDuplicates = async function() {
 };
 
 window.savePreop = async function() {
+// Jordan (assistant) can ONLY edit pre-ops that were spawned by Nicole's
+// booking flow. She can't start a brand-new pre-op from scratch — they
+// must come through the Schedule Pre-Op Visit modal first.
+if(window._userRole === 'assistant' && !window._editingPreopId) {
+  alert('You can only fill in pre-ops created by Nicole. Open a case from the Mid-Case list to edit it.');
+  return;
+}
 const textData = getPreopTextFields();
 const checkData = getPreopCheckboxes();
 // Always generate Case ID fresh from surgery date at save time
@@ -5569,6 +5578,15 @@ const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records || []) : [];
 const record = records.find(r => r.id === id);
 if(!record) { alert('Record not found.'); return; }
+// Jordan is only allowed to work on pre-ops that came through Nicole's
+// booking flow (tagged 'by-nicole' or her own in-progress 'by-jordan').
+if(window._userRole === 'assistant') {
+  const status = record['po-reviewStatus'] || '';
+  if(status !== 'by-nicole' && status !== 'by-jordan') {
+    alert('You can only edit pre-ops that Nicole has scheduled. This case was created by a CRNA.');
+    return;
+  }
+}
 // Navigate to pre-op tab FIRST so DOM elements exist
 showTab('preop');
 // Small delay to ensure tab is visible and DOM is ready
@@ -9969,6 +9987,15 @@ window.openCaseActionModal = function(preopId, caseId, label) {
   wrap.id = 'caseActionModal';
   wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
   wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
+  // Jordan never finalizes cases — that's CRNA-only. Hide the option for her.
+  const finalizeBtn = (window._userRole === 'assistant') ? '' : `
+        <button onclick="document.getElementById('caseActionModal')?.remove();if(typeof startCaseFromPreop==='function')startCaseFromPreop('${preopId}');else if(typeof loadDraftCaseById==='function')loadDraftCaseById('${caseId}')" style="padding:18px 20px;background:#1d3557;border:2px solid #1d3557;color:#fff;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font-family:inherit">
+          <span style="font-size:22px">✓</span>
+          <div style="flex:1;min-width:0">
+            <div>Finalize Case</div>
+            <div style="font-size:12px;font-weight:400;color:#a8c4e0;margin-top:2px">Log supplies / CS and finalize</div>
+          </div>
+        </button>`;
   wrap.innerHTML = `
     <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -9986,13 +10013,7 @@ window.openCaseActionModal = function(preopId, caseId, label) {
             <div style="font-size:12px;font-weight:400;color:var(--text-muted);margin-top:2px">Edit the pre-op assessment</div>
           </div>
         </button>
-        <button onclick="document.getElementById('caseActionModal')?.remove();if(typeof startCaseFromPreop==='function')startCaseFromPreop('${preopId}');else if(typeof loadDraftCaseById==='function')loadDraftCaseById('${caseId}')" style="padding:18px 20px;background:#1d3557;border:2px solid #1d3557;color:#fff;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font-family:inherit">
-          <span style="font-size:22px">✓</span>
-          <div style="flex:1;min-width:0">
-            <div>Finalize Case</div>
-            <div style="font-size:12px;font-weight:400;color:#a8c4e0;margin-top:2px">Log supplies / CS and finalize</div>
-          </div>
-        </button>
+        ${finalizeBtn}
       </div>
     </div>
   `;
