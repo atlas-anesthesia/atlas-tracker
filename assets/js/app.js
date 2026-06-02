@@ -1213,11 +1213,11 @@ function getUserDisplayName(email, role) {
   return role === 'crna' ? 'CRNA' : 'User';
 }
 // Tabs an assistant (Jordan) is allowed to open. He has his own Availability
-// tab instead of the shared case Calendar — that's where he marks the days
-// he's available for pre-op visits so Nicole knows what to book.
-const ASSISTANT_TABS = ['preop','mid-case','availability','preop-history'];
-// Scheduler (Nicole) sees Jordan's availability calendar and her own Tracker
-// table for following up on patients she's booked.
+// tab + shared Tracker so he can see what Nicole booked and update his own
+// clearance progress pills on each row.
+const ASSISTANT_TABS = ['preop','mid-case','availability','scheduler-tracker','preop-history'];
+// Scheduler (Nicole) sees Jordan's availability calendar and the same Tracker
+// table — she manages "Called" + watches $100 Stripe + Jordan's clearance.
 const SCHEDULER_TABS = ['calendar','scheduler-tracker'];
 
 // Hide nav / forms based on role. Assistant (Jordan) only sees pre-op tabs.
@@ -1249,21 +1249,29 @@ function applyRoleRestrictions(role) {
   // Availability tab — Jordan only.
   const navAvail = document.getElementById('nav-availability');
   if(navAvail) navAvail.style.display = isAssistant ? '' : 'none';
-  // Tracker tab — Nicole only.
+  // Tracker tab — both Jordan (assistant) and Nicole (scheduler) see it.
   const navTracker = document.getElementById('nav-scheduler-tracker');
-  if(navTracker) navTracker.style.display = isScheduler ? '' : 'none';
+  if(navTracker) navTracker.style.display = (isAssistant || isScheduler) ? '' : 'none';
+  // Calendar clutter for Nicole — she only cares about surgery dates +
+  // Jordan's availability. Hide everything else on the calendar tab.
+  if(isScheduler) {
+    ['cal-legend-preop-call','cal-legend-final-payment','cal-preop-days-row','cal-deposit-days-row']
+      .forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+  }
 
   // CRNA-assignment toggle on the Pre-Op form — only relevant for assistants.
   const crnaPick = document.getElementById('po-assign-crna-row');
   if(crnaPick) crnaPick.style.display = isAssistant ? '' : 'none';
 
-  // Buttons on the Pre-Op tab + the header Surgery Mode toggle — Jordan
-  // (assistant) shouldn't send $500 deposit emails, print the anesthesia
-  // record, or trigger surgery mode. Hide them for that role.
-  ['preop-deposit-btn','preop-print-record-btn','surgery-mode-toggle'].forEach(id => {
+  // Buttons on the Pre-Op tab + the header Surgery Mode toggle.
+  // Jordan: no $500 deposit, no anesthesia record, no surgery mode.
+  // Nicole: also no surgery mode (she never operates a case).
+  ['preop-deposit-btn','preop-print-record-btn'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.style.display = isAssistant ? 'none' : '';
   });
+  const surgeryModeBtn = document.getElementById('surgery-mode-toggle');
+  if(surgeryModeBtn) surgeryModeBtn.style.display = (isAssistant || isScheduler) ? 'none' : '';
 
   // Schedule Pre-Op Visit + Copy $100 Link buttons — Nicole only.
   const schedBtn = document.getElementById('schedule-preop-visit-btn');
@@ -1305,16 +1313,25 @@ window.openSchedulePreopVisitModal = function() {
     <div style="padding:20px 22px">
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1e3a8a;line-height:1.5">Books a pre-op clearance visit with Jordan and emails the patient a $100 Stripe link to pay before the visit.</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-        <div><label style="margin-top:0">Patient first name <span style="color:var(--warn)">*</span></label><input type="text" id="spv-first" placeholder="e.g. John"></div>
-        <div><label style="margin-top:0">Patient last name</label><input type="text" id="spv-last" placeholder="e.g. Smith"></div>
+        <div><label style="margin-top:0">Patient first name <span style="color:var(--warn)">*</span></label><input type="text" id="spv-first" placeholder="e.g. John" oninput="window._spvRefreshPreview()"></div>
+        <div><label style="margin-top:0">Patient last name</label><input type="text" id="spv-last" placeholder="e.g. Smith" oninput="window._spvRefreshPreview()"></div>
       </div>
       <div style="margin-bottom:14px"><label style="margin-top:0">Patient email <span style="color:var(--warn)">*</span></label><input type="email" id="spv-email" placeholder="patient@email.com"></div>
       <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:14px">
-        <div><label style="margin-top:0">Pre-op visit date</label><input type="date" id="spv-date" value="${todayIso}"></div>
-        <div><label style="margin-top:0">Time</label><input type="time" id="spv-time" value="${prefillTime}"></div>
+        <div><label style="margin-top:0">Pre-op visit date</label><input type="date" id="spv-date" value="${todayIso}" oninput="window._spvRefreshPreview()"></div>
+        <div><label style="margin-top:0">Time</label><input type="time" id="spv-time" value="${prefillTime}" oninput="window._spvRefreshPreview()"></div>
       </div>
       <div style="margin-bottom:14px"><label style="margin-top:0">Assign to CRNA <span style="color:var(--warn)">*</span></label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-josh" onclick="window._spvSetCrna('josh')">Josh</button><button type="button" class="worker-btn" id="spv-dev" onclick="window._spvSetCrna('dev')">Devarsh</button></div></div>
-      <div style="margin-bottom:14px"><label style="margin-top:0">Note for patient (optional)</label><textarea id="spv-note" placeholder="Anything they should know about the visit..." style="width:100%;min-height:72px;padding:10px 12px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;color:var(--text);outline:none;resize:vertical"></textarea></div>
+      <div style="margin-bottom:14px"><label style="margin-top:0">Note for patient (optional)</label><textarea id="spv-note" placeholder="Anything they should know about the visit..." oninput="window._spvRefreshPreview()" style="width:100%;min-height:72px;padding:10px 12px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;color:var(--text);outline:none;resize:vertical"></textarea></div>
+      <div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;background:#fafafa">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text-faint)">Email preview</div>
+          <button type="button" id="spv-preview-toggle" onclick="window._spvTogglePreview()" class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px">🔼 Hide preview</button>
+        </div>
+        <div id="spv-preview-box" style="border-top:1px solid var(--border);background:#f1f5f9">
+          <iframe id="spv-preview-iframe" sandbox="" style="width:100%;height:420px;border:none;display:block"></iframe>
+        </div>
+      </div>
       <div id="spv-status" style="font-size:13px;padding:6px 0;min-height:18px"></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--border)">
         <button class="btn btn-ghost" onclick="document.getElementById('schedulePreopVisitModal').remove()">Cancel</button>
@@ -1324,7 +1341,10 @@ window.openSchedulePreopVisitModal = function() {
   </div>`;
   document.body.appendChild(wrap);
   window._spvCrna = 'josh';
-  setTimeout(() => document.getElementById('spv-first')?.focus(), 60);
+  setTimeout(() => {
+    document.getElementById('spv-first')?.focus();
+    window._spvRefreshPreview();
+  }, 60);
 };
 
 window._spvSetCrna = function(w) {
@@ -1333,28 +1353,21 @@ window._spvSetCrna = function(w) {
   const db_ = document.getElementById('spv-dev');
   if(jb) jb.className = 'worker-btn' + (window._spvCrna === 'josh' ? ' active-josh' : '');
   if(db_) db_.className = 'worker-btn' + (window._spvCrna === 'dev' ? ' active-dev' : '');
+  window._spvRefreshPreview();
 };
 
-window._spvSend = async function() {
+// Build the patient-facing $100 pre-op visit email HTML from current modal
+// fields. Used both by Send and by the live Preview iframe.
+function _spvBuildEmailHTML() {
   const $ = id => document.getElementById(id);
   const first = $('spv-first')?.value.trim() || '';
-  const last  = $('spv-last')?.value.trim() || '';
-  const email = $('spv-email')?.value.trim() || '';
   const date  = $('spv-date')?.value || '';
   const time  = $('spv-time')?.value || '';
   const note  = $('spv-note')?.value.trim() || '';
-  const status = $('spv-status');
-  const btn = $('spv-send-btn');
-  if(!first) { alert('Patient first name is required.'); return; }
-  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Valid patient email required.'); return; }
-  btn.disabled = true; btn.textContent = 'Sending...';
-  if(status) { status.textContent = ''; status.style.color = ''; }
-  const crna = window._spvCrna || 'josh';
+  const crna  = window._spvCrna || 'josh';
   const dateFmt = date ? new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
   const timeFmt = time ? new Date('2000-01-01T' + time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-  const patientLabel = [first, last].filter(Boolean).join(' ');
-  // Build the email — friendly, explains the $100 charge for pre-op clearance.
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">
     <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
       <tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Pre-Op Visit</div><div style="font-size:20px;font-weight:700;color:#fff">Your Pre-Op Clearance is Scheduled</div></td></tr>
@@ -1375,6 +1388,45 @@ window._spvSend = async function() {
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">This is a secure payment request. Your payment is processed safely via Stripe.</div></td></tr>
     </table></td></tr></table></body></html>`;
+}
+
+// Re-render the preview iframe whenever a form field changes.
+window._spvRefreshPreview = function() {
+  const iframe = document.getElementById('spv-preview-iframe');
+  if(!iframe) return;
+  const html = _spvBuildEmailHTML();
+  // contentDocument.write replaces the iframe doc each time — cheap for our size.
+  const doc = iframe.contentDocument || iframe.contentWindow?.document;
+  if(!doc) return;
+  doc.open(); doc.write(html); doc.close();
+};
+
+window._spvTogglePreview = function() {
+  const box = document.getElementById('spv-preview-box');
+  const btn = document.getElementById('spv-preview-toggle');
+  if(!box || !btn) return;
+  const isOpen = box.style.display !== 'none';
+  if(isOpen) { box.style.display = 'none'; btn.textContent = '👁 Show preview'; }
+  else       { box.style.display = '';     btn.textContent = '🔼 Hide preview'; window._spvRefreshPreview(); }
+};
+
+window._spvSend = async function() {
+  const $ = id => document.getElementById(id);
+  const first = $('spv-first')?.value.trim() || '';
+  const last  = $('spv-last')?.value.trim() || '';
+  const email = $('spv-email')?.value.trim() || '';
+  const date  = $('spv-date')?.value || '';
+  const time  = $('spv-time')?.value || '';
+  const note  = $('spv-note')?.value.trim() || '';
+  const status = $('spv-status');
+  const btn = $('spv-send-btn');
+  if(!first) { alert('Patient first name is required.'); return; }
+  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Valid patient email required.'); return; }
+  btn.disabled = true; btn.textContent = 'Sending...';
+  if(status) { status.textContent = ''; status.style.color = ''; }
+  const crna = window._spvCrna || 'josh';
+  const patientLabel = [first, last].filter(Boolean).join(' ');
+  const html = _spvBuildEmailHTML();
   try {
     const url = 'https://atlas-reminder.blue-disk-9b10.workers.dev/preop-visit-email';
     const res = await fetch(url, {
@@ -2012,17 +2064,29 @@ if(window._userRole === 'scheduler') {
       });
     });
   });
-  // 2) Surgery dates from preop records
+  // 2) Surgery dates from preop records — include start/end time on the label
+  //    so Nicole knows when each day's surgeries are booked.
   const records = window._cachedPreopRecords || [];
+  const findCase = (cid) => (window.cases || []).find(c => c.caseId === cid && !c.draft) || null;
   records.forEach(r => {
     const surgDate = r['po-surgeryDate'];
     if(!surgDate || surgDate === '—') return;
     const caseId = r['po-caseId'] || '—';
     const worker = r.worker || 'dev';
+    // Start time comes from the preop (scheduled). End time only exists on a
+    // finalized case record (CRNA enters it after the procedure).
+    const startTime = r['po-startTime'] || '';
+    const c = findCase(caseId);
+    const endTime = c?.endTime || '';
+    const start = startTime ? fmtTime(startTime) : '';
+    const end   = endTime   ? fmtTime(endTime)   : '';
+    let timeTxt = '';
+    if(start && end) timeTxt = `${start}–${end} · `;
+    else if(start)   timeTxt = `${start} · `;
     out.push({
       type: 'surgery',
       date: surgDate,
-      label: `${worker==='josh'?'J':'D'} Surgery · ${caseId}`,
+      label: `${worker==='josh'?'J':'D'} ${timeTxt}Surgery · ${caseId}`,
       caseId,
       worker,
       surgDate
