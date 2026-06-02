@@ -1355,6 +1355,22 @@ window.openSchedulePreopVisitModal = function() {
 // Render Jordan's open availability slots as tap-to-fill chips inside the
 // Schedule Pre-Op Visit modal. Pulls from window._availabilitySlots which is
 // kept in sync by availability.js.
+// Break a "HH:MM"–"HH:MM" availability window into 15-minute start times.
+// Each entry is a valid pre-op visit start; final increment must fit inside.
+function _spvExpand15(start, end) {
+  if(!start || !end) return [];
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  if([sh, sm, eh, em].some(n => Number.isNaN(n))) return [];
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  const out = [];
+  for(let m = startMin; m + 15 <= endMin; m += 15) {
+    out.push(String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'));
+  }
+  return out;
+}
+
 window._spvRenderOpenSlots = async function() {
   const host = document.getElementById('spv-open-slots');
   if(!host) return;
@@ -1364,31 +1380,54 @@ window._spvRenderOpenSlots = async function() {
   }
   const slots = window._availabilitySlots || {};
   const todayIso = new Date().toISOString().split('T')[0];
-  // Flatten { date: [{start,end}, ...] } into a sorted upcoming list.
-  const flat = [];
+
+  // Already-booked starts (date + time) so we don't offer a taken slot.
+  const taken = new Set();
+  try {
+    const visitsSnap = await getDoc(doc(db, 'atlas', 'preop_visits'));
+    if(visitsSnap.exists()) {
+      (visitsSnap.data().entries || []).forEach(e => {
+        if(e.date && e.time) taken.add(e.date + ' ' + e.time);
+      });
+    }
+  } catch(e) { /* fall through — show all 15-min slots if we can't load bookings */ }
+
+  // For each upcoming day, build the de-duped sorted list of free 15-min starts.
+  const grouped = {};
   Object.keys(slots).sort().forEach(date => {
     if(date < todayIso) return;
-    (slots[date] || []).forEach(s => flat.push({ date, start: s.start, end: s.end }));
+    const all = new Set();
+    (slots[date] || []).forEach(s => _spvExpand15(s.start, s.end).forEach(t => all.add(t)));
+    const free = [...all].filter(t => !taken.has(date + ' ' + t)).sort();
+    if(free.length) grouped[date] = free;
   });
-  if(!flat.length) {
-    host.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:6px 10px;background:#fef9c3;border:1px solid #fde68a;border-radius:6px">Jordan hasn’t opened any pre-op visit slots yet. Enter a date/time manually below.</div>';
+
+  const dates = Object.keys(grouped).sort();
+  if(!dates.length) {
+    host.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:6px 10px;background:#fef9c3;border:1px solid #fde68a;border-radius:6px">Jordan hasn’t opened any pre-op visit slots yet, or every slot is already booked. Enter a date/time manually below.</div>';
     return;
   }
+
   const fmtDate = iso => {
-    try { return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { month:'short', day:'numeric' }); }
+    try { return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }); }
     catch(e) { return iso; }
   };
   const fmtTime = t => {
     try { return new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }); }
     catch(e) { return t; }
   };
-  const chips = flat.slice(0, 24).map(s => {
-    const label = `${fmtDate(s.date)} · ${fmtTime(s.start)}`;
-    return `<button type="button" onclick="window._spvFillSlot('${s.date}','${s.start}')" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:12px;font-weight:600;padding:6px 11px;border-radius:14px;cursor:pointer;font-family:inherit;white-space:nowrap">${label}</button>`;
+
+  // Group the chips by day so Nicole can scan visually.
+  const dayBlocks = dates.slice(0, 14).map(date => {
+    const chips = grouped[date].map(t =>
+      `<button type="button" onclick="window._spvFillSlot('${date}','${t}')" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:12px;font-weight:600;padding:4px 9px;border-radius:12px;cursor:pointer;font-family:inherit;white-space:nowrap">${fmtTime(t)}</button>`
+    ).join('');
+    return `<div style="margin-bottom:8px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text-faint);margin-bottom:4px">${fmtDate(date)}</div><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div></div>`;
   }).join('');
+
   host.innerHTML = `
-    <label style="margin-top:0">Jordan’s open slots</label>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;max-height:104px;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:8px;background:#f8fafc">${chips}</div>
+    <label style="margin-top:0">Jordan’s open slots <span style="font-weight:400;color:var(--text-faint);font-size:11px">(15-min increments)</span></label>
+    <div style="max-height:220px;overflow-y:auto;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#f8fafc">${dayBlocks}</div>
     <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Tap a slot to fill the date and time below.</div>
   `;
 };
