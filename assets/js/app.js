@@ -1403,13 +1403,15 @@ window._spvRenderScript = function() {
   const fmtTime = t => t ? new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }) : '____';
   const surgD = fmtDate(e.surgeryDate);
   const surgT = fmtTime(e.surgeryTime);
+  // Only highlight the dynamic placeholders that vary per patient — name +
+  // "you" stay plain so the script reads naturally.
   const hl = s => `<strong style="background:#dcfce7;border-radius:4px;padding:1px 5px;color:#166534">${s}</strong>`;
   host.innerHTML = `
-    <p style="margin:0 0 10px"><em>Hi, my name is ${hl('Nicole')} calling from Atlas Anesthesia.</em></p>
-    <p style="margin:0 0 10px"><em>I see ${hl('you')} have an upcoming procedure scheduled at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</em></p>
-    <p style="margin:0 0 10px"><em>We wanted to call to schedule anesthesia clearance.</em></p>
-    <p style="margin:0 0 10px"><em>We have our own nurse practitioner who can clear you via Zoom.</em></p>
-    <p style="margin:0 0 10px"><em>We can schedule that today. It's a <strong>$100 fee</strong> that can be charged over the phone right now or sent as a payment link — but it must be paid before the visit.</em></p>
+    <p style="margin:0 0 10px">Hi, my name is Nicole calling from Atlas Anesthesia.</p>
+    <p style="margin:0 0 10px">I see you have an upcoming procedure scheduled at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</p>
+    <p style="margin:0 0 10px">We wanted to call to schedule anesthesia clearance.</p>
+    <p style="margin:0 0 10px">We have our own nurse practitioner who can clear you via Zoom.</p>
+    <p style="margin:0 0 10px">We can schedule that today. It's a <strong>$100 fee</strong> that can be charged over the phone right now or sent as a payment link — but it must be paid before the visit.</p>
     <hr style="border:0;border-top:1px solid #e2e8f0;margin:14px 0">
     <div style="font-size:11px;color:var(--text-faint)">Once they agree, drop their email in the form to the left and pick a visit time from Jordan's open slots. The confirmation email goes out as soon as you book.</div>
   `;
@@ -1686,14 +1688,21 @@ window._spvSend = async function() {
     // started as a "pending" patient and is now marked scheduled.
     try {
       if(typeof window._strUpdateEntry === 'function') {
-        await window._strUpdateEntry(entryId, {
+        const patch = {
           patientEmail: email,
           date, time, note,
           crna,
           payMethod: window._spvPayMethod || 'phone',
           scheduledAt: new Date().toISOString(),
           scheduledBy: (currentUser?.email) || ''
-        });
+        };
+        // "By phone" means the card was charged off-system, so flip the
+        // tracker's $100 pill to Paid (Phone) right away.
+        if(window._spvPayMethod === 'phone') {
+          patch.manualPaidAt = new Date().toISOString();
+          patch.manualPaidBy = (currentUser?.email) || '';
+        }
+        await window._strUpdateEntry(entryId, patch);
       }
     } catch(e) { console.warn('Could not update tracker entry:', e); }
 

@@ -121,12 +121,19 @@
       const nurseCalled = !!e.nurseCalledAt;
       const cleared     = !!e.clearedAt;
 
-      // $100 paid (driven by Stripe)
+      // $100 paid: either Stripe saw a successful $100 charge, OR Nicole
+      // manually marked it paid (typical when the card was taken over the
+      // phone and run through a non-Stripe processor). Stripe-confirmed
+      // status overrides manual state for the label so it's obvious which
+      // source flagged it.
       const stripe = _stripeStatus[(e.patientEmail||'').toLowerCase()] || {};
-      const paid = !!stripe.preopVisitPaid;
-      const paidPill = paid
-        ? `<span title="Confirmed via Stripe" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px">✓ Paid</span>`
-        : `<span title="No $100 charge yet" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px">⏳ Pending</span>`;
+      const stripePaid = !!stripe.preopVisitPaid;
+      const manualPaid = !!e.manualPaidAt;
+      const paidPill = stripePaid
+        ? `<button onclick="window._strToggleManualPaid('${e.id}')" title="Confirmed via Stripe — tap to override" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">✓ Paid · Stripe</button>`
+        : manualPaid
+          ? `<button onclick="window._strToggleManualPaid('${e.id}')" title="Marked paid manually — tap to unmark" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">✓ Paid · Phone</button>`
+          : `<button onclick="window._strToggleManualPaid('${e.id}')" title="Tap to mark paid (e.g. card taken over phone)" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">⏳ Pending</button>`;
 
       html += `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center">
         <div><div style="font-size:14px;font-weight:600;color:var(--text)">${_esc(name)}</div>${phoneLine}${emailLine}${pcpLine}${surgeryLine}${pdfLine}</div>
@@ -354,6 +361,25 @@
       return;
     }
     window.openSchedulePreopVisitModal(id);
+  };
+
+  // Manual paid toggle — for the case when the $100 was collected outside
+  // Stripe (e.g. card taken over the phone via a different processor). Stripe-
+  // confirmed paid status is read-only from here; this flag is independent.
+  window._strToggleManualPaid = async function(id) {
+    const idx = _entries.findIndex(e => e.id === id);
+    if(idx === -1) return;
+    const isPaid = !!_entries[idx].manualPaidAt;
+    if(isPaid) {
+      _entries[idx].manualPaidAt = null;
+      _entries[idx].manualPaidBy = null;
+    } else {
+      _entries[idx].manualPaidAt = new Date().toISOString();
+      _entries[idx].manualPaidBy = (window.currentUser?.email) || '';
+    }
+    await _saveEntries();
+    try { window.logAudit && window.logAudit(isPaid ? 'preop-visit-manual-unpaid' : 'preop-visit-manual-paid', id); } catch(e){}
+    window.renderSchedulerTracker();
   };
 
   // ── Multi-state call pill: none → called → voicemail → failed → none ───────
