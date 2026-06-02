@@ -1227,6 +1227,14 @@ function applyRoleRestrictions(role) {
   const crnaPick = document.getElementById('po-assign-crna-row');
   if(crnaPick) crnaPick.style.display = isAssistant ? '' : 'none';
 
+  // Buttons on the Pre-Op tab + the header Surgery Mode toggle — Jordan
+  // (assistant) shouldn't send $500 deposit emails, print the anesthesia
+  // record, or trigger surgery mode. Hide them for that role.
+  ['preop-deposit-btn','preop-print-record-btn','surgery-mode-toggle'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = isAssistant ? 'none' : '';
+  });
+
   // Schedule Pre-Op Visit button — only Nicole. Sending the $100 link is
   // exclusively her job; Jordan and CRNAs don't see this button.
   const schedBtn = document.getElementById('schedule-preop-visit-btn');
@@ -1453,9 +1461,12 @@ currentCaseLogTab = mappedWorker;
 ['dev','josh'].forEach(x => { const el=document.getElementById('cltab-'+x); if(el) el.classList.toggle('active', x===mappedWorker); });
 document.getElementById('caselog-dev').style.display = mappedWorker==='dev' ? '' : 'none';
 document.getElementById('caselog-josh').style.display = mappedWorker==='josh' ? '' : 'none';
-currentHistoryFilter = mappedWorker;
-['all','dev','josh'].forEach(x => { const el=document.getElementById('hbtn-'+x); if(el) el.className='worker-btn'+(x===mappedWorker?' '+(mappedWorker==='dev'?'active-dev':'active-josh'):''); });
-document.getElementById('hbtn-all').className = 'worker-btn';
+// Default Case History filter to "All" for Jordan/Nicole so they see cases
+// from BOTH CRNAs by default. Josh and Devarsh still land on their own
+// perspective.
+currentHistoryFilter = (window._userRole === 'assistant' || window._userRole === 'scheduler') ? 'all' : mappedWorker;
+['all','dev','josh'].forEach(x => { const el=document.getElementById('hbtn-'+x); if(el) el.className='worker-btn'+(x===currentHistoryFilter?(currentHistoryFilter==='all'?' active':' '+(currentHistoryFilter==='dev'?'active-dev':'active-josh')):''); });
+if(currentHistoryFilter !== 'all') document.getElementById('hbtn-all').className = 'worker-btn';
 { const _dd = document.getElementById('dateDisplay'); if(_dd) _dd.textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
 document.getElementById('caseDate').value = todayStr();
 await initData();
@@ -7346,9 +7357,12 @@ preopRecords = snap.exists() ? (snap.data().records || []) : [];
 } catch(e) { console.error(e); }
 // Get draft cases
 let drafts = cases.filter(c => c.draft);
-// Always filter to the logged-in worker
-preopRecords = preopRecords.filter(r => (r.worker || 'dev') === currentWorker);
-drafts = drafts.filter(d => (d.worker || 'dev') === currentWorker);
+// Filter to the logged-in worker — but Jordan (assistant) and Nicole
+// (scheduler) work across both CRNAs, so they see every pre-op and draft.
+if(window._userRole !== 'assistant' && window._userRole !== 'scheduler') {
+  preopRecords = preopRecords.filter(r => (r.worker || 'dev') === currentWorker);
+  drafts = drafts.filter(d => (d.worker || 'dev') === currentWorker);
+}
 // Match pre-ops to drafts by caseId
 const draftIds = new Set(drafts.map(d => d.caseId));
 // IDs of already-finalized cases — exclude these from Mid-Case entirely
