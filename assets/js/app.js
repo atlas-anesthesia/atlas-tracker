@@ -1420,7 +1420,7 @@ function _spvBuildEmailHTML() {
     <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
       <tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Pre-Op Visit</div><div style="font-size:20px;font-weight:700;color:#fff">Your Pre-Op Clearance is Scheduled</div></td></tr>
       <tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">
-        <p style="margin:0 0 14px">Hi${first ? ' '+first : ''},</p>
+        <p style="margin:0 0 16px;font-size:18px;font-weight:600;color:#0f172a">Hi${first ? ' '+first : ' there'},</p>
         <p style="margin:0 0 14px">Thanks for scheduling with us. Your pre-op clearance visit with our nurse Jordan${dateFmt ? ' is set for <strong>'+dateFmt+(timeFmt ? ' at '+timeFmt : '')+'</strong>' : ''}. During this visit Jordan will collect your medical history and any prior clearances so we can safely plan your anesthesia.</p>
         <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px 16px;margin:18px 0">
           <div style="font-size:14px;font-weight:700;color:#9a3412;margin-bottom:4px">$100 Pre-Op Clearance Charge</div>
