@@ -1185,10 +1185,12 @@ const PREOP_VISIT_STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03'
 function getUserRole(email) {
   return EMAIL_ROLE_MAP[(email||'').toLowerCase()] || 'assistant';
 }
-// Tabs an assistant is allowed to open.
-const ASSISTANT_TABS = ['preop','mid-case','calendar','preop-history'];
-// Scheduler (Nicole) is even more restricted — only the calendar, where she
-// books pre-op visits with Jordan.
+// Tabs an assistant (Jordan) is allowed to open. He has his own Availability
+// tab instead of the shared case Calendar — that's where he marks the days
+// he's available for pre-op visits so Nicole knows what to book.
+const ASSISTANT_TABS = ['preop','mid-case','availability','preop-history'];
+// Scheduler (Nicole) is restricted to the Calendar — she sees Jordan's
+// availability there and books pre-op visits onto it.
 const SCHEDULER_TABS = ['calendar'];
 
 // Hide nav / forms based on role. Assistant (Jordan) only sees pre-op tabs.
@@ -1207,23 +1209,28 @@ function applyRoleRestrictions(role) {
     if(el) el.style.display = toHide.includes(id) ? 'none' : '';
   });
 
-  // Reports + Setup dropdowns — hidden for restricted roles. Top-level
-  // Calendar button shown instead.
+  // Reports + Setup dropdowns — hidden for restricted roles.
   const reportsDd = document.getElementById('reports-dropdown');
   if(reportsDd) reportsDd.style.display = restricted ? 'none' : '';
   const setupDd = document.getElementById('setup-dropdown');
   if(setupDd) setupDd.style.display = restricted ? 'none' : '';
+  // Top-level Calendar (case schedule) — shown to Nicole only. Jordan gets
+  // his own Availability tab instead; CRNAs reach Calendar via the Setup
+  // dropdown like before.
   const navCalendar = document.getElementById('nav-calendar');
-  if(navCalendar) navCalendar.style.display = restricted ? '' : 'none';
+  if(navCalendar) navCalendar.style.display = isScheduler ? '' : 'none';
+  // Availability tab — Jordan only.
+  const navAvail = document.getElementById('nav-availability');
+  if(navAvail) navAvail.style.display = isAssistant ? '' : 'none';
 
   // CRNA-assignment toggle on the Pre-Op form — only relevant for assistants.
   const crnaPick = document.getElementById('po-assign-crna-row');
   if(crnaPick) crnaPick.style.display = isAssistant ? '' : 'none';
 
-  // Schedule Pre-Op Visit button on the Calendar tab — shown to both Nicole
-  // and Jordan so either can book a pre-op visit + email the patient.
+  // Schedule Pre-Op Visit button — only Nicole. Sending the $100 link is
+  // exclusively her job; Jordan and CRNAs don't see this button.
   const schedBtn = document.getElementById('schedule-preop-visit-btn');
-  if(schedBtn) schedBtn.style.display = (isAssistant || isScheduler) ? '' : '';
+  if(schedBtn) schedBtn.style.display = isScheduler ? '' : 'none';
 
   // Bounce restricted roles off any tab they shouldn't be on.
   if(restricted) {
@@ -1247,7 +1254,8 @@ window.openSchedulePreopVisitModal = function() {
   wrap.id = 'schedulePreopVisitModal';
   wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto';
   wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
-  const todayIso = new Date().toISOString().split('T')[0];
+  const todayIso = window._spvPrefillDate || new Date().toISOString().split('T')[0];
+  window._spvPrefillDate = null;
   wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
     <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
       <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">Schedule</div><div style="font-size:16px;font-weight:600">Pre-Op Visit with Jordan</div></div>
@@ -1934,6 +1942,22 @@ if(calMonth < 0) { calMonth=11; calYear--; }
 buildCalendar();
 };
 function getCalEvents() {
+// Nicole (scheduler role) sees ONLY Jordan's availability — no case events.
+// Each available day becomes a green "Available" event she can click to book.
+if(window._userRole === 'scheduler') {
+  const dates = window._availableDates || new Set();
+  const out = [];
+  dates.forEach(iso => {
+    out.push({
+      type: 'availability',
+      date: iso,
+      label: '✓ Jordan available',
+      worker: 'josh', // arbitrary — only used for color, scheduler view will override
+      _availability: true
+    });
+  });
+  return out;
+}
 try {
 const preopDays = parseInt(document.getElementById('cal-preop-days')?.value) || 30;
 const depositDays = parseInt(document.getElementById('cal-deposit-days')?.value) || 7;
@@ -1997,6 +2021,19 @@ if(fcEl && typeof FullCalendar !== 'undefined') {
     dev:  { surgery: '#2563eb', 'preop-call': '#16a34a', deposit: '#9333ea', default: '#1d4ed8' }
   };
   const fcEvents = events.map(e => {
+    // Availability events render green regardless of worker.
+    if(e._availability) {
+      return {
+        id: 'avail-' + e.date,
+        title: e.label || '✓ Available',
+        start: e.date,
+        allDay: true,
+        backgroundColor: '#16a34a',
+        borderColor: '#16a34a',
+        textColor: '#fff',
+        extendedProps: { _raw: e }
+      };
+    }
     const w = e.worker === 'josh' ? 'josh' : 'dev';
     const color = (workerColors[w][e.type] || workerColors[w].default);
     return {
@@ -2020,6 +2057,14 @@ if(fcEl && typeof FullCalendar !== 'undefined') {
       editable: false, // events are not draggable — dates are fixed
       eventClick: function(info) {
         const raw = info.event.extendedProps._raw;
+        // Scheduler click on an availability event → open booking modal pre-filled.
+        if(raw && raw._availability && window._userRole === 'scheduler') {
+          window._spvPrefillDate = raw.date;
+          if(typeof window.openSchedulePreopVisitModal === 'function') {
+            window.openSchedulePreopVisitModal();
+          }
+          return;
+        }
         if(raw && typeof showCalDetail === 'function') {
           try { showCalDetail(raw); } catch(e){}
         }
