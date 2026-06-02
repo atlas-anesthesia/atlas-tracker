@@ -1247,6 +1247,9 @@ function applyRoleRestrictions(role) {
   if(isScheduler) {
     ['cal-legend-preop-call','cal-legend-final-payment','cal-preop-days-row','cal-deposit-days-row','cal-worker-key','cal-controls-card']
       .forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+    // Show the Jordan-Available legend chip only on the scheduler's calendar.
+    const jordanLegend = document.getElementById('cal-legend-jordan-avail');
+    if(jordanLegend) jordanLegend.style.display = 'flex';
   }
 
   // CRNA-assignment toggle on the Pre-Op form — only relevant for assistants.
@@ -2269,7 +2272,7 @@ if(window._userRole === 'scheduler') {
       out.push({
         type: 'availability',
         date: iso,
-        label: `${fmtTime(s.start)}–${fmtTime(s.end)} · Jordan`,
+        label: `✓ Jordan Available · ${fmtTime(s.start)}–${fmtTime(s.end)}`,
         worker: 'josh',
         _availability: true,
         _slotStart: s.start,
