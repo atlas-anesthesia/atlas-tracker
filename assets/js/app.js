@@ -1177,7 +1177,7 @@ const EMAIL_ROLE_MAP = {
 'jxcondado@gmail.com': 'crna',
 'murthy.devarsh@gmail.com': 'crna',
 'vallieresjordan@gmail.com': 'assistant', // Jordan — pre-op nurse
-'condado.nicole@gmail.com':  'scheduler'  // Nicole — schedules pre-op visits
+'condadonicole@gmail.com':   'scheduler'  // Nicole — schedules pre-op visits
 };
 // Stripe payment link for the $100 pre-op visit charge (Nicole sends after booking).
 const PREOP_VISIT_STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
@@ -1204,7 +1204,7 @@ const EMAIL_NAME_MAP = {
   'jxcondado@gmail.com':       'Josh',
   'murthy.devarsh@gmail.com':  'Devarsh',
   'vallieresjordan@gmail.com': 'Jordan',
-  'condado.nicole@gmail.com':  'Nicole'
+  'condadonicole@gmail.com':   'Nicole'
 };
 function getUserDisplayName(email, role) {
   const known = EMAIL_NAME_MAP[(email||'').toLowerCase()];
@@ -1986,9 +1986,10 @@ if(calMonth < 0) { calMonth=11; calYear--; }
 buildCalendar();
 };
 function getCalEvents() {
-// Nicole (scheduler role) sees ONLY Jordan's availability — no case events.
-// One event per time slot Jordan marked, so Nicole can click a specific slot
-// to book it (and the booking modal pre-fills both the date and the time).
+// Nicole (scheduler role) sees Jordan's availability slots (green, clickable)
+// + the surgery dates Josh/Dev have on the books (so she avoids double-booking
+// pre-op visits onto surgery days). NO preop-call or deposit events — those
+// would clutter her view with reminders that aren't hers to act on.
 if(window._userRole === 'scheduler') {
   const slots = window._availabilitySlots || {};
   const out = [];
@@ -1997,6 +1998,7 @@ if(window._userRole === 'scheduler') {
     try { return new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }); }
     catch(e) { return t; }
   };
+  // 1) Availability slots
   Object.keys(slots).forEach(iso => {
     (slots[iso] || []).forEach(s => {
       out.push({
@@ -2008,6 +2010,22 @@ if(window._userRole === 'scheduler') {
         _slotStart: s.start,
         _slotEnd: s.end
       });
+    });
+  });
+  // 2) Surgery dates from preop records
+  const records = window._cachedPreopRecords || [];
+  records.forEach(r => {
+    const surgDate = r['po-surgeryDate'];
+    if(!surgDate || surgDate === '—') return;
+    const caseId = r['po-caseId'] || '—';
+    const worker = r.worker || 'dev';
+    out.push({
+      type: 'surgery',
+      date: surgDate,
+      label: `${worker==='josh'?'J':'D'} Surgery · ${caseId}`,
+      caseId,
+      worker,
+      surgDate
     });
   });
   return out;
