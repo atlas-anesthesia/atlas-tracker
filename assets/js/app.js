@@ -1181,17 +1181,44 @@ const EMAIL_ROLE_MAP = {
 };
 // Stripe payment link for the $100 pre-op visit charge (Nicole sends after booking).
 const PREOP_VISIT_STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
+
+// Quick "copy the $100 link" button on Nicole's Calendar. Drops it on the
+// clipboard so she can paste into any text/email she's composing herself.
+window.copyPreopVisitLink = async function() {
+  try {
+    await navigator.clipboard.writeText(PREOP_VISIT_STRIPE_LINK);
+    if(typeof window.toastSuccess === 'function') window.toastSuccess('$100 link copied to clipboard');
+    else alert('$100 link copied to clipboard:\n\n' + PREOP_VISIT_STRIPE_LINK);
+  } catch(e) {
+    // Clipboard API can fail on iPad sometimes — show the URL so she can copy by hand.
+    prompt('Select all and copy:', PREOP_VISIT_STRIPE_LINK);
+  }
+};
 // Unknown emails default to the restricted 'assistant' role (least privilege).
 function getUserRole(email) {
   return EMAIL_ROLE_MAP[(email||'').toLowerCase()] || 'assistant';
+}
+// Per-email display name. Decoupled from role so a typoed/unknown email never
+// silently borrows another person's label (e.g. assistant default → "Jordan").
+const EMAIL_NAME_MAP = {
+  'jxcondado@gmail.com':       'Josh',
+  'murthy.devarsh@gmail.com':  'Devarsh',
+  'vallieresjordan@gmail.com': 'Jordan',
+  'condado.nicole@gmail.com':  'Nicole'
+};
+function getUserDisplayName(email, role) {
+  const known = EMAIL_NAME_MAP[(email||'').toLowerCase()];
+  if(known) return known;
+  // No exact match → don't pretend to know who they are.
+  return role === 'crna' ? 'CRNA' : 'User';
 }
 // Tabs an assistant (Jordan) is allowed to open. He has his own Availability
 // tab instead of the shared case Calendar — that's where he marks the days
 // he's available for pre-op visits so Nicole knows what to book.
 const ASSISTANT_TABS = ['preop','mid-case','availability','preop-history'];
-// Scheduler (Nicole) is restricted to the Calendar — she sees Jordan's
-// availability there and books pre-op visits onto it.
-const SCHEDULER_TABS = ['calendar'];
+// Scheduler (Nicole) sees Jordan's availability calendar and her own Tracker
+// table for following up on patients she's booked.
+const SCHEDULER_TABS = ['calendar','scheduler-tracker'];
 
 // Hide nav / forms based on role. Assistant (Jordan) only sees pre-op tabs.
 // Scheduler (Nicole) only sees the calendar. View looks otherwise normal.
@@ -1222,6 +1249,9 @@ function applyRoleRestrictions(role) {
   // Availability tab — Jordan only.
   const navAvail = document.getElementById('nav-availability');
   if(navAvail) navAvail.style.display = isAssistant ? '' : 'none';
+  // Tracker tab — Nicole only.
+  const navTracker = document.getElementById('nav-scheduler-tracker');
+  if(navTracker) navTracker.style.display = isScheduler ? '' : 'none';
 
   // CRNA-assignment toggle on the Pre-Op form — only relevant for assistants.
   const crnaPick = document.getElementById('po-assign-crna-row');
@@ -1235,10 +1265,11 @@ function applyRoleRestrictions(role) {
     if(el) el.style.display = isAssistant ? 'none' : '';
   });
 
-  // Schedule Pre-Op Visit button — only Nicole. Sending the $100 link is
-  // exclusively her job; Jordan and CRNAs don't see this button.
+  // Schedule Pre-Op Visit + Copy $100 Link buttons — Nicole only.
   const schedBtn = document.getElementById('schedule-preop-visit-btn');
   if(schedBtn) schedBtn.style.display = isScheduler ? '' : 'none';
+  const copyLinkBtn = document.getElementById('copy-preop-link-btn');
+  if(copyLinkBtn) copyLinkBtn.style.display = isScheduler ? '' : 'none';
 
   // Bounce restricted roles off any tab they shouldn't be on.
   if(restricted) {
@@ -1450,7 +1481,7 @@ const _brandCityEl = document.getElementById('branding-city');
 if(_brandCityEl) _brandCityEl.textContent = mappedWorker === 'josh' ? 'Fox Valley, WI' : 'Stevens Point, WI';
 // Default inventory tab to their own
 ['dev','josh','combined'].forEach(x => document.getElementById('itab-'+x).classList.toggle('active', x===mappedWorker));
-document.getElementById('userLabel').textContent = window._userRole === 'assistant' ? 'Jordan' : window._userRole === 'scheduler' ? 'Nicole' : (mappedWorker === 'dev' ? 'Devarsh' : 'Josh');
+document.getElementById('userLabel').textContent = getUserDisplayName(user.email, window._userRole);
 // Show payout tab only for Josh (now lives inside the Setup dropdown)
 const payoutNavBtn = document.getElementById('subnav-payout');
 if(payoutNavBtn) payoutNavBtn.style.display = '';
