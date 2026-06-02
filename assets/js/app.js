@@ -1609,7 +1609,8 @@ window._spvSend = async function() {
     }
     try { logAudit && logAudit('preop-visit-scheduled', '', patientLabel + ' @ ' + (date||'?') + ' / ' + crna); } catch(e){}
     // Fire-and-forget: notify Jordan so she sees a fresh patient lined up
-    // for her clearance call. Non-blocking — booking succeeds even if this fails.
+    // for her clearance call. Uses /outreach-email (which already accepts a
+    // custom subject) so no worker redeploy is needed.
     try {
       const jordanHtml = _spvBuildJordanNotificationHTML({
         first, last, email, phone, pcp,
@@ -1617,15 +1618,13 @@ window._spvSend = async function() {
         visitDate: date, visitTime: time,
         crna, note
       });
-      fetch(url, {
+      fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/outreach-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: 'vallieresjordan@gmail.com',
-          patientName: patientLabel,
-          crna,
-          html: jordanHtml,
-          subject: 'New pre-op visit scheduled — ' + (patientLabel || 'patient')
+          subject: 'New pre-op visit scheduled — ' + (patientLabel || 'patient'),
+          html: jordanHtml
         })
       }).catch(() => {});
     } catch(e) { console.warn('Jordan notification skipped:', e); }
