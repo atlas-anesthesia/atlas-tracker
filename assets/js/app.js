@@ -1775,6 +1775,9 @@ window._assistantSetCrna = function(w) {
   const db_ = document.getElementById('po-assign-dev');
   if(jb) jb.className = 'worker-btn' + (window._assistantCrna === 'josh' ? ' active-josh' : '');
   if(db_) db_.className = 'worker-btn' + (window._assistantCrna === 'dev' ? ' active-dev' : '');
+  // Re-roll the Case-ID preview so it tracks whichever CRNA the assistant
+  // is about to assign the case to.
+  if(typeof window.updatePreopCaseIdDisplay === 'function') window.updatePreopCaseIdDisplay();
 };
 
 onAuthStateChanged(auth, async (user) => {
@@ -2272,9 +2275,20 @@ window.updatePreopCaseIdDisplay = function updatePreopCaseIdDisplay() {
 const surgeryDate = document.getElementById('po-surgeryDate')?.value;
 const display = document.getElementById('po-caseId-display');
 const input = document.getElementById('po-caseId');
-// Generate using surgery date if available, otherwise today's date as preview
+// When editing an existing record, keep its original Case ID — never
+// regenerate. Otherwise build a fresh preview from the surgery date and
+// whichever CRNA the form is currently assigning the case to.
+if(window._editingPreopId && input && input.value) {
+  if(display) { display.textContent = input.value; display.style.opacity = '1'; display.title = ''; }
+  return;
+}
+// For assistants, the worker comes from the Assign-to-CRNA toggle, not the
+// logged-in inventory owner (Jordan isn't a CRNA herself).
+const effectiveWorker = (window._userRole === 'assistant')
+  ? (window._assistantCrna || 'josh')
+  : currentWorker;
 const dateToUse = surgeryDate || todayStr();
-const id = generateCaseId(currentWorker, dateToUse);
+const id = generateCaseId(effectiveWorker, dateToUse);
 if(display) {
   display.textContent = id;
   display.style.opacity = surgeryDate ? '1' : '0.5';
@@ -5805,6 +5819,11 @@ await new Promise(resolve => setTimeout(resolve, 150));
 clearPreop();
 // Store editing ID immediately after clear (clearPreop resets it)
 window._editingPreopId = id;
+// Sync the assistant's CRNA toggle to the case's actual worker so the
+// Pre-Op form (Case ID display, the active button, etc.) matches.
+if(window._userRole === 'assistant' && typeof window._assistantSetCrna === 'function') {
+  window._assistantSetCrna(record.worker || 'josh');
+}
 // HIPAA: hide PHI fields if case is 3+ days post-surgery (until reveal)
 const phiHiddenInModal = typeof window.isPHIHidden === 'function' && window.isPHIHidden(record['po-surgeryDate'], record['po-caseId']);
 window._editingPreopRecord = record; // stored so reveal can fill PHI fields later
