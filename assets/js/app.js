@@ -1185,11 +1185,11 @@ function getUserRole(email) {
 // Tabs an assistant is allowed to open.
 const ASSISTANT_TABS = ['preop','mid-case','calendar','preop-history'];
 
-// Hide/show UI based on role. Assistant gets a stripped-down, pre-op-focused
-// view with a distinct teal header; CRNAs get everything.
+// Hide nav / forms based on role. Assistant only sees the pre-op-relevant
+// tabs. The view looks otherwise identical to the CRNA view — no banner, no
+// accent — just fewer nav items.
 function applyRoleRestrictions(role) {
   const isAssistant = role === 'assistant';
-  document.body.classList.toggle('assistant-mode', isAssistant);
 
   // Top-level nav buttons that assistants should NOT see.
   const hideNavIds = ['nav-home','nav-new-case','nav-payments'];
@@ -1204,8 +1204,7 @@ function applyRoleRestrictions(role) {
   const navCalendar = document.getElementById('nav-calendar');
   if(navCalendar) navCalendar.style.display = isAssistant ? '' : 'none';
 
-  // Assistant header badge + the CRNA-assignment toggle on the Pre-Op form.
-  _renderAssistantBadge(isAssistant);
+  // CRNA-assignment toggle on the Pre-Op form — only relevant for assistants.
   const crnaPick = document.getElementById('po-assign-crna-row');
   if(crnaPick) crnaPick.style.display = isAssistant ? '' : 'none';
 
@@ -1231,19 +1230,6 @@ window._assistantSetCrna = function(w) {
   if(db_) db_.className = 'worker-btn' + (window._assistantCrna === 'dev' ? ' active-dev' : '');
 };
 
-function _renderAssistantBadge(show) {
-  let badge = document.getElementById('assistant-badge');
-  if(show) {
-    if(!badge) {
-      badge = document.createElement('div');
-      badge.id = 'assistant-badge';
-      badge.innerHTML = '👤 Jordan · Pre-Op access';
-      document.body.appendChild(badge);
-    }
-  } else if(badge) {
-    badge.remove();
-  }
-}
 onAuthStateChanged(auth, async (user) => {
 document.getElementById('loadingScreen').style.display='none';
 if(user) {
