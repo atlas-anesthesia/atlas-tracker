@@ -1255,7 +1255,7 @@ function applyRoleRestrictions(role) {
   // Calendar clutter for Nicole — she only cares about surgery dates +
   // Jordan's availability. Hide everything else on the calendar tab.
   if(isScheduler) {
-    ['cal-legend-preop-call','cal-legend-final-payment','cal-preop-days-row','cal-deposit-days-row']
+    ['cal-legend-preop-call','cal-legend-final-payment','cal-preop-days-row','cal-deposit-days-row','cal-worker-key','cal-controls-card']
       .forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
   }
 
@@ -1317,6 +1317,7 @@ window.openSchedulePreopVisitModal = function() {
         <div><label style="margin-top:0">Patient last name</label><input type="text" id="spv-last" placeholder="e.g. Smith" oninput="window._spvRefreshPreview()"></div>
       </div>
       <div style="margin-bottom:14px"><label style="margin-top:0">Patient email <span style="color:var(--warn)">*</span></label><input type="email" id="spv-email" placeholder="patient@email.com"></div>
+      <div id="spv-open-slots" style="margin-bottom:14px"></div>
       <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:14px">
         <div><label style="margin-top:0">Pre-op visit date</label><input type="date" id="spv-date" value="${todayIso}" oninput="window._spvRefreshPreview()"></div>
         <div><label style="margin-top:0">Time</label><input type="time" id="spv-time" value="${prefillTime}" oninput="window._spvRefreshPreview()"></div>
@@ -1344,7 +1345,57 @@ window.openSchedulePreopVisitModal = function() {
   setTimeout(() => {
     document.getElementById('spv-first')?.focus();
     window._spvRefreshPreview();
+    window._spvRenderOpenSlots();
   }, 60);
+};
+
+// Render Jordan's open availability slots as tap-to-fill chips inside the
+// Schedule Pre-Op Visit modal. Pulls from window._availabilitySlots which is
+// kept in sync by availability.js.
+window._spvRenderOpenSlots = async function() {
+  const host = document.getElementById('spv-open-slots');
+  if(!host) return;
+  // If availability.js hasn't published slots yet, give it one chance to load.
+  if((!window._availabilitySlots || !Object.keys(window._availabilitySlots).length) && typeof window.openAvailability === 'function') {
+    try { await window.openAvailability(); } catch(e){}
+  }
+  const slots = window._availabilitySlots || {};
+  const todayIso = new Date().toISOString().split('T')[0];
+  // Flatten { date: [{start,end}, ...] } into a sorted upcoming list.
+  const flat = [];
+  Object.keys(slots).sort().forEach(date => {
+    if(date < todayIso) return;
+    (slots[date] || []).forEach(s => flat.push({ date, start: s.start, end: s.end }));
+  });
+  if(!flat.length) {
+    host.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:6px 10px;background:#fef9c3;border:1px solid #fde68a;border-radius:6px">Jordan hasn’t opened any pre-op visit slots yet. Enter a date/time manually below.</div>';
+    return;
+  }
+  const fmtDate = iso => {
+    try { return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { month:'short', day:'numeric' }); }
+    catch(e) { return iso; }
+  };
+  const fmtTime = t => {
+    try { return new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }); }
+    catch(e) { return t; }
+  };
+  const chips = flat.slice(0, 24).map(s => {
+    const label = `${fmtDate(s.date)} · ${fmtTime(s.start)}`;
+    return `<button type="button" onclick="window._spvFillSlot('${s.date}','${s.start}')" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:12px;font-weight:600;padding:6px 11px;border-radius:14px;cursor:pointer;font-family:inherit;white-space:nowrap">${label}</button>`;
+  }).join('');
+  host.innerHTML = `
+    <label style="margin-top:0">Jordan’s open slots</label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;max-height:104px;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:8px;background:#f8fafc">${chips}</div>
+    <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Tap a slot to fill the date and time below.</div>
+  `;
+};
+
+window._spvFillSlot = function(date, time) {
+  const d = document.getElementById('spv-date');
+  const t = document.getElementById('spv-time');
+  if(d) d.value = date;
+  if(t) t.value = time;
+  window._spvRefreshPreview();
 };
 
 window._spvSetCrna = function(w) {
