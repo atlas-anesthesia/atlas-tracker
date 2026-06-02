@@ -1195,13 +1195,14 @@ function applyRoleRestrictions(role) {
   const hideNavIds = ['nav-home','nav-new-case','nav-payments'];
   hideNavIds.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = isAssistant ? 'none' : ''; });
 
-  // Reports dropdown — hidden entirely for assistants.
+  // Reports + Setup dropdowns — hidden entirely for assistants. They get a
+  // dedicated top-level Calendar button instead of having to drill into More.
   const reportsDd = document.getElementById('reports-dropdown');
   if(reportsDd) reportsDd.style.display = isAssistant ? 'none' : '';
-
-  // Setup ("More") dropdown — keep visible for Calendar, hide the rest.
-  const setupHideIds = ['subnav-inventory','subnav-analytics','subnav-outreach','subnav-payout'];
-  setupHideIds.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = isAssistant ? 'none' : ''; });
+  const setupDd = document.getElementById('setup-dropdown');
+  if(setupDd) setupDd.style.display = isAssistant ? 'none' : '';
+  const navCalendar = document.getElementById('nav-calendar');
+  if(navCalendar) navCalendar.style.display = isAssistant ? '' : 'none';
 
   // Assistant header badge + the CRNA-assignment toggle on the Pre-Op form.
   _renderAssistantBadge(isAssistant);
