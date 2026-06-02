@@ -1316,13 +1316,13 @@ window.openSchedulePreopVisitModal = function() {
       <div style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 14px;margin-bottom:14px">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9a3412;margin-bottom:8px">Surgery details</div>
         <div style="display:grid;grid-template-columns:1fr 140px;gap:14px">
-          <div><label style="margin-top:0">Surgery date</label><input type="date" id="spv-surgery-date"></div>
+          <div><label style="margin-top:0">Surgery date</label><input type="date" id="spv-surgery-date" min="${todayIso}" oninput="window._spvSyncSurgeryDate()"></div>
           <div><label style="margin-top:0">Start time</label><input type="time" id="spv-surgery-time"></div>
         </div>
       </div>
       <div id="spv-open-slots" style="margin-bottom:14px"></div>
       <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:14px">
-        <div><label style="margin-top:0">Pre-op visit date</label><input type="date" id="spv-date" value="${todayIso}" oninput="window._spvRefreshPreview()"></div>
+        <div><label style="margin-top:0">Pre-op visit date <span style="font-size:11px;color:var(--text-faint)">(must be before surgery)</span></label><input type="date" id="spv-date" value="${todayIso}" oninput="window._spvRefreshPreview()"></div>
         <div><label style="margin-top:0">Time</label><input type="time" id="spv-time" value="${prefillTime}" oninput="window._spvRefreshPreview()"></div>
       </div>
       <div style="margin-bottom:14px"><label style="margin-top:0">Assign to CRNA <span style="color:var(--warn)">*</span></label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-josh" onclick="window._spvSetCrna('josh')">Josh</button><button type="button" class="worker-btn" id="spv-dev" onclick="window._spvSetCrna('dev')">Devarsh</button></div></div>
@@ -1401,6 +1401,24 @@ window._spvFillSlot = function(date, time) {
   window._spvRefreshPreview();
 };
 
+// Whenever Nicole edits the surgery date, clamp the pre-op visit date picker
+// so it can't be on or after surgery. If the existing visit date is now
+// invalid, blank it so she's forced to repick from Jordan's open slots.
+window._spvSyncSurgeryDate = function() {
+  const surgEl = document.getElementById('spv-surgery-date');
+  const visitEl = document.getElementById('spv-date');
+  if(!surgEl || !visitEl) return;
+  const surg = surgEl.value;
+  if(!surg) { visitEl.removeAttribute('max'); window._spvRefreshPreview(); return; }
+  // max attribute on a date input is inclusive, so subtract one day.
+  const d = new Date(surg + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 1);
+  const maxIso = d.toISOString().split('T')[0];
+  visitEl.max = maxIso;
+  if(visitEl.value && visitEl.value >= surg) visitEl.value = '';
+  window._spvRefreshPreview();
+};
+
 window._spvSetCrna = function(w) {
   window._spvCrna = (w === 'dev') ? 'dev' : 'josh';
   const jb = document.getElementById('spv-josh');
@@ -1444,6 +1462,39 @@ function _spvBuildEmailHTML() {
     </table></td></tr></table></body></html>`;
 }
 
+// Internal notification email sent to Jordan whenever Nicole books a new
+// pre-op visit. Includes patient contact info + surgery + visit times so
+// Jordan can plan her clearance call.
+function _spvBuildJordanNotificationHTML(p) {
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtDate = iso => iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }) : '—';
+  const fmtTime = t => t ? new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }) : '';
+  const fullName = [p.first, p.last].filter(Boolean).join(' ') || 'New patient';
+  const crnaName = p.crna === 'dev' ? 'Devarsh Murthy, CRNA' : 'Joshua Condado, CRNA';
+  const row = (label, val) => val ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;width:160px">${esc(label)}</td><td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:500">${val}</td></tr>` : '';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+      <tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Internal</div><div style="font-size:20px;font-weight:700;color:#fff">New pre-op visit scheduled</div></td></tr>
+      <tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">
+        <p style="margin:0 0 14px;font-size:16px;font-weight:600">Hi Jordan,</p>
+        <p style="margin:0 0 18px">Nicole just scheduled a new pre-op clearance visit. Here are the details — please reach out to the patient for the clearance call before surgery.</p>
+        <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 18px">
+          ${row('Patient', esc(fullName))}
+          ${row('Email', esc(p.email))}
+          ${row('Phone', esc(p.phone))}
+          ${row('PCP', esc(p.pcp))}
+          ${row('Surgery', esc(fmtDate(p.surgeryDate)) + (p.surgeryTime ? ' · ' + esc(fmtTime(p.surgeryTime)) : ''))}
+          ${row('Pre-op visit', esc(fmtDate(p.visitDate)) + (p.visitTime ? ' · ' + esc(fmtTime(p.visitTime)) : ''))}
+          ${row('CRNA on case', esc(crnaName))}
+        </table>
+        ${p.note ? `<div style="background:#f1f5f9;border-left:3px solid #1d3557;padding:10px 14px;font-size:13px;color:#1e293b;line-height:1.5;margin:0 0 18px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:4px">Note from Nicole</div>${esc(p.note).replace(/\n/g,'<br>')}</div>` : ''}
+        <p style="margin:0;font-size:13px;color:#64748b">A pre-op case has already been created in Atlas Tracker and tagged for your review. Open it from the Mid-Case list when you're ready.</p>
+      </td></tr>
+      <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">Sent by Atlas Tracker — this is an internal notification, no patient action required.</div></td></tr>
+    </table></td></tr></table></body></html>`;
+}
+
 // Re-render the preview iframe whenever a form field changes.
 window._spvRefreshPreview = function() {
   const iframe = document.getElementById('spv-preview-iframe');
@@ -1481,6 +1532,12 @@ window._spvSend = async function() {
   if(!first) { alert('Patient first name is required.'); return; }
   if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Valid patient email required.'); return; }
   if(!surgeryDate) { alert('Surgery date is required so the CRNA has a case to review.'); return; }
+  // Pre-op visit must happen BEFORE the day of surgery (no same-day, no after).
+  if(!date) { alert('Pre-op visit date is required.'); return; }
+  if(date >= surgeryDate) { alert('The pre-op visit date must be before the surgery date.'); return; }
+  // Don't let a booking get scheduled for a surgery that already happened.
+  const todayIso = new Date().toISOString().split('T')[0];
+  if(surgeryDate < todayIso) { alert('Surgery date is in the past — pick a future date.'); return; }
   btn.disabled = true; btn.textContent = 'Sending...';
   if(status) { status.textContent = ''; status.style.color = ''; }
   const crna = window._spvCrna || 'josh';
@@ -1551,6 +1608,27 @@ window._spvSend = async function() {
       } catch(e) { console.warn('Could not auto-create pre-op case:', e); }
     }
     try { logAudit && logAudit('preop-visit-scheduled', '', patientLabel + ' @ ' + (date||'?') + ' / ' + crna); } catch(e){}
+    // Fire-and-forget: notify Jordan so she sees a fresh patient lined up
+    // for her clearance call. Non-blocking — booking succeeds even if this fails.
+    try {
+      const jordanHtml = _spvBuildJordanNotificationHTML({
+        first, last, email, phone, pcp,
+        surgeryDate, surgeryTime,
+        visitDate: date, visitTime: time,
+        crna, note
+      });
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: 'vallieresjordan@gmail.com',
+          patientName: patientLabel,
+          crna,
+          html: jordanHtml,
+          subject: 'New pre-op visit scheduled — ' + (patientLabel || 'patient')
+        })
+      }).catch(() => {});
+    } catch(e) { console.warn('Jordan notification skipped:', e); }
     if(status) { status.textContent = '✓ Booked. $100 link emailed to ' + email + '.'; status.style.color = '#166534'; }
     setTimeout(() => { document.getElementById('schedulePreopVisitModal')?.remove(); if(window.buildCalendar) window.buildCalendar(); }, 1200);
   } catch(err) {
