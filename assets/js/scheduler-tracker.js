@@ -137,9 +137,18 @@
 
       // Jordan sees an "Open Pre-Op" button whenever a pre-op record has been
       // auto-created for this entry — taps it to open the assessment directly.
+      // We accept either an explicit preopRecordId stamped on the entry (new
+      // flow) OR a pre-op record whose po-preopVisitId points back at us
+      // (covers entries booked before the stamping was added).
       const isAssistant = (window._userRole === 'assistant');
-      const openPreopBtn = (isAssistant && e.preopRecordId)
-        ? `<button onclick="window._strOpenPreop('${e.preopRecordId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:3px 7px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`
+      let linkedPreopId = e.preopRecordId || '';
+      if(!linkedPreopId) {
+        const recs = window._rawPreopRecords || [];
+        const match = recs.find(r => r && r['po-preopVisitId'] === e.id);
+        if(match) linkedPreopId = match.id;
+      }
+      const openPreopBtn = (isAssistant && linkedPreopId)
+        ? `<button onclick="window._strOpenPreop('${linkedPreopId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:3px 7px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`
         : '';
       // Only the scheduler edits patient info or deletes rows; Jordan is
       // read-only on those (she still toggles her own pills + opens pre-op).
