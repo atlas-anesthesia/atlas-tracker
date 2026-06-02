@@ -1182,18 +1182,6 @@ const EMAIL_ROLE_MAP = {
 // Stripe payment link for the $100 pre-op visit charge (Nicole sends after booking).
 const PREOP_VISIT_STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
 
-// Quick "copy the $100 link" button on Nicole's Calendar. Drops it on the
-// clipboard so she can paste into any text/email she's composing herself.
-window.copyPreopVisitLink = async function() {
-  try {
-    await navigator.clipboard.writeText(PREOP_VISIT_STRIPE_LINK);
-    if(typeof window.toastSuccess === 'function') window.toastSuccess('$100 link copied to clipboard');
-    else alert('$100 link copied to clipboard:\n\n' + PREOP_VISIT_STRIPE_LINK);
-  } catch(e) {
-    // Clipboard API can fail on iPad sometimes — show the URL so she can copy by hand.
-    prompt('Select all and copy:', PREOP_VISIT_STRIPE_LINK);
-  }
-};
 // Unknown emails default to the restricted 'assistant' role (least privilege).
 function getUserRole(email) {
   return EMAIL_ROLE_MAP[(email||'').toLowerCase()] || 'assistant';
@@ -1273,11 +1261,9 @@ function applyRoleRestrictions(role) {
   const surgeryModeBtn = document.getElementById('surgery-mode-toggle');
   if(surgeryModeBtn) surgeryModeBtn.style.display = (isAssistant || isScheduler) ? 'none' : '';
 
-  // Schedule Pre-Op Visit + Copy $100 Link buttons — Nicole only.
+  // Schedule Pre-Op Visit button — Nicole only.
   const schedBtn = document.getElementById('schedule-preop-visit-btn');
   if(schedBtn) schedBtn.style.display = isScheduler ? '' : 'none';
-  const copyLinkBtn = document.getElementById('copy-preop-link-btn');
-  if(copyLinkBtn) copyLinkBtn.style.display = isScheduler ? '' : 'none';
 
   // Bounce restricted roles off any tab they shouldn't be on.
   if(restricted) {
