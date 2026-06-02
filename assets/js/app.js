@@ -1255,7 +1255,9 @@ window.openSchedulePreopVisitModal = function() {
   wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto';
   wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
   const todayIso = window._spvPrefillDate || new Date().toISOString().split('T')[0];
+  const prefillTime = window._spvPrefillTime || '';
   window._spvPrefillDate = null;
+  window._spvPrefillTime = null;
   wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
     <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
       <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">Schedule</div><div style="font-size:16px;font-weight:600">Pre-Op Visit with Jordan</div></div>
@@ -1270,7 +1272,7 @@ window.openSchedulePreopVisitModal = function() {
       <div style="margin-bottom:14px"><label style="margin-top:0">Patient email <span style="color:var(--warn)">*</span></label><input type="email" id="spv-email" placeholder="patient@email.com"></div>
       <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:14px">
         <div><label style="margin-top:0">Pre-op visit date</label><input type="date" id="spv-date" value="${todayIso}"></div>
-        <div><label style="margin-top:0">Time</label><input type="time" id="spv-time"></div>
+        <div><label style="margin-top:0">Time</label><input type="time" id="spv-time" value="${prefillTime}"></div>
       </div>
       <div style="margin-bottom:14px"><label style="margin-top:0">Assign to CRNA <span style="color:var(--warn)">*</span></label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-josh" onclick="window._spvSetCrna('josh')">Josh</button><button type="button" class="worker-btn" id="spv-dev" onclick="window._spvSetCrna('dev')">Devarsh</button></div></div>
       <div style="margin-bottom:14px"><label style="margin-top:0">Note for patient (optional)</label><textarea id="spv-note" placeholder="Anything they should know about the visit..." style="width:100%;min-height:72px;padding:10px 12px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;color:var(--text);outline:none;resize:vertical"></textarea></div>
@@ -1943,17 +1945,27 @@ buildCalendar();
 };
 function getCalEvents() {
 // Nicole (scheduler role) sees ONLY Jordan's availability — no case events.
-// Each available day becomes a green "Available" event she can click to book.
+// One event per time slot Jordan marked, so Nicole can click a specific slot
+// to book it (and the booking modal pre-fills both the date and the time).
 if(window._userRole === 'scheduler') {
-  const dates = window._availableDates || new Set();
+  const slots = window._availabilitySlots || {};
   const out = [];
-  dates.forEach(iso => {
-    out.push({
-      type: 'availability',
-      date: iso,
-      label: '✓ Jordan available',
-      worker: 'josh', // arbitrary — only used for color, scheduler view will override
-      _availability: true
+  const fmtTime = t => {
+    if(!t) return '';
+    try { return new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }); }
+    catch(e) { return t; }
+  };
+  Object.keys(slots).forEach(iso => {
+    (slots[iso] || []).forEach(s => {
+      out.push({
+        type: 'availability',
+        date: iso,
+        label: `${fmtTime(s.start)}–${fmtTime(s.end)} · Jordan`,
+        worker: 'josh',
+        _availability: true,
+        _slotStart: s.start,
+        _slotEnd: s.end
+      });
     });
   });
   return out;
@@ -2057,9 +2069,11 @@ if(fcEl && typeof FullCalendar !== 'undefined') {
       editable: false, // events are not draggable — dates are fixed
       eventClick: function(info) {
         const raw = info.event.extendedProps._raw;
-        // Scheduler click on an availability event → open booking modal pre-filled.
+        // Scheduler click on an availability event → open booking modal
+        // pre-filled with that exact slot (date + start time).
         if(raw && raw._availability && window._userRole === 'scheduler') {
           window._spvPrefillDate = raw.date;
+          window._spvPrefillTime = raw._slotStart || '';
           if(typeof window.openSchedulePreopVisitModal === 'function') {
             window.openSchedulePreopVisitModal();
           }
