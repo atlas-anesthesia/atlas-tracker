@@ -1474,6 +1474,7 @@ window._spvSend = async function() {
   const btn = $('spv-send-btn');
   if(!first) { alert('Patient first name is required.'); return; }
   if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Valid patient email required.'); return; }
+  if(!surgeryDate) { alert('Surgery date is required so the CRNA has a case to review.'); return; }
   btn.disabled = true; btn.textContent = 'Sending...';
   if(status) { status.textContent = ''; status.style.color = ''; }
   const crna = window._spvCrna || 'josh';
@@ -1489,12 +1490,14 @@ window._spvSend = async function() {
     const data = await res.json().catch(() => ({}));
     if(!res.ok || !data.success) throw new Error(data.error || 'send failed');
     // Save the booking to Firestore so it shows up on the calendar.
+    let preopVisitId = '';
     try {
       const docRef = doc(db, 'atlas', 'preop_visits');
       const snap = await getDoc(docRef);
       const entries = snap.exists() ? (snap.data().entries || []) : [];
+      preopVisitId = uid ? uid() : Math.random().toString(36).slice(2,11);
       entries.unshift({
-        id: uid ? uid() : Math.random().toString(36).slice(2,11),
+        id: preopVisitId,
         bookedBy: currentUser?.email || 'unknown',
         crna,
         patientFirst: first,
@@ -1508,6 +1511,39 @@ window._spvSend = async function() {
       });
       await setDoc(docRef, { entries });
     } catch(e) { console.warn('Could not save preop visit booking:', e); }
+    // Auto-create a pre-op case for Josh/Dev pre-filled with what Nicole knows,
+    // tagged "to review by Nicole" so the CRNA sees who created it and that
+    // Jordan still needs to do the clearance.
+    if(surgeryDate) {
+      try {
+        const preSnap = await getDoc(doc(db, 'atlas', 'preop'));
+        const existing = preSnap.exists() ? (preSnap.data().records || []) : [];
+        // Make generateCaseId() see all current records, then compute a fresh ID.
+        window._cachedPreopRecords = existing;
+        const newCaseId = generateCaseId(crna, surgeryDate);
+        const newRecord = {
+          id: uid ? uid() : Math.random().toString(36).slice(2,11),
+          worker: crna,
+          savedAt: new Date().toISOString(),
+          createdBy: 'nicole',
+          'po-reviewStatus': 'by-nicole',
+          'po-caseId': newCaseId,
+          'po-surgeryDate': surgeryDate,
+          'po-startTime': surgeryTime || '',
+          'po-patientFirstName': first,
+          'po-patientLastName': last,
+          'po-patientEmail': email,
+          'po-patientPhone': phone,
+          'po-pcp-name': pcp,
+          'po-preopVisitId': preopVisitId,
+          'po-preopVisitDate': date,
+          'po-preopVisitTime': time
+        };
+        existing.unshift(newRecord);
+        await savePreopRecords(existing);
+        try { logAudit && logAudit('preop-autocreated-by-nicole', newCaseId, patientLabel); } catch(e){}
+      } catch(e) { console.warn('Could not auto-create pre-op case:', e); }
+    }
     try { logAudit && logAudit('preop-visit-scheduled', '', patientLabel + ' @ ' + (date||'?') + ' / ' + crna); } catch(e){}
     if(status) { status.textContent = '✓ Booked. $100 link emailed to ' + email + '.'; status.style.color = '#166534'; }
     setTimeout(() => { document.getElementById('schedulePreopVisitModal')?.remove(); if(window.buildCalendar) window.buildCalendar(); }, 1200);
@@ -5102,6 +5138,9 @@ if(typeof window.isPHIHidden === 'function' && window.isPHIHidden(records[idx]['
   mergeCheck = stripped.checkData;
 }
 const updated = { ...records[idx], ...mergeText, ...mergeCheck, savedAt: new Date().toISOString() };
+// When Jordan (assistant) saves a pre-op, mark it as her review so the CRNA
+// sees the tag transition from "by-nicole" to "by-jordan".
+if(window._userRole === 'assistant') updated['po-reviewStatus'] = 'by-jordan';
 // HARDENED: filter out ALL records with same caseId+worker (cleans up any
 // pre-existing duplicates) and re-add the updated one. Prevents dupes from
 // ever surviving a save.
@@ -5151,6 +5190,9 @@ worker: effectiveWorker,
 ...textData,
 ...checkData
 };
+// When Jordan creates/saves a brand-new pre-op directly, also tag as
+// "by-jordan" so the CRNA knows she's the latest reviewer.
+if(window._userRole === 'assistant') record['po-reviewStatus'] = 'by-jordan';
 // HARDENED: filter out ALL records with same caseId+worker (not just findIndex
 // the first one) — this cleans up any pre-existing duplicates on every save.
 const cleaned = existingRecs.filter(r =>
@@ -7097,6 +7139,14 @@ window.renderFollowupTab = function() {
     const patientName = phiHidden
       ? '<span style="color:#94a3b8;font-style:italic">[hidden]</span>'
       : [r['po-patientLastName'], r['po-patientFirstName']].filter(Boolean).join(', ') || '—';
+    // Review tag — set when Nicole auto-creates the case ("by-nicole") and
+    // flipped to "by-jordan" once Jordan saves her pre-op clearance fields.
+    const reviewStatus = r['po-reviewStatus'] || '';
+    const reviewTag = reviewStatus === 'by-nicole'
+      ? '<span title="Nicole created this case — Jordan still needs to do the pre-op clearance" style="display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px;white-space:nowrap">👤 To review by Nicole</span>'
+      : reviewStatus === 'by-jordan'
+      ? '<span title="Jordan completed the pre-op clearance — ready for CRNA review" style="display:inline-block;background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px;white-space:nowrap">🩺 To review by Jordan</span>'
+      : '';
     const worker = r.worker === 'dev' ? 'Dev' : 'Josh';
     const workerClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
 
@@ -7150,7 +7200,7 @@ window.renderFollowupTab = function() {
     const openOC = `onclick="openCaseActionModal('${r.id}','${caseId}','${fuLabel}')"`;
     html += `<div style="display:grid;grid-template-columns:${COLS};gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;background:${rowBg};transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${rowBg||'transparent'}'">
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;font-weight:600;overflow:hidden;min-width:0;cursor:pointer">${inlineIndicator}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayId}</span></div>
-      <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;min-width:0;cursor:pointer">${patientName}</div>
+      <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;min-width:0;cursor:pointer">${patientName}${reviewTag}</div>
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;color:var(--text-muted);cursor:pointer">${surgDateFmt}${isPast?' <span style="font-size:9px;color:var(--text-faint);margin-left:4px">(past)</span>':''}</div>
       <div style="${cellCSS};justify-content:center"><span class="worker-pill ${workerClass}" style="font-size:10px;padding:2px 8px">${worker}</span></div>
       <div style="${cellCSS};justify-content:center"><button onclick="openCallStatusModal('${r.id}')" style="background:${callC.bg};color:${callC.color};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${CALL_LABELS[callStatus] || '📞 Pending'}</button></div>
