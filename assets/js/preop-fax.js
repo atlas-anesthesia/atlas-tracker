@@ -140,13 +140,16 @@ function readPreopForm() {
 }
 
 function preopChoices() {
-  // Cases for the current logged-in worker that have a Case ID. Most recent
-  // surgery dates first.
+  // All upcoming cases with a Case ID, across every CRNA — Jordan needs to fax
+  // for cases on both Josh's and Dev's lists. Soonest surgery date first.
   const records = window._rawPreopRecords || [];
+  const todayIso = (typeof window.todayLocal === 'function')
+    ? window.todayLocal()
+    : new Date().toISOString().split('T')[0];
   return records
-    .filter(r => (r.worker || 'dev') === (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'dev'))
     .filter(r => r['po-caseId'])
-    .sort((a, b) => (b['po-surgeryDate']||'').localeCompare(a['po-surgeryDate']||''));
+    .filter(r => (r['po-surgeryDate'] || '') >= todayIso)
+    .sort((a, b) => (a['po-surgeryDate']||'').localeCompare(b['po-surgeryDate']||''));
 }
 
 function populateCaseDropdown() {
@@ -156,7 +159,8 @@ function populateCaseDropdown() {
   const currentValue = sel.value;
   sel.innerHTML = '<option value="">— Pick a case —</option>'
     + choices.map(r => {
-        const name = [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ').trim()
+        const name = [r['po-patientFirstName']||'', r['po-patientLastName']||''].filter(Boolean).join(' ').trim()
+                  || [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ').trim()
                   || r['po-patient'] || '';
         const date = r['po-surgeryDate'] ? fmtDate(r['po-surgeryDate']) : '';
         const bits = [r['po-caseId']];

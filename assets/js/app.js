@@ -1266,6 +1266,10 @@ function applyRoleRestrictions(role) {
   // Schedule Pre-Op Visit button — Nicole only.
   const schedBtn = document.getElementById('schedule-preop-visit-btn');
   if(schedBtn) schedBtn.style.display = isScheduler ? '' : 'none';
+  // "+ New Pre-Op" shortcut on Mid-Case — hide for restricted roles since
+  // they shouldn't be creating fresh pre-ops from scratch.
+  const midNewPreop = document.getElementById('mid-case-new-preop-btn');
+  if(midNewPreop) midNewPreop.style.display = restricted ? 'none' : '';
 
   // Bounce restricted roles off any tab they shouldn't be on.
   if(restricted) {
