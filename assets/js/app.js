@@ -5138,9 +5138,12 @@ if(typeof window.isPHIHidden === 'function' && window.isPHIHidden(records[idx]['
   mergeCheck = stripped.checkData;
 }
 const updated = { ...records[idx], ...mergeText, ...mergeCheck, savedAt: new Date().toISOString() };
-// When Jordan (assistant) saves a pre-op, mark it as her review so the CRNA
-// sees the tag transition from "by-nicole" to "by-jordan".
+// Review-status transitions:
+//   Jordan saves   → 'by-jordan'  (still pre-CRNA, row stays greyed)
+//   CRNA saves     → cleared       (case graduates out of the pre-CRNA pipeline,
+//                                    row returns to normal styling)
 if(window._userRole === 'assistant') updated['po-reviewStatus'] = 'by-jordan';
+else if(window._userRole === 'crna') updated['po-reviewStatus'] = '';
 // HARDENED: filter out ALL records with same caseId+worker (cleans up any
 // pre-existing duplicates) and re-add the updated one. Prevents dupes from
 // ever surviving a save.
@@ -7139,14 +7142,17 @@ window.renderFollowupTab = function() {
     const patientName = phiHidden
       ? '<span style="color:#94a3b8;font-style:italic">[hidden]</span>'
       : [r['po-patientLastName'], r['po-patientFirstName']].filter(Boolean).join(', ') || '—';
-    // Review tag — set when Nicole auto-creates the case ("by-nicole") and
-    // flipped to "by-jordan" once Jordan saves her pre-op clearance fields.
+    // "From X" tag = who last touched the case. Nicole creates it, then Jordan
+    // takes over for clearance, then it's released to the CRNA. Cases still
+    // tagged are pre-CRNA and the whole row is greyed out so Josh/Dev see at a
+    // glance that they aren't ready for review yet.
     const reviewStatus = r['po-reviewStatus'] || '';
     const reviewTag = reviewStatus === 'by-nicole'
-      ? '<span title="Nicole created this case — Jordan still needs to do the pre-op clearance" style="display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px;white-space:nowrap">👤 To review by Nicole</span>'
+      ? '<span title="Nicole created this case — Jordan still needs to do the pre-op clearance" style="display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px;white-space:nowrap">👤 From Nicole</span>'
       : reviewStatus === 'by-jordan'
-      ? '<span title="Jordan completed the pre-op clearance — ready for CRNA review" style="display:inline-block;background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px;white-space:nowrap">🩺 To review by Jordan</span>'
+      ? '<span title="Jordan completed the pre-op clearance — case is now with the CRNA" style="display:inline-block;background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px;white-space:nowrap">🩺 From Jordan</span>'
       : '';
+    const isPreCrna = reviewStatus === 'by-nicole' || reviewStatus === 'by-jordan';
     const worker = r.worker === 'dev' ? 'Dev' : 'Josh';
     const workerClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
 
@@ -7198,7 +7204,8 @@ window.renderFollowupTab = function() {
     // the Pre-Op vs Finalize Case picker. The remaining cells are interactive
     // status buttons and keep their own behavior.
     const openOC = `onclick="openCaseActionModal('${r.id}','${caseId}','${fuLabel}')"`;
-    html += `<div style="display:grid;grid-template-columns:${COLS};gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;background:${rowBg};transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${rowBg||'transparent'}'">
+    const preCrnaStyle = isPreCrna ? 'opacity:.5;filter:grayscale(.4)' : '';
+    html += `<div style="display:grid;grid-template-columns:${COLS};gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;background:${rowBg};transition:background .12s;${preCrnaStyle}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${rowBg||'transparent'}'">
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;font-weight:600;overflow:hidden;min-width:0;cursor:pointer">${inlineIndicator}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayId}</span></div>
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;min-width:0;cursor:pointer">${patientName}${reviewTag}</div>
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;color:var(--text-muted);cursor:pointer">${surgDateFmt}${isPast?' <span style="font-size:9px;color:var(--text-faint);margin-left:4px">(past)</span>':''}</div>
