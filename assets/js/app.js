@@ -2387,28 +2387,12 @@ if(calMonth < 0) { calMonth=11; calYear--; }
 buildCalendar();
 };
 function getCalEvents() {
-// Jordan (assistant) sees her own published availability + every scheduled
-// pre-op visit she's expected to make (pulled from the Tracker entries that
-// have a visit time set). Lets her see her week at a glance.
+// Jordan (assistant) sees only the scheduled pre-op visit calls — her own
+// availability windows are managed on the Availability tab, so showing them
+// here too would just clutter the view.
 if(window._userRole === 'assistant') {
-  const slots = window._availabilitySlots || {};
   const out = [];
   const fmtTime = t => t ? new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }) : '';
-  Object.keys(slots).forEach(iso => {
-    (slots[iso] || []).forEach(s => {
-      out.push({
-        type: 'availability',
-        date: iso,
-        label: `🟢 Open · ${fmtTime(s.start)}–${fmtTime(s.end)}`,
-        worker: 'josh',
-        _availability: true,
-        _slotStart: s.start,
-        _slotEnd: s.end
-      });
-    });
-  });
-  // Scheduled pre-op visit calls — each booked Tracker entry becomes a blue
-  // event on the day Jordan is supposed to call the patient.
   const entries = (typeof window._strGetAllEntries === 'function') ? window._strGetAllEntries() : [];
   entries.forEach(e => {
     if(!e.scheduledAt || !e.date) return;
