@@ -327,9 +327,12 @@ function buildFaxHTML(r) {
   const providerName = worker === 'josh' ? 'Josh Condado, CRNA' : 'Dev Murthy, CRNA';
   const providerCreds = 'CRNA, Anesthesiology';
   const phone = worker === 'josh' ? '7154996858' : '2625739095';
-  // Per-worker return fax numbers — Atlas's dedicated lines so the recipient
-  // knows where to fax records back.
-  const returnFax = worker === 'josh' ? '833-485-5191' : '262-228-1623';
+  // Return fax numbers — Atlas's dedicated lines so the recipient knows
+  // where to fax records back. Jordan (assistant role) has his own line;
+  // CRNAs use their per-worker dedicated lines.
+  const returnFax = window._userRole === 'assistant'
+    ? '317-608-3539'
+    : (worker === 'josh' ? '833-485-5191' : '262-228-1623');
   const patientName = document.getElementById('fax-patient-name')?.value.trim()
     || [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ')
     || r['po-patient']||'';

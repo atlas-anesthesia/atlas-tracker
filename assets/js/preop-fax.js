@@ -540,7 +540,7 @@ function buildPreviewHTML() {
         ${labelVal('FROM', 'Atlas Anesthesia')}
         ${labelVal('REQ. PROVIDER', providerName(w))}
         ${labelVal('DATE', fmtDate(today))}
-        ${labelVal('RETURN FAX', RETURN_FAX[w] || '')}
+        ${labelVal('RETURN FAX', window._userRole === 'assistant' ? '317-608-3539' : (RETURN_FAX[w] || ''))}
       </div>
     </div>
 

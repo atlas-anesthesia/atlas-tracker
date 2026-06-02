@@ -1176,48 +1176,190 @@ const EMAIL_WORKER_MAP = {
 const EMAIL_ROLE_MAP = {
 'jxcondado@gmail.com': 'crna',
 'murthy.devarsh@gmail.com': 'crna',
-'vallieresjordan@gmail.com': 'assistant' // Jordan — pre-op nurse
+'vallieresjordan@gmail.com': 'assistant', // Jordan — pre-op nurse
+'condado.nicole@gmail.com':  'scheduler'  // Nicole — schedules pre-op visits
 };
+// Stripe payment link for the $100 pre-op visit charge (Nicole sends after booking).
+const PREOP_VISIT_STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
 // Unknown emails default to the restricted 'assistant' role (least privilege).
 function getUserRole(email) {
   return EMAIL_ROLE_MAP[(email||'').toLowerCase()] || 'assistant';
 }
 // Tabs an assistant is allowed to open.
 const ASSISTANT_TABS = ['preop','mid-case','calendar','preop-history'];
+// Scheduler (Nicole) is even more restricted — only the calendar, where she
+// books pre-op visits with Jordan.
+const SCHEDULER_TABS = ['calendar'];
 
-// Hide nav / forms based on role. Assistant only sees the pre-op-relevant
-// tabs. The view looks otherwise identical to the CRNA view — no banner, no
-// accent — just fewer nav items.
+// Hide nav / forms based on role. Assistant (Jordan) only sees pre-op tabs.
+// Scheduler (Nicole) only sees the calendar. View looks otherwise normal.
 function applyRoleRestrictions(role) {
   const isAssistant = role === 'assistant';
+  const isScheduler = role === 'scheduler';
+  const restricted = isAssistant || isScheduler;
 
-  // Top-level nav buttons that assistants should NOT see.
-  const hideNavIds = ['nav-home','nav-new-case','nav-payments'];
-  hideNavIds.forEach(id => { const el = document.getElementById(id); if(el) el.style.display = isAssistant ? 'none' : ''; });
+  // Top-level nav buttons assistants/schedulers shouldn't see.
+  const assistantHide = ['nav-home','nav-new-case','nav-payments'];
+  const schedulerHide = ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'];
+  const toHide = isScheduler ? schedulerHide : (isAssistant ? assistantHide : []);
+  ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = toHide.includes(id) ? 'none' : '';
+  });
 
-  // Reports + Setup dropdowns — hidden entirely for assistants. They get a
-  // dedicated top-level Calendar button instead of having to drill into More.
+  // Reports + Setup dropdowns — hidden for restricted roles. Top-level
+  // Calendar button shown instead.
   const reportsDd = document.getElementById('reports-dropdown');
-  if(reportsDd) reportsDd.style.display = isAssistant ? 'none' : '';
+  if(reportsDd) reportsDd.style.display = restricted ? 'none' : '';
   const setupDd = document.getElementById('setup-dropdown');
-  if(setupDd) setupDd.style.display = isAssistant ? 'none' : '';
+  if(setupDd) setupDd.style.display = restricted ? 'none' : '';
   const navCalendar = document.getElementById('nav-calendar');
-  if(navCalendar) navCalendar.style.display = isAssistant ? '' : 'none';
+  if(navCalendar) navCalendar.style.display = restricted ? '' : 'none';
 
   // CRNA-assignment toggle on the Pre-Op form — only relevant for assistants.
   const crnaPick = document.getElementById('po-assign-crna-row');
   if(crnaPick) crnaPick.style.display = isAssistant ? '' : 'none';
 
-  // If an assistant somehow landed on a restricted tab (saved hash, etc.),
-  // bounce them to Pre-Op.
-  if(isAssistant) {
+  // Schedule Pre-Op Visit button on the Calendar tab — shown to both Nicole
+  // and Jordan so either can book a pre-op visit + email the patient.
+  const schedBtn = document.getElementById('schedule-preop-visit-btn');
+  if(schedBtn) schedBtn.style.display = (isAssistant || isScheduler) ? '' : '';
+
+  // Bounce restricted roles off any tab they shouldn't be on.
+  if(restricted) {
     const active = document.querySelector('.section.active');
     const activeTab = active ? active.id.replace('tab-','') : '';
-    if(!ASSISTANT_TABS.includes(activeTab)) {
-      try { showTab('preop'); } catch(e){}
+    const allowed = isScheduler ? SCHEDULER_TABS : ASSISTANT_TABS;
+    if(!allowed.includes(activeTab)) {
+      try { showTab(allowed[0]); } catch(e){}
     }
   }
 }
+
+// ── SCHEDULE PRE-OP VISIT MODAL ───────────────────────────────────────────────
+// Used by Nicole (and Jordan) to book a pre-op clearance visit + email the
+// patient a $100 Stripe link. The patient pays the $100 BEFORE Jordan does
+// the clearance, per the agreed workflow.
+window.openSchedulePreopVisitModal = function() {
+  const prior = document.getElementById('schedulePreopVisitModal');
+  if(prior) prior.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'schedulePreopVisitModal';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto';
+  wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
+  const todayIso = new Date().toISOString().split('T')[0];
+  wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
+    <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">Schedule</div><div style="font-size:16px;font-weight:600">Pre-Op Visit with Jordan</div></div>
+      <button onclick="document.getElementById('schedulePreopVisitModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px">✕</button>
+    </div>
+    <div style="padding:20px 22px">
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1e3a8a;line-height:1.5">Books a pre-op clearance visit with Jordan and emails the patient a $100 Stripe link to pay before the visit.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <div><label style="margin-top:0">Patient first name <span style="color:var(--warn)">*</span></label><input type="text" id="spv-first" placeholder="e.g. John"></div>
+        <div><label style="margin-top:0">Patient last name</label><input type="text" id="spv-last" placeholder="e.g. Smith"></div>
+      </div>
+      <div style="margin-bottom:14px"><label style="margin-top:0">Patient email <span style="color:var(--warn)">*</span></label><input type="email" id="spv-email" placeholder="patient@email.com"></div>
+      <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:14px">
+        <div><label style="margin-top:0">Pre-op visit date</label><input type="date" id="spv-date" value="${todayIso}"></div>
+        <div><label style="margin-top:0">Time</label><input type="time" id="spv-time"></div>
+      </div>
+      <div style="margin-bottom:14px"><label style="margin-top:0">Assign to CRNA <span style="color:var(--warn)">*</span></label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-josh" onclick="window._spvSetCrna('josh')">Josh</button><button type="button" class="worker-btn" id="spv-dev" onclick="window._spvSetCrna('dev')">Devarsh</button></div></div>
+      <div style="margin-bottom:14px"><label style="margin-top:0">Note for patient (optional)</label><textarea id="spv-note" placeholder="Anything they should know about the visit..." style="width:100%;min-height:72px;padding:10px 12px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;color:var(--text);outline:none;resize:vertical"></textarea></div>
+      <div id="spv-status" style="font-size:13px;padding:6px 0;min-height:18px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" onclick="document.getElementById('schedulePreopVisitModal').remove()">Cancel</button>
+        <button id="spv-send-btn" class="btn btn-primary" onclick="window._spvSend()" style="background:#1d3557;border-color:#1d3557">📧 Book & Send $100 Link</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(wrap);
+  window._spvCrna = 'josh';
+  setTimeout(() => document.getElementById('spv-first')?.focus(), 60);
+};
+
+window._spvSetCrna = function(w) {
+  window._spvCrna = (w === 'dev') ? 'dev' : 'josh';
+  const jb = document.getElementById('spv-josh');
+  const db_ = document.getElementById('spv-dev');
+  if(jb) jb.className = 'worker-btn' + (window._spvCrna === 'josh' ? ' active-josh' : '');
+  if(db_) db_.className = 'worker-btn' + (window._spvCrna === 'dev' ? ' active-dev' : '');
+};
+
+window._spvSend = async function() {
+  const $ = id => document.getElementById(id);
+  const first = $('spv-first')?.value.trim() || '';
+  const last  = $('spv-last')?.value.trim() || '';
+  const email = $('spv-email')?.value.trim() || '';
+  const date  = $('spv-date')?.value || '';
+  const time  = $('spv-time')?.value || '';
+  const note  = $('spv-note')?.value.trim() || '';
+  const status = $('spv-status');
+  const btn = $('spv-send-btn');
+  if(!first) { alert('Patient first name is required.'); return; }
+  if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Valid patient email required.'); return; }
+  btn.disabled = true; btn.textContent = 'Sending...';
+  if(status) { status.textContent = ''; status.style.color = ''; }
+  const crna = window._spvCrna || 'josh';
+  const dateFmt = date ? new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
+  const timeFmt = time ? new Date('2000-01-01T' + time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+  const patientLabel = [first, last].filter(Boolean).join(' ');
+  // Build the email — friendly, explains the $100 charge for pre-op clearance.
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+      <tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Pre-Op Visit</div><div style="font-size:20px;font-weight:700;color:#fff">Your Pre-Op Clearance is Scheduled</div></td></tr>
+      <tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">
+        <p style="margin:0 0 14px">Hi${first ? ' '+first : ''},</p>
+        <p style="margin:0 0 14px">Thanks for scheduling with us. Your pre-op clearance visit with our nurse Jordan${dateFmt ? ' is set for <strong>'+dateFmt+(timeFmt ? ' at '+timeFmt : '')+'</strong>' : ''}. During this visit Jordan will collect your medical history and any prior clearances so we can safely plan your anesthesia.</p>
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px 16px;margin:18px 0">
+          <div style="font-size:14px;font-weight:700;color:#9a3412;margin-bottom:4px">$100 Pre-Op Clearance Charge</div>
+          <div style="font-size:13px;color:#7c2d12;line-height:1.55">A <strong>$100</strong> charge is required to complete your pre-op clearance <em>before</em> your anesthesia services are scheduled. Please pay using the secure link below — this confirms your visit and is separate from any anesthesia fees collected later.</div>
+        </div>
+        <div style="text-align:center;margin:22px 0">
+          <a href="${PREOP_VISIT_STRIPE_LINK}" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:15px;font-weight:600">Pay $100 Pre-Op Fee</a>
+        </div>
+        <p style="margin:14px 0 0;font-size:13px;color:#475569">After we receive your clearance information, ${crna === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA'} will reach out separately to discuss your anesthesia plan and the remaining payment.</p>
+        ${note ? `<div style="background:#f1f5f9;border-left:3px solid #1d3557;padding:10px 14px;margin-top:18px;font-size:13px;color:#1e293b;line-height:1.5">${String(note).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</div>` : ''}
+        <p style="margin:18px 0 0">If you have any questions before the visit, just reply to this email.</p>
+        <p style="margin:14px 0 0">Talk soon,<br><strong>Atlas Anesthesia</strong></p>
+      </td></tr>
+      <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">This is a secure payment request. Your payment is processed safely via Stripe.</div></td></tr>
+    </table></td></tr></table></body></html>`;
+  try {
+    const url = 'https://atlas-reminder.blue-disk-9b10.workers.dev/preop-visit-email';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: email, patientName: patientLabel, crna, html })
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok || !data.success) throw new Error(data.error || 'send failed');
+    // Save the booking to Firestore so it shows up on the calendar.
+    try {
+      const docRef = doc(db, 'atlas', 'preop_visits');
+      const snap = await getDoc(docRef);
+      const entries = snap.exists() ? (snap.data().entries || []) : [];
+      entries.unshift({
+        id: uid ? uid() : Math.random().toString(36).slice(2,11),
+        bookedBy: currentUser?.email || 'unknown',
+        crna,
+        patientFirst: first,
+        patientLast: last,
+        patientEmail: email,
+        date, time, note,
+        bookedAt: new Date().toISOString()
+      });
+      await setDoc(docRef, { entries });
+    } catch(e) { console.warn('Could not save preop visit booking:', e); }
+    try { logAudit && logAudit('preop-visit-scheduled', '', patientLabel + ' @ ' + (date||'?') + ' / ' + crna); } catch(e){}
+    if(status) { status.textContent = '✓ Booked. $100 link emailed to ' + email + '.'; status.style.color = '#166534'; }
+    setTimeout(() => { document.getElementById('schedulePreopVisitModal')?.remove(); if(window.buildCalendar) window.buildCalendar(); }, 1200);
+  } catch(err) {
+    if(status) { status.textContent = '✗ ' + (err.message || err); status.style.color = '#b91c1c'; }
+    btn.disabled = false; btn.textContent = '📧 Book & Send $100 Link';
+  }
+};
 
 // Assistant picks which CRNA a pre-op is assigned to (since they aren't one).
 // Defaults to 'josh'. Stored on window so savePreop can read it.
@@ -1290,7 +1432,7 @@ const _brandCityEl = document.getElementById('branding-city');
 if(_brandCityEl) _brandCityEl.textContent = mappedWorker === 'josh' ? 'Fox Valley, WI' : 'Stevens Point, WI';
 // Default inventory tab to their own
 ['dev','josh','combined'].forEach(x => document.getElementById('itab-'+x).classList.toggle('active', x===mappedWorker));
-document.getElementById('userLabel').textContent = window._userRole === 'assistant' ? 'Jordan' : (mappedWorker === 'dev' ? 'Devarsh' : 'Josh');
+document.getElementById('userLabel').textContent = window._userRole === 'assistant' ? 'Jordan' : window._userRole === 'scheduler' ? 'Nicole' : (mappedWorker === 'dev' ? 'Devarsh' : 'Josh');
 // Show payout tab only for Josh (now lives inside the Setup dropdown)
 const payoutNavBtn = document.getElementById('subnav-payout');
 if(payoutNavBtn) payoutNavBtn.style.display = '';
@@ -10121,10 +10263,12 @@ function _updateNavActiveState(tabName) {
 // Wrap showTab to update active state on the dropdown parent
 const _origShowTab = window.showTab;
 window.showTab = function(name, pushState) {
-  // Assistant role guard — only pre-op tabs are reachable. Any attempt to open
-  // a restricted tab (deep link, saved hash, stray button) redirects to Pre-Op.
+  // Role guards — restricted roles can only open their allowed tabs.
   if(window._userRole === 'assistant' && !ASSISTANT_TABS.includes(name)) {
     name = 'preop';
+    pushState = false;
+  } else if(window._userRole === 'scheduler' && !SCHEDULER_TABS.includes(name)) {
+    name = 'calendar';
     pushState = false;
   }
   if(typeof _origShowTab === 'function') _origShowTab(name, pushState);
