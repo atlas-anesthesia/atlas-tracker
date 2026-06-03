@@ -1333,7 +1333,7 @@ window.openSchedulePreopVisitModal = function(entryId) {
 
   wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:920px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
     <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
-      <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">Schedule</div><div style="font-size:16px;font-weight:600">Pre-Op Visit with Jordan · ${esc(patientName)}</div></div>
+      <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">Schedule</div><div style="font-size:16px;font-weight:600">Pre-Op Visit with Jordan, APRN, FNP · ${esc(patientName)}</div></div>
       <button onclick="document.getElementById('schedulePreopVisitModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px">✕</button>
     </div>
     <div class="spv-body" style="display:flex;gap:0;flex-wrap:wrap">
@@ -1364,7 +1364,9 @@ window.openSchedulePreopVisitModal = function(entryId) {
         <input type="hidden" id="spv-date" value="">
         <input type="hidden" id="spv-time" value="">
         <div style="margin-bottom:14px"><label style="margin-top:0">Assign to CRNA <span style="color:var(--warn)">*</span></label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-josh" onclick="window._spvSetCrna('josh')">Josh</button><button type="button" class="worker-btn" id="spv-dev" onclick="window._spvSetCrna('dev')">Devarsh</button></div></div>
-        <div style="margin-bottom:14px"><label style="margin-top:0">$100 collection</label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-pay-phone" onclick="window._spvSetPayMethod('phone')">📞 By phone</button><button type="button" class="worker-btn" id="spv-pay-email" onclick="window._spvSetPayMethod('email')">📧 Email link</button></div><div style="font-size:11px;color:var(--text-faint);margin-top:4px;font-style:italic">Switch to "Email link" if the patient couldn't give a card over the phone.</div></div>
+        <!-- $100 collection toggle removed — patient always pays via the
+             portal Stripe link, no over-the-phone option anymore. -->
+
         <div style="margin-bottom:14px"><label style="margin-top:0">Note for patient (optional)</label><textarea id="spv-note" placeholder="Anything the patient should know about the visit..." oninput="window._spvRefreshPreview()" style="width:100%;min-height:72px;padding:10px 12px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;color:var(--text);outline:none;resize:vertical"></textarea></div>
         <div style="margin-bottom:14px;border:1px solid var(--border);border-radius:8px;background:#fafafa">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px">
@@ -1391,7 +1393,7 @@ window.openSchedulePreopVisitModal = function(entryId) {
   </div>`;
   document.body.appendChild(wrap);
   window._spvCrna = 'josh';
-  window._spvPayMethod = 'phone';
+  window._spvPayMethod = 'email';   // Always email-via-portal now
   setTimeout(() => {
     document.getElementById('spv-email')?.focus();
     // Slot picker removed — patient self-schedules via the portal post-payment.
@@ -1417,8 +1419,8 @@ window._spvRenderScript = function() {
     <p style="margin:0 0 10px">Hi, my name is Nicole calling from Atlas Anesthesia.</p>
     <p style="margin:0 0 10px">I see you have an upcoming procedure scheduled at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</p>
     <p style="margin:0 0 10px">We wanted to call to schedule anesthesia clearance.</p>
-    <p style="margin:0 0 10px">We have our own nurse practitioner, ${hl('Jordan')}, who will give you a call and walk you through everything you need to do.</p>
-    <p style="margin:0 0 10px">We can schedule that today. It's a <strong>$100 fee</strong> that can be charged over the phone right now or sent as a payment link — but it must be paid before the visit.</p>
+    <p style="margin:0 0 10px">We have our own nurse practitioner, ${hl('Jordan, APRN, FNP')}, who will give you a call and walk you through everything you need to do.</p>
+    <p style="margin:0 0 10px">There's a <strong>$100 fee</strong> for the clearance — I'll email you a secure payment link, and once that's paid you'll pick a time to talk with Jordan.</p>
     <hr style="border:0;border-top:1px solid #e2e8f0;margin:14px 0">
     <div style="font-size:11px;color:var(--text-faint)">Once they agree, drop their email in the form to the left and pick a visit time from Jordan's open slots. The confirmation email goes out as soon as you book.</div>
   `;
@@ -1427,11 +1429,9 @@ window._spvRenderScript = function() {
 // Toggle between phone-collected card info (default) and emailing the Stripe
 // link as a backup. Drives the "What to expect" copy in the patient email.
 window._spvSetPayMethod = function(m) {
-  window._spvPayMethod = (m === 'email') ? 'email' : 'phone';
-  const phoneBtn = document.getElementById('spv-pay-phone');
-  const emailBtn = document.getElementById('spv-pay-email');
-  if(phoneBtn) phoneBtn.className = 'worker-btn' + (window._spvPayMethod === 'phone' ? ' active-josh' : '');
-  if(emailBtn) emailBtn.className = 'worker-btn' + (window._spvPayMethod === 'email' ? ' active-josh' : '');
+  // Toggle is gone; this remains as a no-op stub so older inline
+  // handlers (or anything reading the global) don't error.
+  window._spvPayMethod = 'email';
   window._spvRefreshPreview();
 };
 
@@ -1576,13 +1576,13 @@ function _spvBuildEmailHTML() {
           <div style="font-size:13px;color:#1e293b;line-height:1.7">
             <div><strong>1.</strong> Upload 6 short airway photos (we'll guide you through each angle).</div>
             <div><strong>2.</strong> Pay the $100 pre-op clearance fee (secure Stripe checkout).</div>
-            <div><strong>3.</strong> Pick a time for your pre-op call with our nurse <strong>Jordan</strong>.</div>
+            <div><strong>3.</strong> Pick a time for your pre-op call with our nurse practitioner <strong>Jordan, APRN, FNP</strong>.</div>
           </div>
         </div>
         <div style="text-align:center;margin:22px 0">
           <a href="${portalUrl}" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:15px;font-weight:600">Open My Patient Portal →</a>
         </div>
-        <p style="margin:14px 0 0;font-size:13px;color:#475569">Jordan will call you from a <strong>317 area code</strong> at the time you choose. Please have your medical history and a current medication list handy for the call.</p>
+        <p style="margin:14px 0 0;font-size:13px;color:#475569">Jordan, APRN, FNP will call you from a <strong>317 area code</strong> at the time you choose. Please have your medical history and a current medication list handy for the call.</p>
         <p style="margin:10px 0 0;font-size:13px;color:#475569">After your clearance, ${crna === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA'} will follow up separately to walk through your anesthesia plan.</p>
         ${note ? `<div style="background:#f1f5f9;border-left:3px solid #1d3557;padding:10px 14px;margin-top:18px;font-size:13px;color:#1e293b;line-height:1.5">${esc(note).replace(/\n/g,'<br>')}</div>` : ''}
         <p style="margin:18px 0 0">If you need to reschedule or have questions before the visit, just reply to this email.</p>
@@ -1690,21 +1690,34 @@ window._spvSend = async function() {
     // started as a "pending" patient and is now marked scheduled.
     try {
       if(typeof window._strUpdateEntry === 'function') {
+        // Sending the portal email means Nicole has just spoken with the
+        // patient — auto-flip the "Nicole's Call" pill to Called so she
+        // doesn't have to remember to tap it separately. Pre-op visit
+        // date/time are NOT stamped here anymore; the patient picks them
+        // on the portal once they've paid.
         const patch = {
           patientEmail: email,
-          date, time, note,
+          note,
           crna,
-          payMethod: window._spvPayMethod || 'phone',
-          scheduledAt: new Date().toISOString(),
-          scheduledBy: (currentUser?.email) || ''
+          callStatus: 'called',
+          callStatusAt: new Date().toISOString(),
+          callStatusBy: (currentUser?.email) || ''
         };
-        // "By phone" means the card was charged off-system, so flip the
-        // tracker's $100 pill to Paid (Phone) right away.
-        if(window._spvPayMethod === 'phone') {
-          patch.manualPaidAt = new Date().toISOString();
-          patch.manualPaidBy = (currentUser?.email) || '';
-        }
         await window._strUpdateEntry(entryId, patch);
+        // Also mirror onto the linked pre-op record so Josh/Dev's Follow-up
+        // Tracker stays in agreement with the Tracker pill.
+        try {
+          const entry = (typeof window._strGetEntry === 'function') ? window._strGetEntry(entryId) : null;
+          let preopId = entry?.preopRecordId || '';
+          if(!preopId) {
+            const recs = window._rawPreopRecords || [];
+            const match = recs.find(r => r && r['po-preopVisitId'] === entryId);
+            if(match) preopId = match.id;
+          }
+          if(preopId && typeof window._updatePreopStatusField === 'function') {
+            await window._updatePreopStatusField(preopId, 'po-callStatus', 'spoken');
+          }
+        } catch(_){}
       }
     } catch(e) { console.warn('Could not update tracker entry:', e); }
 

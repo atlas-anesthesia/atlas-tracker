@@ -339,7 +339,7 @@ function paintSlots() {
   const dates = Object.keys(grouped).sort();
   const list = $('slot-list');
   if(!dates.length) {
-    list.innerHTML = '<div class="alert warn">Jordan doesn’t have any open windows that fit your timeline right now. Reply to the email we sent you and we’ll work it out directly.</div>';
+    list.innerHTML = '<div class="alert warn">Jordan, APRN, FNP doesn’t have any open windows that fit your timeline right now. Reply to the email we sent you and we’ll work it out directly.</div>';
     return;
   }
   list.innerHTML = dates.slice(0, 14).map(date => {
@@ -354,7 +354,7 @@ function paintSlots() {
       btn.classList.add('selected');
       _selected = { date: btn.dataset.date, time: btn.dataset.time };
       const sum = $('selection-summary');
-      sum.innerHTML = '<div class="summary">📞 <strong>' + esc(fmtDate(_selected.date)) + ' at ' + esc(fmtTime(_selected.time)) + '</strong> — Jordan will call you from a 317 area code.</div>';
+      sum.innerHTML = '<div class="summary">📞 <strong>' + esc(fmtDate(_selected.date)) + ' at ' + esc(fmtTime(_selected.time)) + '</strong> — Jordan, APRN, FNP will call you from a 317 area code.</div>';
       sum.classList.remove('hidden');
       $('book-btn').disabled = false;
     });
@@ -434,7 +434,7 @@ function buildPatientConfirmHTML(firstName, sel) {
       <tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Pre-Op Visit</div><div style="font-size:20px;font-weight:700;color:#fff">Your Pre-Op Call is Confirmed</div></td></tr>
       <tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">
         <p style="margin:0 0 16px;font-size:18px;font-weight:600;color:#0f172a">Hi${greet},</p>
-        <p style="margin:0 0 14px">Your pre-op clearance call with our nurse <strong>Jordan</strong> is set for:</p>
+        <p style="margin:0 0 14px">Your pre-op clearance call with our nurse practitioner <strong>Jordan, APRN, FNP</strong> is set for:</p>
         <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 18px;margin:14px 0;text-align:center">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#1d4ed8;letter-spacing:.6px;margin-bottom:4px">Scheduled For</div>
           <div style="font-size:18px;font-weight:700;color:#0f172a">${esc(fmtDate(sel.date))}</div>
@@ -442,7 +442,7 @@ function buildPatientConfirmHTML(firstName, sel) {
         </div>
         <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin:18px 0">
           <div style="font-size:14px;font-weight:700;color:#1e3a8a;margin-bottom:6px">What to expect</div>
-          <div style="font-size:13px;color:#1e293b;line-height:1.55">Jordan will reach out by phone at the scheduled time from a <strong>317 area code</strong> number — please answer or save it to your contacts so the call doesn’t get flagged as spam.</div>
+          <div style="font-size:13px;color:#1e293b;line-height:1.55">Jordan, APRN, FNP will reach out by phone at the scheduled time from a <strong>317 area code</strong> number — please answer or save it to your contacts so the call doesn’t get flagged as spam.</div>
           <div style="font-size:13px;color:#1e293b;line-height:1.55;margin-top:8px"><strong>Before the call, please have ready:</strong></div>
           <ul style="font-size:13px;color:#1e293b;line-height:1.55;margin:4px 0 0;padding-left:22px">
             <li>Your full medical history</li>

@@ -94,7 +94,7 @@
       ? `<div style="font-size:11px;color:var(--text-faint);margin-top:5px;line-height:1.5">${contactParts.join('<span style="color:#cbd5e1;margin:0 6px">·</span>')}</div>`
       : '';
     const surgeryLine = e.surgeryDate
-      ? `<div style="font-size:11px;color:#9a3412;font-weight:600;margin-top:6px;line-height:1.4">🔴 ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}${e.surgeryCenterName ? ' · ' + _esc(e.surgeryCenterName) : ''}</div>`
+      ? `<div style="font-size:11px;color:#9a3412;font-weight:600;margin-top:6px;line-height:1.4">🔴 ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}${e.surgeryCenterName ? ' · ' + _esc(e.surgeryCenterName) : ''}${e.surgeon ? ' · ' + _esc(e.surgeon) : ''}</div>`
       : '';
     let pdfLine = '';
     if(!phiHidden) {
@@ -288,6 +288,7 @@
         </div>
         <div style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 14px;margin-bottom:14px">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9a3412;margin-bottom:8px">Surgery details</div>
+          <div style="margin-bottom:12px"><label style="margin-top:0">Surgeon <span style="font-weight:400;color:var(--text-faint);font-size:11px">(performing the procedure)</span></label><input type="text" id="strap-surgeon" placeholder="Dr. Patel" value="${_esc(existing?.surgeon || '')}"></div>
           <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:12px">
             <div><label style="margin-top:0">Surgery date <span style="color:var(--warn)">*</span></label><input type="date" id="strap-surg-date" value="${_esc(existing?.surgeryDate || '')}"></div>
             <div><label style="margin-top:0">Start time</label><input type="time" id="strap-surg-time" value="${_esc(existing?.surgeryTime || '')}"></div>
@@ -328,6 +329,7 @@
     const last  = (_$('strap-last')?.value || '').trim();
     const phone = (_$('strap-phone')?.value || '').trim();
     const pcp   = (_$('strap-pcp')?.value || '').trim();
+    const surgeon = (_$('strap-surgeon')?.value || '').trim();
     const surgD = _$('strap-surg-date')?.value || '';
     const surgT = _$('strap-surg-time')?.value || '';
     const centerEl = _$('strap-center');
@@ -364,14 +366,14 @@
         if(idx === -1) throw new Error('Entry not found');
         entry = _entries[idx];
         Object.assign(entry, {
-          patientFirst: first, patientLast: last, patientPhone: phone, pcp,
+          patientFirst: first, patientLast: last, patientPhone: phone, pcp, surgeon,
           surgeryDate: surgD, surgeryTime: surgT,
           surgeryCenterId, surgeryCenterName
         });
       } else {
         entry = {
           id: _uid(),
-          patientFirst: first, patientLast: last, patientPhone: phone, pcp,
+          patientFirst: first, patientLast: last, patientPhone: phone, pcp, surgeon,
           surgeryDate: surgD, surgeryTime: surgT,
           surgeryCenterId, surgeryCenterName,
           callStatus: 'none',
@@ -499,7 +501,7 @@
       + '<tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Friendly Reminder</div><div style="font-size:20px;font-weight:700;color:#fff">$100 Pre-Op Fee — Payment Reminder</div></td></tr>'
       + '<tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">'
       + '<p style="margin:0 0 16px;font-size:18px;font-weight:600;color:#0f172a">Hi' + greet + ',</p>'
-      + '<p style="margin:0 0 14px">Just a quick reminder — we still need the <strong>$100 pre-op clearance fee</strong> before your visit with our nurse Jordan. It only takes a moment via the secure link below.</p>'
+      + '<p style="margin:0 0 14px">Just a quick reminder — we still need the <strong>$100 pre-op clearance fee</strong> before your visit with our nurse practitioner Jordan, APRN, FNP. It only takes a moment via the secure link below.</p>'
       + '<div style="text-align:center;margin:22px 0"><a href="' + STRIPE_LINK + '" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:15px;font-weight:600">Pay $100 Pre-Op Fee</a></div>'
       + '<p style="margin:14px 0 0;font-size:13px;color:#475569">Already paid? You can ignore this — your case will continue as scheduled.</p>'
       + '<p style="margin:18px 0 0">Thanks,<br><strong>Atlas Anesthesia</strong></p>'
