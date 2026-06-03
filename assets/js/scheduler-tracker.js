@@ -222,12 +222,7 @@
       ? `📥 Pending Pre-Op Forms · ${pending.length}`
       : '📥 Pending Pre-Op Forms';
     host.innerHTML = `<div class="card" style="padding:0;overflow:hidden;border-left:4px solid #0369a1">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#eff6ff;border-bottom:1px solid #bfdbfe">
-        <div style="font-size:13px;font-weight:700;color:#0369a1">${countLabel}</div>
-        <div style="display:flex;gap:6px">
-          <button onclick="window._strSimulateInboxPDF()" class="btn btn-ghost btn-sm" title="Drop a PDF here to test the flow without email" style="font-size:11px;color:#0369a1;border-color:#bfdbfe">+ Test PDF</button>
-        </div>
-      </div>
+      <div style="padding:12px 16px;background:#eff6ff;border-bottom:1px solid #bfdbfe;font-size:13px;font-weight:700;color:#0369a1">${countLabel}</div>
       ${rows}${emptyState}
     </div>`;
   }
@@ -248,38 +243,6 @@
     } catch(e) { console.warn('inbox subscribe failed:', e); }
   }
   subscribeInbox();
-
-  // Manual test entry point — drops a PDF onto the inbox without going
-  // through email. Useful for QA until Cloudflare Email Routing is wired up.
-  window._strSimulateInboxPDF = function() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/pdf';
-    input.onchange = async () => {
-      const f = input.files?.[0];
-      if(!f) return;
-      if(f.type !== 'application/pdf') { alert('Pick a PDF.'); return; }
-      if(f.size > MAX_PDF_BYTES) { alert(`PDF is too large (${Math.round(f.size/1024)} KB). Keep it under ${Math.round(MAX_PDF_BYTES/1024)} KB.`); return; }
-      const id = _uid();
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          await window.setDoc(window.doc(window.db, 'atlas', INBOX_PDF_PREFIX + id), {
-            filename: f.name, dataUrl: reader.result, contentType: 'application/pdf', sizeBytes: f.size
-          });
-          const snap = await window.getDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH));
-          const data = snap.exists() ? snap.data() : { items: [] };
-          (data.items = data.items || []).unshift({
-            id, from: 'manual-upload', subject: 'Test PDF (' + f.name + ')',
-            receivedAt: new Date().toISOString(), pdfFilename: f.name, status: 'pending'
-          });
-          await window.setDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH), data);
-        } catch(e) { alert('Could not add test PDF: ' + e.message); }
-      };
-      reader.readAsDataURL(f);
-    };
-    input.click();
-  };
 
   window._strDeleteInboxItem = async function(id) {
     if(!confirm('Delete this inbox item?')) return;
