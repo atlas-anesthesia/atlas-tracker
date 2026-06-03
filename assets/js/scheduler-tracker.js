@@ -158,7 +158,7 @@
     const centerCell = 'display:flex;justify-content:center;align-items:center';
     return `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center${phiHidden ? ';opacity:.85' : ''}">
       <div><div style="font-size:14px;font-weight:600;color:var(--text)">${nameHtml}</div>${contactLine}${surgeryLine}${pdfLine}${revealBtn ? '<div style=\"margin-top:8px\">' + revealBtn + '</div>' : ''}</div>
-      <div style="padding-left:18px">${scheduledCell}</div>
+      <div style="display:flex;justify-content:center;align-items:center;text-align:center">${scheduledCell}</div>
       <div style="${centerCell}">${callPill}</div>
       <div style="${centerCell}">${paidPill}</div>
       <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled')}</div>
@@ -210,7 +210,7 @@
     // themselves.
     const isAssistantView = (window._userRole === 'assistant');
     const headerRow = `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">
-      <span>Patient</span><span>Pre-Op Visit</span><span style="text-align:center">Nicole's Call</span><span style="text-align:center">$100 Paid</span><span style="text-align:center">Jordan Called</span><span style="text-align:center">Cleared</span><span style="text-align:center">${isAssistantView ? 'Pre-Op' : ''}</span>
+      <span>Patient</span><span style="text-align:center">Pre-Op Visit</span><span style="text-align:center">Nicole's Call</span><span style="text-align:center">$100 Paid</span><span style="text-align:center">Jordan Called</span><span style="text-align:center">Cleared</span><span style="text-align:center">${isAssistantView ? 'Pre-Op' : ''}</span>
     </div>`;
 
     let html = '';
