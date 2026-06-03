@@ -538,11 +538,52 @@
     } else {
       _entries[idx].manualPaidAt = new Date().toISOString();
       _entries[idx].manualPaidBy = (window.currentUser?.email) || '';
+      // Newly marked paid — kick off the self-scheduling email if we haven't
+      // sent one yet and this entry isn't already scheduled.
+      _maybeSendScheduleEmail(_entries[idx]);
     }
     await _saveEntries();
     try { window.logAudit && window.logAudit(isPaid ? 'preop-visit-manual-unpaid' : 'preop-visit-manual-paid', id); } catch(e){}
     window.renderSchedulerTracker();
   };
+
+  // Self-scheduling email — fired once per entry, after the $100 is paid (via
+  // Stripe or manual). Sends a portal link the patient uses to pick their own
+  // visit time from Jordan's published availability.
+  const PATIENT_PORTAL_URL = 'https://atlas-anesthesia.github.io/atlas-tracker/schedule.html';
+  function _maybeSendScheduleEmail(entry) {
+    if(!entry || !entry.patientEmail) return;
+    if(entry.scheduleEmailSentAt) return;   // already sent
+    if(entry.scheduledAt) return;           // already scheduled — no need
+    const first = (entry.patientFirst || '').trim();
+    const greet = first ? ' ' + _esc(first) : ' there';
+    const subject = 'Schedule Your Pre-Op Call · Atlas Anesthesia';
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif">'
+      + '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">'
+      + '<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">'
+      + '<tr><td style="background:#166534;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#bbf7d0;margin-bottom:4px">Atlas Anesthesia · Payment Received</div><div style="font-size:20px;font-weight:700;color:#fff">Pick a Time for Your Pre-Op Call</div></td></tr>'
+      + '<tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">'
+      + '<p style="margin:0 0 16px;font-size:18px;font-weight:600;color:#0f172a">Hi' + greet + ',</p>'
+      + '<p style="margin:0 0 14px">Thanks — we\'ve received your $100 pre-op fee. Now pick the time that works best for your call with our nurse Jordan.</p>'
+      + '<div style="text-align:center;margin:22px 0"><a href="' + PATIENT_PORTAL_URL + '" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:15px;font-weight:600">Choose a Time</a></div>'
+      + '<p style="margin:14px 0 0;font-size:13px;color:#475569">You\'ll be asked for the email and last name on file (this email + your last name) to load your record. Jordan will call you from a <strong>317 area code</strong> at whichever time you pick.</p>'
+      + '<p style="margin:18px 0 0">Talk soon,<br><strong>Atlas Anesthesia</strong></p>'
+      + '</td></tr>'
+      + '<tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">Need help? Just reply to this email.</div></td></tr>'
+      + '</table></td></tr></table></body></html>';
+    fetch(WORKER_URL + '/outreach-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: entry.patientEmail, subject, html })
+    }).then(() => {
+      // Stamp the entry so we don't double-send. Need to write through the
+      // in-memory + Firestore copies because this fires from inside another
+      // save flow.
+      entry.scheduleEmailSentAt = new Date().toISOString();
+      // Best-effort persistence — caller will _saveEntries shortly after.
+      try { window.setDoc(window.doc(window.db, 'atlas', DOC_PATH), { entries: _entries }); } catch(_){}
+    }).catch(e => console.warn('schedule email send failed:', e));
+  }
 
   // ── Multi-state call pill: none → called → voicemail → failed → none ───────
   window._strCycleCallStatus = async function(id) {
@@ -659,10 +700,19 @@
           });
           if(!res.ok) continue;
           const data = await res.json();
+          const prevPaid = _stripeStatus[email]?.preopVisitPaid;
           _stripeStatus[email] = {
             preopVisitPaid:   !!data.preopVisitPaid,
             preopVisitPaidAt: data.preopVisitPaidAt || null
           };
+          // Newly-paid transition → fire the self-scheduling email for any
+          // matching entry that hasn't been sent one yet. _maybeSendScheduleEmail
+          // is idempotent (skips if scheduleEmailSentAt or scheduledAt is set).
+          if(data.preopVisitPaid && !prevPaid) {
+            _entries
+              .filter(e => (e.patientEmail || '').toLowerCase() === email)
+              .forEach(e => _maybeSendScheduleEmail(e));
+          }
         } catch(e) { /* keep prior status on transient failure */ }
       }
       window.renderSchedulerTracker();
