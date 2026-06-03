@@ -2071,20 +2071,30 @@ onSnapshot(doc(db,'atlas','preop_visits'), (snap) => {
 });
 
 // Effective call status — combines what's on the pre-op record with what
-// Jordan/Nicole logged on the Tracker. The Tracker's nurseCalledAt is treated
-// as authoritative ("spoken") when the pre-op record hasn't been synced yet.
+// Nicole AND Jordan logged on the Tracker. Either pill marking the call as
+// successful is treated as "spoken" so the Home Follow-up Tracker stays in
+// agreement with what Nicole/Jordan see on their screens.
 window._effectiveCallStatus = function(preopRecord) {
   if(!preopRecord) return 'not-called';
   const fromRecord = preopRecord['po-callStatus'] || 'not-called';
   if(fromRecord === 'spoken') return 'spoken';
-  const caseId = preopRecord['po-caseId'];
   const entries = window._preopVisitEntries || [];
   // Match by preopRecordId (newer entries) OR po-preopVisitId on the record.
   const visit = entries.find(e =>
     (preopRecord.id && e.preopRecordId === preopRecord.id) ||
     (preopRecord['po-preopVisitId'] && e.id === preopRecord['po-preopVisitId'])
   );
-  if(visit && visit.nurseCalledAt) return 'spoken';
+  if(!visit) return fromRecord;
+  // Jordan's "Call Made" pill → po-callStatus = 'spoken'
+  if(visit.nurseCalledAt) return 'spoken';
+  // Nicole's multi-state call pill maps as follows:
+  //   'called'    → 'spoken'    (reached patient, scheduled)
+  //   'voicemail' → 'voicemail' (left a message)
+  //   'failed'    → 'no-answer' (tried but didn't reach)
+  //   'none'      → fall through to po-callStatus
+  if(visit.callStatus === 'called')    return 'spoken';
+  if(visit.callStatus === 'voicemail') return 'voicemail';
+  if(visit.callStatus === 'failed')    return 'no-answer';
   return fromRecord;
 };
 }

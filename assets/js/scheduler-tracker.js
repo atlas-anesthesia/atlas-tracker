@@ -487,14 +487,36 @@
   window._strCycleCallStatus = async function(id) {
     const idx = _entries.findIndex(e => e.id === id);
     if(idx === -1) return;
-    const cur = _entries[idx].callStatus || 'none';
+    const e = _entries[idx];
+    const cur = e.callStatus || 'none';
     const keys = CALL_STATES.map(s => s.key);
     const next = keys[(keys.indexOf(cur) + 1) % keys.length];
-    _entries[idx].callStatus = next;
-    _entries[idx].callStatusAt = new Date().toISOString();
-    _entries[idx].callStatusBy = (window.currentUser?.email) || '';
+    e.callStatus = next;
+    e.callStatusAt = new Date().toISOString();
+    e.callStatusBy = (window.currentUser?.email) || '';
     await _saveEntries();
-    try { window.logAudit && window.logAudit('preop-visit-call-status-' + next, id, _entries[idx].patientFirst + ' ' + _entries[idx].patientLast); } catch(e){}
+    // Mirror the new state onto the linked pre-op record so Josh/Dev's
+    // Follow-up Tracker shows the same status. Mapping:
+    //   none      → 'not-called'
+    //   called    → 'spoken'
+    //   voicemail → 'voicemail'
+    //   failed    → 'no-answer'
+    try {
+      let preopId = e.preopRecordId || '';
+      if(!preopId) {
+        const recs = window._rawPreopRecords || [];
+        const match = recs.find(r => r && r['po-preopVisitId'] === e.id);
+        if(match) preopId = match.id;
+      }
+      if(preopId && typeof window._updatePreopStatusField === 'function') {
+        const mapped = next === 'called'    ? 'spoken'
+                     : next === 'voicemail' ? 'voicemail'
+                     : next === 'failed'    ? 'no-answer'
+                     : 'not-called';
+        await window._updatePreopStatusField(preopId, 'po-callStatus', mapped);
+      }
+    } catch(err) { console.warn('Could not sync call-status to pre-op:', err); }
+    try { window.logAudit && window.logAudit('preop-visit-call-status-' + next, id, e.patientFirst + ' ' + e.patientLast); } catch(_){}
     window.renderSchedulerTracker();
   };
 
