@@ -4229,29 +4229,84 @@ window.caseImages = caseImages;
 const CASE_PHOTO_MAX_SIDE = 1100;
 const CASE_PHOTO_QUALITY = 0.70;
 const CASE_PHOTO_LIMIT = 4;
+// Firestore caps a doc at 1 MB. With multiple photos per case + other
+// fields, we need each photo to stay roughly under this. ~180 KB of base64
+// is ~135 KB of binary JPEG — usually plenty for a case-log shot.
+const CASE_PHOTO_TARGET_B64 = 180 * 1024;
 
-function _processCaseImageFile(file) {
+// Lazy-load heic2any from CDN the first time we encounter a HEIC. Avoids
+// pulling ~150 KB of JS on every page load for the 99% of cases that
+// upload JPEGs/PNGs.
+let _heic2anyLoading = null;
+function _ensureHeic2Any() {
+  if(typeof window.heic2any === 'function') return Promise.resolve();
+  if(_heic2anyLoading) return _heic2anyLoading;
+  _heic2anyLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Could not load HEIC converter.'));
+    document.head.appendChild(s);
+  });
+  return _heic2anyLoading;
+}
+
+// Render a Blob/File onto a canvas at maxSide, return a JPEG data URL.
+function _renderToJpeg(blob, maxSide, quality) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
       img.onload = () => {
-        const scale = Math.min(1, CASE_PHOTO_MAX_SIDE / Math.max(img.width, img.height));
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
         const w = Math.round(img.width * scale) || img.width;
         const h = Math.round(img.height * scale) || img.height;
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve({ id: uid(), dataUrl: canvas.toDataURL('image/jpeg', CASE_PHOTO_QUALITY) });
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
-      img.onerror = () => {
-        const isHeic = /\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type);
-        reject(isHeic ? 'HEIC' : 'BAD_IMAGE');
-      };
+      img.onerror = () => reject('BAD_IMAGE');
       img.src = ev.target.result;
     };
-    reader.readAsDataURL(file);
+    reader.onerror = () => reject('BAD_IMAGE');
+    reader.readAsDataURL(blob);
   });
+}
+
+async function _processCaseImageFile(file) {
+  // Auto-convert HEIC/HEIF from iPhone Camera to JPEG client-side so we
+  // don't ask the user to change a camera setting.
+  const isHeic = /\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type);
+  let workingBlob = file;
+  if(isHeic) {
+    try { await _ensureHeic2Any(); }
+    catch(e) { throw 'HEIC'; }
+    if(typeof window.heic2any !== 'function') throw 'HEIC';
+    try {
+      const out = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+      workingBlob = Array.isArray(out) ? out[0] : out;
+    } catch(e) { throw 'HEIC'; }
+  }
+
+  // First pass at the standard quality. If the result is still over the
+  // per-photo target, drop quality (and finally max side) in steps until
+  // it fits. Beats the previous "this won't save, sorry" failure mode.
+  let maxSide = CASE_PHOTO_MAX_SIDE;
+  let quality = CASE_PHOTO_QUALITY;
+  let dataUrl;
+  for(let attempt = 0; attempt < 6; attempt++) {
+    try { dataUrl = await _renderToJpeg(workingBlob, maxSide, quality); }
+    catch(e) { throw 'BAD_IMAGE'; }
+    if(dataUrl.length <= CASE_PHOTO_TARGET_B64) break;
+    if(quality > 0.40) {
+      quality = Math.max(0.40, quality - 0.10);
+    } else {
+      maxSide = Math.round(maxSide * 0.85);
+    }
+  }
+  return { id: uid(), dataUrl };
 }
 
 window.handleImageUpload = async function(e) {
@@ -4272,7 +4327,7 @@ window.handleImageUpload = async function(e) {
     } catch(err) {
       if(err === 'HEIC' && !heicWarned) {
         heicWarned = true;
-        alert('A HEIC photo was skipped — most browsers can\'t display them.\n\nFix: on iPhone, open Settings → Camera → Formats → "Most Compatible". New photos will be JPEG.');
+        alert('Could not convert a HEIC photo automatically.\n\nQuick fix: open the photo in your Photos app and pick "Export Unmodified" or save it as JPEG, then try again. (Or on iPhone: Settings → Camera → Formats → "Most Compatible" so new photos are JPEG by default.)');
       } else if(err !== 'HEIC' && !badWarned) {
         badWarned = true;
         alert('Could not load one of the images. Try JPEG or PNG.');
