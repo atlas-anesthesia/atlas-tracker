@@ -24,11 +24,14 @@
 (() => {
   const DOC_PATH = 'preop_visits';
   const PDF_DOC_PATH = 'preop_visit_pdfs';
+  const INBOX_DOC_PATH = 'scheduling_inbox';      // single doc { items: [] }
+  const INBOX_PDF_PREFIX = 'scheduling_inbox_pdf_';
   const WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
   const MAX_PDF_BYTES = 700 * 1024; // soft cap so the PDF doc stays under 1 MB
 
   let _entries = [];
   let _stripeStatus = {}; // { email-lower: { preopVisitPaid, preopVisitPaidAt } }
+  let _inboxItems = [];   // [{id, from, subject, receivedAt, pdfFilename, status}, ...]
 
   function _$(id) { return document.getElementById(id); }
   function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -181,7 +184,245 @@
     </div>`;
   }
 
+  // ── Scheduling Inbox ───────────────────────────────────────────────────────
+  // Pre-op clearance PDFs Josh/Dev forward to scheduling@atlasanesthesia.co
+  // land in atlas/scheduling_inbox as { items: [{ id, from, subject,
+  // receivedAt, pdfFilename, status }] }. The matching PDF is stored as its
+  // own doc at atlas/scheduling_inbox_pdf_<id> (keeps each PDF under the
+  // Firestore 1 MB per-doc limit).
+  //
+  // Nicole sees a panel above the Tracker rows showing every pending item.
+  // Clicking one opens a split-screen modal — PDF on the left, Add Patient
+  // form on the right. Submitting creates a tracker entry, copies the PDF
+  // over to preop_visit_pdfs_<entryId>, and marks the inbox item processed.
+
+  function renderInbox() {
+    const host = _$('str-inbox');
+    if(!host) return;
+    const isScheduler = (window._userRole === 'scheduler');
+    if(!isScheduler) { host.innerHTML = ''; return; }
+    const pending = (_inboxItems || []).filter(i => (i.status || 'pending') === 'pending');
+    if(!pending.length) { host.innerHTML = ''; return; }
+    const rows = pending.map(i => {
+      const recv = i.receivedAt ? new Date(i.receivedAt).toLocaleString('en-US', { dateStyle:'short', timeStyle:'short' }) : '';
+      return `<div class="str-inbox-row" onclick="window._strOpenInboxItem('${i.id}')" style="display:grid;grid-template-columns:1fr 200px 90px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">📎 ${_esc(i.pdfFilename || 'attachment.pdf')}</div>
+          <div style="font-size:11px;color:var(--text-faint);margin-top:2px">${_esc(i.subject || '')}</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint)"><div>${_esc(i.from || '')}</div><div style="margin-top:2px">${_esc(recv)}</div></div>
+        <div style="text-align:right"><button onclick="event.stopPropagation();window._strDeleteInboxItem('${i.id}')" title="Delete this email" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);padding:3px 8px">🗑</button></div>
+      </div>`;
+    }).join('');
+    host.innerHTML = `<div class="card" style="padding:0;overflow:hidden;border-left:4px solid #0369a1">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#eff6ff;border-bottom:1px solid #bfdbfe">
+        <div style="font-size:13px;font-weight:700;color:#0369a1">📥 Pending Pre-Op Forms · ${pending.length}</div>
+        <div style="display:flex;gap:6px">
+          <button onclick="window._strSimulateInboxPDF()" class="btn btn-ghost btn-sm" title="Drop a PDF here to test the flow without email" style="font-size:11px;color:#0369a1;border-color:#bfdbfe">+ Test PDF</button>
+        </div>
+      </div>
+      ${rows}
+    </div>`;
+  }
+
+  // Live subscription to inbox doc — onSnapshot from app.js's Firestore.
+  function subscribeInbox() {
+    if(typeof window.onSnapshot !== 'function') return;
+    try {
+      window.onSnapshot(window.doc(window.db, 'atlas', INBOX_DOC_PATH), snap => {
+        _inboxItems = snap.exists() ? (snap.data().items || []) : [];
+        renderInbox();
+      });
+    } catch(e) { console.warn('inbox subscribe failed:', e); }
+  }
+  subscribeInbox();
+
+  // Manual test entry point — drops a PDF onto the inbox without going
+  // through email. Useful for QA until Cloudflare Email Routing is wired up.
+  window._strSimulateInboxPDF = function() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf';
+    input.onchange = async () => {
+      const f = input.files?.[0];
+      if(!f) return;
+      if(f.type !== 'application/pdf') { alert('Pick a PDF.'); return; }
+      if(f.size > MAX_PDF_BYTES) { alert(`PDF is too large (${Math.round(f.size/1024)} KB). Keep it under ${Math.round(MAX_PDF_BYTES/1024)} KB.`); return; }
+      const id = _uid();
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          await window.setDoc(window.doc(window.db, 'atlas', INBOX_PDF_PREFIX + id), {
+            filename: f.name, dataUrl: reader.result, contentType: 'application/pdf', sizeBytes: f.size
+          });
+          const snap = await window.getDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH));
+          const data = snap.exists() ? snap.data() : { items: [] };
+          (data.items = data.items || []).unshift({
+            id, from: 'manual-upload', subject: 'Test PDF (' + f.name + ')',
+            receivedAt: new Date().toISOString(), pdfFilename: f.name, status: 'pending'
+          });
+          await window.setDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH), data);
+        } catch(e) { alert('Could not add test PDF: ' + e.message); }
+      };
+      reader.readAsDataURL(f);
+    };
+    input.click();
+  };
+
+  window._strDeleteInboxItem = async function(id) {
+    if(!confirm('Delete this inbox item?')) return;
+    try {
+      const snap = await window.getDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH));
+      const data = snap.exists() ? snap.data() : { items: [] };
+      data.items = (data.items || []).filter(i => i.id !== id);
+      await window.setDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH), data);
+      try { await window.deleteDoc(window.doc(window.db, 'atlas', INBOX_PDF_PREFIX + id)); } catch(_){}
+    } catch(e) { alert('Could not delete: ' + e.message); }
+  };
+
+  // Click an inbox row → split-screen modal: PDF left, Add Patient form right.
+  window._strOpenInboxItem = async function(id) {
+    const item = (_inboxItems || []).find(i => i.id === id);
+    if(!item) return;
+    // Load the PDF blob.
+    let pdfDataUrl = '';
+    try {
+      const pdfSnap = await window.getDoc(window.doc(window.db, 'atlas', INBOX_PDF_PREFIX + id));
+      if(pdfSnap.exists()) pdfDataUrl = pdfSnap.data().dataUrl || '';
+    } catch(_){}
+    if(!pdfDataUrl) { alert('Could not load the PDF for this inbox item.'); return; }
+
+    const prior = document.getElementById('strInboxModal');
+    if(prior) prior.remove();
+    const centers = window.surgeryCenters || [];
+    const centerOptions = centers.map(c => `<option value="${_esc(c.id)}">${_esc(c.name)}</option>`).join('');
+
+    const wrap = document.createElement('div');
+    wrap.id = 'strInboxModal';
+    wrap.dataset.inboxId = id;
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:stretch;justify-content:center;padding:20px';
+    wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
+
+    wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:1400px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+      <div style="background:#1d3557;color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="min-width:0">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0">New Patient from Pre-Op Form</div>
+          <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📎 ${_esc(item.pdfFilename || 'attachment.pdf')} · ${_esc(item.from || '')}</div>
+        </div>
+        <button onclick="document.getElementById('strInboxModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;flex-shrink:0">✕</button>
+      </div>
+      <div class="str-inbox-split" style="display:flex;flex:1;min-height:0;flex-wrap:wrap">
+        <div style="flex:1 1 48%;min-width:0;min-height:60vh;background:#525659">
+          <iframe src="${pdfDataUrl}" style="width:100%;height:100%;border:none;display:block" title="Pre-op PDF"></iframe>
+        </div>
+        <div style="flex:1 1 52%;min-width:300px;overflow-y:auto;padding:20px 22px;background:var(--surface);max-height:80vh">
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Fill in what you can pull from the form on the left. Required fields are marked <span style="color:var(--warn)">*</span>.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div><label style="margin-top:0">First name <span style="color:var(--warn)">*</span></label><input type="text" id="strap-first" placeholder="e.g. John"></div>
+            <div><label style="margin-top:0">Last name</label><input type="text" id="strap-last" placeholder="e.g. Smith"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div><label style="margin-top:0">Phone <span style="color:var(--warn)">*</span></label><input type="tel" id="strap-phone" placeholder="(555) 123-4567"></div>
+            <div><label style="margin-top:0">PCP <span style="font-weight:400;color:var(--text-faint);font-size:11px">(if any)</span></label><input type="text" id="strap-pcp" placeholder="Dr. Smith"></div>
+          </div>
+          <div style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9a3412;margin-bottom:8px">Surgery details</div>
+            <div style="margin-bottom:10px"><label style="margin-top:0">Surgeon</label><input type="text" id="strap-surgeon" placeholder="Dr. Patel"></div>
+            <div style="display:grid;grid-template-columns:1fr 140px;gap:12px;margin-bottom:10px">
+              <div><label style="margin-top:0">Surgery date <span style="color:var(--warn)">*</span></label><input type="date" id="strap-surg-date"></div>
+              <div><label style="margin-top:0">Start time</label><input type="time" id="strap-surg-time"></div>
+            </div>
+            <div><label style="margin-top:0">Surgery center</label>${centers.length
+              ? `<select id="strap-center"><option value="">— Pick a center —</option>${centerOptions}</select>`
+              : `<input type="text" id="strap-center" placeholder="e.g. Bellin Surgery Center">`}</div>
+          </div>
+          <div id="strap-status" style="font-size:12px;padding:4px 0;min-height:16px"></div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--border)">
+            <button class="btn btn-ghost" onclick="document.getElementById('strInboxModal').remove()">Cancel</button>
+            <button class="btn btn-primary" id="strap-save-btn" onclick="window._strSaveInboxPatient()" style="background:#1d3557;border-color:#1d3557">+ Add to Tracker</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    document.body.appendChild(wrap);
+    setTimeout(() => document.getElementById('strap-first')?.focus(), 60);
+  };
+
+  // Submit handler for the inbox split-screen modal.
+  window._strSaveInboxPatient = async function() {
+    const wrap = document.getElementById('strInboxModal');
+    if(!wrap) return;
+    const inboxId = wrap.dataset.inboxId;
+    const first = (_$('strap-first')?.value || '').trim();
+    const last  = (_$('strap-last')?.value || '').trim();
+    const phone = (_$('strap-phone')?.value || '').trim();
+    const pcp   = (_$('strap-pcp')?.value || '').trim();
+    const surgeon = (_$('strap-surgeon')?.value || '').trim();
+    const surgD = _$('strap-surg-date')?.value || '';
+    const surgT = _$('strap-surg-time')?.value || '';
+    const centerEl = _$('strap-center');
+    const centers = window.surgeryCenters || [];
+    let surgeryCenterId = '', surgeryCenterName = '';
+    if(centerEl) {
+      if(centerEl.tagName === 'SELECT') {
+        surgeryCenterId = centerEl.value || '';
+        const c = centers.find(x => x.id === surgeryCenterId);
+        surgeryCenterName = c ? c.name : '';
+      } else { surgeryCenterName = (centerEl.value || '').trim(); }
+    }
+    const status = _$('strap-status');
+    const setError = msg => { if(status) { status.textContent = '✗ ' + msg; status.style.color = '#b91c1c'; } };
+    if(!first) { setError('First name is required.'); return; }
+    if(!phone) { setError('Phone is required.'); return; }
+    if(!surgD) { setError('Surgery date is required.'); return; }
+
+    const btn = _$('strap-save-btn');
+    if(btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      if(!_entries.length) await _loadEntries();
+      const inboxItem = _inboxItems.find(i => i.id === inboxId);
+      // Copy the inbox PDF over to a per-entry PDF doc so it lives with the
+      // patient long-term (and so deleting the inbox doesn't lose the file).
+      const newEntryId = _uid();
+      const inboxPdfSnap = await window.getDoc(window.doc(window.db, 'atlas', INBOX_PDF_PREFIX + inboxId));
+      const filename = inboxPdfSnap.exists() ? inboxPdfSnap.data().filename : (inboxItem?.pdfFilename || 'preop.pdf');
+      if(inboxPdfSnap.exists()) {
+        await window.setDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + newEntryId), inboxPdfSnap.data());
+      }
+      const entry = {
+        id: newEntryId,
+        patientFirst: first, patientLast: last, patientPhone: phone, pcp, surgeon,
+        surgeryDate: surgD, surgeryTime: surgT,
+        surgeryCenterId, surgeryCenterName,
+        pdfFilename: filename,
+        callStatus: 'none',
+        addedAt: new Date().toISOString(),
+        addedBy: (window.currentUser?.email) || '',
+        fromInboxId: inboxId
+      };
+      _entries.unshift(entry);
+      await _saveEntries();
+      // Mark inbox item processed (and clean up its inbox-side PDF doc).
+      try {
+        const isnap = await window.getDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH));
+        const idata = isnap.exists() ? isnap.data() : { items: [] };
+        idata.items = (idata.items || []).map(i => i.id === inboxId
+          ? { ...i, status: 'processed', processedAt: new Date().toISOString(), processedBy: (window.currentUser?.email) || '', linkedEntryId: newEntryId }
+          : i);
+        await window.setDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH), idata);
+        try { await window.deleteDoc(window.doc(window.db, 'atlas', INBOX_PDF_PREFIX + inboxId)); } catch(_){}
+      } catch(e) { console.warn('inbox cleanup failed:', e); }
+      try { window.logAudit && window.logAudit('preop-visit-from-inbox', newEntryId, first + ' ' + last); } catch(_){}
+      wrap.remove();
+      window.renderSchedulerTracker();
+    } catch(err) {
+      setError(err.message || String(err));
+      if(btn) { btn.disabled = false; btn.textContent = '+ Add to Tracker'; }
+    }
+  };
+
   window.renderSchedulerTracker = async function() {
+    renderInbox();
     const body = _$('str-body');
     if(!body) return;
     if(!_entries.length) await _loadEntries();
