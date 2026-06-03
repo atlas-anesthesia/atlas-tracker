@@ -8383,6 +8383,15 @@ console.error('Stripe check error:', err);
 };
 function populateFinalizeFromPreop(r) {
 if(!r) return;
+// HIPAA: 3 days after surgery, patient identifiers (phone, driver name,
+// contact phone, etc.) disappear from this summary unless the case has been
+// PHI-revealed for the session.
+const _phiHide = typeof window.isPHIHidden === 'function'
+  && window.isPHIHidden(r['po-surgeryDate'], r['po-caseId']);
+const _phiVal = (fid, val) => {
+  if(_phiHide && typeof window.isPHIField === 'function' && window.isPHIField(fid)) return null;
+  return val;
+};
 // Fill case fields
 const el = id => document.getElementById(id);
 if(el('caseId')) el('caseId').value = r['po-caseId'] || '';
@@ -8419,13 +8428,21 @@ if(neuroFlags.length) html += `<div style="margin-bottom:6px"><span style="font-
 html += '</div>';
 // Key info rows
 html += '<div style="margin-top:10px">';
-html += row('Contact', r['po-contact-phone'] ? [r['po-contact-type'],r['po-contact-phone']].filter(Boolean).join(' · ') : null);
-html += row('Medications', r['po-medications']);
-html += row('Allergies', r['po-allergies'], true);
-html += row('Surgical Hx', r['po-surgicalHistory']);
-html += row('NPO Notes', r['po-comments']);
+// PHI-protected fields are dropped from the summary 3 days post-surgery.
+const _contactPhone = _phiVal('po-contact-phone', r['po-contact-phone']);
+const _contactType  = _phiVal('po-contact-type',  r['po-contact-type']);
+html += row('Contact', _contactPhone ? [_contactType, _contactPhone].filter(Boolean).join(' · ') : null);
+html += row('Medications', _phiVal('po-medications', r['po-medications']));
+html += row('Allergies', _phiVal('po-allergies', r['po-allergies']), true);
+html += row('Surgical Hx', _phiVal('po-surgicalHistory', r['po-surgicalHistory']));
+html += row('NPO Notes', _phiVal('po-comments', r['po-comments']));
 html += row('Call Date', fmtDate(r['po-callDateTime']?.split('T')[0]));
-html += row('Driver', r['po-driverName'] ? r['po-driverName'] + (r['po-driverRel']?' ('+r['po-driverRel']+')':'') : null);
+const _drvName = _phiVal('po-driverName', r['po-driverName']);
+const _drvRel  = _phiVal('po-driverRel', r['po-driverRel']);
+html += row('Driver', _drvName ? _drvName + (_drvRel?' ('+_drvRel+')':'') : null);
+if(_phiHide) {
+  html += '<div style="margin-top:10px;padding:8px 12px;background:#f1f5f9;border:1px dashed #cbd5e1;border-radius:8px;font-size:11px;color:#64748b;text-align:center">🔒 Patient contact details (phone, driver, etc.) hidden under HIPAA minimum-necessary. Use the Pre-Op record to reveal.</div>';
+}
 html += '</div>';
 const summary = document.getElementById('finalize-preop-summary');
 const summaryContent = document.getElementById('finalize-preop-content');
