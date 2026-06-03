@@ -202,7 +202,6 @@
     const isScheduler = (window._userRole === 'scheduler');
     if(!isScheduler) { host.innerHTML = ''; return; }
     const pending = (_inboxItems || []).filter(i => (i.status || 'pending') === 'pending');
-    if(!pending.length) { host.innerHTML = ''; return; }
     const rows = pending.map(i => {
       const recv = i.receivedAt ? new Date(i.receivedAt).toLocaleString('en-US', { dateStyle:'short', timeStyle:'short' }) : '';
       return `<div class="str-inbox-row" onclick="window._strOpenInboxItem('${i.id}')" style="display:grid;grid-template-columns:1fr 200px 90px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">
@@ -214,20 +213,33 @@
         <div style="text-align:right"><button onclick="event.stopPropagation();window._strDeleteInboxItem('${i.id}')" title="Delete this email" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn);padding:3px 8px">🗑</button></div>
       </div>`;
     }).join('');
+    // Always render the card for Nicole — even with zero items — so the
+    // "+ Test PDF" affordance is reachable and she knows the inbox exists.
+    const emptyState = pending.length
+      ? ''
+      : '<div style="padding:14px 16px;font-size:12px;color:var(--text-faint);font-style:italic;text-align:center">No forms waiting. Forwards from <strong>scheduling@atlasanesthesia.co</strong> show up here.</div>';
+    const countLabel = pending.length
+      ? `📥 Pending Pre-Op Forms · ${pending.length}`
+      : '📥 Pending Pre-Op Forms';
     host.innerHTML = `<div class="card" style="padding:0;overflow:hidden;border-left:4px solid #0369a1">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#eff6ff;border-bottom:1px solid #bfdbfe">
-        <div style="font-size:13px;font-weight:700;color:#0369a1">📥 Pending Pre-Op Forms · ${pending.length}</div>
+        <div style="font-size:13px;font-weight:700;color:#0369a1">${countLabel}</div>
         <div style="display:flex;gap:6px">
           <button onclick="window._strSimulateInboxPDF()" class="btn btn-ghost btn-sm" title="Drop a PDF here to test the flow without email" style="font-size:11px;color:#0369a1;border-color:#bfdbfe">+ Test PDF</button>
         </div>
       </div>
-      ${rows}
+      ${rows}${emptyState}
     </div>`;
   }
 
   // Live subscription to inbox doc — onSnapshot from app.js's Firestore.
+  // Wait until window.db / window.onSnapshot are populated (app.js sets these
+  // late in its boot) before subscribing.
   function subscribeInbox() {
-    if(typeof window.onSnapshot !== 'function') return;
+    if(typeof window.onSnapshot !== 'function' || !window.db) {
+      setTimeout(subscribeInbox, 200);
+      return;
+    }
     try {
       window.onSnapshot(window.doc(window.db, 'atlas', INBOX_DOC_PATH), snap => {
         _inboxItems = snap.exists() ? (snap.data().items || []) : [];
