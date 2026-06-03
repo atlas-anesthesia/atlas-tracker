@@ -1357,11 +1357,12 @@ window.openSchedulePreopVisitModal = function(entryId) {
 
         <!-- Editable fields -->
         <div style="margin-bottom:14px"><label style="margin-top:0">Patient email <span style="color:var(--warn)">*</span></label><input type="email" id="spv-email" placeholder="patient@email.com" value="${esc(entry.patientEmail || '')}" oninput="window._spvRefreshPreview()"></div>
-        <div id="spv-open-slots" style="margin-bottom:14px"></div>
-        <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:14px">
-          <div><label style="margin-top:0">Pre-op visit date <span style="font-size:11px;color:var(--text-faint)">(must be before surgery)</span></label><input type="date" id="spv-date" value="${esc(entry.date || '')}" ${visitMax ? `max="${visitMax}"` : ''} oninput="window._spvRefreshPreview()"></div>
-          <div><label style="margin-top:0">Time</label><input type="time" id="spv-time" value="${esc(entry.time || '')}" oninput="window._spvRefreshPreview()"></div>
-        </div>
+        <!-- Visit date/time + Jordan's slot picker removed: the patient now
+             picks their own time via the self-scheduling portal once the
+             $100 fee is paid. Date/time get stamped on the entry when the
+             patient confirms. -->
+        <input type="hidden" id="spv-date" value="">
+        <input type="hidden" id="spv-time" value="">
         <div style="margin-bottom:14px"><label style="margin-top:0">Assign to CRNA <span style="color:var(--warn)">*</span></label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-josh" onclick="window._spvSetCrna('josh')">Josh</button><button type="button" class="worker-btn" id="spv-dev" onclick="window._spvSetCrna('dev')">Devarsh</button></div></div>
         <div style="margin-bottom:14px"><label style="margin-top:0">$100 collection</label><div class="worker-toggle" style="margin-bottom:0"><button type="button" class="worker-btn active-josh" id="spv-pay-phone" onclick="window._spvSetPayMethod('phone')">📞 By phone</button><button type="button" class="worker-btn" id="spv-pay-email" onclick="window._spvSetPayMethod('email')">📧 Email link</button></div><div style="font-size:11px;color:var(--text-faint);margin-top:4px;font-style:italic">Switch to "Email link" if the patient couldn't give a card over the phone.</div></div>
         <div style="margin-bottom:14px"><label style="margin-top:0">Note for patient (optional)</label><textarea id="spv-note" placeholder="Anything the patient should know about the visit..." oninput="window._spvRefreshPreview()" style="width:100%;min-height:72px;padding:10px 12px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;color:var(--text);outline:none;resize:vertical"></textarea></div>
@@ -1393,7 +1394,7 @@ window.openSchedulePreopVisitModal = function(entryId) {
   window._spvPayMethod = 'phone';
   setTimeout(() => {
     document.getElementById('spv-email')?.focus();
-    window._spvRenderOpenSlots();
+    // Slot picker removed — patient self-schedules via the portal post-payment.
     window._spvRefreshPreview();
     window._spvRenderScript();
   }, 60);
@@ -1669,10 +1670,11 @@ window._spvSend = async function() {
   const btn = $('spv-send-btn');
   if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Valid patient email required (a confirmation will be sent there).'); return; }
   if(!surgeryDate) { alert('Surgery date is missing on the Tracker entry — edit the patient first.'); return; }
-  if(!date) { alert('Pre-op visit date is required.'); return; }
-  if(date >= surgeryDate) { alert('The pre-op visit date must be before the surgery date.'); return; }
   const todayIso = new Date().toISOString().split('T')[0];
   if(surgeryDate < todayIso) { alert('Surgery date is in the past — fix it on the Tracker first.'); return; }
+  // Visit date/time are now picked by the patient via the self-scheduling
+  // portal, so we don't require them here. They get stamped on the entry
+  // when the patient confirms their slot.
   btn.disabled = true; btn.textContent = 'Sending...';
   if(status) { status.textContent = ''; status.style.color = ''; }
   const crna = window._spvCrna || 'josh';
