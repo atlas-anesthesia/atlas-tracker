@@ -490,15 +490,31 @@
   window._strToggleNurseCalled = async function(id, done) {
     const idx = _entries.findIndex(e => e.id === id);
     if(idx === -1) return;
+    const e = _entries[idx];
     if(done) {
-      _entries[idx].nurseCalledAt = new Date().toISOString();
-      _entries[idx].nurseCalledBy = (window.currentUser?.email) || '';
+      e.nurseCalledAt = new Date().toISOString();
+      e.nurseCalledBy = (window.currentUser?.email) || '';
     } else {
-      _entries[idx].nurseCalledAt = null;
-      _entries[idx].nurseCalledBy = null;
+      e.nurseCalledAt = null;
+      e.nurseCalledBy = null;
     }
     await _saveEntries();
-    try { window.logAudit && window.logAudit(done ? 'preop-visit-nurse-called' : 'preop-visit-nurse-uncalled', id, _entries[idx].patientFirst + ' ' + _entries[idx].patientLast); } catch(e){}
+    // Mirror the call status onto the linked pre-op record so Josh/Dev's
+    // Follow-up Tracker reflects what Jordan just did. Falls back to a
+    // po-preopVisitId lookup for entries that pre-date the preopRecordId
+    // stamping.
+    try {
+      let preopId = e.preopRecordId || '';
+      if(!preopId) {
+        const recs = window._rawPreopRecords || [];
+        const match = recs.find(r => r && r['po-preopVisitId'] === e.id);
+        if(match) preopId = match.id;
+      }
+      if(preopId && typeof window._updatePreopStatusField === 'function') {
+        await window._updatePreopStatusField(preopId, 'po-callStatus', done ? 'spoken' : 'not-called');
+      }
+    } catch(err) { console.warn('Could not sync call-status to pre-op:', err); }
+    try { window.logAudit && window.logAudit(done ? 'preop-visit-nurse-called' : 'preop-visit-nurse-uncalled', id, e.patientFirst + ' ' + e.patientLast); } catch(_){}
     window.renderSchedulerTracker();
   };
 

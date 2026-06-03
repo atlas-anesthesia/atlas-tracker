@@ -7109,6 +7109,10 @@ async function _updatePreopStatusField(preopId, field, value) {
     return false;
   }
 }
+// Exposed so scheduler-tracker.js can sync Jordan's "Call Made" pill into the
+// linked pre-op record's po-callStatus, keeping Josh/Dev's Follow-up Tracker
+// in agreement with what Jordan logged on the Tracker.
+window._updatePreopStatusField = _updatePreopStatusField;
 
 // Modal selector for call status — replaces the cycle behavior so all options
 // are visible at once instead of having to click through them.
