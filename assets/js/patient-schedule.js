@@ -1,20 +1,19 @@
-// patient-schedule.js — Atlas Anesthesia public patient scheduling portal.
+// patient-schedule.js — Atlas Anesthesia patient portal.
 //
-// Flow:
-//   1. Patient enters their email + last name (the credentials Nicole has on
-//      file for them, captured during her initial intake).
-//   2. We look up a matching atlas/preop_visits entry that has paid the $100
-//      pre-op fee and hasn't been scheduled yet.
-//   3. We expand Jordan's published availability windows into 15-min slots,
-//      remove any that are already booked, and render the rest grouped by day.
-//   4. Patient picks a slot. We stamp the entry with scheduledAt + date/time,
-//      remove the slot from Jordan's availability (so it can't be double-
-//      booked), and fire confirmation emails to the patient + Jordan + admin.
+// Three sequential gates the patient walks through after Nicole sends them
+// the portal link (with ?t=<tracker-entry-id>):
 //
-// This page runs without authentication — it uses the same Firebase config
-// as the main app. The Tracker entry's email + last name pair is the "auth"
-// token. If a guess wins, the attacker can only book a visit they've already
-// paid $100 for, which is a small attack surface.
+//   1) PHOTOS — six airway-assessment angles. HEIC inputs are converted to
+//      JPG client-side. Each image is downscaled + JPEG-compressed and saved
+//      to its own Firestore doc so we stay well under the 1 MB per-doc cap.
+//   2) PAYMENT — $100 Stripe link. We poll /stripe-check for the patient's
+//      email; once it flips paid the gate unlocks. Manual paid stamps from
+//      Nicole's side (e.g. card taken over the phone) also unlock it.
+//   3) SCHEDULE — 15-min slot picker over Jordan's published availability.
+//      Booking re-reads the entries doc to avoid double-booking.
+//
+// On confirmation we stamp the entry and fire emails to the patient, Jordan,
+// and admin via the worker's /outreach-email endpoint.
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -31,139 +30,300 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
+const STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
+
+// Six required photos. Order + copy comes straight from the instruction
+// sheet — keep the labels short, the bullets actionable.
+const ANGLES = [
+  { key: 'neckExt',  label: 'Neck extended', bullets: ['Tilt head back as far as comfortably possible.', 'Look up toward the ceiling.', 'Camera in front of you.', 'Top of chest to top of head.'] },
+  { key: 'profile',  label: 'Profile (side)', bullets: ['Turn so the camera sees your side.', 'Head in a natural, neutral position.', 'Camera at eye level.', 'Top of chest to top of head.'] },
+  { key: 'straight', label: 'Straight on',    bullets: ['Look straight ahead.', 'Head in a natural, neutral position.', 'Camera at eye level.', 'Top of chest to top of head.'] },
+  { key: 'right',    label: 'Head turned right', bullets: ['Turn your head as far right as comfortable.', 'Keep eyes level, face relaxed.', 'Camera in front of you.', 'Top of chest to top of head.'] },
+  { key: 'left',     label: 'Head turned left',  bullets: ['Turn your head as far left as comfortable.', 'Keep eyes level, face relaxed.', 'Camera in front of you.', 'Top of chest to top of head.'] },
+  { key: 'throat',   label: 'Back of the throat', bullets: ['Open your mouth wide.', 'Stick your tongue out and say "ahh".', 'Camera in front of you.', 'Top of chest to top of head.'] }
+];
+
+const PHOTO_MAX_DIMENSION = 1400;   // longest side, in px
+const PHOTO_JPEG_QUALITY  = 0.82;   // ~80-300 KB per photo after resize
 
 // ── helpers ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const fmtDate = iso => {
-  if(!iso) return '';
-  try { return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); }
-  catch(e) { return iso; }
-};
-const fmtDateShort = iso => {
-  if(!iso) return '';
-  try { return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }); }
-  catch(e) { return iso; }
-};
-const fmtTime = t => {
-  if(!t) return '';
-  try { return new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }); }
-  catch(e) { return t; }
-};
-function showError(boxId, msg) {
-  const el = $(boxId);
-  if(!el) return;
-  el.innerHTML = '<div class="alert err">' + esc(msg) + '</div>';
-}
-function clearError(boxId) {
-  const el = $(boxId);
-  if(el) el.innerHTML = '';
-}
-function showStage(stage) {
-  ['stage-identity','stage-picker','stage-confirm'].forEach(id => {
-    const el = $(id);
-    if(el) el.classList.toggle('stage-hidden', id !== stage);
-  });
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// 15-min expansion. Same logic the internal modal uses.
+const fmtDate     = iso => iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }) : '';
+const fmtDateShort= iso => iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }) : '';
+const fmtTime     = t   => t ? new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }) : '';
 function expand15(start, end) {
   if(!start || !end || !start.includes(':') || !end.includes(':')) return [];
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
   if([sh,sm,eh,em].some(n => Number.isNaN(n))) return [];
-  const s = sh*60 + sm;
-  const e = eh*60 + em;
+  const s = sh*60 + sm, e = eh*60 + em;
   const out = [];
-  for(let m = s; m + 15 <= e; m += 15) {
-    out.push(String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'));
-  }
+  for(let m = s; m + 15 <= e; m += 15) out.push(String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'));
   return out;
+}
+function setBootError(msg) {
+  $('boot-state').classList.add('hidden');
+  $('boot-error').classList.remove('hidden');
+  $('boot-error').innerHTML = '<div class="alert err">' + esc(msg) + '</div>';
 }
 
 // ── module state ───────────────────────────────────────────────────────────
-let _entry = null;          // the matching preop_visits entry
-let _allEntries = [];       // entire entries array (needed to write back)
-let _entryIdx = -1;         // index of _entry inside _allEntries
-let _slots = {};            // current availability slots map
-let _selected = null;       // { date, time } once a chip is tapped
+let _entry = null;          // matching preop_visits entry
+let _allEntries = [];       // full entries array (for double-book check)
+let _entryId = '';          // token from URL
+let _selected = null;       // chosen { date, time }
+let _slots = {};            // Jordan's availability slots map
 
-// ── Stage 1: identity lookup ──────────────────────────────────────────────
-$('lookup-btn').addEventListener('click', async () => {
-  clearError('identity-error');
-  const email = ($('p-email').value || '').trim().toLowerCase();
-  const last  = ($('p-last').value  || '').trim().toLowerCase();
-  if(!email || !email.includes('@')) { showError('identity-error', 'Enter the email Atlas has on file.'); return; }
-  if(!last) { showError('identity-error', 'Enter your last name.'); return; }
-
-  const btn = $('lookup-btn');
-  btn.disabled = true; btn.textContent = 'Looking up…';
+// ── boot: read token from URL, fetch the entry ────────────────────────────
+(async function boot() {
   try {
+    const params = new URLSearchParams(window.location.search);
+    _entryId = params.get('t') || '';
+    if(!_entryId) {
+      setBootError("This link is missing the patient token. Please use the link from your Atlas Anesthesia email, or reply to it for a new one.");
+      return;
+    }
     const snap = await getDoc(doc(db, 'atlas', 'preop_visits'));
     const entries = snap.exists() ? (snap.data().entries || []) : [];
     _allEntries = entries;
-    const idx = entries.findIndex(e =>
-      (e.patientEmail || '').toLowerCase() === email &&
-      (e.patientLast  || '').toLowerCase() === last
-    );
-    if(idx === -1) {
-      showError('identity-error', "We couldn't find a matching record. Double-check the email and last name we used when we called you, or reply to that email and we'll sort it out.");
-      btn.disabled = false; btn.textContent = 'Continue →';
+    _entry = entries.find(e => e.id === _entryId);
+    if(!_entry) {
+      setBootError("We couldn't find your record. Reply to the email we sent you and we'll get a fresh link out to you.");
       return;
     }
-    _entry = entries[idx];
-    _entryIdx = idx;
-
-    // Guard rails: already scheduled, or $100 not yet paid.
-    if(_entry.scheduledAt) {
-      showError('identity-error', 'Your call is already scheduled. Check the confirmation email we sent you, or reply to it if you need to make a change.');
-      btn.disabled = false; btn.textContent = 'Continue →';
+    // Personalize the header.
+    const name = (_entry.patientFirst || '').trim();
+    if(name) $('hdr-title').textContent = 'Hi ' + name + " — let's set up your pre-op visit";
+    // If already scheduled, jump straight to confirmation view.
+    if(_entry.scheduledAt && _entry.date && _entry.time) {
+      $('boot-state').classList.add('hidden');
+      $('steps-wrap').classList.add('hidden');
+      showConfirm({ date: _entry.date, time: _entry.time });
       return;
     }
-    const hasPaid = !!_entry.manualPaidAt || !!_entry.stripePaidAt;
-    // We don't strictly require the paid stamp client-side (Stripe may not
-    // have synced yet), but warn if it looks unpaid.
-    if(!hasPaid) {
-      // Soft warning — let them through. The internal team can correct.
-      console.info('Patient scheduling without confirmed payment stamp.');
-    }
-    await loadSlotsAndShowPicker();
+    $('boot-state').classList.add('hidden');
+    $('steps-wrap').classList.remove('hidden');
+    renderPhotos();
+    renderPayment();
+    renderSchedule();
+    refreshStripeStatus();   // fire-and-forget initial check
   } catch(err) {
-    console.error('lookup failed', err);
-    showError('identity-error', 'Something went wrong. Please try again in a moment.');
-    btn.disabled = false; btn.textContent = 'Continue →';
+    console.error('boot failed', err);
+    setBootError('Something went wrong loading your record. Try refreshing the page.');
   }
-});
+})();
 
-// ── Stage 2: slot picker ──────────────────────────────────────────────────
-async function loadSlotsAndShowPicker() {
-  showStage('stage-picker');
-  $('slot-list').innerHTML = '<div style="text-align:center;color:var(--text-faint);padding:20px"><span class="spinner"></span> Loading available times…</div>';
-  $('selection-summary').classList.add('stage-hidden');
-  $('book-btn').disabled = true;
-  _selected = null;
+// ══════════════════════════════════════════════════════════════════════════
+// STEP 1: PHOTOS
+// ══════════════════════════════════════════════════════════════════════════
+function renderPhotos() {
+  const grid = $('photo-grid');
+  const status = _entry.photoStatus || {};
+  grid.innerHTML = ANGLES.map((a, i) => {
+    const uploaded = !!(status[a.key] && status[a.key].uploadedAt);
+    const filename = uploaded ? status[a.key].filename : '';
+    return `<div class="photo-card${uploaded ? ' uploaded' : ''}" id="photo-card-${a.key}">
+      <div class="photo-num-row"><span class="photo-num">${i+1}</span><span class="photo-label">${esc(a.label)}</span></div>
+      <ul>${a.bullets.map(b => '<li>' + esc(b) + '</li>').join('')}</ul>
+      <input type="file" class="photo-input" accept="image/*,.heic,.heif" data-angle="${a.key}">
+      <img class="photo-preview ${uploaded ? '' : 'hidden'}" id="photo-preview-${a.key}" alt="${esc(a.label)} preview">
+      <div class="check">✓ Uploaded${filename ? ' · ' + esc(filename) : ''}</div>
+    </div>`;
+  }).join('');
+  // For already-uploaded photos, load + render the preview from Firestore
+  // so the patient sees what they sent on a return visit.
+  ANGLES.forEach(async a => {
+    if(!status[a.key]) return;
+    try {
+      const ps = await getDoc(doc(db, 'atlas', 'preop_photos_' + _entryId + '_' + a.key));
+      if(ps.exists()) {
+        const dataUrl = ps.data().dataUrl;
+        const img = $('photo-preview-' + a.key);
+        if(img) img.src = dataUrl;
+      }
+    } catch(_) {}
+  });
+  // Wire file inputs
+  grid.querySelectorAll('.photo-input').forEach(inp => {
+    inp.addEventListener('change', e => handlePhotoUpload(inp.dataset.angle, e.target.files[0]));
+  });
+  updatePhotosStatus();
+}
 
+async function handlePhotoUpload(angleKey, file) {
+  if(!file) return;
+  const card = $('photo-card-' + angleKey);
+  card.classList.remove('uploaded');
+  const img = $('photo-preview-' + angleKey);
+  if(img) { img.classList.add('hidden'); img.src = ''; }
+  const checkEl = card.querySelector('.check');
+  if(checkEl) checkEl.textContent = 'Processing…';
+  try {
+    let blob = file;
+    const name = (file.name || '').toLowerCase();
+    const isHeic = file.type === 'image/heic' || file.type === 'image/heif' || name.endsWith('.heic') || name.endsWith('.heif');
+    if(isHeic) {
+      if(typeof window.heic2any !== 'function') {
+        throw new Error('HEIC converter not loaded yet. Try again in a few seconds.');
+      }
+      blob = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: PHOTO_JPEG_QUALITY });
+      if(Array.isArray(blob)) blob = blob[0];
+    }
+    // Downscale + re-encode to JPEG (regardless of source type) so each photo
+    // fits comfortably under the 1 MB Firestore doc limit.
+    const jpgDataUrl = await downscaleToJpeg(blob, PHOTO_MAX_DIMENSION, PHOTO_JPEG_QUALITY);
+    // Save the photo to its own doc.
+    const docId = 'preop_photos_' + _entryId + '_' + angleKey;
+    const sizeBytes = Math.ceil((jpgDataUrl.length - jpgDataUrl.indexOf(',') - 1) * 0.75);
+    await setDoc(doc(db, 'atlas', docId), {
+      filename: file.name || (angleKey + '.jpg'),
+      dataUrl: jpgDataUrl,
+      contentType: 'image/jpeg',
+      sizeBytes,
+      uploadedAt: new Date().toISOString()
+    });
+    // Update the entry's photoStatus and persist. Use the freshest entries
+    // copy so we don't clobber any other in-flight edits.
+    const snap = await getDoc(doc(db, 'atlas', 'preop_visits'));
+    const entries = snap.exists() ? (snap.data().entries || []) : [];
+    const idx = entries.findIndex(e => e.id === _entryId);
+    if(idx === -1) throw new Error('Record lost during upload — please refresh.');
+    const ps = entries[idx].photoStatus || {};
+    ps[angleKey] = { filename: file.name || (angleKey + '.jpg'), uploadedAt: new Date().toISOString() };
+    entries[idx].photoStatus = ps;
+    await setDoc(doc(db, 'atlas', 'preop_visits'), { entries });
+    _allEntries = entries;
+    _entry = entries[idx];
+    // Update UI
+    card.classList.add('uploaded');
+    if(img) { img.src = jpgDataUrl; img.classList.remove('hidden'); }
+    if(checkEl) checkEl.textContent = '✓ Uploaded · ' + (file.name || angleKey + '.jpg');
+    updatePhotosStatus();
+  } catch(err) {
+    console.error('photo upload failed', err);
+    if(checkEl) checkEl.textContent = '';
+    alert('Could not upload ' + angleKey + ': ' + (err.message || err) + '\n\nTry again, or pick a different photo.');
+  }
+}
+
+function downscaleToJpeg(blob, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+        const scale = Math.min(1, maxDim / Math.max(width, height));
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const jpg = canvas.toDataURL('image/jpeg', quality);
+        URL.revokeObjectURL(url);
+        resolve(jpg);
+      } catch(e) { URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image decode failed')); };
+    img.src = url;
+  });
+}
+
+function updatePhotosStatus() {
+  const status = _entry.photoStatus || {};
+  const done = ANGLES.filter(a => status[a.key]).length;
+  const pill = $('photos-status');
+  if(done === 0) { pill.className = 'step-status pending'; pill.textContent = '0 / 6 uploaded'; }
+  else if(done < 6) { pill.className = 'step-status inprogress'; pill.textContent = done + ' / 6 uploaded'; }
+  else { pill.className = 'step-status done'; pill.textContent = 'All 6 uploaded'; }
+  // Toggle step lock state
+  $('step-photos').classList.toggle('done', done === 6);
+  if(done === 6) {
+    $('step-pay').classList.remove('locked');
+  } else {
+    $('step-pay').classList.add('locked');
+    $('step-sched').classList.add('locked');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// STEP 2: PAYMENT
+// ══════════════════════════════════════════════════════════════════════════
+function renderPayment() {
+  $('pay-link').href = STRIPE_LINK;
+  $('pay-refresh-btn').addEventListener('click', refreshStripeStatus);
+  updatePayUI();
+}
+
+async function refreshStripeStatus() {
+  const btn = $('pay-refresh-btn');
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try {
+    // Manual paid stamp from the internal team also unlocks the gate.
+    if(_entry.manualPaidAt) { _entry._paid = true; updatePayUI(); return; }
+    if(!_entry.patientEmail) { _entry._paid = false; updatePayUI(); return; }
+    const res = await fetch(WORKER_URL + '/stripe-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerEmail: _entry.patientEmail, caseId: _entry.caseId || '' })
+    });
+    if(!res.ok) { updatePayUI(); return; }
+    const data = await res.json();
+    _entry._paid = !!data.preopVisitPaid;
+    updatePayUI();
+  } catch(_) {
+    // leave previous state
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+}
+
+function updatePayUI() {
+  const photosDone = (_entry.photoStatus && ANGLES.every(a => _entry.photoStatus[a.key]));
+  const paid = !!_entry._paid;
+  const statusEl = $('pay-status');
+  const pill = $('pay-status-pill');
+  if(paid) {
+    statusEl.className = 'pay-status paid';
+    statusEl.textContent = '✓ Payment confirmed — thanks!';
+    pill.className = 'step-status done';
+    pill.textContent = 'Paid';
+    $('step-pay').classList.add('done');
+    if(photosDone) $('step-sched').classList.remove('locked');
+  } else {
+    statusEl.className = 'pay-status pending';
+    statusEl.textContent = '⏳ Payment pending';
+    pill.className = 'step-status pending';
+    pill.textContent = 'Pending';
+    $('step-pay').classList.remove('done');
+    $('step-sched').classList.add('locked');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// STEP 3: SCHEDULE
+// ══════════════════════════════════════════════════════════════════════════
+async function renderSchedule() {
   try {
     const snap = await getDoc(doc(db, 'atlas', 'availability'));
     const data = snap.exists() ? snap.data() : {};
     _slots = (data && data.jordan && data.jordan.slots) || {};
-  } catch(e) {
-    showError('picker-error', "Couldn't load Jordan's schedule. Please refresh and try again.");
-    return;
-  }
+  } catch(_) {}
+  paintSlots();
+  $('book-btn').addEventListener('click', confirmBooking);
+}
 
-  // Booked times: anything in atlas/preop_visits with both date + time set.
+function paintSlots() {
   const taken = new Set();
   _allEntries.forEach(e => {
     if(e.date && e.time) taken.add(e.date + ' ' + e.time);
   });
-
-  // Surgery-day guard: no visit on or after the patient's own surgery.
   const surgIso = _entry.surgeryDate || '';
   const todayIso = new Date().toISOString().split('T')[0];
 
-  // Expand → filter → group by date.
   const grouped = {};
   Object.keys(_slots).sort().forEach(date => {
     if(date < todayIso) return;
@@ -173,58 +333,52 @@ async function loadSlotsAndShowPicker() {
     const free = [...all].filter(t => !taken.has(date + ' ' + t)).sort();
     if(free.length) grouped[date] = free;
   });
-
   const dates = Object.keys(grouped).sort();
+  const list = $('slot-list');
   if(!dates.length) {
-    $('slot-list').innerHTML = '<div class="alert warn">Jordan doesn’t have any open windows that fit your timeline right now. Reply to the email you received and we’ll work something out directly.</div>';
+    list.innerHTML = '<div class="alert warn">Jordan doesn’t have any open windows that fit your timeline right now. Reply to the email we sent you and we’ll work it out directly.</div>';
     return;
   }
-
-  // Cap to first 14 days with slots so the page doesn't get overwhelming.
-  const html = dates.slice(0, 14).map(date => {
+  list.innerHTML = dates.slice(0, 14).map(date => {
     const chips = grouped[date].map(t =>
-      `<button type="button" class="slot" data-date="${date}" data-time="${t}">${esc(fmtTime(t))}</button>`
+      '<button type="button" class="slot" data-date="' + date + '" data-time="' + t + '">' + esc(fmtTime(t)) + '</button>'
     ).join('');
-    return `<div class="day-block"><div class="day-header">${esc(fmtDateShort(date))}</div><div class="slots">${chips}</div></div>`;
+    return '<div class="day-block"><div class="day-header">' + esc(fmtDateShort(date)) + '</div><div class="slots">' + chips + '</div></div>';
   }).join('');
-  $('slot-list').innerHTML = html;
-
-  // Wire chip clicks.
-  $('slot-list').querySelectorAll('.slot').forEach(btn => {
+  list.querySelectorAll('.slot').forEach(btn => {
     btn.addEventListener('click', () => {
-      $('slot-list').querySelectorAll('.slot').forEach(b => b.classList.remove('selected'));
+      list.querySelectorAll('.slot').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       _selected = { date: btn.dataset.date, time: btn.dataset.time };
       const sum = $('selection-summary');
-      sum.innerHTML = '<div class="summary">📞 <strong>' + esc(fmtDate(_selected.date)) + ' at ' + esc(fmtTime(_selected.time)) + '</strong> — Jordan will call you from a 317 area code at this time.</div>';
-      sum.classList.remove('stage-hidden');
+      sum.innerHTML = '<div class="summary">📞 <strong>' + esc(fmtDate(_selected.date)) + ' at ' + esc(fmtTime(_selected.time)) + '</strong> — Jordan will call you from a 317 area code.</div>';
+      sum.classList.remove('hidden');
       $('book-btn').disabled = false;
     });
   });
 }
 
-$('back-btn').addEventListener('click', () => showStage('stage-identity'));
-
-// ── Stage 3: book the slot ────────────────────────────────────────────────
-$('book-btn').addEventListener('click', async () => {
+async function confirmBooking() {
   if(!_selected || !_entry) return;
-  clearError('picker-error');
+  // Re-check gates before committing.
+  const photosDone = (_entry.photoStatus && ANGLES.every(a => _entry.photoStatus[a.key]));
+  if(!photosDone) { alert('Please upload all 6 photos first.'); return; }
+  if(!_entry._paid) { alert('Please complete the $100 payment first.'); return; }
   const btn = $('book-btn');
   btn.disabled = true; btn.textContent = 'Confirming…';
-
+  $('sched-error').innerHTML = '';
   try {
-    // Re-fetch the entries just before writing so we don't clobber any other
-    // concurrent edits Nicole/Jordan may have made.
-    const visitSnap = await getDoc(doc(db, 'atlas', 'preop_visits'));
-    const entries = visitSnap.exists() ? (visitSnap.data().entries || []) : [];
-    const idx = entries.findIndex(e => e.id === _entry.id);
-    if(idx === -1) throw new Error('Could not find your record. Please refresh.');
-
-    const conflict = entries.some(e => e.id !== _entry.id && e.date === _selected.date && e.time === _selected.time);
-    if(conflict) {
-      showError('picker-error', 'Someone else just grabbed that exact time. Pick another slot.');
+    // Re-fetch entries right before the write so we catch any concurrent
+    // bookings that grabbed our slot.
+    const snap = await getDoc(doc(db, 'atlas', 'preop_visits'));
+    const entries = snap.exists() ? (snap.data().entries || []) : [];
+    const idx = entries.findIndex(e => e.id === _entryId);
+    if(idx === -1) throw new Error('Could not find your record.');
+    if(entries.some(e => e.id !== _entryId && e.date === _selected.date && e.time === _selected.time)) {
+      $('sched-error').innerHTML = '<div class="alert err">That exact time was just claimed by another patient. Pick another slot.</div>';
+      _allEntries = entries;
+      paintSlots();
       btn.disabled = false; btn.textContent = 'Confirm This Time';
-      await loadSlotsAndShowPicker();
       return;
     }
     entries[idx] = {
@@ -236,30 +390,31 @@ $('book-btn').addEventListener('click', async () => {
     };
     await setDoc(doc(db, 'atlas', 'preop_visits'), { entries });
 
-    // Notify the team. Patient gets their own confirmation via /outreach-email.
     const patientName = [_entry.patientFirst, _entry.patientLast].filter(Boolean).join(' ') || 'Patient';
-    const subjectInternal = 'Pre-op call self-scheduled — ' + patientName;
-    const internalHtml = buildInternalHTML(patientName, _selected);
-    const patientHtml  = buildPatientConfirmHTML(_entry.patientFirst || '', _selected);
-    const patientSubject = 'Pre-Op Call Confirmed — Atlas Anesthesia';
-    fireEmail(_entry.patientEmail, patientSubject, patientHtml);
-    fireEmail('jordan@atlasanesthesia.co', subjectInternal, internalHtml);
-    fireEmail('admin@atlasanesthesia.co', subjectInternal, internalHtml);
+    const internalSubject = 'Pre-op call self-scheduled — ' + patientName;
+    const internalHtml    = buildInternalHTML(patientName, _selected);
+    const patientHtml     = buildPatientConfirmHTML(_entry.patientFirst || '', _selected);
+    fireEmail(_entry.patientEmail, 'Pre-Op Call Confirmed — Atlas Anesthesia', patientHtml);
+    fireEmail('jordan@atlasanesthesia.co', internalSubject, internalHtml);
+    fireEmail('admin@atlasanesthesia.co', internalSubject, internalHtml);
 
-    // Confirmation stage.
-    $('confirm-summary').innerHTML =
-      '<div style="text-align:left">'
-      + '<div style="margin-bottom:6px"><strong>' + esc(fmtDate(_selected.date)) + '</strong></div>'
-      + '<div style="font-size:18px;font-weight:700;color:var(--accent);font-family:DM Mono,monospace">' + esc(fmtTime(_selected.time)) + ' CT</div>'
-      + '</div>';
-    showStage('stage-confirm');
+    showConfirm(_selected);
   } catch(err) {
     console.error('book failed', err);
-    showError('picker-error', 'Something went wrong. Please try again — if it keeps failing, reply to the email we sent you.');
+    $('sched-error').innerHTML = '<div class="alert err">Could not confirm — please try again, or reply to your email.</div>';
     btn.disabled = false; btn.textContent = 'Confirm This Time';
   }
-});
+}
 
+function showConfirm(sel) {
+  $('steps-wrap').classList.add('hidden');
+  $('stage-confirm').classList.remove('hidden');
+  $('confirm-summary').innerHTML =
+    '<div style="margin-bottom:6px"><strong>' + esc(fmtDate(sel.date)) + '</strong></div>'
+    + '<div style="font-size:18px;font-weight:700;color:var(--accent);font-family:DM Mono,monospace">' + esc(fmtTime(sel.time)) + ' Central Time</div>';
+}
+
+// ── email helpers ──────────────────────────────────────────────────────────
 function fireEmail(to, subject, html) {
   if(!to || !html) return;
   fetch(WORKER_URL + '/outreach-email', {
@@ -268,7 +423,6 @@ function fireEmail(to, subject, html) {
     body: JSON.stringify({ to, subject, html })
   }).catch(() => {});
 }
-
 function buildPatientConfirmHTML(firstName, sel) {
   const greet = firstName ? ' ' + esc(firstName) : ' there';
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
@@ -298,7 +452,6 @@ function buildPatientConfirmHTML(firstName, sel) {
       <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">This is a confirmation message from Atlas Anesthesia.</div></td></tr>
     </table></td></tr></table></body></html>`;
 }
-
 function buildInternalHTML(patientName, sel) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">
@@ -310,7 +463,7 @@ function buildInternalHTML(patientName, sel) {
           <div style="font-size:16px;font-weight:700;color:#0f172a">${esc(fmtDate(sel.date))}</div>
           <div style="font-size:14px;color:#1d4ed8;font-family:'DM Mono',monospace;margin-top:4px">${esc(fmtTime(sel.time))} Central Time</div>
         </div>
-        <p style="margin:18px 0 0;font-size:13px;color:#64748b">The Tracker row is now marked scheduled.</p>
+        <p style="margin:18px 0 0;font-size:13px;color:#64748b">The Tracker row is now marked scheduled. Six airway photos and the $100 fee were captured before the patient reached this step.</p>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">Sent by Atlas Tracker · self-scheduling portal.</div></td></tr>
     </table></td></tr></table></body></html>`;

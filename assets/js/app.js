@@ -1556,45 +1556,39 @@ window._spvSetCrna = function(w) {
 // pre-op visit time with Jordan. Card info is handled separately by phone.
 function _spvBuildEmailHTML() {
   const $ = id => document.getElementById(id);
-  // Patient first name comes from the locked Tracker entry, not a form field.
-  const first = (window._spvEntry?.patientFirst) || '';
-  const date  = $('spv-date')?.value || '';
-  const time  = $('spv-time')?.value || '';
+  // Patient first name + the tracker entry id (used as the portal token).
+  const first    = (window._spvEntry?.patientFirst) || '';
+  const entryId  = window._spvEntryId || (window._spvEntry?.id) || '';
   const note  = $('spv-note')?.value.trim() || '';
   const crna  = window._spvCrna || 'josh';
-  const payMethod = window._spvPayMethod || 'phone';
-  const dateFmt = date ? new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
-  const timeFmt = time ? new Date('2000-01-01T' + time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  // Payment copy + (if applicable) the Stripe button. Phone path matches the
-  // existing flow; email path replaces it with a "please pay this link" CTA.
-  const paymentBlock = payMethod === 'email'
-    ? `<div style="font-size:13px;color:#1e293b;line-height:1.55;margin-top:8px"><strong>$100 Pre-Op Clearance Fee</strong> — we weren't able to take your card over the phone, so please use the secure link below to pay before your visit. Your payment is processed safely via Stripe.</div>
-       <div style="text-align:center;margin:16px 0 4px"><a href="${PREOP_VISIT_STRIPE_LINK}" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:13px 28px;border-radius:6px;font-size:15px;font-weight:600">Pay $100 Pre-Op Fee</a></div>`
-    : `<div style="font-size:13px;color:#1e293b;line-height:1.55;margin-top:8px">The $100 pre-op clearance fee will be billed to the card we collected over the phone — no action is needed from you on the day of the visit.</div>`;
+  // Unique per-patient portal link — three steps: upload airway photos,
+  // pay the $100 fee, pick a time with Jordan.
+  const portalUrl = 'https://atlas-anesthesia.github.io/atlas-tracker/schedule.html?t=' + encodeURIComponent(entryId);
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">
     <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
-      <tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Pre-Op Visit</div><div style="font-size:20px;font-weight:700;color:#fff">Your Pre-Op Visit is Confirmed</div></td></tr>
+      <tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Pre-Op Visit</div><div style="font-size:20px;font-weight:700;color:#fff">Your Pre-Op Patient Portal</div></td></tr>
       <tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">
         <p style="margin:0 0 16px;font-size:18px;font-weight:600;color:#0f172a">Hi${first ? ' ' + esc(first) : ' there'},</p>
-        <p style="margin:0 0 14px">This is a confirmation of your pre-op clearance visit with our nurse Jordan${dateFmt ? ' on <strong>' + dateFmt + (timeFmt ? ' at ' + timeFmt : '') + '</strong>' : ''}. During this visit Jordan will collect your medical history and any prior clearances so we can safely plan your anesthesia.</p>
-        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin:18px 0">
-          <div style="font-size:14px;font-weight:700;color:#1e3a8a;margin-bottom:6px">What to expect</div>
-          <div style="font-size:13px;color:#1e293b;line-height:1.55">Jordan will reach out by phone at the scheduled time from a <strong>317 area code</strong> number — please answer or save it to your contacts so the call doesn’t get flagged as spam.</div>
-          <div style="font-size:13px;color:#1e293b;line-height:1.55;margin-top:8px"><strong>Before the call, please have ready:</strong></div>
-          <ul style="font-size:13px;color:#1e293b;line-height:1.55;margin:4px 0 0;padding-left:22px">
-            <li>Your full medical history</li>
-            <li>A current list of all medications you take (including dosages)</li>
-          </ul>
-          ${paymentBlock}
+        <p style="margin:0 0 14px">Thanks for your time on the phone. Use your <strong>personal patient portal</strong> below — it has three quick steps:</p>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 18px;margin:18px 0">
+          <div style="font-size:13px;color:#1e293b;line-height:1.7">
+            <div><strong>1.</strong> Upload 6 short airway photos (we'll guide you through each angle).</div>
+            <div><strong>2.</strong> Pay the $100 pre-op clearance fee (secure Stripe checkout).</div>
+            <div><strong>3.</strong> Pick a time for your pre-op call with our nurse <strong>Jordan</strong>.</div>
+          </div>
         </div>
-        <p style="margin:14px 0 0;font-size:13px;color:#475569">After your clearance call, ${crna === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA'} will follow up separately to discuss your anesthesia plan.</p>
+        <div style="text-align:center;margin:22px 0">
+          <a href="${portalUrl}" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:15px;font-weight:600">Open My Patient Portal →</a>
+        </div>
+        <p style="margin:14px 0 0;font-size:13px;color:#475569">Jordan will call you from a <strong>317 area code</strong> at the time you choose. Please have your medical history and a current medication list handy for the call.</p>
+        <p style="margin:10px 0 0;font-size:13px;color:#475569">After your clearance, ${crna === 'josh' ? 'Joshua Condado, CRNA' : 'Devarsh Murthy, CRNA'} will follow up separately to walk through your anesthesia plan.</p>
         ${note ? `<div style="background:#f1f5f9;border-left:3px solid #1d3557;padding:10px 14px;margin-top:18px;font-size:13px;color:#1e293b;line-height:1.5">${esc(note).replace(/\n/g,'<br>')}</div>` : ''}
         <p style="margin:18px 0 0">If you need to reschedule or have questions before the visit, just reply to this email.</p>
         <p style="margin:14px 0 0">Talk soon,<br><strong>Atlas Anesthesia</strong></p>
       </td></tr>
-      <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">${payMethod === 'email' ? 'This message includes a secure payment request processed via Stripe.' : 'This is a confirmation message from Atlas Anesthesia.'}</div></td></tr>
+      <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">This link is unique to you — please don't share it.</div></td></tr>
     </table></td></tr></table></body></html>`;
 }
 
