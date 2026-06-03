@@ -110,7 +110,10 @@ let _slots = {};            // Jordan's availability slots map
     refreshStripeStatus();   // fire-and-forget initial check
   } catch(err) {
     console.error('boot failed', err);
-    setBootError('Something went wrong loading your record. Try refreshing the page.');
+    const msg = err && (err.code === 'permission-denied' || /permission/i.test(err.message || ''))
+      ? "We're temporarily unable to load your record (database is locked). Reply to the email we sent you and we'll get this fixed."
+      : 'Something went wrong loading your record (' + (err.message || err.code || 'unknown error') + '). Try refreshing the page.';
+    setBootError(msg);
   }
 })();
 
