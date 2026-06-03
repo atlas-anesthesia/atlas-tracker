@@ -868,19 +868,28 @@ async function _loadAllCases() {
   const meta = await getDoc(doc(db, 'atlas', 'cases'));
   if(!meta.exists()) { _casesFormat = 'legacy'; return []; }
   const data = meta.data();
+  let arr;
   if(data.format === 'monthly-v2' && Array.isArray(data.months)) {
     _casesFormat = 'monthly-v2';
     const snaps = await Promise.all(data.months.map(m => getDoc(doc(db, 'atlas', 'cases_' + m))));
-    return snaps.flatMap(s => s.exists() ? (s.data().cases || []) : []);
+    arr = snaps.flatMap(s => s.exists() ? (s.data().cases || []) : []);
+  } else {
+    _casesFormat = 'legacy';
+    arr = data.cases || [];
   }
-  _casesFormat = 'legacy';
-  return data.cases || [];
+  await _hydrateCasePhotos(arr);
+  return arr;
 }
 
 async function _saveAllCases(casesArray) {
+  // Push any inline photo dataUrls out to per-photo docs (one doc per photo)
+  // and strip the dataUrls from the snapshot we're about to write. Keeps
+  // the cases doc tiny and well under Firestore's 1MB-per-doc cap.
+  await _extractCasePhotos(casesArray);
+  const slim = _stripPhotoData(casesArray);
   if(_casesFormat === 'monthly-v2') {
     const byMonth = {};
-    for(const c of casesArray) {
+    for(const c of slim) {
       const m = _monthKey(c);
       if(!byMonth[m]) byMonth[m] = [];
       byMonth[m].push(c);
@@ -892,7 +901,89 @@ async function _saveAllCases(casesArray) {
     ));
     return setDoc(doc(db, 'atlas', 'cases'), { format: 'monthly-v2', months, updatedAt: now });
   }
-  return setDoc(doc(db, 'atlas', 'cases'), { cases: casesArray });
+  return setDoc(doc(db, 'atlas', 'cases'), { cases: slim });
+}
+
+// === Per-photo storage =====================================================
+// Photos used to live inline in the cases doc as base64 data URLs. That made
+// the monthly cases doc balloon past Firestore's 1MB-per-doc cap once a few
+// cases each had 3+ photos. Each photo now gets its own doc at
+//   atlas/case_photo_<photoId>
+// and the case object stores only `{ id }`. The dataUrl is hydrated back
+// into the in-memory case on load so rendering code keeps working unchanged.
+const _photoCache = new Map(); // photoId -> dataUrl, session-only
+
+async function _savePhotoDoc(photoId, dataUrl) {
+  await setDoc(doc(db, 'atlas', 'case_photo_' + photoId), {
+    dataUrl,
+    updatedAt: new Date().toISOString()
+  });
+  _photoCache.set(photoId, dataUrl);
+}
+
+async function _loadPhotoDoc(photoId) {
+  if(_photoCache.has(photoId)) return _photoCache.get(photoId);
+  try {
+    const snap = await getDoc(doc(db, 'atlas', 'case_photo_' + photoId));
+    if(!snap.exists()) return null;
+    const url = snap.data().dataUrl || null;
+    if(url) _photoCache.set(photoId, url);
+    return url;
+  } catch(e) { return null; }
+}
+
+// Walk each case's images: if a photo has an inline dataUrl and that exact
+// dataUrl isn't already in cache, write it to its own doc. Skips re-writing
+// already-persisted photos so repeat saves are cheap.
+async function _extractCasePhotos(casesArray) {
+  const writes = [];
+  for(const c of casesArray) {
+    const imgs = Array.isArray(c.images) ? c.images : [];
+    for(const im of imgs) {
+      if(!im || !im.id || !im.dataUrl) continue;
+      if(_photoCache.get(im.id) === im.dataUrl) continue;
+      writes.push(_savePhotoDoc(im.id, im.dataUrl));
+    }
+  }
+  if(writes.length) await Promise.all(writes);
+}
+
+// Build a clone of cases with photo dataUrls dropped — only the {id}
+// references remain on each image. The live `cases` array still has the
+// dataUrls so rendering keeps working; this slim version is what gets saved.
+function _stripPhotoData(casesArray) {
+  return casesArray.map(c => {
+    const imgs = Array.isArray(c.images)
+      ? c.images.map(im => im && im.id ? { id: im.id } : im)
+      : c.images;
+    return { ...c, images: imgs };
+  });
+}
+
+// After a load, fetch every photo doc referenced by the cases (via id only)
+// and stitch the dataUrl back onto the in-memory image objects. Cache hits
+// skip the network entirely so repeat snapshots stay fast.
+async function _hydrateCasePhotos(casesArray) {
+  const need = new Set();
+  for(const c of casesArray) {
+    const imgs = Array.isArray(c.images) ? c.images : [];
+    for(const im of imgs) {
+      if(im && im.id && !im.dataUrl) need.add(im.id);
+    }
+  }
+  if(!need.size) return;
+  const ids = [...need];
+  const urls = await Promise.all(ids.map(id => _loadPhotoDoc(id)));
+  const byId = new Map(ids.map((id, i) => [id, urls[i]]));
+  for(const c of casesArray) {
+    const imgs = Array.isArray(c.images) ? c.images : [];
+    for(const im of imgs) {
+      if(im && im.id && !im.dataUrl) {
+        const url = byId.get(im.id);
+        if(url) im.dataUrl = url;
+      }
+    }
+  }
 }
 
 // One-time migration: splits the legacy atlas/cases.cases array into per-month
@@ -2002,6 +2093,9 @@ if(data.format === 'monthly-v2' && Array.isArray(data.months)) {
   _casesFormat = 'legacy';
   cases = data.cases || [];
 }
+  // Photos live in their own docs now — re-attach dataUrls before any
+  // render runs. Cache hits skip the network entirely.
+  await _hydrateCasePhotos(cases);
   const beforeLen = cases.length;
   deduplicateCases();
   // After replacing `cases`, repoint the live-case draft reference so the
