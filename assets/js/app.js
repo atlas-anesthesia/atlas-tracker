@@ -741,28 +741,8 @@ async function loadAtlasFormula() {
     window._piFormula_get = () => data;
   } catch(e) { window._atlasFormulaData = { centers: [] }; }
 }
-function getAtlasFormula() { return window._atlasFormulaData || (window._piFormula_get && window._piFormula_get()) || { centers: [] }; }
-function calcPersonalIncome(worker) {
-  const formula = getAtlasFormula();
-  if(!formula.centers || !formula.centers.length) return 0;
-  const finalized = (window.cases||[]).filter(c => !c.draft && c.worker === worker);
-  let total = 0;
-  finalized.forEach(c => {
-    const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId'] === c.caseId);
-    const centerId = preop?.['po-surgery-center'] || c.surgeryCenter || '';
-    const rule = formula.centers.find(f => f.id === centerId);
-    if(!rule) return;
-    if(rule.type === 'flat') {
-      total += parseFloat(rule.rate) || 0;
-    } else if(rule.type === 'hourly') {
-      const hrs = c.endTime && c.startTime
-        ? Math.max(0, ((function(){const[eh,em]=c.endTime.split(':').map(Number);const[sh,sm]=c.startTime.split(':').map(Number);return(eh*60+em)-(sh*60+sm);})())/60)
-        : (parseFloat(preop?.['po-est-hours'])||0);
-      total += hrs * (parseFloat(rule.rate)||0);
-    }
-  });
-  return total;
-}
+// Personal-income calculator removed. Self-pay now comes straight off the
+// invoice modal (one entry per case) — no formula, no per-center rules.
 
 // ── EMERGENCY RECOVERY: list + restore from a daily Firestore backup ────────
 // Call from the browser console:
@@ -2805,6 +2785,13 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   };
   function _meta(cat) { return CAT_META[cat] || CAT_META.expense; }
   function _isExp(cat) { return _meta(cat).isExpense; }
+  // Self-pay accessor. New invoices store the value on `selfPay`; legacy
+  // case-income entries (synced before the rework) have `personalIncome` —
+  // fall back to that so historical totals don't drop to zero.
+  function _entrySelfPay(e) {
+    if(typeof e.selfPay === 'number') return e.selfPay;
+    return e.personalIncome || 0;
+  }
 
   function _totals(worker, data) {
     const entries     = (data.entries||[]).filter(e=>e.worker===worker);
@@ -2816,14 +2803,16 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     // Track how much of invest has been paid back incrementally via distributions
     const totalInvestPaid = dists.reduce((s,d)=>s+(d.investPaid||0),0);
     const investOwed     = Math.max(0, totalInvest - totalInvestPaid);
-    // Revenue and PI both come from the case-income log entries themselves —
-    // NOT pulled live from Payments. This gives E&D its own source of truth.
-    // Mismatches with Payments surface as a red border on the metric card.
+    // Revenue and self-pay come from the case-income log entries themselves —
+    // amount = what the surgery center was invoiced, selfPay = what the
+    // worker is paying themselves out of it (entered manually on the invoice
+    // modal). For legacy entries written before selfPay existed we fall back
+    // to the old personalIncome snapshot so totals don't suddenly drop.
     const caseIncomeEntries = entries.filter(e => e.cat === 'case-income');
-    const rev       = caseIncomeEntries.reduce((s,e) => s + (e.amount         || 0), 0);
-    const piFromLog = caseIncomeEntries.reduce((s,e) => s + (e.personalIncome || 0), 0);
-    const revSuggested   = Math.max(0, piFromLog + totalIn - totalOut - totalDist);
-    return { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, piFromLog, revSuggested, investOwed };
+    const rev          = caseIncomeEntries.reduce((s,e) => s + (e.amount || 0), 0);
+    const selfPayTotal = caseIncomeEntries.reduce((s,e) => s + _entrySelfPay(e), 0);
+    const revSuggested = Math.max(0, selfPayTotal + totalIn - totalOut - totalDist);
+    return { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, selfPayTotal, revSuggested, investOwed };
   }
 
   function _lbl(text, optional) {
@@ -2968,7 +2957,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
   function _buildSection(worker, canEdit, data, container) {
     const wname  = worker==='dev'?'Devarsh':'Josh';
     const wcolor = worker==='dev'?'var(--dev)':'var(--josh)';
-    const { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, piFromLog, revSuggested, investOwed } = _totals(worker, data);
+    const { entries, dists, totalIn, totalOut, totalInvest, totalInvestPaid, totalDist, rev, selfPayTotal, revSuggested, investOwed } = _totals(worker, data);
     const sorted  = [...entries].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
     const sortedD = [...dists].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -3007,38 +2996,25 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     hdr.textContent = wname;
     wrap.appendChild(hdr);
 
-    // Cross-tab reconciliation: compare E&D log totals vs Payments live totals.
-    // If they differ by more than a penny (rounding), highlight the affected
-    // metric card in red so the user knows to re-sync. The two stay decoupled
-    // by design — E&D shows what the log says; Payments shows the live calc.
-    const ref = (typeof window._getPaymentsTotalsForWorker === 'function')
-      ? window._getPaymentsTotalsForWorker(worker)
-      : { totalInvoiced: 0, personalIncome: (window._personalIncome && window._personalIncome[worker]) || 0 };
-    const piMismatch  = Math.abs(piFromLog - ref.personalIncome) > 0.01;
-    const revMismatch = Math.abs(rev       - ref.totalInvoiced)  > 0.01;
-    const anyMismatch = piMismatch || revMismatch;
-
-    // ── Metric cards: PI front-and-center, with invoice as caption ──────
+    // ── Metric cards: Self-Pay (this is the worker's salary base), invoiced
+    //    revenue (informational), expenses, investment owed ───────────────
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:16px';
 
-    // Headline card: Personal Income (large) + Invoiced Revenue (small subtitle)
-    const piCard = document.createElement('div');
-    piCard.className = 'metric-card';
-    const piBorder = piMismatch ? 'border:2px solid var(--warn)' : '';
-    const revColor = revMismatch ? 'var(--warn)' : 'var(--text-faint)';
-    piCard.style.cssText = 'padding:14px 16px;' + piBorder;
-    piCard.innerHTML =
-      '<div class="metric-label" style="font-size:11px">Personal Income</div>'
-      + '<div class="metric-value" style="color:#0369a1;font-size:28px;line-height:1.1;margin-top:2px">'+_fmt(piFromLog)+'</div>'
-      + '<div style="font-size:11px;color:'+revColor+';margin-top:6px;font-weight:'+(revMismatch?'600':'500')+'">'
-        + 'from <span style="font-family:DM Mono,monospace">'+_fmt(rev)+'</span> in case invoices'
-        + (revMismatch ? ' <span title="Doesn’t match Payments tab — click Re-sync below">⚠</span>' : '')
-      + '</div>'
-      + (piMismatch ? '<div style="font-size:11px;color:var(--warn);margin-top:6px;font-weight:600">⚠ Doesn’t match Payments ('+_fmt(ref.personalIncome)+')</div>' : '');
-    grid.appendChild(piCard);
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
+    [
+      ['Self-Pay (all time)', _fmt(selfPayTotal),   '#166534'],
+      ['Invoiced Revenue',    _fmt(rev),            'var(--text-muted)'],
+    ].forEach(function(item) {
+      const card = document.createElement('div');
+      card.className = 'metric-card';
+      card.style.cssText = 'padding:14px 16px';
+      card.innerHTML = '<div class="metric-label" style="font-size:11px">'+item[0]+'</div><div class="metric-value" style="color:'+item[2]+';font-size:24px;line-height:1.1;margin-top:2px">'+item[1]+'</div>';
+      topRow.appendChild(card);
+    });
+    grid.appendChild(topRow);
 
-    // Secondary row: Expenses + Investment Owed (unchanged from before)
     const secRow = document.createElement('div');
     secRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
     [
@@ -3054,35 +3030,21 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
     wrap.appendChild(grid);
 
-    // ── Mismatch banner with re-sync action ──
-    if(anyMismatch && canEdit) {
-      const banner = document.createElement('div');
-      banner.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;background:rgba(181,69,27,0.08);border:1px solid var(--warn);border-radius:var(--radius-sm);margin-bottom:14px';
-      banner.innerHTML =
-        '<div style="font-size:12px;color:var(--warn);font-weight:500">'
-          + '⚠ Log totals don’t match Payments tab. The log is authoritative for E&D, but you may want to re-sync from Payments.'
-        + '</div>';
-      const resyncBtn = document.createElement('button');
-      resyncBtn.className = 'btn btn-ghost btn-sm';
-      resyncBtn.style.cssText = 'background:var(--warn);color:#fff;border:none;flex-shrink:0';
-      resyncBtn.textContent = '🔄 Re-sync from Payments';
-      resyncBtn.addEventListener('click', async function() {
-        resyncBtn.disabled = true;
-        resyncBtn.textContent = 'Syncing…';
-        try {
-          if(typeof window._syncAllInvoicedToPayouts === 'function') {
-            await window._syncAllInvoicedToPayouts();
-          }
-          await renderPayoutTab();
-        } catch(err) {
-          console.error('Re-sync failed:', err);
-          alert('Re-sync failed: ' + (err.message || err));
-          resyncBtn.disabled = false;
-          resyncBtn.textContent = '🔄 Re-sync from Payments';
-        }
+    // Month-end Review button — opens a modal showing every case for a given
+    // month with invoiced + self-pay so the worker can confirm before paying
+    // themselves their salary.
+    if(canEdit) {
+      const reviewRow = document.createElement('div');
+      reviewRow.style.cssText = 'margin-bottom:14px';
+      const reviewBtn = document.createElement('button');
+      reviewBtn.className = 'btn btn-primary btn-sm';
+      reviewBtn.style.cssText = 'background:#166534;border-color:#166534';
+      reviewBtn.textContent = '📋 Month-End Salary Review';
+      reviewBtn.addEventListener('click', function() {
+        if(typeof window.openMonthEndReview === 'function') window.openMonthEndReview(worker);
       });
-      banner.appendChild(resyncBtn);
-      wrap.appendChild(banner);
+      reviewRow.appendChild(reviewBtn);
+      wrap.appendChild(reviewRow);
     }
 
     // Action buttons
@@ -3147,11 +3109,12 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         });
         if(!items.length) return;
 
-        // Subtotal: PI for cases (matches Personal Income card), absolute amount for everything else.
-        // Future-dated cases contribute 0 — same rule as the live calc.
+        // Subtotal: self-pay for case invoices, absolute amount for everything
+        // else. Legacy entries (no selfPay field) fall back to personalIncome
+        // so totals don't suddenly drop after the switch.
         let subtotal = 0;
         items.forEach(function(e) {
-          if(e.cat === 'case-income') subtotal += (e.personalIncome || 0);
+          if(e.cat === 'case-income') subtotal += _entrySelfPay(e);
           else                         subtotal += (e.amount || 0);
         });
 
@@ -3161,7 +3124,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
         const ghdr = document.createElement('div');
         ghdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:9px 14px;background:'+g.accent+'10;border-bottom:1px solid '+g.accent+'20;border-left:3px solid '+g.accent;
-        const subLabel = g.key === 'case-income' ? 'PI total' : 'subtotal';
+        const subLabel = g.key === 'case-income' ? 'self-pay total' : 'subtotal';
         ghdr.innerHTML =
           '<div style="display:flex;align-items:baseline;gap:10px">'
           + '<span style="font-size:12px;font-weight:700;color:'+g.accent+';letter-spacing:.2px">'+g.title+'</span>'
@@ -3173,7 +3136,32 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           +'</div>';
         groupBox.appendChild(ghdr);
 
+        // Month sub-headers — insert a slim row whenever the calendar month
+        // changes inside this category group. Entries land newest-first so
+        // the header reads as "month divider before its block of entries".
+        let _prevMonthKey = null;
+        const _monthLabel = (iso) => {
+          if(!iso) return 'Undated';
+          const d = new Date(iso + 'T12:00:00Z');
+          if(isNaN(d.getTime())) return 'Undated';
+          return d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+        };
         items.forEach(function(e, i) {
+        const monthKey = e.date ? e.date.slice(0,7) : 'undated';
+        if(monthKey !== _prevMonthKey) {
+          _prevMonthKey = monthKey;
+          // Subtotal for just this month within this category.
+          const monthItems = items.filter(x => (x.date || '').slice(0,7) === (e.date || '').slice(0,7));
+          let monthSub = 0;
+          monthItems.forEach(x => {
+            if(x.cat === 'case-income') monthSub += _entrySelfPay(x);
+            else                          monthSub += (x.amount || 0);
+          });
+          const mhdr = document.createElement('div');
+          mhdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 14px;background:'+g.accent+'06;border-top:1px solid '+g.accent+'15;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)';
+          mhdr.innerHTML = '<span>'+_monthLabel(e.date)+' · '+monthItems.length+' '+(monthItems.length===1?'entry':'entries')+'</span><span style="font-family:DM Mono,monospace;color:'+g.accent+'">'+_fmt(monthSub)+'</span>';
+          groupBox.appendChild(mhdr);
+        }
         const row = document.createElement('div');
         // Two-zone flex layout: content on the left, amount block on the right.
         // Edit/delete actions live in a flexbox slot before the amount and fade
@@ -3190,11 +3178,10 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           ? '<span style="font-size:9px;color:var(--text-faint);margin-left:8px;font-style:italic;font-weight:400">auto</span>'
           : '';
         // SAME DAY tag — when two or more case-income entries share a date
-        // (same worker), only the first absorbs the full day's PI and the
-        // rest land at $0. Tagging the $0 row explains why it isn't paying
-        // out — it's not a stalled case, it's a same-day stack.
+        // (same worker) and one was left at $0 self-pay, tag it so the row
+        // doesn't look like a stalled case. Mostly informational.
         const sameDayTag = (e.cat === 'case-income'
-            && (e.personalIncome || 0) === 0
+            && _entrySelfPay(e) === 0
             && e.date
             && _sameDayCaseDates.has(e.date))
           ? '<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.4px;background:rgba(180,83,9,0.12);color:#b45309;margin-left:8px;vertical-align:middle">SAME DAY</span>'
@@ -3261,37 +3248,28 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         const amtCol = document.createElement('div');
         amtCol.style.cssText = 'text-align:right;min-width:108px';
         if(e.cat === 'case-income') {
-          // Case-income rows lead with PI (the practitioner's actual cut)
-          // and show the underlying invoice amount as a caption beneath.
-          // PI is what matters for personal accounting; invoice is context.
-          //
-          // Three display states the row can be in:
-          //   1. Future case, PI not yet earned        → "PENDING / $X invoiced"
-          //   2. Past/today, PI earned, not invoiced   → "+$PI / awaiting invoice"
-          //   3. Invoiced (and presumably PI earned)   → "+$PI / of $X inv."
-          const piVal = e.personalIncome || 0;
+          // Case-income rows lead with self-pay (what the worker is paying
+          // themselves out of the invoice) and show the underlying invoice
+          // amount as a caption beneath. Three display states:
+          //   1. Not yet invoiced + no self-pay        → "PENDING / $X invoiced"
+          //   2. Case happened, not invoiced           → "no self-pay yet / awaiting invoice"
+          //   3. Invoiced (self-pay set on send)       → "+$selfPay / of $X inv."
+          const spVal = _entrySelfPay(e);
           const todayStr = new Date().toISOString().slice(0, 10);
           const isFutureCase = e.date && e.date > todayStr;
           const invAmt = e.amount || 0;
-          // Treat the entry as invoiced if either invAmt > 0 or the explicit
-          // flag is set (back-compat for older entries that didn't store the
-          // flag — invAmt > 0 is the historical signal).
           const isInvoiced = (typeof e.invoiced === 'boolean' ? e.invoiced : invAmt > 0);
-          if(isFutureCase && piVal === 0) {
-            // State 1: future case, no PI earned yet
+          if(isFutureCase && spVal === 0) {
             amtCol.innerHTML =
               '<div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.6px;line-height:1.2">PENDING</div>'
               + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">'+_fmt(invAmt)+' invoiced</div>';
           } else if(!isInvoiced) {
-            // State 2: case happened (PI earned) but not yet invoiced — italic
-            // amber caption distinguishes it from the standard "of $X inv."
             amtCol.innerHTML =
-              '<div style="font-size:14px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace;line-height:1.2">+'+_fmt(piVal)+'</div>'
+              '<div style="font-size:13px;font-weight:600;color:var(--text-faint);line-height:1.2">no self-pay yet</div>'
               + '<div style="font-size:10px;color:#b45309;margin-top:3px;font-style:italic">awaiting invoice</div>';
           } else {
-            // State 3: invoiced — show PI on top of invoice context
             amtCol.innerHTML =
-              '<div style="font-size:14px;font-weight:700;color:#0369a1;font-family:DM Mono,monospace;line-height:1.2">+'+_fmt(piVal)+'</div>'
+              '<div style="font-size:14px;font-weight:700;color:#166534;font-family:DM Mono,monospace;line-height:1.2">+'+_fmt(spVal)+'</div>'
               + '<div style="font-size:10px;color:var(--text-faint);margin-top:3px;font-family:DM Mono,monospace">of '+_fmt(invAmt)+' inv.</div>';
           }
         } else {
@@ -3554,10 +3532,8 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     if(!window._rawPreopRecords || !window._rawPreopRecords.length) {
       try { const s = await getDoc(doc(db,'atlas','preop')); if(s.exists()) window._rawPreopRecords = s.data().records||[]; } catch(e) {}
     }
-    // Use exact same calculator as payments tab
-    const _piCalc = window._calcPersonalIncome || calcPersonalIncome;
-    window._personalIncome = { josh: _piCalc('josh'), dev: _piCalc('dev') };
-    if(typeof _renderPICards === 'function') _renderPICards();
+    // Personal-income formula is gone — E&D reads self-pay straight off
+    // case-income entries instead. Just load the entries and render.
     const data = await _load();
     const me = currentUser ? (EMAIL_WORKER_MAP[currentUser.email.toLowerCase()]||'dev') : 'dev';
     const el = document.getElementById('payout-sections');
@@ -3866,6 +3842,170 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     data.distributions = (data.distributions||[]).filter(function(d){return d.id!==id;});
     await _save(data);
     renderPayoutTab();
+  };
+
+  // ── Month-end salary review ────────────────────────────────────────────────
+  // Lists every case-income entry for the chosen worker + month, with what
+  // was invoiced and what self-pay was entered. Confirming stamps a
+  // reviewedAt marker on atlas/payout_reviews so the row shows as locked
+  // afterwards. Once locked, case-income self-pay edits for that month are
+  // discouraged (we don't prevent edits — Firestore-level locking would
+  // require rules — but the UI shows the lock state).
+  const REVIEWS_DOC = 'payout_reviews';
+  async function _loadReviews() {
+    try { const s = await getDoc(doc(db, 'atlas', REVIEWS_DOC));
+          return s.exists() ? (s.data() || { months: {} }) : { months: {} };
+    } catch(e) { return { months: {} }; }
+  }
+  async function _saveReviews(data) {
+    await setDoc(doc(db, 'atlas', REVIEWS_DOC), data);
+  }
+
+  window.openMonthEndReview = async function(worker) {
+    const prior = document.getElementById('monthEndReviewModal');
+    if(prior) prior.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'monthEndReviewModal';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto';
+    wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
+
+    // Pick the previous calendar month by default — typical "review last
+    // month before paying salary" cadence.
+    const now = new Date();
+    const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const defaultMonth = last.getFullYear() + '-' + String(last.getMonth()+1).padStart(2,'0');
+
+    wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:820px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
+      <div style="background:#166534;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
+        <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#bbf7d0;margin-bottom:3px">Salary Review</div><div style="font-size:16px;font-weight:600">Month-End — ${worker==='dev'?'Devarsh':'Josh'}</div></div>
+        <button onclick="document.getElementById('monthEndReviewModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px">✕</button>
+      </div>
+      <div style="padding:20px 22px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+          <div style="font-size:13px;color:var(--text-muted)">Review the month before paying yourself. Confirming stamps a locked marker so Atlas knows the month is reconciled.</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="margin:0;font-size:12px;color:var(--text-muted)">Month:</label>
+            <input type="month" id="mer-month" value="${defaultMonth}" onchange="window._merRenderRows('${worker}')" style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none">
+          </div>
+        </div>
+        <div id="mer-body" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px"></div>
+        <div id="mer-status" style="font-size:13px;padding:6px 0;min-height:18px"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--border)">
+          <button class="btn btn-ghost" onclick="document.getElementById('monthEndReviewModal').remove()">Close</button>
+          <button id="mer-confirm-btn" class="btn btn-primary" onclick="window._merConfirm('${worker}')" style="background:#166534;border-color:#166534">✓ Mark Month Reviewed</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.appendChild(wrap);
+    window._merRenderRows(worker);
+  };
+
+  window._merRenderRows = async function(worker) {
+    const monthVal = document.getElementById('mer-month')?.value || '';
+    const body = document.getElementById('mer-body');
+    if(!body) return;
+    body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px">Loading…</div>';
+    const [data, reviews] = await Promise.all([_load(), _loadReviews()]);
+    const entries = (data.entries || [])
+      .filter(e => e.worker === worker && e.cat === 'case-income')
+      .filter(e => (e.date || '').slice(0,7) === monthVal)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const reviewKey = worker + '|' + monthVal;
+    const reviewed = reviews.months && reviews.months[reviewKey];
+    const totalInv  = entries.reduce((s,e) => s + (e.amount || 0), 0);
+    const totalPay  = entries.reduce((s,e) => s + _entrySelfPay(e), 0);
+    const monthLabel = monthVal
+      ? new Date(monthVal + '-01T12:00:00Z').toLocaleDateString('en-US', { month:'long', year:'numeric' })
+      : 'Unselected';
+
+    if(!entries.length) {
+      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px">No case invoices in '+monthLabel+' for this worker.</div>';
+      _merUpdateStatus(reviewed, monthLabel, 0, 0);
+      return;
+    }
+
+    const headerCss = 'display:grid;grid-template-columns:1.2fr 100px 130px 130px;gap:8px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)';
+    const rowCss    = 'display:grid;grid-template-columns:1.2fr 100px 130px 130px;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;align-items:center';
+    let html = `<div style="${headerCss}"><span>Case</span><span>Date</span><span style="text-align:right">Invoiced</span><span style="text-align:right">Self-Pay</span></div>`;
+    entries.forEach(e => {
+      const dateTxt = e.date ? new Date(e.date + 'T12:00:00Z').toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '—';
+      const center = (e.notes || '').replace(/^Center:\s*/, '');
+      const inv = e.amount || 0;
+      const sp  = _entrySelfPay(e);
+      html += `<div style="${rowCss}">
+        <div><div style="font-weight:600;font-family:DM Mono,monospace;font-size:12px">${e.name || e.caseId || ''}</div>${center ? '<div style="font-size:11px;color:var(--text-faint)">'+center+'</div>' : ''}</div>
+        <div style="color:var(--text-muted);font-size:12px">${dateTxt}</div>
+        <div style="text-align:right;font-family:DM Mono,monospace">${_fmt(inv)}</div>
+        <div style="text-align:right;font-family:DM Mono,monospace;color:#166534;font-weight:600">${_fmt(sp)}</div>
+      </div>`;
+    });
+    html += `<div style="${rowCss};background:#f0fdf4;border-top:2px solid #86efac;font-weight:700">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#166534">Totals · ${entries.length} ${entries.length===1?'case':'cases'}</div>
+      <div></div>
+      <div style="text-align:right;font-family:DM Mono,monospace">${_fmt(totalInv)}</div>
+      <div style="text-align:right;font-family:DM Mono,monospace;color:#166534">${_fmt(totalPay)}</div>
+    </div>`;
+    body.innerHTML = html;
+    _merUpdateStatus(reviewed, monthLabel, entries.length, totalPay);
+  };
+
+  function _merUpdateStatus(reviewed, monthLabel, count, totalPay) {
+    const status = document.getElementById('mer-status');
+    const btn = document.getElementById('mer-confirm-btn');
+    if(!status || !btn) return;
+    if(reviewed) {
+      const at = reviewed.reviewedAt ? new Date(reviewed.reviewedAt).toLocaleString('en-US', {dateStyle:'medium', timeStyle:'short'}) : '';
+      status.innerHTML = '🔒 <strong>Locked</strong> — reviewed' + (at ? ' on ' + at : '') + (reviewed.reviewedBy ? ' by ' + reviewed.reviewedBy : '') + '.';
+      status.style.color = '#166534';
+      btn.textContent = '✗ Unlock Month';
+      btn.style.background = '#b45309';
+      btn.style.borderColor = '#b45309';
+    } else {
+      status.textContent = count ? (count + ' case' + (count===1?'':'s') + ' · paying yourself ' + _fmt(totalPay) + ' for ' + monthLabel) : '';
+      status.style.color = 'var(--text-muted)';
+      btn.textContent = '✓ Mark Month Reviewed';
+      btn.style.background = '#166534';
+      btn.style.borderColor = '#166534';
+    }
+  }
+
+  window._merConfirm = async function(worker) {
+    const monthVal = document.getElementById('mer-month')?.value || '';
+    if(!monthVal) return;
+    const status = document.getElementById('mer-status');
+    const btn = document.getElementById('mer-confirm-btn');
+    btn.disabled = true;
+    try {
+      const reviews = await _loadReviews();
+      if(!reviews.months) reviews.months = {};
+      const key = worker + '|' + monthVal;
+      if(reviews.months[key]) {
+        if(!confirm('This month is already locked. Unlock it?')) { btn.disabled = false; return; }
+        delete reviews.months[key];
+      } else {
+        // Snapshot the totals at lock time so retrospective reports stay
+        // honest even if someone edits case-income entries later.
+        const data = await _load();
+        const entries = (data.entries || []).filter(e => e.worker === worker && e.cat === 'case-income' && (e.date || '').slice(0,7) === monthVal);
+        const totalInv = entries.reduce((s,e) => s + (e.amount || 0), 0);
+        const totalPay = entries.reduce((s,e) => s + _entrySelfPay(e), 0);
+        reviews.months[key] = {
+          worker, month: monthVal,
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: (currentUser?.email) || '',
+          caseCount: entries.length,
+          totalInvoiced: totalInv,
+          totalSelfPay: totalPay
+        };
+      }
+      await _saveReviews(reviews);
+      try { logAudit && logAudit('month-review-toggle', worker + '|' + monthVal); } catch(e){}
+      window._merRenderRows(worker);
+    } catch(err) {
+      if(status) { status.textContent = '✗ ' + (err.message || err); status.style.color = '#b91c1c'; }
+    } finally {
+      btn.disabled = false;
+    }
   };
 
 })();

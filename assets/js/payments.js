@@ -1577,21 +1577,25 @@ async function _syncAllInvoicedToPayouts(paymentRows) {
       });
     }
 
-    // For each eligible row, look up the matching case so we can compute PI at
-    // sync time. The PI value is stored on the entry itself — that's what
-    // makes E&D's totals "from the log" rather than re-derived from Payments.
-    const cases = window.cases || [];
+    // For each eligible row, write/update a case-income log entry. The self-
+    // pay number now comes from whatever Josh/Dev entered on the invoice
+    // modal (stamped on the row at send time) — no formula, no inference.
     eligible.forEach(row => {
       const existingIdx = data.entries.findIndex(e => e.cat === 'case-income' && e.caseId === row.caseId);
-      const matchedCase = cases.find(c => c.caseId === row.caseId);
-      const pi = _calcPIForCase(matchedCase, row);
+      // Fall back to the previous case-income entry's selfPay so a re-sync
+      // (e.g., user toggling a Payments checkbox) doesn't clobber an already-
+      // entered value if the row itself lost it.
+      const priorSelfPay = (existingIdx !== -1) ? (data.entries[existingIdx].selfPay) : undefined;
+      const selfPay = (typeof row.selfPay === 'number' && !Number.isNaN(row.selfPay))
+        ? row.selfPay
+        : (typeof priorSelfPay === 'number' ? priorSelfPay : null);
       const entry = {
         id:        existingIdx !== -1 ? data.entries[existingIdx].id : (window.uid ? window.uid() : Date.now().toString(36) + Math.random().toString(36).slice(2,5)),
         worker:    row.worker || 'josh',
         cat:       'case-income',
         name:      row.caseId || 'Unknown Case',
         amount:    parseFloat(row.invoicedAmount) || 0,        // 0 if not yet invoiced
-        personalIncome: pi,                                     // ← snapshot of PI at sync time
+        selfPay:   selfPay,                                     // ← entered manually on invoice send
         date:      row.caseDate || null,
         notes:     (row.surgeryCenterName||row.surgeryCenter) ? 'Center: ' + (row.surgeryCenterName||row.surgeryCenter) : '',
         caseId:    row.caseId,
@@ -1640,6 +1644,16 @@ window.sendInvoiceEmail = async function() {
   const location=(scSel?.value==='__custom__'||!center)?(locInput?.value||''):(center?.name||'');
   const date=document.getElementById('inv-modal-date')?.value||'';
   const billingType=document.getElementById('inv-modal-billing-type')?.value||'hourly';
+  // Self-pay: how much of this invoice the provider is paying themselves out
+  // of. Required so the month-end review + E&D salary totals always have a
+  // number to roll up.
+  const selfPayRaw=document.getElementById('inv-modal-self-pay')?.value;
+  const selfPay=parseFloat(selfPayRaw);
+  if(selfPayRaw==='' || selfPayRaw===null || selfPayRaw===undefined || Number.isNaN(selfPay) || selfPay<0){
+    alert('Enter your self-pay amount for this invoice. (Required for monthly review.)');
+    document.getElementById('inv-modal-self-pay')?.focus();
+    return;
+  }
   if(!email){alert('Please enter a recipient email.');return;}
   if(!caseId){alert('Please select an associated case.');return;}
   if(!location||!date){alert('Please fill in surgery center and date.');return;}
@@ -1717,7 +1731,11 @@ window.sendInvoiceEmail = async function() {
       _readPaymentDOMIntoRows();
       _paymentRows[modalRow.idx].invoiceSent    = true;
       _paymentRows[modalRow.idx].invoicedAmount = total;
-      // Persist to Firestore so the row's Inv. Amt + Inv✓ survive page reload
+      // Stamp the self-pay so it flows into the case-income log entry and the
+      // month-end review modal.
+      _paymentRows[modalRow.idx].selfPay = selfPay;
+      // Persist to Firestore so the row's Inv. Amt + Inv✓ + selfPay survive
+      // a page reload.
       window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(e=>console.error('save invoice after send failed:',e));
       // Auto-sync to Expenses & Distributions — bulk sync re-reads current
       // row state and writes a fresh case-income log entry for every
