@@ -643,9 +643,17 @@ window.editPaymentField = function(field, rowIdx) {
   const old = document.getElementById('payment-edit-popup');
   if(old) old.remove();
   const isProj = field==='proj';
+  const row = _paymentRows[rowIdx] || {};
+  // For the Invoiced Amount field on a patient-billed row, route to the
+  // wider two-input modal (invoice + self-pay). Projected Income overrides
+  // and surgery-center-billed cases keep the original single-input popup.
+  if(!isProj && _isPatientBilled(row)) {
+    _openPatientBilledAmountModal(rowIdx);
+    return;
+  }
   const currentVal = isProj
-    ? (_paymentRows[rowIdx]?.projOverride!=null?_paymentRows[rowIdx].projOverride:(_paymentRows[rowIdx]?.estHrs||0)*600)
-    : (_paymentRows[rowIdx]?.invoicedAmount||0);
+    ? (row.projOverride!=null ? row.projOverride : (row.estHrs||0)*600)
+    : (row.invoicedAmount||0);
   const overlay = document.createElement('div');
   overlay.id = 'payment-edit-popup';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
@@ -672,6 +680,59 @@ window.editPaymentField = function(field, rowIdx) {
   overlay.appendChild(box); document.body.appendChild(overlay);
   requestAnimationFrame(()=>{inp.focus();inp.select();});
 };
+
+// Patient-billed amount modal — two inputs (invoice + self-pay) so the
+// case-income log entry carries the salary number alongside the revenue.
+function _openPatientBilledAmountModal(rowIdx) {
+  const row = _paymentRows[rowIdx] || {};
+  const overlay = document.createElement('div');
+  overlay.id = 'payment-edit-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--surface);border-radius:12px;padding:24px 28px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.35)';
+  box.innerHTML = `
+    <div style="font-size:13px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;text-align:center">Patient-Billed Case</div>
+    <div style="font-size:11px;color:var(--text-faint);margin-bottom:18px;text-align:center;font-family:DM Mono,monospace">${row.caseId || ''}</div>
+    <label style="display:block;font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px">Invoice Amount (billed to patient)</label>
+    <input type="number" id="pbam-invoice" step="0.01" min="0" value="${(row.invoicedAmount || 0).toFixed(2)}" style="width:100%;padding:11px 13px;font-size:18px;font-weight:700;font-family:DM Mono,monospace;border:2px solid var(--info);border-radius:8px;background:var(--bg);color:var(--text);text-align:right;outline:none;box-sizing:border-box;margin-bottom:14px">
+    <label style="display:block;font-size:12px;font-weight:600;color:#166534;margin-bottom:4px">Self-Pay <span style="color:var(--warn)">*</span> <span style="font-weight:400;color:var(--text-faint);font-size:11px">(of the invoice, how much you pay yourself)</span></label>
+    <input type="number" id="pbam-selfpay" step="0.01" min="0" value="${(typeof row.selfPay === 'number' ? row.selfPay : 0).toFixed(2)}" style="width:100%;padding:11px 13px;font-size:18px;font-weight:700;font-family:DM Mono,monospace;border:2px solid #86efac;border-radius:8px;background:#f0fdf4;color:#0f172a;text-align:right;outline:none;box-sizing:border-box">
+    <div id="pbam-error" style="font-size:11px;color:var(--warn);margin-top:8px;min-height:14px"></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button id="pbam-cancel" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>
+      <button id="pbam-save" style="flex:2;padding:10px;border:none;border-radius:8px;background:#166534;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Save Both</button>
+    </div>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  const invEl = box.querySelector('#pbam-invoice');
+  const spEl  = box.querySelector('#pbam-selfpay');
+  const errEl = box.querySelector('#pbam-error');
+  const doCancel = () => overlay.remove();
+  const doSave = () => {
+    const inv = parseFloat(invEl.value);
+    const sp  = parseFloat(spEl.value);
+    if(Number.isNaN(sp) || spEl.value === '') { errEl.textContent = 'Self-pay is required.'; spEl.focus(); return; }
+    if(Number.isNaN(inv)) { errEl.textContent = 'Invoice amount must be a number.'; invEl.focus(); return; }
+    if(sp < 0 || inv < 0) { errEl.textContent = 'Amounts can\'t be negative.'; return; }
+    // Read current DOM checkboxes/dates into rows first so we don't clobber
+    // another in-flight edit.
+    _readPaymentDOMIntoRows();
+    _paymentRows[rowIdx].invoicedAmount = inv;
+    _paymentRows[rowIdx].selfPay = sp;
+    window.setDoc(window.doc(window.db, 'atlas', 'payments'), { rows: _paymentRows }).catch(e => console.error('save patient-billed amounts failed:', e));
+    // Sync to E&D so the case-income entry picks up both numbers.
+    _syncAllInvoicedToPayouts(_paymentRows).catch(() => {});
+    renderPaymentRows(); renderPaymentSummary();
+    overlay.remove();
+  };
+  box.querySelector('#pbam-cancel').onclick = doCancel;
+  box.querySelector('#pbam-save').onclick = doSave;
+  invEl.addEventListener('keydown', e => { if(e.key === 'Enter') spEl.focus(); if(e.key === 'Escape') doCancel(); });
+  spEl.addEventListener('keydown',  e => { if(e.key === 'Enter') doSave(); if(e.key === 'Escape') doCancel(); });
+  overlay.addEventListener('click', e => { if(e.target === overlay) doCancel(); });
+  requestAnimationFrame(() => { invEl.focus(); invEl.select(); });
+}
 
 // Commits a manually-edited Projected Income or Invoiced Amount value from
 // the editPaymentField popup. Renamed from `commitPaymentField` to avoid
