@@ -278,8 +278,23 @@ window.openDepositsModal = async function() {
   const form = document.createElement('div');
   form.style.cssText = 'padding:20px 24px;border-bottom:1px solid var(--border)';
 
-  // Build case options
-  const sortedPreops = [...preops].sort((a,b) => (b['po-surgeryDate']||'').localeCompare(a['po-surgeryDate']||''));
+  // Build case options — only upcoming cases. Cases whose surgery date is
+  // in the past, or whose paired case has been finalized, drop off the
+  // picker so the list stays tidy.
+  const todayIso = (typeof window.todayStr === 'function')
+    ? window.todayStr()
+    : new Date().toISOString().split('T')[0];
+  const finalizedIds = new Set(
+    (window.cases || []).filter(c => !c.draft && c.caseId).map(c => c.caseId)
+  );
+  const upcoming = preops.filter(r => {
+    if(!r['po-caseId']) return false;
+    if(finalizedIds.has(r['po-caseId'])) return false;
+    const surgDate = r['po-surgeryDate'];
+    if(!surgDate) return true; // undated entries stay (rare, but don't hide silently)
+    return surgDate >= todayIso;
+  });
+  const sortedPreops = upcoming.sort((a,b) => (a['po-surgeryDate']||'').localeCompare(b['po-surgeryDate']||''));
   const caseOptions = sortedPreops.map(r => {
     const label = `${r['po-caseId']||r.id} — ${r['po-provider']||''} — ${r['po-surgeryDate']||''}`;
     return `<option value="${r.id}">${label}</option>`;

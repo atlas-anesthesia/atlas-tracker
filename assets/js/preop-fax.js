@@ -142,12 +142,18 @@ function readPreopForm() {
 function preopChoices() {
   // All upcoming cases with a Case ID, across every CRNA — Jordan needs to fax
   // for cases on both Josh's and Dev's lists. Soonest surgery date first.
+  // Drop cases whose surgery date has passed OR whose case has been
+  // finalized so the picker stays focused on cases that still need work.
   const records = window._rawPreopRecords || [];
-  const todayIso = (typeof window.todayLocal === 'function')
-    ? window.todayLocal()
+  const todayIso = (typeof window.todayStr === 'function')
+    ? window.todayStr()
     : new Date().toISOString().split('T')[0];
+  const finalizedIds = new Set(
+    (window.cases || []).filter(c => !c.draft && c.caseId).map(c => c.caseId)
+  );
   return records
     .filter(r => r['po-caseId'])
+    .filter(r => !finalizedIds.has(r['po-caseId']))
     .filter(r => (r['po-surgeryDate'] || '') >= todayIso)
     .sort((a, b) => (a['po-surgeryDate']||'').localeCompare(b['po-surgeryDate']||''));
 }
