@@ -76,21 +76,33 @@
     const isAssistant = (window._userRole === 'assistant');
     const hiddenSpan = '<span style="color:#94a3b8;font-style:italic;font-size:12px;background:#f1f5f9;padding:1px 8px;border-radius:8px">[hidden]</span>';
 
-    // Patient block — masked when phiHidden.
+    // Patient block — masked when phiHidden. Layout:
+    //   Row 1: patient name (bold)
+    //   Row 2: contact line — phone · email · PCP (only the ones that exist)
+    //   Row 3: surgery line — date · time · center
+    //   Row 4: PDF attach link
+    // Each row has its own top margin so the column reads as 3-4 calm
+    // chunks instead of 5 tightly stacked one-liners.
     const nameHtml = phiHidden ? hiddenSpan : _esc([e.patientFirst, e.patientLast].filter(Boolean).join(' ') || '—');
-    const phoneLine   = phiHidden ? '' : (e.patientPhone ? `<div style="font-size:11px;color:var(--text-faint)">📞 ${_esc(e.patientPhone)}</div>` : '');
-    const emailLine   = phiHidden ? '' : (e.patientEmail ? `<div style="font-size:11px;color:var(--text-faint);font-family:monospace">${_esc(e.patientEmail)}</div>` : '');
-    const pcpLine     = phiHidden ? '' : (e.pcp ? `<div style="font-size:11px;color:var(--text-faint)">🩺 PCP: ${_esc(e.pcp)}</div>` : '');
+    let contactParts = [];
+    if(!phiHidden) {
+      if(e.patientPhone) contactParts.push('📞 ' + _esc(e.patientPhone));
+      if(e.patientEmail) contactParts.push('<span style="font-family:monospace">' + _esc(e.patientEmail) + '</span>');
+      if(e.pcp)          contactParts.push('🩺 ' + _esc(e.pcp));
+    }
+    const contactLine = contactParts.length
+      ? `<div style="font-size:11px;color:var(--text-faint);margin-top:5px;line-height:1.5">${contactParts.join('<span style="color:#cbd5e1;margin:0 6px">·</span>')}</div>`
+      : '';
     const surgeryLine = e.surgeryDate
-      ? `<div style="font-size:11px;color:#9a3412;font-weight:600">🔴 Surgery: ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}${e.surgeryCenterName ? ' · ' + _esc(e.surgeryCenterName) : ''}</div>`
+      ? `<div style="font-size:11px;color:#9a3412;font-weight:600;margin-top:6px;line-height:1.4">🔴 ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}${e.surgeryCenterName ? ' · ' + _esc(e.surgeryCenterName) : ''}</div>`
       : '';
     let pdfLine = '';
     if(!phiHidden) {
       pdfLine = e.pdfFilename
-        ? `<div style="font-size:11px;margin-top:3px"><a href="javascript:void(0)" onclick="window._strViewPDF('${e.id}')" style="color:#1d4ed8;text-decoration:none">📎 ${_esc(e.pdfFilename)}</a> <a href="javascript:void(0)" onclick="window._strRemovePDF('${e.id}')" title="Remove PDF" style="color:var(--warn);text-decoration:none;margin-left:6px">✕</a></div>`
-        : `<div style="font-size:11px;margin-top:3px"><a href="javascript:void(0)" onclick="window._strAttachPDF('${e.id}')" style="color:var(--text-faint);text-decoration:none">📎 Attach pre-op PDF</a></div>`;
+        ? `<div style="font-size:11px;margin-top:6px"><a href="javascript:void(0)" onclick="window._strViewPDF('${e.id}')" style="color:#1d4ed8;text-decoration:none">📎 ${_esc(e.pdfFilename)}</a> <a href="javascript:void(0)" onclick="window._strRemovePDF('${e.id}')" title="Remove PDF" style="color:var(--warn);text-decoration:none;margin-left:6px">✕</a></div>`
+        : `<div style="font-size:11px;margin-top:6px"><a href="javascript:void(0)" onclick="window._strAttachPDF('${e.id}')" style="color:var(--text-faint);text-decoration:none">📎 Attach pre-op PDF</a></div>`;
     } else if(e.pdfFilename) {
-      pdfLine = `<div style="font-size:11px;margin-top:3px;color:var(--text-faint)">📎 ${hiddenSpan}</div>`;
+      pdfLine = `<div style="font-size:11px;margin-top:6px;color:var(--text-faint)">📎 ${hiddenSpan}</div>`;
     }
 
     // Pre-Op Visit column — scheduled date stays visible (no PHI), Schedule
@@ -145,7 +157,7 @@
 
     const centerCell = 'display:flex;justify-content:center;align-items:center';
     return `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center${phiHidden ? ';opacity:.85' : ''}">
-      <div><div style="font-size:14px;font-weight:600;color:var(--text)">${nameHtml}</div>${phoneLine}${emailLine}${pcpLine}${surgeryLine}${pdfLine}${revealBtn ? '<div style=\"margin-top:6px\">' + revealBtn + '</div>' : ''}</div>
+      <div><div style="font-size:14px;font-weight:600;color:var(--text)">${nameHtml}</div>${contactLine}${surgeryLine}${pdfLine}${revealBtn ? '<div style=\"margin-top:8px\">' + revealBtn + '</div>' : ''}</div>
       <div>${scheduledCell}</div>
       <div style="${centerCell}">${callPill}</div>
       <div style="${centerCell}">${paidPill}</div>
