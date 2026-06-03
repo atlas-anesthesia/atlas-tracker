@@ -232,13 +232,9 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
       </div>
     </div>
 
-    <!-- Personal Income + Invoiced Summary -->
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div style="display:flex;gap:8px">
-        <button onclick="window.openPersonalIncomeModal()" style="font-size:12px;padding:6px 14px;border:1px solid var(--info);border-radius:6px;background:none;color:var(--info);cursor:pointer;font-weight:600">⚙️ Personal Income Formula</button>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px" id="payments-summary">
+    <!-- Personal-Income formula button removed — self-pay is now entered
+         manually on each invoice via the Invoice modal, no formula. -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px;margin-top:18px" id="payments-summary">
       <div class="metric-card" style="border-left:3px solid var(--accent)">
         <div class="metric-label">Total Invoiced</div>
         <div class="metric-value" id="pm-invoiced">$0</div>
@@ -423,7 +419,7 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
 
 
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
-<script src="assets/js/phi-redaction.js?v=20260515b"></script><script type="module" src="assets/js/app.js?v=20260524a"></script>
+<script src="assets/js/phi-redaction.js?v=20260515b"></script><script type="module" src="assets/js/app.js?v=20260524b"></script>
   <script type="module" src="assets/js/fax.js?v=20260522a"></script>
   <script type="module" src="assets/js/preop-fax.js?v=20260522b"></script>
   <script type="module" src="assets/js/insurance-sheet.js?v=20260519d"></script>
