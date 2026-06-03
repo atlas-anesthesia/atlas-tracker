@@ -238,6 +238,49 @@ function _isPatientBilled(row) {
   return !center || center.billingType !== 'center';
 }
 
+// Courtesy "thank you, payment received" email — fired once when Stripe
+// first reports the deposit or remainder paid. The sentAt stamps on the row
+// prevent re-sending on every poll. Goes through /outreach-email so no
+// worker change is required.
+async function _sendPaymentConfirmation(row, kind, amount) {
+  if(!row.patientEmail) return;
+  // Look up patient first name from the linked preop record for personalization.
+  const preop = (window._rawPreopRecords || []).find(p => p['po-caseId'] === row.caseId);
+  const first = (preop?.['po-patientFirstName'] || '').trim();
+  const greetingName = first ? ' ' + first : '';
+  const amtFmt = amount > 0
+    ? amount.toLocaleString('en-US', { style:'currency', currency:'USD', minimumFractionDigits:2 })
+    : '';
+  const subjectLine = kind === 'deposit'
+    ? 'Payment Received — $500 Deposit · Atlas Anesthesia'
+    : 'Payment Received — Remaining Balance · Atlas Anesthesia';
+  const heading = kind === 'deposit' ? 'Deposit Received' : 'Remaining Balance Paid';
+  const body = kind === 'deposit'
+    ? `We've received your $500 anesthesia deposit. Your case is confirmed and on our schedule — thank you for getting that handled.`
+    : `We've received the remaining balance${amtFmt ? ' of <strong>' + amtFmt + '</strong>' : ''} for your anesthesia services. Your account is paid in full — thank you.`;
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+      <tr><td style="background:#166534;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#bbf7d0;margin-bottom:4px">Atlas Anesthesia · Payment Confirmation</div><div style="font-size:20px;font-weight:700;color:#fff">${heading}</div></td></tr>
+      <tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">
+        <p style="margin:0 0 14px;font-size:16px;font-weight:600">Hi${greetingName},</p>
+        <p style="margin:0 0 14px">${body}</p>
+        ${kind === 'deposit'
+          ? '<p style="margin:0 0 14px;font-size:13px;color:#475569">The remaining balance will be invoiced separately after your procedure.</p>'
+          : '<p style="margin:0 0 14px;font-size:13px;color:#475569">If you need a receipt, just reply to this email and we’ll send one over.</p>'}
+        <p style="margin:18px 0 0">Thanks again,<br><strong>Atlas Anesthesia</strong></p>
+      </td></tr>
+      <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">This is a courtesy payment-received confirmation. No action required.</div></td></tr>
+    </table></td></tr></table></body></html>`;
+  try {
+    await fetch(_STRIPE_WORKER_URL + '/outreach-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: row.patientEmail, subject: subjectLine, html })
+    });
+  } catch(e) { console.warn('Payment confirmation email skipped:', e); }
+}
+
 async function _checkStripeForRow(row) {
   if(!row.patientEmail) return false;
   if(!_isPatientBilled(row)) return false;
@@ -258,12 +301,21 @@ async function _checkStripeForRow(row) {
       row.depositDate = d.paidAt ? d.paidAt.split('T')[0] : '';
       row.dep500Paid = true;
       changed = true;
+      // Send the courtesy email exactly once per row.
+      if(!row.depositConfirmationSentAt) {
+        row.depositConfirmationSentAt = new Date().toISOString();
+        _sendPaymentConfirmation(row, 'deposit', 500);
+      }
     }
     // Remainder
     if(d.remainderPaid && !row.paidDate) {
       row.paidDate = d.remainderPaidAt ? d.remainderPaidAt.split('T')[0] : '';
       row.paid = true;
       changed = true;
+      if(!row.remainderConfirmationSentAt) {
+        row.remainderConfirmationSentAt = new Date().toISOString();
+        _sendPaymentConfirmation(row, 'remainder', d.remainderAmount || 0);
+      }
     }
     // Invoice amount = $500 + remainder (only auto-fill if currently 0)
     if(d.remainderPaid && (!row.invoicedAmount || row.invoicedAmount === 0)) {
