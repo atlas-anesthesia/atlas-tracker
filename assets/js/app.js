@@ -7119,7 +7119,9 @@ const CALL_LABELS = {
   'not-called': '📞 Call Pending',
   'voicemail':  '📞 Voicemail Left',
   'no-answer':  '📞 No Answer',
-  'spoken':     '✓ Spoken To'
+  // Same concept as Nicole's "Called" pill — keep the language identical
+  // across Tracker + Follow-up Tracker so it doesn't read like two states.
+  'spoken':     '✓ Called'
 };
 const CALL_COLORS = {
   'not-called': { bg: '#fef3c7', color: '#92400e' },
