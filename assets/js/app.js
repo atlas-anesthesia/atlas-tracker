@@ -3102,12 +3102,53 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
         { key:'initial-invest', title:'Initial Investment',     accent:'#1d4380' }
       ];
 
+      // Case invoices: render each calendar month as its own card so the
+      // worker can scan a month at a time. Other categories stay as a single
+      // card (with month sub-headers inside) since their volume is lower.
+      const _monthLabel = (iso) => {
+        if(!iso) return 'Undated';
+        const d = new Date(iso + 'T12:00:00Z');
+        if(isNaN(d.getTime())) return 'Undated';
+        return d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+      };
+      const renderGroups = [];
       GROUPS.forEach(function(g) {
         const items = sorted.filter(function(e) {
           if(g.test) return g.test(e);
           return e.cat === g.key;
         });
         if(!items.length) return;
+        if(g.key === 'case-income') {
+          // Bucket by month, preserving the date-desc order of the input.
+          const byMonth = new Map();
+          items.forEach(function(e) {
+            const k = (e.date ? e.date.slice(0,7) : 'undated');
+            if(!byMonth.has(k)) byMonth.set(k, []);
+            byMonth.get(k).push(e);
+          });
+          const sortedKeys = [...byMonth.keys()].sort(function(a,b){
+            if(a === 'undated') return 1;
+            if(b === 'undated') return -1;
+            return b.localeCompare(a);
+          });
+          sortedKeys.forEach(function(k) {
+            const monthItems = byMonth.get(k);
+            const sampleDate = monthItems[0].date || '';
+            renderGroups.push({
+              key: 'case-income-' + k,
+              title: g.title + ' · ' + _monthLabel(sampleDate),
+              accent: g.accent,
+              items: monthItems,
+              showMonthSubheaders: false
+            });
+          });
+        } else {
+          renderGroups.push({ key: g.key, title: g.title, accent: g.accent, items, showMonthSubheaders: true });
+        }
+      });
+
+      renderGroups.forEach(function(g) {
+        const items = g.items;
 
         // Subtotal: self-pay for case invoices, absolute amount for everything
         // else. Legacy entries (no selfPay field) fall back to personalIncome
@@ -3124,7 +3165,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
 
         const ghdr = document.createElement('div');
         ghdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:9px 14px;background:'+g.accent+'10;border-bottom:1px solid '+g.accent+'20;border-left:3px solid '+g.accent;
-        const subLabel = g.key === 'case-income' ? 'self-pay total' : 'subtotal';
+        const subLabel = items[0]?.cat === 'case-income' ? 'self-pay total' : 'subtotal';
         ghdr.innerHTML =
           '<div style="display:flex;align-items:baseline;gap:10px">'
           + '<span style="font-size:12px;font-weight:700;color:'+g.accent+';letter-spacing:.2px">'+g.title+'</span>'
@@ -3136,17 +3177,12 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           +'</div>';
         groupBox.appendChild(ghdr);
 
-        // Month sub-headers — insert a slim row whenever the calendar month
-        // changes inside this category group. Entries land newest-first so
-        // the header reads as "month divider before its block of entries".
+        // Month sub-headers — used in non-case categories where one card
+        // covers all months. Case-income rendering already gives each month
+        // its own card, so no sub-headers needed there.
         let _prevMonthKey = null;
-        const _monthLabel = (iso) => {
-          if(!iso) return 'Undated';
-          const d = new Date(iso + 'T12:00:00Z');
-          if(isNaN(d.getTime())) return 'Undated';
-          return d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
-        };
         items.forEach(function(e, i) {
+        if(g.showMonthSubheaders) {
         const monthKey = e.date ? e.date.slice(0,7) : 'undated';
         if(monthKey !== _prevMonthKey) {
           _prevMonthKey = monthKey;
@@ -3161,6 +3197,7 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
           mhdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 14px;background:'+g.accent+'06;border-top:1px solid '+g.accent+'15;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)';
           mhdr.innerHTML = '<span>'+_monthLabel(e.date)+' · '+monthItems.length+' '+(monthItems.length===1?'entry':'entries')+'</span><span style="font-family:DM Mono,monospace;color:'+g.accent+'">'+_fmt(monthSub)+'</span>';
           groupBox.appendChild(mhdr);
+        }
         }
         const row = document.createElement('div');
         // Two-zone flex layout: content on the left, amount block on the right.
@@ -3932,11 +3969,15 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
       const center = (e.notes || '').replace(/^Center:\s*/, '');
       const inv = e.amount || 0;
       const sp  = _entrySelfPay(e);
+      // Self-pay column is inline-editable so the worker can backfill old
+      // entries (most legacy case-income rows have no selfPay set, since the
+      // field didn't exist when they were synced) right from the review.
+      const spInput = `<input type="number" step="0.01" min="0" value="${(sp || 0).toFixed(2)}" data-entry-id="${e.id}" onchange="window._merSaveSelfPay('${worker}','${e.id}',this.value)" style="width:110px;padding:5px 8px;font-family:DM Mono,monospace;font-size:13px;font-weight:700;color:#166534;border:1px solid #86efac;border-radius:6px;background:#f0fdf4;text-align:right;outline:none">`;
       html += `<div style="${rowCss}">
         <div><div style="font-weight:600;font-family:DM Mono,monospace;font-size:12px">${e.name || e.caseId || ''}</div>${center ? '<div style="font-size:11px;color:var(--text-faint)">'+center+'</div>' : ''}</div>
         <div style="color:var(--text-muted);font-size:12px">${dateTxt}</div>
         <div style="text-align:right;font-family:DM Mono,monospace">${_fmt(inv)}</div>
-        <div style="text-align:right;font-family:DM Mono,monospace;color:#166534;font-weight:600">${_fmt(sp)}</div>
+        <div style="text-align:right">${spInput}</div>
       </div>`;
     });
     html += `<div style="${rowCss};background:#f0fdf4;border-top:2px solid #86efac;font-weight:700">
@@ -3947,6 +3988,30 @@ if(tab==='saved-pdfs' && typeof loadSavedPDFs==='function') loadSavedPDFs();
     </div>`;
     body.innerHTML = html;
     _merUpdateStatus(reviewed, monthLabel, entries.length, totalPay);
+  };
+
+  // Inline edit: write a new self-pay value back to the case-income entry
+  // straight from the review modal. Used to backfill historical entries that
+  // were synced before the selfPay field existed.
+  window._merSaveSelfPay = async function(worker, entryId, newVal) {
+    const val = parseFloat(newVal);
+    if(Number.isNaN(val) || val < 0) { alert('Self-pay must be a non-negative number.'); window._merRenderRows(worker); return; }
+    try {
+      const data = await _load();
+      const idx = (data.entries || []).findIndex(e => e.id === entryId);
+      if(idx === -1) { alert('Entry not found — try reopening the modal.'); return; }
+      data.entries[idx].selfPay = val;
+      // Drop the legacy field so we don't double-source; selfPay is now
+      // authoritative going forward.
+      delete data.entries[idx].personalIncome;
+      data.entries[idx].syncedAt = new Date().toISOString();
+      await _save(data);
+      try { logAudit && logAudit('case-income-selfpay-edit', entryId, '$' + val.toFixed(2)); } catch(e){}
+      // Re-render the modal totals so the footer updates immediately.
+      window._merRenderRows(worker);
+      // Also refresh E&D in the background if it's the active tab.
+      if(typeof renderPayoutTab === 'function') renderPayoutTab();
+    } catch(err) { alert('Could not save self-pay: ' + (err.message || err)); }
   };
 
   function _merUpdateStatus(reviewed, monthLabel, count, totalPay) {
