@@ -1420,7 +1420,7 @@ window._spvRenderScript = function() {
     <p style="margin:0 0 10px">I see you have an upcoming procedure scheduled at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</p>
     <p style="margin:0 0 10px">We wanted to call to schedule anesthesia clearance.</p>
     <p style="margin:0 0 10px">We have our own nurse practitioner, ${hl('Jordan, APRN, FNP')}, who will give you a call and walk you through everything you need to do.</p>
-    <p style="margin:0 0 10px">There's a <strong>$100 fee</strong> for the clearance — I'll email you a secure payment link, and once that's paid you'll pick a time to talk with Jordan.</p>
+    <p style="margin:0 0 10px">There's a <strong>$100 fee</strong> for the clearance — I'll email you a secure payment link, and once that's paid you'll pick a time to talk with ${hl('Jordan, APRN, FNP')}.</p>
     <hr style="border:0;border-top:1px solid #e2e8f0;margin:14px 0">
     <div style="font-size:11px;color:var(--text-faint)">Once they agree, drop their email in the form to the left and pick a visit time from Jordan's open slots. The confirmation email goes out as soon as you book.</div>
   `;
@@ -1625,7 +1625,7 @@ function _spvBuildJordanNotificationHTML(p) {
     <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
       <tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Internal</div><div style="font-size:20px;font-weight:700;color:#fff">New pre-op visit scheduled</div></td></tr>
       <tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">
-        <p style="margin:0 0 14px;font-size:16px;font-weight:600">Hi Jordan,</p>
+        <p style="margin:0 0 14px;font-size:16px;font-weight:600">Hi Jordan, APRN, FNP,</p>
         <p style="margin:0 0 18px">Nicole just scheduled a new pre-op clearance visit. Here are the details — please reach out to the patient for the clearance call before surgery.</p>
         <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 18px">
           ${row('Patient', esc(fullName))}
