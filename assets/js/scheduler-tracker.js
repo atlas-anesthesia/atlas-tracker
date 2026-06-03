@@ -31,7 +31,62 @@
 
   let _entries = [];
   let _stripeStatus = {}; // { email-lower: { preopVisitPaid, preopVisitPaidAt } }
-  let _inboxItems = [];   // [{id, from, subject, receivedAt, pdfFilename, status}, ...]
+  let _inboxItems = [];   // [{id, from, subject, receivedAt, pdfs[]|pdfFilename, status}, ...]
+  // Cache the merged PDF (data URL + filename + sizeBytes) for the currently
+  // open inbox modal so we can save it without re-merging on submit.
+  let _currentMergedInboxPdf = null;
+
+  // Lazy-load pdf-lib the first time we need to merge a multi-PDF inbox item.
+  // Adds ~250 KB of JS but only when actually needed.
+  let _pdfLibLoading = null;
+  function _ensurePdfLib() {
+    if(typeof window.PDFLib === 'object') return Promise.resolve();
+    if(_pdfLibLoading) return _pdfLibLoading;
+    _pdfLibLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Could not load PDF merger.'));
+      document.head.appendChild(s);
+    });
+    return _pdfLibLoading;
+  }
+
+  // Strip data: prefix, decode base64 into a Uint8Array PDF byte buffer.
+  function _dataUrlToBytes(dataUrl) {
+    const i = dataUrl.indexOf(',');
+    const b64 = i >= 0 ? dataUrl.slice(i + 1) : dataUrl;
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for(let k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k);
+    return arr;
+  }
+
+  // Concatenate every PDF in `pdfDataUrls` (in order) into a single PDF.
+  // Returns a base64 data URL like the inputs.
+  async function _mergePdfs(pdfDataUrls) {
+    await _ensurePdfLib();
+    const { PDFDocument } = window.PDFLib;
+    const out = await PDFDocument.create();
+    for(const url of pdfDataUrls) {
+      try {
+        const src = await PDFDocument.load(_dataUrlToBytes(url), { ignoreEncryption: true });
+        const pages = await out.copyPages(src, src.getPageIndices());
+        pages.forEach(p => out.addPage(p));
+      } catch(e) {
+        console.warn('Skipped a PDF that failed to parse:', e);
+      }
+    }
+    const bytes = await out.save();
+    // Convert to base64 in chunks to avoid blowing the call-stack on big PDFs.
+    let bin = '';
+    const chunk = 0x8000;
+    for(let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return 'data:application/pdf;base64,' + btoa(bin);
+  }
 
   function _$(id) { return document.getElementById(id); }
   function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -204,9 +259,13 @@
     const pending = (_inboxItems || []).filter(i => (i.status || 'pending') === 'pending');
     const rows = pending.map(i => {
       const recv = i.receivedAt ? new Date(i.receivedAt).toLocaleString('en-US', { dateStyle:'short', timeStyle:'short' }) : '';
+      const pdfCount = Array.isArray(i.pdfs) ? i.pdfs.length : 0;
+      const titleText = pdfCount > 1
+        ? (pdfCount + ' PDFs (will combine on open)')
+        : (i.pdfFilename || 'attachment.pdf');
       return `<div class="str-inbox-row" onclick="window._strOpenInboxItem('${i.id}')" style="display:grid;grid-template-columns:1fr 200px 90px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">
         <div>
-          <div style="font-size:13px;font-weight:600;color:var(--text)">📎 ${_esc(i.pdfFilename || 'attachment.pdf')}</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text)">📎 ${_esc(titleText)}</div>
           <div style="font-size:11px;color:var(--text-faint);margin-top:2px">${_esc(i.subject || '')}</div>
         </div>
         <div style="font-size:11px;color:var(--text-faint)"><div>${_esc(i.from || '')}</div><div style="margin-top:2px">${_esc(recv)}</div></div>
@@ -259,13 +318,41 @@
   window._strOpenInboxItem = async function(id) {
     const item = (_inboxItems || []).find(i => i.id === id);
     if(!item) return;
-    // Load the PDF blob.
-    let pdfDataUrl = '';
+    _currentMergedInboxPdf = null;
+    // Figure out which PDF docs to load.
+    //   New shape: item.pdfs = [{idx, filename, sizeBytes}, ...]  →  one doc per idx.
+    //   Legacy:    item.pdfFilename only                          →  single doc at INBOX_PDF_PREFIX + id.
+    const refs = Array.isArray(item.pdfs) && item.pdfs.length
+      ? item.pdfs.map(p => ({ path: INBOX_PDF_PREFIX + id + '_' + p.idx, filename: p.filename }))
+      : [{ path: INBOX_PDF_PREFIX + id, filename: item.pdfFilename || 'attachment.pdf' }];
+    let parts = [];
     try {
-      const pdfSnap = await window.getDoc(window.doc(window.db, 'atlas', INBOX_PDF_PREFIX + id));
-      if(pdfSnap.exists()) pdfDataUrl = pdfSnap.data().dataUrl || '';
+      const snaps = await Promise.all(refs.map(r => window.getDoc(window.doc(window.db, 'atlas', r.path))));
+      parts = snaps.map((s, i) => ({
+        dataUrl: s.exists() ? (s.data().dataUrl || '') : '',
+        filename: (s.exists() && s.data().filename) || refs[i].filename
+      })).filter(p => p.dataUrl);
     } catch(_){}
-    if(!pdfDataUrl) { alert('Could not load the PDF for this inbox item.'); return; }
+    if(!parts.length) { alert('Could not load the PDF for this inbox item.'); return; }
+    // One PDF — show as-is. Multiple PDFs — merge into a single combined PDF
+    // so Jordan sees one document with all pages in order.
+    let pdfDataUrl, mergedFilename, mergedSize;
+    if(parts.length === 1) {
+      pdfDataUrl = parts[0].dataUrl;
+      mergedFilename = parts[0].filename;
+      mergedSize = Math.round(pdfDataUrl.length * 0.75); // rough base64→bytes
+    } else {
+      try {
+        pdfDataUrl = await _mergePdfs(parts.map(p => p.dataUrl));
+      } catch(e) {
+        alert('Could not merge the PDFs: ' + e.message);
+        return;
+      }
+      const base = (parts[0].filename || 'preop').replace(/\.pdf$/i, '');
+      mergedFilename = base + ' (combined ' + parts.length + ').pdf';
+      mergedSize = Math.round(pdfDataUrl.length * 0.75);
+    }
+    _currentMergedInboxPdf = { dataUrl: pdfDataUrl, filename: mergedFilename, sizeBytes: mergedSize, count: parts.length };
 
     const prior = document.getElementById('strInboxModal');
     if(prior) prior.remove();
@@ -282,7 +369,7 @@
       <div style="background:#1d3557;color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;gap:10px">
         <div style="min-width:0">
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0">New Patient from Pre-Op Form</div>
-          <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📎 ${_esc(item.pdfFilename || 'attachment.pdf')} · ${_esc(item.from || '')}</div>
+          <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📎 ${_esc(mergedFilename)}${parts.length > 1 ? ` <span style="font-weight:400;color:#bcd4ec;font-size:12px">(${parts.length} PDFs merged)</span>` : ''} · ${_esc(item.from || '')}</div>
         </div>
         <button onclick="document.getElementById('strInboxModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;flex-shrink:0">✕</button>
       </div>
@@ -356,13 +443,19 @@
     try {
       if(!_entries.length) await _loadEntries();
       const inboxItem = _inboxItems.find(i => i.id === inboxId);
-      // Copy the inbox PDF over to a per-entry PDF doc so it lives with the
-      // patient long-term (and so deleting the inbox doesn't lose the file).
+      // Save the (possibly merged) PDF to the patient's per-entry PDF doc.
+      // We use the in-memory merged copy that was created when the modal
+      // opened so we don't re-do the merge work here.
       const newEntryId = _uid();
-      const inboxPdfSnap = await window.getDoc(window.doc(window.db, 'atlas', INBOX_PDF_PREFIX + inboxId));
-      const filename = inboxPdfSnap.exists() ? inboxPdfSnap.data().filename : (inboxItem?.pdfFilename || 'preop.pdf');
-      if(inboxPdfSnap.exists()) {
-        await window.setDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + newEntryId), inboxPdfSnap.data());
+      const merged = _currentMergedInboxPdf;
+      const filename = merged?.filename || inboxItem?.pdfFilename || 'preop.pdf';
+      if(merged?.dataUrl) {
+        await window.setDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + newEntryId), {
+          filename: merged.filename,
+          dataUrl: merged.dataUrl,
+          contentType: 'application/pdf',
+          sizeBytes: merged.sizeBytes || 0
+        });
       }
       const entry = {
         id: newEntryId,
@@ -377,7 +470,8 @@
       };
       _entries.unshift(entry);
       await _saveEntries();
-      // Mark inbox item processed (and clean up its inbox-side PDF doc).
+      // Mark inbox item processed and clean up ALL inbox-side PDF docs
+      // (legacy single + per-idx for multi-PDF emails).
       try {
         const isnap = await window.getDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH));
         const idata = isnap.exists() ? isnap.data() : { items: [] };
@@ -385,8 +479,14 @@
           ? { ...i, status: 'processed', processedAt: new Date().toISOString(), processedBy: (window.currentUser?.email) || '', linkedEntryId: newEntryId }
           : i);
         await window.setDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH), idata);
-        try { await window.deleteDoc(window.doc(window.db, 'atlas', INBOX_PDF_PREFIX + inboxId)); } catch(_){}
+        const paths = Array.isArray(inboxItem?.pdfs) && inboxItem.pdfs.length
+          ? inboxItem.pdfs.map(p => INBOX_PDF_PREFIX + inboxId + '_' + p.idx)
+          : [INBOX_PDF_PREFIX + inboxId];
+        for(const p of paths) {
+          try { await window.deleteDoc(window.doc(window.db, 'atlas', p)); } catch(_){}
+        }
       } catch(e) { console.warn('inbox cleanup failed:', e); }
+      _currentMergedInboxPdf = null;
       try { window.logAudit && window.logAudit('preop-visit-from-inbox', newEntryId, first + ' ' + last); } catch(_){}
       wrap.remove();
       window.renderSchedulerTracker();
