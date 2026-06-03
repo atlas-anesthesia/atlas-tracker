@@ -2058,6 +2058,35 @@ onSnapshot(doc(db,'atlas','preop'), (snap) => {
   // Sync payment rows if loaded
   if(typeof _paymentRows !== 'undefined' && _paymentRows.length > 0) syncPaymentRowsFromCases();
 });
+
+// Tracker entries (atlas/preop_visits) — surfaced to window so the Home-tab
+// Follow-up Tracker can cross-reference Jordan's "Call Made" pill state when
+// a pre-op record's po-callStatus hasn't been synced yet.
+onSnapshot(doc(db,'atlas','preop_visits'), (snap) => {
+  window._preopVisitEntries = snap.exists() ? (snap.data().entries || []) : [];
+  // Refresh the Home Follow-up Tracker if it's the active tab so its call
+  // column updates live when Nicole / Jordan flip a pill.
+  const activeTab = document.querySelector('.section.active')?.id?.replace('tab-','');
+  if(activeTab === 'home' && typeof renderFollowupTab === 'function') renderFollowupTab();
+});
+
+// Effective call status — combines what's on the pre-op record with what
+// Jordan/Nicole logged on the Tracker. The Tracker's nurseCalledAt is treated
+// as authoritative ("spoken") when the pre-op record hasn't been synced yet.
+window._effectiveCallStatus = function(preopRecord) {
+  if(!preopRecord) return 'not-called';
+  const fromRecord = preopRecord['po-callStatus'] || 'not-called';
+  if(fromRecord === 'spoken') return 'spoken';
+  const caseId = preopRecord['po-caseId'];
+  const entries = window._preopVisitEntries || [];
+  // Match by preopRecordId (newer entries) OR po-preopVisitId on the record.
+  const visit = entries.find(e =>
+    (preopRecord.id && e.preopRecordId === preopRecord.id) ||
+    (preopRecord['po-preopVisitId'] && e.id === preopRecord['po-preopVisitId'])
+  );
+  if(visit && visit.nurseCalledAt) return 'spoken';
+  return fromRecord;
+};
 }
 async function saveInventory() {
 setSyncing(true);
@@ -7605,7 +7634,12 @@ window.renderFollowupTab = function() {
     if(surgDate && surgDate < today) return false;
     // Hide PHI-hidden cases (3+ days post-surgery — but those are past anyway).
     if(typeof window.isPHIHidden === 'function' && window.isPHIHidden(surgDate, r['po-caseId'])) return false;
-    const callStatus = r['po-callStatus'] || 'not-called';
+    // Honor the Tracker's "Call Made" pill even when po-callStatus hasn't
+    // been synced — keeps the Home Follow-up view consistent with Nicole's
+    // and Jordan's screens.
+    const callStatus = (typeof window._effectiveCallStatus === 'function')
+      ? window._effectiveCallStatus(r)
+      : (r['po-callStatus'] || 'not-called');
     const row = window._paymentRows && window._paymentRows.find(pr => pr.caseId === r['po-caseId']);
     const remPaid = row ? !!row.paid : false;
     const lastFollowup = r['po-lastFollowupAt'];
@@ -7670,7 +7704,9 @@ window.renderFollowupTab = function() {
     const worker = r.worker === 'dev' ? 'Dev' : 'Josh';
     const workerClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
 
-    const callStatus = r['po-callStatus'] || 'not-called';
+    const callStatus = (typeof window._effectiveCallStatus === 'function')
+      ? window._effectiveCallStatus(r)
+      : (r['po-callStatus'] || 'not-called');
     const lastFollowup = r['po-lastFollowupAt'];
     const callC = CALL_COLORS[callStatus] || CALL_COLORS['not-called'];
     const needsFollowup = callStatus !== 'spoken' && callStatus !== 'not-called' && lastFollowup
