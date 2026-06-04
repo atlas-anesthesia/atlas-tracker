@@ -63,6 +63,12 @@ window.onFaxCenterChange = function() {
 // the appropriate underlying modal. Replaces two separate "send a fax" entry
 // points with a single button on the Pre-Op tab.
 window.openFaxPicker = function() {
+  // Jordan only ever uses the generic cover sheet — skip the picker and
+  // open the generic modal directly so he gets there in one click.
+  if(window._userRole === 'assistant') {
+    if(typeof window.openFaxModalFromForm === 'function') window.openFaxModalFromForm();
+    return;
+  }
   const prior = document.getElementById('faxPickerModal');
   if(prior) prior.remove();
   const wrap = document.createElement('div');
@@ -165,9 +171,20 @@ function _applyFaxModalAssistantUi() {
   const ta    = document.getElementById('fax-requested-docs');
   const help  = ta?.parentElement?.querySelector('div[style*="italic"]');
   if(label) label.textContent = isAssistant ? 'Notes / Message' : 'Additional Requested Documents';
-  if(ta) ta.placeholder = isAssistant
-    ? 'Type any note or message you want to include on the fax cover sheet.'
-    : 'Add extra items here, one per line, e.g.\nEKG within last 12 months\nStress test results (within 5 years)';
+  if(ta) {
+    ta.placeholder = isAssistant
+      ? 'Type any note or message you want to include on the fax cover sheet.'
+      : 'Add extra items here, one per line, e.g.\nEKG within last 12 months\nStress test results (within 5 years)';
+    // Jordan writes longer notes — give him a roomier textarea so he can see
+    // what he's typing without scrolling. CRNAs keep the compact 3-row size.
+    if(isAssistant) {
+      ta.rows = 8;
+      ta.style.minHeight = '180px';
+    } else {
+      ta.rows = 3;
+      ta.style.minHeight = '';
+    }
+  }
   if(help) help.style.display = isAssistant ? 'none' : '';
 }
 
@@ -405,13 +422,15 @@ function buildFaxHTML(r) {
     ${surgDate ? `<tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">SURGERY DATE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${surgDate}</td></tr>` : ''}
   </table>
   ${isAssistant ? (function() {
-    // Jordan's cover is a generic notes-only sheet — no records-request body.
+    // Jordan's cover is generic — no records-request list, but with a
+    // proper letter body so it reads professionally on the recipient's end.
     const notes = (document.getElementById('fax-requested-docs')?.value || '').trim();
     return `
   <p style="margin:0 0 8px 0">Dear Colleague,</p>
-  <p style="margin:0 0 10px 0">Please see the attached pages regarding the above patient. If you have any questions, please contact us at the return fax or phone number listed above.</p>
-  ${notes ? `<div style="border:1px solid #bbb;border-radius:4px;padding:10px 12px;background:#fafafa;margin:0 0 14px 0;white-space:pre-wrap;font-size:12px">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
-  <p style="margin:0 0 8px 0">Thank you.</p>
+  <p style="margin:0 0 10px 0">Thank you for your time and assistance with the above-named patient. I am reaching out from <strong>Atlas Anesthesia</strong> as part of our pre-operative anesthesia evaluation, and have attached the relevant documentation for your review.</p>
+  ${notes ? `<p style="margin:0 0 6px 0"><strong>Additional notes:</strong></p><div style="border:1px solid #bbb;border-radius:4px;padding:10px 12px;background:#fafafa;margin:0 0 14px 0;white-space:pre-wrap;font-size:12px">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
+  <p style="margin:0 0 10px 0">If you have any questions or need additional information, please don't hesitate to contact our office directly at the return fax number or phone number listed above. Timely communication helps us ensure the safest and most coordinated anesthesia care for our shared patient.</p>
+  <p style="margin:0 0 8px 0">Thank you again for your cooperation and partnership in care.</p>
   <p style="margin:0 0 24px 0">Warm regards,</p>`;
   })() : `
   <p style="color:#b91c1c;font-weight:bold;font-size:13px;margin:0 0 10px 0">⚠ Urgent — Please Respond ASAP</p>
