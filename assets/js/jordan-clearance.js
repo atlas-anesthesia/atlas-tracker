@@ -236,18 +236,46 @@
 
   // ── Pre-op assessment summary page (text-only) ────────────────────────────
   function collectPreopFields() {
-    // Read every po-* input/select/textarea on the form into a labeled list.
+    // Read every po-* input/select/textarea on the form, paired with the
+    // label that ACTUALLY belongs to it (closest preceding label sibling, or
+    // a <label for="id"> match). Earlier version used the first label in the
+    // parent card, which made every field show up as "First Name".
     const out = [];
     const seen = new Set();
-    const addRow = (label, val) => {
-      if(val == null) return;
-      const v = String(val).trim();
-      if(!v) return;
-      out.push({ label, value: v });
+    const cleanText = node => (node.textContent || '').replace(/\s+/g, ' ').trim().replace(/[*:]\s*$/, '');
+    const findLabel = (el) => {
+      // 1. label[for="..."]
+      if(el.id) {
+        try {
+          const direct = document.querySelector('label[for="' + (window.CSS && CSS.escape ? CSS.escape(el.id) : el.id) + '"]');
+          if(direct) return cleanText(direct);
+        } catch(_){}
+      }
+      // 2. Wrapping label ancestor.
+      let p = el.parentElement;
+      while(p && p !== document.body) {
+        if(p.tagName === 'LABEL') return cleanText(p);
+        p = p.parentElement;
+      }
+      // 3. Closest preceding label sibling, walking up the tree.
+      let node = el;
+      while(node && node !== document.body) {
+        let sib = node.previousElementSibling;
+        while(sib) {
+          if(sib.tagName === 'LABEL') return cleanText(sib);
+          // A wrapper div ending in a label also counts.
+          const inner = sib.querySelector && sib.querySelector('label');
+          if(inner) return cleanText(inner);
+          sib = sib.previousElementSibling;
+        }
+        node = node.parentElement;
+      }
+      return '';
     };
-    // Try to use the label text immediately above each input when possible.
     document.querySelectorAll('#tab-preop input, #tab-preop select, #tab-preop textarea').forEach(el => {
       if(!el.id || !el.id.startsWith('po-')) return;
+      if(el.type === 'hidden') return;          // skip backing-store inputs
+      if(el.closest('#jordan-clearance-block')) return; // skip Jordan's own block
       if(seen.has(el.id)) return;
       seen.add(el.id);
       let val = '';
@@ -255,12 +283,8 @@
       else if(el.type === 'radio') { if(el.checked) val = el.value; }
       else val = el.value;
       if(!val) return;
-      // Find the closest label — fall back to the id with prefix stripped.
-      let label = '';
-      const lbl = el.closest('div')?.querySelector('label');
-      if(lbl) label = lbl.textContent.replace(/\s+/g, ' ').trim();
-      if(!label) label = el.id.replace(/^po-/, '').replace(/-/g, ' ');
-      addRow(label, val);
+      const label = findLabel(el) || el.id.replace(/^po-/, '').replace(/-/g, ' ');
+      out.push({ label, value: String(val).trim() });
     });
     return out;
   }
