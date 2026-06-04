@@ -317,8 +317,9 @@ async function renderSchedule() {
   } catch(_) {}
   paintSlots();
   $('book-btn').addEventListener('click', confirmBooking);
-  // Terms & Privacy Acknowledgment — patients must check the box AND have a
-  // slot selected before the Confirm button enables.
+  // Terms & Privacy Acknowledgment + Anesthesia Informed Consent —
+  // patients must check BOTH boxes AND have a slot selected before the
+  // Confirm button enables.
   const tcb = $('terms-checkbox');
   if(tcb) tcb.addEventListener('change', _refreshBookBtn);
   const tr  = $('terms-readmore');
@@ -329,15 +330,29 @@ async function renderSchedule() {
   if(tc2) tc2.addEventListener('click', _closeTermsModal);
   const tm  = $('terms-modal');
   if(tm)  tm.addEventListener('click', e => { if(e.target === tm) _closeTermsModal(); });
+
+  const ccb = $('consent-checkbox');
+  if(ccb) ccb.addEventListener('change', _refreshBookBtn);
+  const cr  = $('consent-readmore');
+  if(cr)  cr.addEventListener('click', e => { e.preventDefault(); _openConsentModal(); });
+  const cc1 = $('consent-modal-close');
+  if(cc1) cc1.addEventListener('click', _closeConsentModal);
+  const cc2 = $('consent-modal-close-2');
+  if(cc2) cc2.addEventListener('click', _closeConsentModal);
+  const cm  = $('consent-modal');
+  if(cm)  cm.addEventListener('click', e => { if(e.target === cm) _closeConsentModal(); });
 }
 
-function _openTermsModal()  { const m = $('terms-modal'); if(m) m.classList.remove('hidden'); }
-function _closeTermsModal() { const m = $('terms-modal'); if(m) m.classList.add('hidden'); }
+function _openTermsModal()   { const m = $('terms-modal'); if(m) m.classList.remove('hidden'); }
+function _closeTermsModal()  { const m = $('terms-modal'); if(m) m.classList.add('hidden'); }
+function _openConsentModal() { const m = $('consent-modal'); if(m) m.classList.remove('hidden'); }
+function _closeConsentModal(){ const m = $('consent-modal'); if(m) m.classList.add('hidden'); }
 function _termsAccepted()   { return !!($('terms-checkbox')?.checked); }
+function _consentAccepted() { return !!($('consent-checkbox')?.checked); }
 function _refreshBookBtn()  {
   const btn = $('book-btn');
   if(!btn) return;
-  btn.disabled = !(_selected && _termsAccepted());
+  btn.disabled = !(_selected && _termsAccepted() && _consentAccepted());
 }
 
 function paintSlots() {
@@ -389,6 +404,7 @@ async function confirmBooking() {
   if(!photosDone) { alert('Please upload all 6 photos first.'); return; }
   if(!_entry._paid) { alert('Please complete the $100 payment first.'); return; }
   if(!_termsAccepted()) { alert('Please review and check the Patient Terms & Privacy Acknowledgment box before scheduling.'); return; }
+  if(!_consentAccepted()) { alert('Please review and check the Anesthesia Informed Consent box before scheduling.'); return; }
   const btn = $('book-btn');
   btn.disabled = true; btn.textContent = 'Confirming…';
   $('sched-error').innerHTML = '';
@@ -412,14 +428,22 @@ async function confirmBooking() {
       time: _selected.time,
       scheduledAt: new Date().toISOString(),
       scheduledBy: 'patient-portal',
-      // HIPAA audit trail — patient checked the Privacy Acknowledgment
-      // box before the booking was committed. Stored alongside the entry
-      // so we can prove consent during compliance reviews.
+      // HIPAA + medico-legal audit trail — patient checked BOTH the
+      // Privacy Acknowledgment and the Anesthesia Informed Consent
+      // before the booking was committed. Both are stamped here with
+      // version + timestamp so the consent on file can be matched to
+      // the document the patient actually saw.
       consent: {
         accepted: true,
         acceptedAt: new Date().toISOString(),
         version: 'v1-2026-05-13',
         document: 'Atlas Anesthesia Patient Terms & Privacy Acknowledgment'
+      },
+      anesthesiaConsent: {
+        accepted: true,
+        acceptedAt: new Date().toISOString(),
+        version: 'v1-2026-05-13',
+        document: 'Atlas Anesthesia Informed Consent for Anesthesia Care'
       }
     };
     await setDoc(doc(db, 'atlas', 'preop_visits'), { entries });

@@ -208,6 +208,19 @@
               </label>
             </div>
 
+            <!-- Anesthesia Informed Consent (required) -->
+            <div id="consent-box" style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;background:#fafafa;margin-top:14px">
+              <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--accent)">Anesthesia Informed Consent</div>
+              <div style="font-size:13px;color:var(--text-muted);line-height:1.55;margin-bottom:12px">
+                I understand that I will receive anesthesia care for my dental procedure, that anesthesia carries real risks including (rarely) serious or life-threatening complications, and that the Atlas anesthesia team may need to adjust the anesthesia plan during the procedure for my safety. I have had the opportunity to read the full consent and ask questions before agreeing.
+                <a href="#" id="consent-readmore" style="color:var(--accent);text-decoration:underline;font-weight:600;white-space:nowrap">Read the full consent →</a>
+              </div>
+              <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+                <input type="checkbox" id="consent-checkbox" style="margin-top:2px;width:18px;height:18px;flex-shrink:0;cursor:pointer">
+                <span>I have read and agree to the <strong>Atlas Anesthesia Informed Consent for Anesthesia Care</strong>.</span>
+              </label>
+            </div>
+
             <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
               <button id="book-btn" class="btn-primary" disabled>Confirm This Time</button>
             </div>
@@ -306,8 +319,113 @@
   </div>
 </div>
 
+<!-- Anesthesia Informed Consent modal -->
+<div id="consent-modal" class="hidden" style="position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;max-width:760px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+    <div style="background:var(--accent);color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0">Atlas Anesthesia LLC</div>
+        <div style="font-size:17px;font-weight:700;margin-top:2px">Informed Consent for Anesthesia Care</div>
+      </div>
+      <button id="consent-modal-close" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:14px;font-family:inherit">✕ Close</button>
+    </div>
+    <div style="padding:22px 26px;overflow-y:auto;font-size:14px;line-height:1.6;color:var(--text)">
+      <p style="margin-top:0;font-size:13px;color:var(--text-muted)"><strong>Effective May 13, 2026</strong> · Please read the entire document before agreeing.</p>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">1. Anesthesia care you are consenting to</h3>
+      <p>I authorize the anesthesia provider(s) of Atlas Anesthesia LLC — Joshua Condado, CRNA and/or Devarsh Murthy, CRNA — to administer anesthesia for my dental procedure. I understand that depending on my medical history, the type of procedure, and conditions at the time of surgery, the anesthesia plan may include one or more of the following:</p>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li><strong>General anesthesia</strong> — medications that put me into a state of unconsciousness so I do not feel or remember the procedure</li>
+        <li><strong>Monitored anesthesia care (MAC) / IV sedation</strong> — medications that make me very sleepy and comfortable while I continue to breathe on my own</li>
+        <li><strong>Local anesthesia</strong> — numbing medication injected near the surgical site, given by my dentist or surgeon, that may be supplemented by Atlas's IV sedation</li>
+      </ul>
+      <p>I understand the anesthesia provider will choose and may adjust the technique that they believe is safest for me based on their clinical judgment.</p>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">2. Common risks and side effects</h3>
+      <p>I understand that even when anesthesia is performed correctly, the following common side effects can occur, most of which resolve on their own:</p>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li>Nausea or vomiting after the procedure</li>
+        <li>Sore throat, hoarseness, or cough</li>
+        <li>Dry mouth, lip or tongue soreness</li>
+        <li>Headache, dizziness, drowsiness, or grogginess</li>
+        <li>Muscle aches or shivering</li>
+        <li>Bruising, soreness, or minor swelling at the IV site</li>
+        <li>Confusion or memory disturbance (especially in older patients)</li>
+        <li>Minor injury to lips, teeth, gums, dental restorations, or the tongue from airway management</li>
+        <li>Eye irritation or rare corneal abrasion</li>
+        <li>Temporary nerve numbness or tingling from positioning</li>
+      </ul>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">3. Serious risks (less common, but possible)</h3>
+      <p>I understand that anesthesia, like any medical procedure, carries the possibility of serious complications. These are rare but can occur even when standard of care is met. They include but are not limited to:</p>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li>Allergic reactions to anesthetic drugs, including severe (anaphylactic) reactions</li>
+        <li>Difficult or failed intubation, dental damage from airway equipment, vocal cord injury</li>
+        <li>Aspiration of stomach contents into the lungs, which can cause pneumonia or breathing problems</li>
+        <li>Awareness or recall during general anesthesia</li>
+        <li>Damage to teeth, dentures, crowns, bridges, or veneers</li>
+        <li>Nerve injury, including weakness, numbness, or chronic pain</li>
+        <li>Cardiovascular events including irregular heart rhythms, heart attack, or cardiac arrest</li>
+        <li>Stroke or other neurologic injury, including (very rarely) brain damage</li>
+        <li>Malignant hyperthermia (a rare genetic reaction to some anesthetic agents)</li>
+        <li>Blood clots, bleeding, or infection</li>
+        <li>Postoperative cognitive dysfunction</li>
+        <li>In extremely rare cases, death</li>
+      </ul>
+      <p style="font-size:13px;color:var(--text-muted)">My personal risk depends on my age, medical history, the medications I take, and the type of surgery. I have had the opportunity to discuss my individual risk with the Atlas team during my pre-op clearance visit, and I will have a final opportunity to ask questions on the day of surgery before anesthesia begins.</p>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">4. Changes to the anesthesia plan</h3>
+      <p>I authorize the Atlas anesthesia provider to change the type of anesthesia, the route of medication, or the airway management plan at any time during the procedure if, in their professional judgment, this is necessary for my safety or for the success of the procedure.</p>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">5. Emergency care and other necessary procedures</h3>
+      <p>I authorize the Atlas anesthesia provider to perform any additional procedures or administer any medications they reasonably believe are necessary in an emergency, including but not limited to:</p>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li>Placement of additional IV lines or airway devices</li>
+        <li>Administration of emergency medications</li>
+        <li>Cardiopulmonary resuscitation (CPR), defibrillation, or other resuscitation efforts</li>
+        <li>Calling 911 and transfer to a hospital for further care</li>
+      </ul>
+      <p>If a blood transfusion is ever required in an emergency, I understand the provider will coordinate with the receiving facility; Atlas does not administer blood products in office-based settings.</p>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">6. Patient responsibilities</h3>
+      <p>For my own safety, I agree to the following pre-operative responsibilities:</p>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li><strong>NPO / fasting:</strong> nothing to eat or drink (including water, gum, candy, mints, and tobacco) for at least 8 hours before my procedure unless told otherwise by Atlas</li>
+        <li><strong>Medication disclosure:</strong> I have disclosed all prescription medications, over-the-counter medications, supplements, herbal products, and recreational substances I take, and any history of alcohol or drug use</li>
+        <li><strong>Medical history disclosure:</strong> I have disclosed all known medical conditions, prior surgeries, allergies, family history of anesthesia complications, and bleeding disorders</li>
+        <li><strong>Pregnancy:</strong> if there is any chance I may be pregnant, I will disclose this before the procedure</li>
+        <li><strong>Responsible adult driver:</strong> I will arrange for a responsible adult to drive me home and stay with me for at least 24 hours after the procedure</li>
+        <li><strong>No driving, work, or signing legal documents</strong> for at least 24 hours after anesthesia</li>
+      </ul>
+      <p>I understand that failing to follow these instructions can delay or cancel my procedure and can put my safety at serious risk.</p>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">7. No guarantee of outcome</h3>
+      <p>I understand that medicine is not an exact science and that no guarantees or assurances have been made to me about the results of my anesthesia care.</p>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">8. Right to ask questions and refuse care</h3>
+      <p>I have had the opportunity to ask questions about the anesthesia plan, its risks, alternatives, and what to expect. I understand I can withdraw this consent at any time before anesthesia is administered without affecting my future relationship with Atlas. I understand that refusing anesthesia may mean my dental procedure cannot proceed as planned.</p>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">9. Acknowledgment</h3>
+      <p>By checking the consent box on the scheduling page, I confirm that:</p>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li>I have read and understood this entire document</li>
+        <li>I have had the opportunity to ask questions and to discuss my anesthesia care with the Atlas team</li>
+        <li>I am voluntarily consenting to anesthesia care as described above</li>
+        <li>I am at least 18 years old, or am the legal guardian / parent of a minor patient and am signing on their behalf</li>
+      </ul>
+
+      <h3 style="font-size:15px;margin-top:14px;margin-bottom:6px;color:var(--accent)">Contact</h3>
+      <p style="margin:4px 0">Atlas Anesthesia LLC<br>1257 Main Street, Stevens Point, WI 54481<br>admin@atlasanesthesia.co · (262) 573-9095</p>
+      <p style="margin:4px 0;font-size:13px;color:var(--text-muted)">If you have any questions about this consent before your procedure day, please call or email us.</p>
+    </div>
+    <div style="padding:14px 22px;border-top:1px solid var(--border);background:#f8fafc;display:flex;justify-content:flex-end">
+      <button id="consent-modal-close-2" class="btn-primary">Got it</button>
+    </div>
+  </div>
+</div>
+
 <!-- HEIC → JPG converter (only loads if the patient uploads a HEIC file) -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
-<script type="module" src="assets/js/patient-schedule.js?v=20260603e"></script>
+<script type="module" src="assets/js/patient-schedule.js?v=20260603f"></script>
 </body>
 </html>
