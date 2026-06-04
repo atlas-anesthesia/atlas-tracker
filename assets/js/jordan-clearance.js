@@ -516,7 +516,7 @@
       <div style="background:#166534;color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;gap:10px">
         <div>
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#bbf7d0">Clearance Confirmation</div>
-          <div style="font-size:17px;font-weight:700;margin-top:2px">Are you sure you're done?</div>
+          <div style="font-size:17px;font-weight:700;margin-top:2px">Finalize Report</div>
         </div>
         <button id="jclr-modal-close" style="background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:14px;font-family:inherit">✕ Close</button>
       </div>
