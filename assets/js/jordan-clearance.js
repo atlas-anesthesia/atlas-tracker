@@ -296,52 +296,67 @@
     });
     return out;
   }
-  async function addAssessmentPage(out) {
-    const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
-    const page = out.addPage([612, 792]); // US Letter
-    const font     = await out.embedFont(StandardFonts.Helvetica);
-    const fontBold = await out.embedFont(StandardFonts.HelveticaBold);
-    const M = 50, headerY = 750;
-    page.drawText('Pre-Op Assessment Summary', { x: M, y: headerY, size: 16, font: fontBold, color: rgb(0.11, 0.21, 0.34) });
-    page.drawText(getPatientName(), { x: M, y: headerY - 20, size: 12, font, color: rgb(0.3, 0.3, 0.3) });
-    page.drawLine({ start: { x: M, y: headerY - 30 }, end: { x: 562, y: headerY - 30 }, thickness: 0.8, color: rgb(0.7, 0.7, 0.7) });
-    let y = headerY - 50;
-    const lineH = 14;
-    const rows = collectPreopFields();
-    if(!rows.length) {
-      page.drawText('No assessment fields filled in yet.', { x: M, y, size: 11, font, color: rgb(0.45, 0.45, 0.45) });
-      page.drawText('Make sure the Pre-Op form has data, save it, then click Cleared.', { x: M, y: y - 16, size: 9, font, color: rgb(0.55, 0.55, 0.55) });
+  // Snapshot the actual Pre-Op tab using html2canvas (loaded site-wide via
+  // index.html) so the report's assessment section looks like the live form
+  // — same section cards, same two-column grid, same labels. Slice the
+  // resulting tall canvas across multiple letter pages.
+  async function addAssessmentPages(out) {
+    const { StandardFonts, rgb } = window.PDFLib;
+    if(typeof window.html2canvas !== 'function') {
+      // Fallback — should never happen since html2canvas is loaded on every page.
+      const page = out.addPage([612, 792]);
+      const font = await out.embedFont(StandardFonts.Helvetica);
+      page.drawText('Pre-Op Assessment Summary unavailable (renderer not loaded).',
+        { x: 50, y: 720, size: 11, font, color: rgb(0.45, 0.45, 0.45) });
       return;
     }
-    for(const r of rows) {
-      if(y < 50) { // overflow — start a new page
-        const p2 = out.addPage([612, 792]);
-        y = 750;
-        p2.drawText('Pre-Op Assessment Summary (cont.)', { x: M, y, size: 12, font: fontBold });
-        y -= 30;
-        rows._page = p2; // not used — kept simple
-      }
-      const labelText = r.label + ':';
-      const wrapped = wrapText(r.value, font, 9, 380);
-      page.drawText(labelText, { x: M, y, size: 9, font: fontBold, color: rgb(0.2, 0.2, 0.2) });
-      for(let i = 0; i < wrapped.length; i++) {
-        page.drawText(wrapped[i], { x: M + 170, y: y - i * lineH, size: 9, font, color: rgb(0, 0, 0) });
-      }
-      y -= Math.max(lineH, wrapped.length * lineH);
+    const tab = document.getElementById('tab-preop');
+    if(!tab) return;
+    // Hide affordances we don't want in the snapshot: action bar, Jordan's
+    // clearance block, any preview-only floating buttons.
+    const hideList = [
+      document.getElementById('jordan-clearance-block'),
+      tab.querySelector('.action-bar')
+    ].filter(Boolean);
+    const prior = hideList.map(el => el.style.visibility);
+    hideList.forEach(el => el.style.visibility = 'hidden');
+    let canvas;
+    try {
+      canvas = await window.html2canvas(tab, {
+        backgroundColor: '#ffffff',
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+        windowWidth: tab.scrollWidth
+      });
+    } finally {
+      hideList.forEach((el, i) => el.style.visibility = prior[i] || '');
     }
-  }
-  function wrapText(text, font, size, maxWidth) {
-    const words = String(text).split(/\s+/);
-    const lines = [];
-    let cur = '';
-    for(const w of words) {
-      const test = cur ? cur + ' ' + w : w;
-      const width = font.widthOfTextAtSize(test, size);
-      if(width > maxWidth && cur) { lines.push(cur); cur = w; }
-      else cur = test;
+    // Slice the canvas across letter pages. Source pixels → PDF points scaled
+    // so the snapshot width fills the page minus 36 pt margins.
+    const PAGE_W = 612, PAGE_H = 792, MARGIN = 36;
+    const drawW = PAGE_W - 2 * MARGIN;
+    const ptPerPx = drawW / canvas.width;
+    const pageDrawH = PAGE_H - 2 * MARGIN;
+    const pageSrcH = Math.max(1, Math.floor(pageDrawH / ptPerPx));
+    let yOff = 0;
+    while(yOff < canvas.height) {
+      const sliceH = Math.min(pageSrcH, canvas.height - yOff);
+      const tmp = document.createElement('canvas');
+      tmp.width  = canvas.width;
+      tmp.height = sliceH;
+      const ctx = tmp.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(canvas, 0, -yOff);
+      const dataUrl = tmp.toDataURL('image/jpeg', 0.85);
+      const bytes = dataUrlToBytes(dataUrl);
+      const img = await out.embedJpg(bytes);
+      const page = out.addPage([PAGE_W, PAGE_H]);
+      const drawH = sliceH * ptPerPx;
+      page.drawImage(img, { x: MARGIN, y: PAGE_H - MARGIN - drawH, width: drawW, height: drawH });
+      yOff += sliceH;
     }
-    if(cur) lines.push(cur);
-    return lines.length ? lines : [''];
   }
 
   // ── Image page (airway photo) ─────────────────────────────────────────────
@@ -378,8 +393,8 @@
     await ensurePdfLib();
     const { PDFDocument } = window.PDFLib;
     const out = await PDFDocument.create();
-    // 1. Pre-op assessment summary first
-    await addAssessmentPage(out);
+    // 1. Pre-op assessment summary first (html2canvas snapshot of the live form)
+    await addAssessmentPages(out);
     // 2. Airway photos from the patient portal (if linked)
     const visitId = getPreopVisitId();
     if(visitId) {
