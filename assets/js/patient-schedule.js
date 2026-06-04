@@ -317,6 +317,27 @@ async function renderSchedule() {
   } catch(_) {}
   paintSlots();
   $('book-btn').addEventListener('click', confirmBooking);
+  // Terms & Privacy Acknowledgment — patients must check the box AND have a
+  // slot selected before the Confirm button enables.
+  const tcb = $('terms-checkbox');
+  if(tcb) tcb.addEventListener('change', _refreshBookBtn);
+  const tr  = $('terms-readmore');
+  if(tr)  tr.addEventListener('click', e => { e.preventDefault(); _openTermsModal(); });
+  const tc1 = $('terms-modal-close');
+  if(tc1) tc1.addEventListener('click', _closeTermsModal);
+  const tc2 = $('terms-modal-close-2');
+  if(tc2) tc2.addEventListener('click', _closeTermsModal);
+  const tm  = $('terms-modal');
+  if(tm)  tm.addEventListener('click', e => { if(e.target === tm) _closeTermsModal(); });
+}
+
+function _openTermsModal()  { const m = $('terms-modal'); if(m) m.classList.remove('hidden'); }
+function _closeTermsModal() { const m = $('terms-modal'); if(m) m.classList.add('hidden'); }
+function _termsAccepted()   { return !!($('terms-checkbox')?.checked); }
+function _refreshBookBtn()  {
+  const btn = $('book-btn');
+  if(!btn) return;
+  btn.disabled = !(_selected && _termsAccepted());
 }
 
 function paintSlots() {
@@ -356,7 +377,7 @@ function paintSlots() {
       const sum = $('selection-summary');
       sum.innerHTML = '<div class="summary">📞 <strong>' + esc(fmtDate(_selected.date)) + ' at ' + esc(fmtTime(_selected.time)) + '</strong> — Jordan, APRN, FNP will call you from a 317 area code.</div>';
       sum.classList.remove('hidden');
-      $('book-btn').disabled = false;
+      _refreshBookBtn();
     });
   });
 }
@@ -367,6 +388,7 @@ async function confirmBooking() {
   const photosDone = (_entry.photoStatus && ANGLES.every(a => _entry.photoStatus[a.key]));
   if(!photosDone) { alert('Please upload all 6 photos first.'); return; }
   if(!_entry._paid) { alert('Please complete the $100 payment first.'); return; }
+  if(!_termsAccepted()) { alert('Please review and check the Patient Terms & Privacy Acknowledgment box before scheduling.'); return; }
   const btn = $('book-btn');
   btn.disabled = true; btn.textContent = 'Confirming…';
   $('sched-error').innerHTML = '';
@@ -389,7 +411,16 @@ async function confirmBooking() {
       date: _selected.date,
       time: _selected.time,
       scheduledAt: new Date().toISOString(),
-      scheduledBy: 'patient-portal'
+      scheduledBy: 'patient-portal',
+      // HIPAA audit trail — patient checked the Privacy Acknowledgment
+      // box before the booking was committed. Stored alongside the entry
+      // so we can prove consent during compliance reviews.
+      consent: {
+        accepted: true,
+        acceptedAt: new Date().toISOString(),
+        version: 'v1-2026-05-13',
+        document: 'Atlas Anesthesia Patient Terms & Privacy Acknowledgment'
+      }
     };
     await setDoc(doc(db, 'atlas', 'preop_visits'), { entries });
 

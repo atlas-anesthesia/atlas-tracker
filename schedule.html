@@ -194,6 +194,20 @@
             <div id="sched-error"></div>
             <div id="slot-list"><div style="text-align:center;color:var(--text-faint);padding:20px"><span class="spinner"></span> Loading available times…</div></div>
             <div id="selection-summary" class="hidden"></div>
+
+            <!-- Patient Terms & Privacy Acknowledgment (required) -->
+            <div id="terms-box" style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;background:#fafafa;margin-top:18px">
+              <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--accent)">Patient Terms &amp; Privacy Acknowledgment</div>
+              <div style="font-size:13px;color:var(--text-muted);line-height:1.55;margin-bottom:12px">
+                By scheduling this call, you confirm you've received Atlas Anesthesia's Notice of Privacy Practices and consent to a phone consult with Jordan, APRN, FNP for pre-op anesthesia clearance. Atlas may share your information with your surgeon, surgery center, and PCP as needed for your care, and may contact you by phone, text, or email about your appointment.
+                <a href="#" id="terms-readmore" style="color:var(--accent);text-decoration:underline;font-weight:600;white-space:nowrap">Read the full terms →</a>
+              </div>
+              <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+                <input type="checkbox" id="terms-checkbox" style="margin-top:2px;width:18px;height:18px;flex-shrink:0;cursor:pointer">
+                <span>I have read and agree to the <strong>Atlas Anesthesia Patient Terms and Privacy Acknowledgment</strong>.</span>
+              </label>
+            </div>
+
             <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
               <button id="book-btn" class="btn-primary" disabled>Confirm This Time</button>
             </div>
@@ -219,8 +233,81 @@
   <div class="footer">© Atlas Anesthesia · Secure patient portal</div>
 </div>
 
+<!-- Full Patient Terms & Privacy Acknowledgment modal -->
+<div id="terms-modal" class="hidden" style="position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:14px;max-width:760px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+    <div style="background:var(--accent);color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0">Atlas Anesthesia LLC</div>
+        <div style="font-size:17px;font-weight:700;margin-top:2px">Patient Terms &amp; Privacy Acknowledgment</div>
+      </div>
+      <button id="terms-modal-close" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:14px;font-family:inherit">✕ Close</button>
+    </div>
+    <div style="padding:22px 26px;overflow-y:auto;font-size:14px;line-height:1.6;color:var(--text)">
+      <p style="margin-top:0;font-size:13px;color:var(--text-muted)"><strong>Effective May 13, 2026</strong></p>
+      <p>By scheduling your call with Jordan, APRN, FNP, you are agreeing to the following.</p>
+
+      <h3 style="font-size:15px;margin-top:18px;margin-bottom:6px;color:var(--accent)">1. What you are consenting to</h3>
+      <p><strong>A 15-minute pre-op phone consult</strong> with Jordan, APRN, FNP to evaluate your fitness for anesthesia for an upcoming dental procedure. This is a clinical screening — not a substitute for in-person primary care.</p>
+
+      <h3 style="font-size:15px;margin-top:18px;margin-bottom:6px;color:var(--accent)">2. Use and sharing of your health information</h3>
+      <p>You authorize Atlas Anesthesia to use and share your protected health information so that we can:</p>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li>Conduct this consult and provide anesthesia services on the day of your surgery</li>
+        <li>Coordinate with your dentist or oral surgeon, the surgery center, and (if you have one) your primary care physician</li>
+        <li>Process payment and securely store your card for the remaining anesthesia charges</li>
+        <li>Send appointment confirmations and reminders by phone, text, and email</li>
+      </ul>
+
+      <h3 style="font-size:15px;margin-top:18px;margin-bottom:6px;color:var(--accent)">3. Service providers Atlas uses</h3>
+      <p>Atlas works with these HIPAA-compliant vendors. Each has a signed Business Associate Agreement protecting your information:</p>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li><strong>Google</strong> — encrypted database &amp; secure email</li>
+        <li><strong>Amazon Web Services</strong> — encrypted email delivery</li>
+        <li><strong>FAXAGE</strong> — HIPAA-compliant fax communication</li>
+        <li><strong>Stripe</strong> — payment processing</li>
+        <li><strong>Cloudflare</strong> — application infrastructure</li>
+      </ul>
+
+      <h3 style="font-size:15px;margin-top:18px;margin-bottom:6px;color:var(--accent)">4. Electronic communication</h3>
+      <p>You consent to receive calls, texts, and emails from Atlas Anesthesia about your appointment and care, including the call from Jordan, APRN, FNP at the time you select.</p>
+
+      <h3 style="font-size:15px;margin-top:18px;margin-bottom:6px;color:var(--accent)">5. Notice of Privacy Practices</h3>
+      <p>You acknowledge that you have received and reviewed Atlas Anesthesia's Notice of Privacy Practices, which explains how your health information is used and disclosed and your rights regarding it.</p>
+
+      <h3 style="font-size:15px;margin-top:18px;margin-bottom:6px;color:var(--accent)">Your rights</h3>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li>Request a copy of your records by emailing <strong>admin@atlasanesthesia.co</strong></li>
+        <li>Ask Atlas to communicate with you only by a specific method (phone, email, etc.)</li>
+        <li>Revoke this authorization in writing at any time (this will not affect care already provided)</li>
+        <li>File a complaint with Atlas or with HHS Office for Civil Rights — Atlas will not retaliate against you for filing a complaint</li>
+      </ul>
+
+      <h3 style="font-size:15px;margin-top:18px;margin-bottom:6px;color:var(--accent)">Limits of the consult</h3>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li>This is a clinical screening for anesthesia fitness only</li>
+        <li>Final anesthesia clearance is determined the day of surgery based on your condition at that time</li>
+        <li>This consult does not establish a primary care relationship</li>
+      </ul>
+
+      <h3 style="font-size:15px;margin-top:18px;margin-bottom:6px;color:var(--accent)">Cancellation</h3>
+      <ul style="margin:6px 0;padding-left:22px">
+        <li>If you need to reschedule, reply to your confirmation email at least 24 hours before your scheduled call</li>
+        <li>The $100 pre-op fee covers the screening and any related clinical review; it is non-refundable once the consult has taken place</li>
+      </ul>
+
+      <h3 style="font-size:15px;margin-top:18px;margin-bottom:6px;color:var(--accent)">Contact</h3>
+      <p style="margin:4px 0">Atlas Anesthesia LLC<br>1257 Main Street, Stevens Point, WI 54481<br>admin@atlasanesthesia.co · (262) 573-9095</p>
+      <p style="margin:4px 0;font-size:13px;color:var(--text-muted)">Privacy Officer: Devarsh Murthy, CRNA<br>Security Officer: Joshua Condado, CRNA</p>
+    </div>
+    <div style="padding:14px 22px;border-top:1px solid var(--border);background:#f8fafc;display:flex;justify-content:flex-end">
+      <button id="terms-modal-close-2" class="btn-primary">Got it</button>
+    </div>
+  </div>
+</div>
+
 <!-- HEIC → JPG converter (only loads if the patient uploads a HEIC file) -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
-<script type="module" src="assets/js/patient-schedule.js?v=20260524e"></script>
+<script type="module" src="assets/js/patient-schedule.js?v=20260603e"></script>
 </body>
 </html>
