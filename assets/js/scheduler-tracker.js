@@ -172,12 +172,25 @@
           : `<div style="font-size:12px;color:var(--text-faint);font-style:italic">Not scheduled yet</div>`);
 
     const cs = _callStateByKey[e.callStatus || 'none'] || _callStateByKey.none;
-    const callPill = `<button onclick="window._strCycleCallStatus('${e.id}')" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap">${cs.label}</button>`;
+    // The call-status pill belongs to Nicole — Jordan sees the current state
+    // but can't change it. Render as a non-clickable span when he's viewing.
+    const callPill = isAssistant
+      ? `<span title="Only Nicole can update this" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;font-family:inherit;white-space:nowrap;cursor:not-allowed;display:inline-block">${cs.label}</span>`
+      : `<button onclick="window._strCycleCallStatus('${e.id}')" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap">${cs.label}</button>`;
 
-    const pill = (done, onLabel, offLabel, color, toggleFn) =>
-      done
+    // pill helper — takes a `nicoleOnly` flag so the "Call Made" pill is also
+    // read-only for Jordan. The Cleared pill leaves `nicoleOnly` false because
+    // that one is Jordan's to flip.
+    const pill = (done, onLabel, offLabel, color, toggleFn, nicoleOnly) => {
+      if(nicoleOnly && isAssistant) {
+        return done
+          ? `<span title="Only Nicole can update this" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border};font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:not-allowed;display:inline-block">${onLabel}</span>`
+          : `<span title="Only Nicole can update this" style="background:#fff;color:#64748b;border:1px dashed #cbd5e1;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:not-allowed;display:inline-block">${offLabel}</span>`;
+      }
+      return done
         ? `<button onclick="${toggleFn}('${e.id}', false)" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border};font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">${onLabel}</button>`
         : `<button onclick="${toggleFn}('${e.id}', true)"  style="background:#fff;color:#64748b;border:1px dashed #cbd5e1;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">${offLabel}</button>`;
+    };
     const green  = { bg:'#dcfce7', fg:'#166534', border:'#86efac' };
     const indigo = { bg:'#e0e7ff', fg:'#3730a3', border:'#a5b4fc' };
     const nurseCalled = !!e.nurseCalledAt;
@@ -231,8 +244,8 @@
       <div style="display:flex;justify-content:center;align-items:center;text-align:center">${scheduledCell}</div>
       <div style="${centerCell}">${callPill}</div>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">${paidPill}${nudgePill}</div>
-      <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled')}</div>
-      <div style="${centerCell}">${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared')}</div>
+      <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', true)}</div>
+      <div style="${centerCell}">${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared', false)}</div>
       <div style="display:flex;gap:4px;justify-content:center;align-items:center">
         ${openPreopBtn}${editBtn}${delBtn}
       </div>
@@ -909,6 +922,7 @@
 
   // ── Multi-state call pill: none → called → voicemail → failed → none ───────
   window._strCycleCallStatus = async function(id) {
+    if(window._userRole === 'assistant') { alert('Only Nicole can update call status.'); return; }
     const idx = _entries.findIndex(e => e.id === id);
     if(idx === -1) return;
     const e = _entries[idx];
@@ -944,8 +958,10 @@
     window.renderSchedulerTracker();
   };
 
-  // Jordan made the pre-op clearance call to the patient.
+  // Nicole's "Call Made" pill — tracks her outreach to schedule the call.
+  // Jordan can't flip this since it's Nicole's status to maintain.
   window._strToggleNurseCalled = async function(id, done) {
+    if(window._userRole === 'assistant') { alert('Only Nicole can update this pill.'); return; }
     const idx = _entries.findIndex(e => e.id === id);
     if(idx === -1) return;
     const e = _entries[idx];

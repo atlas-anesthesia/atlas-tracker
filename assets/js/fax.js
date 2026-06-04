@@ -144,6 +144,7 @@ window.openFaxModalFromForm = function() {
 
   // Build preview and show modal
   document.getElementById('faxPreviewContent').innerHTML = buildFaxHTML(r);
+  _applyFaxModalAssistantUi();
   document.getElementById('faxModal').style.display = 'flex';
   // Inject the shared Send-now/Schedule-later toggle into the slot above the
   // action buttons. Reset to "Send now" each open.
@@ -152,6 +153,23 @@ window.openFaxModalFromForm = function() {
     slot.innerHTML = window.scheduleToggleHTML('fax');
   }
 };
+
+// Jordan's fax modal hides the records-request affordances — the textarea
+// becomes a plain "Notes" field, and the "Additional Requested Documents"
+// helper text is swapped for one that explains the notes will appear on
+// the cover sheet as-is. CRNAs see the original labels.
+function _applyFaxModalAssistantUi() {
+  const isAssistant = window._userRole === 'assistant';
+  const label = document.querySelector('label[for="fax-requested-docs"], label + #fax-requested-docs')?.previousElementSibling
+             || document.querySelector('#fax-requested-docs')?.parentElement?.querySelector('label');
+  const ta    = document.getElementById('fax-requested-docs');
+  const help  = ta?.parentElement?.querySelector('div[style*="italic"]');
+  if(label) label.textContent = isAssistant ? 'Notes / Message' : 'Additional Requested Documents';
+  if(ta) ta.placeholder = isAssistant
+    ? 'Type any note or message you want to include on the fax cover sheet.'
+    : 'Add extra items here, one per line, e.g.\nEKG within last 12 months\nStress test results (within 5 years)';
+  if(help) help.style.display = isAssistant ? 'none' : '';
+}
 
 // Called from the 📠 Fax button on a saved pre-op record in the history list
 window.openFaxModal = async function(id) {
@@ -203,6 +221,7 @@ window.openFaxModal = async function(id) {
     const preview = document.getElementById('faxPreviewContent');
     if(!preview) { alert('faxPreviewContent not found.'); return; }
     preview.innerHTML = buildFaxHTML(r);
+    _applyFaxModalAssistantUi();
     modal.style.display = 'flex';
     const slot = document.getElementById('fax-modal-schedule-slot');
     if(slot && typeof window.scheduleToggleHTML === 'function') {
@@ -324,13 +343,23 @@ function buildFaxHTML(r) {
   const today = now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
   const worker = (typeof window.currentWorker !== 'undefined' ? window.currentWorker : null) || r.worker || 'dev';
-  const providerName = worker === 'josh' ? 'Josh Condado, CRNA' : 'Dev Murthy, CRNA';
-  const providerCreds = 'CRNA, Anesthesiology';
-  const phone = worker === 'josh' ? '7154996858' : '2625739095';
+  // Jordan (assistant role) sends a plain cover with no records-request body
+  // — just standard contact details + any notes he types in. CRNAs keep the
+  // full records-request layout.
+  const isAssistant = window._userRole === 'assistant';
+  const providerName = isAssistant
+    ? 'Jordan Vallieres, APRN, FNP'
+    : (worker === 'josh' ? 'Josh Condado, CRNA' : 'Dev Murthy, CRNA');
+  const providerCreds = isAssistant
+    ? 'APRN, FNP'
+    : 'CRNA, Anesthesiology';
+  const phone = isAssistant
+    ? '2625739095'
+    : (worker === 'josh' ? '7154996858' : '2625739095');
   // Return fax numbers — Atlas's dedicated lines so the recipient knows
-  // where to fax records back. Jordan (assistant role) has his own line;
-  // CRNAs use their per-worker dedicated lines.
-  const returnFax = window._userRole === 'assistant'
+  // where to fax records back. Jordan has his own line; CRNAs use their
+  // per-worker dedicated lines.
+  const returnFax = isAssistant
     ? '317-608-3539'
     : (worker === 'josh' ? '833-485-5191' : '262-228-1623');
   const patientName = document.getElementById('fax-patient-name')?.value.trim()
@@ -370,11 +399,21 @@ function buildFaxHTML(r) {
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${providerName} — Atlas Anesthesia</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RETURN FAX:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3"><strong>${returnFax}</strong></td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PHONE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${phone}</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td><td style="padding:5px 8px;border:1px solid #bbb">${pages}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td><td style="padding:5px 8px;border:1px solid #bbb">Patient Medical Records Request</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td><td style="padding:5px 8px;border:1px solid #bbb">${pages}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td><td style="padding:5px 8px;border:1px solid #bbb">${isAssistant ? 'Pre-Op Anesthesia Communication' : 'Patient Medical Records Request'}</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PATIENT NAME:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${patientName}</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">DATE OF BIRTH:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${dob}</td></tr>
     ${surgDate ? `<tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">SURGERY DATE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${surgDate}</td></tr>` : ''}
   </table>
+  ${isAssistant ? (function() {
+    // Jordan's cover is a generic notes-only sheet — no records-request body.
+    const notes = (document.getElementById('fax-requested-docs')?.value || '').trim();
+    return `
+  <p style="margin:0 0 8px 0">Dear Colleague,</p>
+  <p style="margin:0 0 10px 0">Please see the attached pages regarding the above patient. If you have any questions, please contact us at the return fax or phone number listed above.</p>
+  ${notes ? `<div style="border:1px solid #bbb;border-radius:4px;padding:10px 12px;background:#fafafa;margin:0 0 14px 0;white-space:pre-wrap;font-size:12px">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
+  <p style="margin:0 0 8px 0">Thank you.</p>
+  <p style="margin:0 0 24px 0">Warm regards,</p>`;
+  })() : `
   <p style="color:#b91c1c;font-weight:bold;font-size:13px;margin:0 0 10px 0">⚠ Urgent — Please Respond ASAP</p>
   <p style="margin:0 0 8px 0">Dear,</p>
   <p style="margin:0 0 8px 0">We are writing on behalf of <strong>${providerName}</strong> at <strong>Atlas Anesthesia</strong> regarding the above-named patient who is scheduled for an upcoming anesthesia procedure at our facility. In order to ensure the safest and most comprehensive anesthesia care plan, we are respectfully requesting the following records be transmitted to our office at your earliest convenience — <strong>preferably as soon as possible</strong>.</p>
@@ -392,7 +431,7 @@ function buildFaxHTML(r) {
   })()}
   <p style="margin:0 0 8px 0">Timely receipt of these records is critical to our pre-operative assessment and scheduling process. If you have any questions or require a signed release of information form, please do not hesitate to contact our office directly.</p>
   <p style="margin:0 0 8px 0">We sincerely appreciate your prompt attention to this matter. Thank you for your cooperation.</p>
-  <p style="margin:0 0 24px 0">Warm regards,</p>
+  <p style="margin:0 0 24px 0">Warm regards,</p>`}
   <div style="border-top:1px solid #000;width:220px;padding-top:4px;font-size:11px">
     ${providerName}<br>Atlas Anesthesia<br>Phone: ${phone}
   </div>
