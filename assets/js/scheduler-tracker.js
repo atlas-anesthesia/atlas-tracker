@@ -179,16 +179,20 @@
       : `<button onclick="window._strCycleCallStatus('${e.id}')" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap">${cs.label}</button>`;
 
     // pill helper:
-    //   `nicoleOnly`   → read-only for Jordan (his view shows the state but
-    //                    can't flip it). The "Call Made" pill uses this.
-    //   `readOnlyAll`  → fully display-only for every role. The "Cleared"
-    //                    pill uses this — it only flips when Jordan sends
-    //                    the final clearance report from his Pre-Op view.
-    const pill = (done, onLabel, offLabel, color, toggleFn, nicoleOnly, readOnlyAll) => {
-      const showAsReadOnly = readOnlyAll || (nicoleOnly && isAssistant);
+    //   `nicoleOnly`    → read-only for Jordan (his view shows the state but
+    //                     can't flip it).
+    //   `assistantOnly` → read-only for Nicole (her view shows the state but
+    //                     can't flip it). The "Jordan Called" pill uses this.
+    //   `readOnlyAll`   → fully display-only for every role. The "Cleared"
+    //                     pill uses this — it only flips when Jordan sends
+    //                     the final clearance report from his Pre-Op view.
+    const pill = (done, onLabel, offLabel, color, toggleFn, nicoleOnly, readOnlyAll, assistantOnly) => {
+      const showAsReadOnly = readOnlyAll
+        || (nicoleOnly && isAssistant)
+        || (assistantOnly && isScheduler);
       const tip = readOnlyAll
         ? "Auto-flips when Jordan submits the final clearance report"
-        : "Only Nicole can update this";
+        : (assistantOnly ? "Only Jordan can update this" : "Only Nicole can update this");
       if(showAsReadOnly) {
         return done
           ? `<span title="${tip}" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border};font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">${onLabel}</span>`
@@ -245,8 +249,8 @@
       <div style="display:flex;justify-content:center;align-items:center;text-align:center">${scheduledCell}</div>
       <div style="${centerCell}">${callPill}</div>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">${paidPill}${nudgePill}</div>
-      <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false, false)}</div>
-      <div style="${centerCell}">${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared', false, true)}</div>
+      <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false, false, true)}</div>
+      <div style="${centerCell}">${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared', false, true, false)}</div>
       <div style="display:flex;gap:4px;justify-content:center;align-items:center">
         ${openPreopBtn}${editBtn}${delBtn}
       </div>
@@ -874,8 +878,10 @@
     window.renderSchedulerTracker();
   };
 
-  // Jordan made the pre-op clearance call to the patient.
+  // Jordan made the pre-op clearance call to the patient. Nicole can't
+  // flip this pill since it tracks Jordan's outreach, not hers.
   window._strToggleNurseCalled = async function(id, done) {
+    if(window._userRole === 'scheduler') { alert('Only Jordan can update this pill.'); return; }
     const idx = _entries.findIndex(e => e.id === id);
     if(idx === -1) return;
     const e = _entries[idx];
