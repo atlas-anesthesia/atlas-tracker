@@ -399,9 +399,9 @@
     if(prior) prior.remove();
     const wrap = document.createElement('div');
     wrap.id = 'jclrConfirmModal';
-    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:99999;display:flex;align-items:stretch;justify-content:center;padding:12px';
     wrap.onclick = e => { if(e.target === wrap) closeConfirmModal(blobUrl); };
-    wrap.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:1100px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+    wrap.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:1600px;height:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)">
       <div style="background:#166534;color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;gap:10px">
         <div>
           <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#bbf7d0">Clearance Confirmation</div>
@@ -412,8 +412,8 @@
       <div style="padding:14px 22px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;font-size:13px;color:#166534">
         <strong>Patient:</strong> ${esc(patient)} &nbsp;·&nbsp; <strong>Sending to:</strong> ${esc(crnaName)} (${esc(crnaEmail)}) &nbsp;·&nbsp; <strong>From:</strong> jordan@atlasanesthesia.co
       </div>
-      <div style="flex:1;min-height:0;background:#525659">
-        <iframe src="${blobUrl}" style="width:100%;height:100%;border:none;display:block" title="Combined report preview"></iframe>
+      <div style="flex:1;min-height:0;background:#525659;display:flex">
+        <iframe src="${blobUrl}" style="flex:1;width:100%;height:100%;border:none;display:block" title="Combined report preview"></iframe>
       </div>
       <div id="jclr-send-status" style="padding:8px 22px;background:#fff;border-top:1px solid var(--border);font-size:13px;color:var(--text-muted);min-height:24px"></div>
       <div style="padding:14px 22px;border-top:1px solid var(--border);background:#f8fafc;display:flex;justify-content:flex-end;gap:10px">
