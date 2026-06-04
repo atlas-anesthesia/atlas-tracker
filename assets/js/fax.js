@@ -160,33 +160,11 @@ window.openFaxModalFromForm = function() {
   }
 };
 
-// Jordan's fax modal hides the records-request affordances — the textarea
-// becomes a plain "Notes" field, and the "Additional Requested Documents"
-// helper text is swapped for one that explains the notes will appear on
-// the cover sheet as-is. CRNAs see the original labels.
-function _applyFaxModalAssistantUi() {
-  const isAssistant = window._userRole === 'assistant';
-  const label = document.querySelector('label[for="fax-requested-docs"], label + #fax-requested-docs')?.previousElementSibling
-             || document.querySelector('#fax-requested-docs')?.parentElement?.querySelector('label');
-  const ta    = document.getElementById('fax-requested-docs');
-  const help  = ta?.parentElement?.querySelector('div[style*="italic"]');
-  if(label) label.textContent = isAssistant ? 'Notes / Message' : 'Additional Requested Documents';
-  if(ta) {
-    ta.placeholder = isAssistant
-      ? 'Type any note or message you want to include on the fax cover sheet.'
-      : 'Add extra items here, one per line, e.g.\nEKG within last 12 months\nStress test results (within 5 years)';
-    // Jordan writes longer notes — give him a roomier textarea so he can see
-    // what he's typing without scrolling. CRNAs keep the compact 3-row size.
-    if(isAssistant) {
-      ta.rows = 8;
-      ta.style.minHeight = '180px';
-    } else {
-      ta.rows = 3;
-      ta.style.minHeight = '';
-    }
-  }
-  if(help) help.style.display = isAssistant ? 'none' : '';
-}
+// No-op kept so existing call sites (openFaxModal / openFaxModalFromForm)
+// can continue calling it. Jordan now sees the same fax modal and cover
+// sheet as the CRNAs — only the FROM / RETURN FAX / phone differ, which
+// are handled inline in buildFaxHTML.
+function _applyFaxModalAssistantUi() {}
 
 // Called from the 📠 Fax button on a saved pre-op record in the history list
 window.openFaxModal = async function(id) {
@@ -371,7 +349,7 @@ function buildFaxHTML(r) {
     ? 'APRN, FNP'
     : 'CRNA, Anesthesiology';
   const phone = isAssistant
-    ? '2625739095'
+    ? '3176952561'
     : (worker === 'josh' ? '7154996858' : '2625739095');
   // Return fax numbers — Atlas's dedicated lines so the recipient knows
   // where to fax records back. Jordan has his own line; CRNAs use their
@@ -416,23 +394,11 @@ function buildFaxHTML(r) {
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">FROM:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${providerName} — Atlas Anesthesia</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RETURN FAX:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3"><strong>${returnFax}</strong></td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PHONE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${phone}</td></tr>
-    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td><td style="padding:5px 8px;border:1px solid #bbb">${pages}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td><td style="padding:5px 8px;border:1px solid #bbb">${isAssistant ? 'Pre-Op Anesthesia Communication' : 'Patient Medical Records Request'}</td></tr>
+    <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PAGES:</td><td style="padding:5px 8px;border:1px solid #bbb">${pages}</td><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">RE:</td><td style="padding:5px 8px;border:1px solid #bbb">Patient Medical Records Request</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">PATIENT NAME:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${patientName}</td></tr>
     <tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">DATE OF BIRTH:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${dob}</td></tr>
     ${surgDate ? `<tr><td style="padding:5px 8px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold">SURGERY DATE:</td><td style="padding:5px 8px;border:1px solid #bbb" colspan="3">${surgDate}</td></tr>` : ''}
   </table>
-  ${isAssistant ? (function() {
-    // Jordan's cover is generic — no records-request list, but with a
-    // proper letter body so it reads professionally on the recipient's end.
-    const notes = (document.getElementById('fax-requested-docs')?.value || '').trim();
-    return `
-  <p style="margin:0 0 8px 0">Dear Colleague,</p>
-  <p style="margin:0 0 10px 0">Thank you for your time and assistance with the above-named patient. I am reaching out from <strong>Atlas Anesthesia</strong> as part of our pre-operative anesthesia evaluation, and have attached the relevant documentation for your review.</p>
-  ${notes ? `<p style="margin:0 0 6px 0"><strong>Additional notes:</strong></p><div style="border:1px solid #bbb;border-radius:4px;padding:10px 12px;background:#fafafa;margin:0 0 14px 0;white-space:pre-wrap;font-size:12px">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
-  <p style="margin:0 0 10px 0">If you have any questions or need additional information, please don't hesitate to contact our office directly at the return fax number or phone number listed above. Timely communication helps us ensure the safest and most coordinated anesthesia care for our shared patient.</p>
-  <p style="margin:0 0 8px 0">Thank you again for your cooperation and partnership in care.</p>
-  <p style="margin:0 0 24px 0">Warm regards,</p>`;
-  })() : `
   <p style="color:#b91c1c;font-weight:bold;font-size:13px;margin:0 0 10px 0">⚠ Urgent — Please Respond ASAP</p>
   <p style="margin:0 0 8px 0">Dear,</p>
   <p style="margin:0 0 8px 0">We are writing on behalf of <strong>${providerName}</strong> at <strong>Atlas Anesthesia</strong> regarding the above-named patient who is scheduled for an upcoming anesthesia procedure at our facility. In order to ensure the safest and most comprehensive anesthesia care plan, we are respectfully requesting the following records be transmitted to our office at your earliest convenience — <strong>preferably as soon as possible</strong>.</p>
@@ -450,7 +416,7 @@ function buildFaxHTML(r) {
   })()}
   <p style="margin:0 0 8px 0">Timely receipt of these records is critical to our pre-operative assessment and scheduling process. If you have any questions or require a signed release of information form, please do not hesitate to contact our office directly.</p>
   <p style="margin:0 0 8px 0">We sincerely appreciate your prompt attention to this matter. Thank you for your cooperation.</p>
-  <p style="margin:0 0 24px 0">Warm regards,</p>`}
+  <p style="margin:0 0 24px 0">Warm regards,</p>
   <div style="border-top:1px solid #000;width:220px;padding-top:4px;font-size:11px">
     ${providerName}<br>Atlas Anesthesia<br>Phone: ${phone}
   </div>
