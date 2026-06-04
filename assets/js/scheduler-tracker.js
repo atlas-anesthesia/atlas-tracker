@@ -244,7 +244,7 @@
       <div style="display:flex;justify-content:center;align-items:center;text-align:center">${scheduledCell}</div>
       <div style="${centerCell}">${callPill}</div>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">${paidPill}${nudgePill}</div>
-      <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', true)}</div>
+      <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false)}</div>
       <div style="${centerCell}">${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared', false)}</div>
       <div style="display:flex;gap:4px;justify-content:center;align-items:center">
         ${openPreopBtn}${editBtn}${delBtn}
@@ -958,10 +958,8 @@
     window.renderSchedulerTracker();
   };
 
-  // Nicole's "Call Made" pill — tracks her outreach to schedule the call.
-  // Jordan can't flip this since it's Nicole's status to maintain.
+  // Jordan made the pre-op clearance call to the patient.
   window._strToggleNurseCalled = async function(id, done) {
-    if(window._userRole === 'assistant') { alert('Only Nicole can update this pill.'); return; }
     const idx = _entries.findIndex(e => e.id === id);
     if(idx === -1) return;
     const e = _entries[idx];
