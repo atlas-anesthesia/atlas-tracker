@@ -5855,12 +5855,18 @@ setSyncing(true);
 await savePreopRecords(cleaned);
 setSyncing(false);
 try { logAudit('preop-edit', updated['po-caseId'] || ''); } catch(e){}
-window._editingPreopId = null;
-const editBanner = document.getElementById('preop-edit-banner');
-if(editBanner) editBanner.remove();
-clearPreop();
-toastSuccess('Pre-Op record updated');
-showTab('mid-case');
+// Jordan stays on the form after editing too — keep _editingPreopId set so
+// the next save continues to update this same record.
+if(window._userRole === 'assistant') {
+  toastSuccess('Pre-Op record updated');
+} else {
+  window._editingPreopId = null;
+  const editBanner = document.getElementById('preop-edit-banner');
+  if(editBanner) editBanner.remove();
+  clearPreop();
+  toastSuccess('Pre-Op record updated');
+  showTab('mid-case');
+}
 return;
 }
 } catch(e) {
@@ -5980,8 +5986,16 @@ getDoc(doc(db,'atlas','preop')).then(ps => {
   _globalRefresh();
 }).catch(()=>{});
 alert('✓ Pre-Op record saved!');
-clearPreop();
-showTab('mid-case');
+// Jordan stays on the Pre-Op form so he can keep working on the same patient
+// (attach docs, mark cleared, etc.) — set the editing id so the next save
+// updates this record instead of duplicating it. Everyone else jumps back
+// to Mid-Case as before.
+if(window._userRole === 'assistant') {
+  window._editingPreopId = record.id;
+} else {
+  clearPreop();
+  showTab('mid-case');
+}
 };
 function prefillNewCase(preopRecord) {
 const caseIdEl = document.getElementById('caseId');
