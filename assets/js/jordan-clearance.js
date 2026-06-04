@@ -281,6 +281,14 @@
       let val = '';
       if(el.type === 'checkbox') val = el.checked ? 'Yes' : '';
       else if(el.type === 'radio') { if(el.checked) val = el.value; }
+      else if(el.tagName === 'SELECT') {
+        // Read the visible option text, not the raw value — surgery centers
+        // and similar dropdowns store internal ids as values but display
+        // human-readable names.
+        const opt = el.options[el.selectedIndex];
+        val = opt ? (opt.textContent || opt.text || opt.value) : '';
+        if(val && val.trim().startsWith('—')) val = ''; // placeholder "— Pick a center —"
+      }
       else val = el.value;
       if(!val) return;
       const label = findLabel(el) || el.id.replace(/^po-/, '').replace(/-/g, ' ');
