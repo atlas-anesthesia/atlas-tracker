@@ -212,18 +212,11 @@
     const paidPill = stripePaid
       ? `<span title="Confirmed via Stripe" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">✓ Paid · Stripe</span>`
       : `<span title="Awaiting Stripe confirmation — patient pays via the portal link" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">⏳ Pending</span>`;
-    // Nudge button — Nicole-only, only when the $100 is still unpaid AND we
-    // have an email to send to. Tap sends a payment-link reminder; the
-    // entry's nudgeSentAt stamps the date so the button shows when it was
-    // last fired.
-    const showNudge = isScheduler && !stripePaid && !manualPaid && !!e.patientEmail;
-    let nudgePill = '';
-    if(showNudge) {
-      const lastNudge = e.nudgeSentAt ? new Date(e.nudgeSentAt).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
-      const label = lastNudge ? '📧 Re-nudge' : '📧 Nudge';
-      const title = lastNudge ? 'Last nudged ' + lastNudge + ' — tap to send another reminder' : 'Send a $100 payment-link reminder to the patient';
-      nudgePill = '<div style="margin-top:5px"><button onclick="window._strSendNudge(\'' + e.id + '\')" title="' + title + '" style="background:#fff;color:#0369a1;border:1px solid #bae6fd;font-size:10px;font-weight:600;padding:3px 8px;border-radius:9px;cursor:pointer;font-family:inherit;white-space:nowrap">' + label + (lastNudge ? ' <span style="color:var(--text-faint);font-weight:400">· ' + lastNudge + '</span>' : '') + '</button></div>';
-    }
+    // Manual Nudge button removed — the worker's nightly cron now sends a
+    // daily payment-link reminder to every patient who's been emailed the
+    // portal link but hasn't paid yet. Stops on its own when Stripe shows
+    // paid.
+    const nudgePill = '';
 
     let linkedPreopId = e.preopRecordId || '';
     if(!linkedPreopId) {
@@ -564,31 +557,14 @@
       body.innerHTML = '<div class="empty-state" style="margin:0;padding:30px"><span class="empty-state-icon">📋</span><div class="empty-state-title">No patients yet</div><div class="empty-state-sub">Click <strong>+ Add Patient</strong> to load one in from the surgery center pre-op sheet.</div></div>';
       return;
     }
-    // HIPAA: split entries into Current (recent / future) and History (surgery
-    // > 3 days ago). History rows mask patient identifiers behind [hidden]
-    // until a reveal action, mirroring the same window the pre-op record
-    // PHI gate uses.
-    const PHI_HIDE_DAYS = 3;
-    const cutoffMs = Date.now() - (PHI_HIDE_DAYS * 86400000);
-    const cutoffIso = new Date(cutoffMs).toISOString().split('T')[0];
-    const isPhi = e => {
-      if(!e.surgeryDate) return false;
-      if(e.surgeryDate >= cutoffIso) return false;
-      const cid = e.preopCaseId || e.id;
-      if(window._revealedCases && window._revealedCases.has && window._revealedCases.has(cid)) return false;
-      return true;
-    };
-
-    const allRows = _entries.slice();
-    const active = [];
-    const history = [];
-    allRows.forEach(e => {
-      if(isPhi(e)) history.push(e);
-      else active.push(e);
-    });
-    // Sort: active soonest-first by surgery date; history newest-first.
+    // Once the operation is done (surgery date has passed), the patient
+    // drops off Nicole's and Jordan's Tracker entirely. Josh and Dev keep
+    // the case in their own Case History tab (atlas/cases), so nothing is
+    // lost — just hidden from views that no longer need it.
+    const todayIso = new Date().toISOString().split('T')[0];
+    const isFinished = e => e.surgeryDate && e.surgeryDate < todayIso;
+    const active = _entries.filter(e => !isFinished(e));
     active.sort((a, b) => (a.surgeryDate || '9999-12-31').localeCompare(b.surgeryDate || '9999-12-31'));
-    history.sort((a, b) => (b.surgeryDate || '').localeCompare(a.surgeryDate || ''));
 
     const COLS = '1.6fr 150px 130px 110px 110px 110px 70px';
     // The rightmost column holds Jordan's 📋 Pre-Op button (assistant view)
@@ -605,28 +581,15 @@
       html += headerRow;
       active.forEach(e => { html += _buildTrackerRow(e, COLS, false); });
     } else {
-      html += '<div class="empty-state" style="margin:0;padding:30px"><span class="empty-state-icon">📋</span><div class="empty-state-title">No active patients</div><div class="empty-state-sub">Patients move to History 3 days after their surgery.</div></div>';
-    }
-
-    if(history.length) {
-      const open = !!window._strHistoryOpen;
-      html += `<div style="border-top:6px solid var(--border-strong,#cbd5e1);margin-top:8px"></div>
-        <button onclick="window._strToggleHistory()" style="width:100%;text-align:left;background:#f8fafc;border:none;border-bottom:1px solid var(--border);padding:12px 14px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between">
-          <span>🔒 History (PHI hidden) · ${history.length} ${history.length===1?'patient':'patients'}</span>
-          <span style="font-size:11px;color:var(--text-faint)">${open ? '▼ Hide' : '▶ Show'}</span>
-        </button>`;
-      if(open) {
-        html += headerRow;
-        history.forEach(e => { html += _buildTrackerRow(e, COLS, true); });
-      }
+      html += '<div class="empty-state" style="margin:0;padding:30px"><span class="empty-state-icon">📋</span><div class="empty-state-title">No active patients</div><div class="empty-state-sub">Patients drop off this Tracker once their surgery date has passed.</div></div>';
     }
     body.innerHTML = html;
   };
 
-  window._strToggleHistory = function() {
-    window._strHistoryOpen = !window._strHistoryOpen;
-    window.renderSchedulerTracker();
-  };
+  // History section removed — finished patients drop off the Tracker once
+  // their surgery date has passed. Kept as a no-op so any stale onclick
+  // from a cached page doesn't throw.
+  window._strToggleHistory = function() {};
 
   // ── Add / Edit Patient modal ────────────────────────────────────────────────
   window._strOpenAddPatient = async function(editId) {
@@ -853,54 +816,12 @@
     window.editPreopRecord(recordId);
   };
 
-  // $100 nudge: send a reminder email to the patient with the Stripe link.
-  // Stamps nudgeSentAt on the entry so the button shows the last-nudged date
-  // and the same patient can be nudged again next week if needed.
-  window._strSendNudge = async function(id) {
-    const idx = _entries.findIndex(e => e.id === id);
-    if(idx === -1) return;
-    const e = _entries[idx];
-    if(!e.patientEmail) { alert('No patient email on file — add one before sending a nudge.'); return; }
-    const last = e.nudgeSentAt ? new Date(e.nudgeSentAt) : null;
-    if(last && (Date.now() - last.getTime()) < 6 * 3600 * 1000) {
-      if(!confirm('Already nudged this patient less than 6 hours ago. Send another?')) return;
-    } else if(last) {
-      if(!confirm('Send another nudge? Last one went out ' + last.toLocaleDateString('en-US', { month:'short', day:'numeric' }) + '.')) return;
-    }
-    const STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
-    const first = (e.patientFirst || '').trim();
-    const greet = first ? ' ' + _esc(first) : ' there';
-    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif">'
-      + '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">'
-      + '<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">'
-      + '<tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Friendly Reminder</div><div style="font-size:20px;font-weight:700;color:#fff">$100 Pre-Op Fee — Payment Reminder</div></td></tr>'
-      + '<tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">'
-      + '<p style="margin:0 0 16px;font-size:18px;font-weight:600;color:#0f172a">Hi' + greet + ',</p>'
-      + '<p style="margin:0 0 14px">Just a quick reminder — we still need the <strong>$100 pre-op clearance fee</strong> before your visit with our nurse practitioner Jordan, APRN, FNP. It only takes a moment via the secure link below.</p>'
-      + '<div style="text-align:center;margin:22px 0"><a href="' + STRIPE_LINK + '" style="display:inline-block;background:#1d3557;color:#fff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:15px;font-weight:600">Pay $100 Pre-Op Fee</a></div>'
-      + '<p style="margin:14px 0 0;font-size:13px;color:#475569">Already paid? You can ignore this — your case will continue as scheduled.</p>'
-      + '<p style="margin:18px 0 0">Thanks,<br><strong>Atlas Anesthesia</strong></p>'
-      + '</td></tr>'
-      + '<tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">Payment is processed securely via Stripe.</div></td></tr>'
-      + '</table></td></tr></table></body></html>';
-    const subject = '$100 Pre-Op Fee — Friendly Reminder · Atlas Anesthesia';
-    try {
-      const res = await fetch(WORKER_URL + '/outreach-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: e.patientEmail, subject, html })
-      });
-      if(!res.ok) throw new Error('worker returned ' + res.status);
-      _entries[idx].nudgeSentAt = new Date().toISOString();
-      _entries[idx].nudgeSentBy = (window.currentUser?.email) || '';
-      await _saveEntries();
-      try { window.logAudit && window.logAudit('preop-visit-nudge-sent', id, e.patientEmail); } catch(_){}
-      window.renderSchedulerTracker();
-      alert('Nudge sent to ' + e.patientEmail);
-    } catch(err) {
-      alert('Could not send nudge: ' + (err.message || err));
-    }
-  };
+  // Manual nudge is removed — the worker's nightly cron now emails every
+  // patient who's been sent the portal link but hasn't paid the $100 yet,
+  // stopping automatically once Stripe shows paid. Kept as a no-op so any
+  // stale onclick handler from a cached page does nothing instead of
+  // throwing.
+  window._strSendNudge = function() {};
 
   // Manual paid toggle — for the case when the $100 was collected outside
   // Stripe (e.g. card taken over the phone via a different processor). Stripe-
