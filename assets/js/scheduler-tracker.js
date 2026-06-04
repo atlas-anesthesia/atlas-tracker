@@ -577,7 +577,7 @@
     // themselves.
     const isAssistantView = (window._userRole === 'assistant');
     const headerRow = `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">
-      <span>Patient</span><span style="text-align:center">Pre-Op Visit</span><span style="text-align:center">Nicole's Call</span><span style="text-align:center">$100 Paid</span><span style="text-align:center">Jordan Called</span><span style="text-align:center">Cleared</span><span style="text-align:center">${isAssistantView ? 'Pre-Op' : ''}</span>
+      <span>Patient</span><span style="text-align:center">Pre-Op Visit</span><span style="text-align:center">Nicole's Call</span><span style="text-align:center">${isAssistantView ? 'Deposit Paid' : '$100 Paid'}</span><span style="text-align:center">Jordan Called</span><span style="text-align:center">Cleared</span><span style="text-align:center">${isAssistantView ? 'Pre-Op' : ''}</span>
     </div>`;
 
     let html = '';
