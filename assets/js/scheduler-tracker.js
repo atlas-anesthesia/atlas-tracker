@@ -366,6 +366,16 @@
     }
     _currentMergedInboxPdf = { dataUrl: pdfDataUrl, filename: mergedFilename, sizeBytes: mergedSize, count: parts.length };
 
+    // Iframes can't render very long data: URLs (browsers cap src length).
+    // Convert to a Blob + blob: URL so big merged PDFs still display.
+    const _pdfBlobUrl = (function() {
+      try {
+        const bytes = _dataUrlToBytes(pdfDataUrl);
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        return URL.createObjectURL(blob);
+      } catch(_) { return pdfDataUrl; }
+    })();
+
     const prior = document.getElementById('strInboxModal');
     if(prior) prior.remove();
     const centers = window.surgeryCenters || [];
@@ -387,7 +397,7 @@
       </div>
       <div class="str-inbox-split" style="display:flex;flex:1;min-height:0;flex-wrap:wrap">
         <div style="flex:1 1 48%;min-width:0;min-height:60vh;background:#525659">
-          <iframe src="${pdfDataUrl}" style="width:100%;height:100%;border:none;display:block" title="Pre-op PDF"></iframe>
+          <iframe src="${_pdfBlobUrl}" style="width:100%;height:100%;border:none;display:block" title="Pre-op PDF"></iframe>
         </div>
         <div style="flex:1 1 52%;min-width:300px;overflow-y:auto;padding:20px 22px;background:var(--surface);max-height:80vh">
           <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Fill in what you can pull from the form on the left. Required fields are marked <span style="color:var(--warn)">*</span>.</div>
@@ -419,6 +429,14 @@
       </div>
     </div>`;
     document.body.appendChild(wrap);
+    // Revoke the blob URL when the modal closes (all close paths land here
+    // because they call wrap.remove() — including the X/Cancel buttons via
+    // document.getElementById('strInboxModal').remove()).
+    const _origRemove = wrap.remove.bind(wrap);
+    wrap.remove = function() {
+      try { URL.revokeObjectURL(_pdfBlobUrl); } catch(_){}
+      _origRemove();
+    };
     setTimeout(() => document.getElementById('strap-first')?.focus(), 60);
   };
 
