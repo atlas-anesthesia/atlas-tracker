@@ -1744,6 +1744,7 @@ window._spvSend = async function() {
   const last  = entry.patientLast || '';
   const phone = entry.patientPhone || '';
   const pcp   = entry.pcp || '';
+  const surgeon = entry.surgeon || '';
   const surgeryDate = entry.surgeryDate || '';
   const surgeryTime = entry.surgeryTime || '';
   // Editable fields.
@@ -1821,6 +1822,10 @@ window._spvSend = async function() {
       window._cachedPreopRecords = existing;
       const newCaseId = generateCaseId(crna, surgeryDate);
       const newRecordId = uid ? uid() : Math.random().toString(36).slice(2,11);
+      // Pull surgery center details so the auto-created record also pre-fills
+      // the Dentist Office Address from whatever Josh/Dev set up in the
+      // Surgery Centers tab.
+      const _scForEntry = (window.surgeryCenters || []).find(c => c.id === entry.surgeryCenterId);
       const newRecord = {
         id: newRecordId,
         worker: crna,
@@ -1831,6 +1836,8 @@ window._spvSend = async function() {
         'po-surgeryDate': surgeryDate,
         'po-startTime': surgeryTime || '',
         'po-surgery-center': entry.surgeryCenterId || '',
+        'po-provider': surgeon,                          // Dentist (surgeon from inbox modal)
+        'po-officeAddress': _scForEntry?.address || '',  // Office address from surgery center setup
         'po-patientFirstName': first,
         'po-patientLastName': last,
         'po-patientEmail': email,
