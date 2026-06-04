@@ -60,11 +60,22 @@
   }
 
   // ── UI injection ──────────────────────────────────────────────────────────
+  let _lastRecordId = '';
   function ensureUI() {
     const isAssistant = window._userRole === 'assistant';
     const existing = $('jordan-clearance-block');
-    if(!isAssistant) { existing?.remove(); return; }
-    if(existing) return;
+    if(!isAssistant) { existing?.remove(); _lastRecordId = ''; return; }
+    if(existing) {
+      // Block already in DOM — but if the open pre-op record changed (Jordan
+      // navigated to another patient, came back to the tab, etc.) the doc
+      // list is stale. Re-pull from Firestore for the current record.
+      const cur = getPreopRecordId();
+      if(cur !== _lastRecordId) {
+        _lastRecordId = cur;
+        refreshDocList();
+      }
+      return;
+    }
     const host = $('tab-preop');
     if(!host) return;
     const block = document.createElement('div');
@@ -85,6 +96,7 @@
     host.appendChild(block);
     $('jclr-file-input').addEventListener('change', onFilesPicked);
     $('jclr-cleared-btn').addEventListener('click', onClearedClicked);
+    _lastRecordId = getPreopRecordId();
     refreshDocList();
   }
   setInterval(ensureUI, 1000);
