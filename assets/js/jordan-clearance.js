@@ -300,6 +300,11 @@
     let y = headerY - 50;
     const lineH = 14;
     const rows = collectPreopFields();
+    if(!rows.length) {
+      page.drawText('No assessment fields filled in yet.', { x: M, y, size: 11, font, color: rgb(0.45, 0.45, 0.45) });
+      page.drawText('Make sure the Pre-Op form has data, save it, then click Cleared.', { x: M, y: y - 16, size: 9, font, color: rgb(0.55, 0.55, 0.55) });
+      return;
+    }
     for(const r of rows) {
       if(y < 50) { // overflow — start a new page
         const p2 = out.addPage([612, 792]);
