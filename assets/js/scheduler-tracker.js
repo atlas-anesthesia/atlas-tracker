@@ -320,18 +320,30 @@
     if(!item) return;
     _currentMergedInboxPdf = null;
     // Figure out which PDF docs to load.
-    //   New shape: item.pdfs = [{idx, filename, sizeBytes}, ...]  →  one doc per idx.
-    //   Legacy:    item.pdfFilename only                          →  single doc at INBOX_PDF_PREFIX + id.
+    //   New shape: item.pdfs = [{idx, filename, sizeBytes, chunkCount?}, ...]  →  one head doc + extra chunks per idx.
+    //   Legacy:    item.pdfFilename only                                       →  single doc at INBOX_PDF_PREFIX + id.
     const refs = Array.isArray(item.pdfs) && item.pdfs.length
-      ? item.pdfs.map(p => ({ path: INBOX_PDF_PREFIX + id + '_' + p.idx, filename: p.filename }))
-      : [{ path: INBOX_PDF_PREFIX + id, filename: item.pdfFilename || 'attachment.pdf' }];
+      ? item.pdfs.map(p => ({ basePath: INBOX_PDF_PREFIX + id + '_' + p.idx, filename: p.filename }))
+      : [{ basePath: INBOX_PDF_PREFIX + id, filename: item.pdfFilename || 'attachment.pdf' }];
     let parts = [];
     try {
-      const snaps = await Promise.all(refs.map(r => window.getDoc(window.doc(window.db, 'atlas', r.path))));
-      parts = snaps.map((s, i) => ({
-        dataUrl: s.exists() ? (s.data().dataUrl || '') : '',
-        filename: (s.exists() && s.data().filename) || refs[i].filename
-      })).filter(p => p.dataUrl);
+      parts = await Promise.all(refs.map(async r => {
+        const head = await window.getDoc(window.doc(window.db, 'atlas', r.basePath));
+        if(!head.exists()) return { dataUrl: '', filename: r.filename };
+        const d = head.data();
+        const chunkCount = d.chunkCount || 1;
+        if(chunkCount === 1) return { dataUrl: d.dataUrl || '', filename: d.filename || r.filename };
+        // Multi-chunk PDF — fetch the rest and stitch them back together.
+        const extra = await Promise.all(
+          Array.from({length: chunkCount - 1}, (_, i) =>
+            window.getDoc(window.doc(window.db, 'atlas', r.basePath + '_c' + (i + 1)))
+          )
+        );
+        let full = d.dataUrl || '';
+        for(const cs of extra) full += (cs.exists() ? (cs.data().dataUrl || '') : '');
+        return { dataUrl: full, filename: d.filename || r.filename };
+      }));
+      parts = parts.filter(p => p.dataUrl);
     } catch(_){}
     if(!parts.length) { alert('Could not load the PDF for this inbox item.'); return; }
     // One PDF — show as-is. Multiple PDFs — merge into a single combined PDF
@@ -479,9 +491,17 @@
           ? { ...i, status: 'processed', processedAt: new Date().toISOString(), processedBy: (window.currentUser?.email) || '', linkedEntryId: newEntryId }
           : i);
         await window.setDoc(window.doc(window.db, 'atlas', INBOX_DOC_PATH), idata);
-        const paths = Array.isArray(inboxItem?.pdfs) && inboxItem.pdfs.length
-          ? inboxItem.pdfs.map(p => INBOX_PDF_PREFIX + inboxId + '_' + p.idx)
-          : [INBOX_PDF_PREFIX + inboxId];
+        const paths = [];
+        if(Array.isArray(inboxItem?.pdfs) && inboxItem.pdfs.length) {
+          for(const p of inboxItem.pdfs) {
+            const base = INBOX_PDF_PREFIX + inboxId + '_' + p.idx;
+            paths.push(base);
+            const cc = p.chunkCount || 1;
+            for(let ci = 1; ci < cc; ci++) paths.push(base + '_c' + ci);
+          }
+        } else {
+          paths.push(INBOX_PDF_PREFIX + inboxId);
+        }
         for(const p of paths) {
           try { await window.deleteDoc(window.doc(window.db, 'atlas', p)); } catch(_){}
         }
