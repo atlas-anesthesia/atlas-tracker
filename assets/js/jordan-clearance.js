@@ -320,6 +320,36 @@
     ].filter(Boolean);
     const prior = hideList.map(el => el.style.visibility);
     hideList.forEach(el => el.style.visibility = 'hidden');
+    // Inject a one-shot "print-style" CSS that darkens labels, solidifies
+    // input backgrounds, and tightens borders — only applies during the
+    // html2canvas capture, then is removed. Makes the snapshot look crisp
+    // on paper without affecting how Jordan sees the live form.
+    const snapStyle = document.createElement('style');
+    snapStyle.id = 'jclr-snapshot-style';
+    snapStyle.textContent = `
+      #tab-preop label,
+      #tab-preop .card-title,
+      #tab-preop .card > div[style*="text-faint"] {
+        color: #0f172a !important;
+      }
+      #tab-preop input:not([type="checkbox"]):not([type="radio"]),
+      #tab-preop select,
+      #tab-preop textarea {
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-color: #94a3b8 !important;
+      }
+      #tab-preop .card {
+        background: #ffffff !important;
+        border-color: #94a3b8 !important;
+        box-shadow: none !important;
+      }
+      #tab-preop input[type="checkbox"]:checked + span,
+      #tab-preop label {
+        font-weight: 500 !important;
+      }
+    `;
+    document.head.appendChild(snapStyle);
     let canvas;
     try {
       canvas = await window.html2canvas(tab, {
@@ -331,6 +361,7 @@
       });
     } finally {
       hideList.forEach((el, i) => el.style.visibility = prior[i] || '');
+      snapStyle.remove();
     }
     // Slice the canvas across letter pages. Source pixels → PDF points scaled
     // so the snapshot width fills the page minus 36 pt margins.
