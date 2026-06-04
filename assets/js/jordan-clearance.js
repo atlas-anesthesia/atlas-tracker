@@ -334,34 +334,50 @@
     hideList.forEach(el => el.style.visibility = 'hidden');
     // Inject a one-shot "print-style" CSS that darkens labels, solidifies
     // input backgrounds, and tightens borders — only applies during the
-    // html2canvas capture, then is removed. Makes the snapshot look crisp
-    // on paper without affecting how Jordan sees the live form.
+    // html2canvas capture, then is removed. Trick: redefine the CSS custom
+    // properties (--text, --text-muted, --text-faint, --border) on
+    // #tab-preop so anything in the live form that uses `var(--text-faint)`
+    // resolves to dark text during the snapshot. This catches inline
+    // `style="color:var(--text-faint)"` on the section sub-labels which
+    // straight selectors couldn't override.
     const snapStyle = document.createElement('style');
     snapStyle.id = 'jclr-snapshot-style';
     snapStyle.textContent = `
-      #tab-preop label,
+      #tab-preop {
+        --text: #0f172a !important;
+        --text-muted: #1e293b !important;
+        --text-faint: #334155 !important;
+        --border: #475569 !important;
+        --bg: #ffffff !important;
+        --surface: #ffffff !important;
+        --surface2: #ffffff !important;
+      }
+      #tab-preop * { color: #0f172a !important; }
       #tab-preop .card-title,
-      #tab-preop .card > div[style*="text-faint"] {
+      #tab-preop label {
         color: #0f172a !important;
+        font-weight: 600 !important;
       }
       #tab-preop input:not([type="checkbox"]):not([type="radio"]),
       #tab-preop select,
       #tab-preop textarea {
         background: #ffffff !important;
         color: #0f172a !important;
-        border-color: #94a3b8 !important;
+        border: 1px solid #475569 !important;
+      }
+      #tab-preop input::placeholder,
+      #tab-preop textarea::placeholder {
+        color: #94a3b8 !important;
       }
       #tab-preop .card {
         background: #ffffff !important;
-        border-color: #94a3b8 !important;
+        border: 1px solid #475569 !important;
         box-shadow: none !important;
-      }
-      #tab-preop input[type="checkbox"]:checked + span,
-      #tab-preop label {
-        font-weight: 500 !important;
       }
     `;
     document.head.appendChild(snapStyle);
+    // Force a reflow so html2canvas reads the freshly-applied styles.
+    void document.body.offsetHeight;
     let canvas;
     try {
       canvas = await window.html2canvas(tab, {

@@ -178,14 +178,21 @@
       ? `<span title="Only Nicole can update this" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;font-family:inherit;white-space:nowrap;cursor:not-allowed;display:inline-block">${cs.label}</span>`
       : `<button onclick="window._strCycleCallStatus('${e.id}')" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap">${cs.label}</button>`;
 
-    // pill helper — takes a `nicoleOnly` flag so the "Call Made" pill is also
-    // read-only for Jordan. The Cleared pill leaves `nicoleOnly` false because
-    // that one is Jordan's to flip.
-    const pill = (done, onLabel, offLabel, color, toggleFn, nicoleOnly) => {
-      if(nicoleOnly && isAssistant) {
+    // pill helper:
+    //   `nicoleOnly`   → read-only for Jordan (his view shows the state but
+    //                    can't flip it). The "Call Made" pill uses this.
+    //   `readOnlyAll`  → fully display-only for every role. The "Cleared"
+    //                    pill uses this — it only flips when Jordan sends
+    //                    the final clearance report from his Pre-Op view.
+    const pill = (done, onLabel, offLabel, color, toggleFn, nicoleOnly, readOnlyAll) => {
+      const showAsReadOnly = readOnlyAll || (nicoleOnly && isAssistant);
+      const tip = readOnlyAll
+        ? "Auto-flips when Jordan submits the final clearance report"
+        : "Only Nicole can update this";
+      if(showAsReadOnly) {
         return done
-          ? `<span title="Only Nicole can update this" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border};font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:not-allowed;display:inline-block">${onLabel}</span>`
-          : `<span title="Only Nicole can update this" style="background:#fff;color:#64748b;border:1px dashed #cbd5e1;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:not-allowed;display:inline-block">${offLabel}</span>`;
+          ? `<span title="${tip}" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border};font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">${onLabel}</span>`
+          : `<span title="${tip}" style="background:#fff;color:#64748b;border:1px dashed #cbd5e1;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">${offLabel}</span>`;
       }
       return done
         ? `<button onclick="${toggleFn}('${e.id}', false)" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border};font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">${onLabel}</button>`
@@ -245,8 +252,8 @@
       <div style="display:flex;justify-content:center;align-items:center;text-align:center">${scheduledCell}</div>
       <div style="${centerCell}">${callPill}</div>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">${paidPill}${nudgePill}</div>
-      <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false)}</div>
-      <div style="${centerCell}">${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared', false)}</div>
+      <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false, false)}</div>
+      <div style="${centerCell}">${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared', false, true)}</div>
       <div style="display:flex;gap:4px;justify-content:center;align-items:center">
         ${openPreopBtn}${editBtn}${delBtn}
       </div>
