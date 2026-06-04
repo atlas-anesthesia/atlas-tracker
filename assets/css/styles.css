@@ -283,3 +283,21 @@ cursor: pointer; transition: background .12s; border-bottom: 1px solid var(--bor
 .nav-dropdown-menu button:last-child { border-bottom: none; }
 .nav-dropdown-menu button:hover { background: var(--surface2); color: var(--text); }
 .nav-dropdown-menu button.active { color: var(--info); font-weight: 500; background: var(--info-light); 
+
+/* Pre-Op form: keep inputs solid white when populated. The default
+   background:var(--bg) plus browser autofill yellowing combined to make
+   the form look "faded" once Jordan loaded a saved record. Solid white
+   keeps it crisp. */
+#tab-preop input:not([type="checkbox"]):not([type="radio"]),
+#tab-preop select,
+#tab-preop textarea {
+  background: #ffffff !important;
+}
+#tab-preop input:-webkit-autofill,
+#tab-preop input:-webkit-autofill:hover,
+#tab-preop input:-webkit-autofill:focus,
+#tab-preop textarea:-webkit-autofill,
+#tab-preop select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 30px #ffffff inset !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
