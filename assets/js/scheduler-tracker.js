@@ -198,12 +198,13 @@
 
     const stripe = _stripeStatus[(e.patientEmail||'').toLowerCase()] || {};
     const stripePaid = !!stripe.preopVisitPaid;
-    const manualPaid = !!e.manualPaidAt;
+    // Phone payments are no longer accepted — the only path to "paid" is the
+    // patient completing Stripe checkout from their portal link. Pill is
+    // display-only: tapping does nothing because the state can't be changed
+    // manually.
     const paidPill = stripePaid
-      ? `<button onclick="window._strToggleManualPaid('${e.id}')" title="Confirmed via Stripe — tap to override" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">✓ Paid · Stripe</button>`
-      : manualPaid
-        ? `<button onclick="window._strToggleManualPaid('${e.id}')" title="Marked paid manually — tap to unmark" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">✓ Paid · Phone</button>`
-        : `<button onclick="window._strToggleManualPaid('${e.id}')" title="Tap to mark paid (e.g. card taken over phone)" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit">⏳ Pending</button>`;
+      ? `<span title="Confirmed via Stripe" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">✓ Paid · Stripe</span>`
+      : `<span title="Awaiting Stripe confirmation — patient pays via the portal link" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">⏳ Pending</span>`;
     // Nudge button — Nicole-only, only when the $100 is still unpaid AND we
     // have an email to send to. Tap sends a payment-link reminder; the
     // entry's nudgeSentAt stamps the date so the button shows when it was
@@ -897,24 +898,11 @@
   // Manual paid toggle — for the case when the $100 was collected outside
   // Stripe (e.g. card taken over the phone via a different processor). Stripe-
   // confirmed paid status is read-only from here; this flag is independent.
-  window._strToggleManualPaid = async function(id) {
-    const idx = _entries.findIndex(e => e.id === id);
-    if(idx === -1) return;
-    const isPaid = !!_entries[idx].manualPaidAt;
-    if(isPaid) {
-      _entries[idx].manualPaidAt = null;
-      _entries[idx].manualPaidBy = null;
-    } else {
-      _entries[idx].manualPaidAt = new Date().toISOString();
-      _entries[idx].manualPaidBy = (window.currentUser?.email) || '';
-      // (Old auto-scheduling-email trigger removed — the patient now uses the
-      // all-in-one portal link in Nicole's first email, which advances them
-      // through photos → payment → scheduling on its own.)
-    }
-    await _saveEntries();
-    try { window.logAudit && window.logAudit(isPaid ? 'preop-visit-manual-unpaid' : 'preop-visit-manual-paid', id); } catch(e){}
-    window.renderSchedulerTracker();
-  };
+  // Manual paid toggle is permanently disabled — phone payments are no longer
+  // accepted, and Stripe is the only source of truth for the paid pill.
+  // Kept as a no-op so any stale onclick handlers (e.g. cached browser
+  // pages) silently do nothing instead of throwing.
+  window._strToggleManualPaid = function() {};
 
   // (Earlier "send a scheduling email post-payment" helper removed —
   // Nicole's first email now contains the all-in-one portal link, so the
