@@ -331,16 +331,97 @@ async function renderSchedule() {
   const tm  = $('terms-modal');
   if(tm)  tm.addEventListener('click', e => { if(e.target === tm) _closeTermsModal(); });
 
+  // Anesthesia consent — checkbox is read-only. Patient must open the
+  // modal, sign in the canvas, and click "I Agree & Sign" — only then
+  // does the checkbox auto-tick and the signature get stored in memory.
   const ccb = $('consent-checkbox');
-  if(ccb) ccb.addEventListener('change', _refreshBookBtn);
-  const cr  = $('consent-readmore');
-  if(cr)  cr.addEventListener('click', e => { e.preventDefault(); _openConsentModal(); });
-  const cc1 = $('consent-modal-close');
-  if(cc1) cc1.addEventListener('click', _closeConsentModal);
-  const cc2 = $('consent-modal-close-2');
-  if(cc2) cc2.addEventListener('click', _closeConsentModal);
+  if(ccb) {
+    ccb.disabled = true; // can't be checked directly
+    ccb.addEventListener('click', e => {
+      // Force the user through the modal.
+      e.preventDefault();
+      _openConsentModal();
+    });
+  }
+  const cr   = $('consent-readmore');
+  if(cr)   cr.addEventListener('click', e => { e.preventDefault(); _openConsentModal(); });
+  const cc1 = $('consent-modal-close');     // ✕ in header
+  if(cc1)  cc1.addEventListener('click', _closeConsentModal);
+  const ccn = $('consent-modal-cancel');    // Cancel in footer
+  if(ccn)  ccn.addEventListener('click', _closeConsentModal);
+  const cag = $('consent-modal-agree');     // I Agree & Sign
+  if(cag)  cag.addEventListener('click', _onConsentAgree);
   const cm  = $('consent-modal');
-  if(cm)  cm.addEventListener('click', e => { if(e.target === cm) _closeConsentModal(); });
+  if(cm)   cm.addEventListener('click', e => { if(e.target === cm) _closeConsentModal(); });
+  // Click on the consent box label (not the disabled checkbox) opens modal.
+  const cBox = $('consent-box');
+  if(cBox) cBox.querySelector('label')?.addEventListener('click', e => {
+    e.preventDefault();
+    _openConsentModal();
+  });
+  _initSignaturePad();
+}
+
+// ── Signature pad ─────────────────────────────────────────────────────────
+let _sigCtx, _sigDrawing = false, _sigHasInk = false, _sigDataUrl = '';
+function _initSignaturePad() {
+  const c = $('sig-canvas');
+  if(!c) return;
+  // Match the canvas backing pixels to its CSS size for crisp lines on
+  // retina screens.
+  const ratio = window.devicePixelRatio || 1;
+  const rect = c.getBoundingClientRect();
+  c.width  = Math.max(1, Math.round(rect.width  * ratio));
+  c.height = Math.max(1, Math.round(rect.height * ratio));
+  _sigCtx = c.getContext('2d');
+  _sigCtx.scale(ratio, ratio);
+  _sigCtx.lineWidth   = 2;
+  _sigCtx.lineCap     = 'round';
+  _sigCtx.lineJoin    = 'round';
+  _sigCtx.strokeStyle = '#0f172a';
+  const pos = (ev) => {
+    const r = c.getBoundingClientRect();
+    const t = ev.touches ? ev.touches[0] : ev;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  };
+  const start = (ev) => { ev.preventDefault(); _sigDrawing = true; const p = pos(ev); _sigCtx.beginPath(); _sigCtx.moveTo(p.x, p.y); };
+  const move  = (ev) => { if(!_sigDrawing) return; ev.preventDefault(); const p = pos(ev); _sigCtx.lineTo(p.x, p.y); _sigCtx.stroke(); _sigHasInk = true; _updateSigStatus(); };
+  const end   = (ev) => { if(!_sigDrawing) return; _sigDrawing = false; _sigCtx.closePath(); };
+  c.addEventListener('mousedown',  start);
+  c.addEventListener('mousemove',  move);
+  c.addEventListener('mouseup',    end);
+  c.addEventListener('mouseleave', end);
+  c.addEventListener('touchstart', start, { passive: false });
+  c.addEventListener('touchmove',  move,  { passive: false });
+  c.addEventListener('touchend',   end);
+  $('sig-clear')?.addEventListener('click', _clearSignature);
+}
+function _clearSignature() {
+  if(!_sigCtx) return;
+  const c = $('sig-canvas');
+  _sigCtx.clearRect(0, 0, c.width, c.height);
+  _sigHasInk = false;
+  _updateSigStatus();
+}
+function _updateSigStatus() {
+  const agree  = $('consent-modal-agree');
+  const status = $('sig-status');
+  if(_sigHasInk) {
+    if(status) { status.textContent = '✓ Signature captured.'; status.style.color = '#166534'; }
+    if(agree)  { agree.disabled = false; agree.style.opacity = ''; agree.style.cursor = ''; }
+  } else {
+    if(status) { status.textContent = 'Please sign above before agreeing.'; status.style.color = ''; }
+    if(agree)  { agree.disabled = true;  agree.style.opacity = '.55'; agree.style.cursor = 'not-allowed'; }
+  }
+}
+function _onConsentAgree() {
+  if(!_sigHasInk) return;
+  const c = $('sig-canvas');
+  _sigDataUrl = c.toDataURL('image/png');
+  const ccb = $('consent-checkbox');
+  if(ccb) { ccb.checked = true; }
+  _closeConsentModal();
+  _refreshBookBtn();
 }
 
 function _openTermsModal()   { const m = $('terms-modal'); if(m) m.classList.remove('hidden'); }
@@ -443,7 +524,8 @@ async function confirmBooking() {
         accepted: true,
         acceptedAt: new Date().toISOString(),
         version: 'v1-2026-05-13',
-        document: 'Atlas Anesthesia Informed Consent for Anesthesia Care'
+        document: 'Atlas Anesthesia Informed Consent for Anesthesia Care',
+        signatureDataUrl: _sigDataUrl || ''
       }
     };
     await setDoc(doc(db, 'atlas', 'preop_visits'), { entries });
@@ -455,6 +537,15 @@ async function confirmBooking() {
     fireEmail(_entry.patientEmail, 'Pre-Op Call Confirmed — Atlas Anesthesia', patientHtml);
     fireEmail('jordan@atlasanesthesia.co', internalSubject, internalHtml);
     fireEmail('admin@atlasanesthesia.co', internalSubject, internalHtml);
+    // Also send the signed anesthesia consent to the assigned CRNA so
+    // they have a record of consent + the patient's signature image on
+    // file before the day of surgery. Falls back to admin@ if the entry
+    // doesn't have a crna assigned yet.
+    const crnaEmail = _entry.crna === 'josh' ? 'josh@atlasanesthesia.co'
+                    : _entry.crna === 'dev'  ? 'dev@atlasanesthesia.co'
+                    : 'admin@atlasanesthesia.co';
+    const consentHtml = buildSignedConsentEmailHTML(patientName, _sigDataUrl, new Date());
+    fireEmail(crnaEmail, 'Signed Anesthesia Consent — ' + patientName, consentHtml);
 
     showConfirm(_selected);
   } catch(err) {
@@ -470,6 +561,46 @@ function showConfirm(sel) {
   $('confirm-summary').innerHTML =
     '<div style="margin-bottom:6px"><strong>' + esc(fmtDate(sel.date)) + '</strong></div>'
     + '<div style="font-size:18px;font-weight:700;color:var(--accent);font-family:DM Mono,monospace">' + esc(fmtTime(sel.time)) + ' Central Time</div>';
+}
+
+// Build the CRNA-bound email body that contains the full signed consent +
+// the patient's inline signature image. The signature is a data:image/png
+// URL so it renders directly inside the email client without an attachment.
+function buildSignedConsentEmailHTML(patientName, sigDataUrl, signedAt) {
+  const sigImg = sigDataUrl
+    ? '<img src="' + sigDataUrl + '" alt="Patient signature" style="display:block;border:1px solid #cbd5e1;border-radius:8px;background:#fff;max-width:520px;width:100%;height:auto">'
+    : '<div style="font-style:italic;color:#94a3b8">No signature captured.</div>';
+  const when = signedAt instanceof Date
+    ? signedAt.toLocaleString('en-US', { dateStyle:'long', timeStyle:'short' })
+    : '';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;line-height:1.55">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 12px"><tr><td align="center">
+      <table width="680" cellpadding="0" cellspacing="0" style="max-width:680px;width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.06)">
+        <tr><td style="background:#1d3557;color:#fff;padding:18px 22px">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0">Atlas Anesthesia · For Your Records</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px">Signed Anesthesia Consent — ${esc(patientName)}</div>
+        </td></tr>
+        <tr><td style="padding:18px 22px;font-size:13px;color:#475569;background:#f8fafc;border-bottom:1px solid #e2e8f0">
+          <strong>Patient:</strong> ${esc(patientName)} &nbsp;·&nbsp;
+          <strong>Signed:</strong> ${esc(when)}
+        </td></tr>
+        <tr><td style="padding:22px 24px;font-size:13px;color:#0f172a">
+          <h3 style="margin:0 0 8px 0;font-size:15px;color:#1d3557">Patient Signature</h3>
+          ${sigImg}
+          <h3 style="margin:18px 0 6px 0;font-size:15px;color:#1d3557">Atlas Anesthesia Informed Consent for Anesthesia Care (v1 · 2026-05-13)</h3>
+          <p>I authorize the anesthesia provider(s) of Atlas Anesthesia LLC — Joshua Condado, CRNA and/or Devarsh Murthy, CRNA — to administer anesthesia for my procedure. I understand the plan may include general anesthesia or monitored anesthesia care (MAC) / IV sedation, and that the provider will choose and may adjust the technique they believe is safest for me based on clinical judgment.</p>
+          <p><strong>Common risks and side effects</strong> include nausea/vomiting, sore throat, hoarseness, dry mouth, headache, dizziness, muscle aches, shivering, IV-site bruising, confusion or memory disturbance, minor lip/tooth/gum/restoration soreness, eye irritation, and temporary nerve tingling.</p>
+          <p><strong>Serious risks</strong> (rare but possible) include severe allergic reaction, difficult/failed intubation and dental damage, aspiration, awareness during general anesthesia, damage to teeth or restorations, nerve injury, cardiovascular events including cardiac arrest, stroke or other neurologic injury, malignant hyperthermia, blood clots/bleeding/infection, postoperative cognitive dysfunction, and in extremely rare cases, death.</p>
+          <p>I authorize the provider to <strong>change the anesthesia plan</strong> as needed for safety, and to perform <strong>emergency procedures</strong> including additional IV/airway placement, emergency medications, CPR/defibrillation, and 911 transfer. Atlas does not administer blood products in office-based settings.</p>
+          <p><strong>I agree to my patient responsibilities:</strong> NPO for at least 8 hours, full disclosure of medications, supplements, recreational substances, medical history, allergies, and possible pregnancy; arrange a responsible adult to drive me home and stay with me several hours after the procedure; no driving, work, or signing legal documents for several hours after anesthesia.</p>
+          <p>I understand that <strong>no guarantee</strong> of outcome has been made. By signing above, I confirm I have read and understood the entire consent, had the opportunity to ask questions, am voluntarily consenting, and am at least 18 years old or am the legal guardian/parent of a minor signing on their behalf.</p>
+        </td></tr>
+        <tr><td style="background:#f8fafc;padding:14px 22px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center">
+          Atlas Anesthesia LLC · admin@atlasanesthesia.co · (262) 573-9095
+        </td></tr>
+      </table>
+    </td></tr></table>
+  </body></html>`;
 }
 
 // ── email helpers ──────────────────────────────────────────────────────────
