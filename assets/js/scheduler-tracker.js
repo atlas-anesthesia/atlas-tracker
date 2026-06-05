@@ -864,9 +864,21 @@
                 if(!entry.preopCaseId && rec['po-caseId']) entry.preopCaseId = rec['po-caseId'];
                 await _saveEntries();
               }
-              console.log('Propagated Nicole edits to pre-op record', rec['po-caseId'] || rec.id, '— Jordan/Josh/Dev should see the update on next open.');
+              const caseLabel = rec['po-caseId'] || rec.id;
+              console.log('Propagated Nicole edits to pre-op record', caseLabel, '— Jordan/Josh/Dev should see the update on next open.');
+              if(typeof window.toastSuccess === 'function') {
+                window.toastSuccess('✓ Synced to Pre-Op ' + caseLabel);
+              }
             } else {
-              console.log('No linked pre-op record found for entry', entry.id, '— nothing to propagate (patient hasn\'t been scheduled with Jordan yet).');
+              const reason = 'No linked Pre-Op record found for ' + (first + ' ' + last).trim() +
+                '. Entry id=' + entry.id +
+                ' preopRecordId=' + (entry.preopRecordId || '(none)') +
+                ' preopCaseId=' + (entry.preopCaseId || '(none)') +
+                '. The Pre-Op gets created when you hit "Book & Send Confirmation" on the Schedule Pre-Op Visit modal.';
+              console.warn(reason);
+              if(typeof window.toastWarn === 'function') {
+                window.toastWarn('Tracker entry not linked to a Pre-Op yet — no propagation.');
+              }
             }
           }
         } catch(propErr) { console.warn('Could not propagate edit to linked pre-op record:', propErr); }
