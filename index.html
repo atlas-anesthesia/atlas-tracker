@@ -362,17 +362,17 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
       <button onclick="closeFaxModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px">Close</button>
     </div>
     <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;align-items:end">
         <div>
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">To (PCP)</label>
-          <select id="fax-to-select" onchange="window.onFaxPcpChange()" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-            <option value="">— Select PCP —</option>
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Patient</label>
+          <select id="fax-to-select" onchange="window.onFaxPatientChange()" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+            <option value="">— Select patient —</option>
           </select>
           <input type="text" id="fax-to-custom" placeholder="Enter recipient name" oninput="document.getElementById('fax-to').value=this.value;if(typeof previewFax==='function')previewFax();" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-top:6px;display:none">
           <input type="hidden" id="fax-to">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax Number <span style="font-weight:400;color:var(--text-faint);text-transform:none">(auto-fills from PCP if saved)</span></label>
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax</label>
           <input type="tel" id="fax-destination" placeholder="+12345678901" value="+1" style="width:100%;padding:7px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
         </div>
         <div>
@@ -387,10 +387,7 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
           <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Date of Birth</label>
           <input type="text" id="fax-dob" placeholder="MM/DD/YYYY" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
         </div>
-        <div>
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Pages</label>
-          <input type="text" id="fax-pages" placeholder="e.g. 2" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-        </div>
+        <input type="hidden" id="fax-pages" value="">
       </div>
       <div style="padding:0 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px">
         <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Additional Requested Documents</label>
@@ -419,8 +416,8 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
 
 
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
-<script src="assets/js/phi-redaction.js?v=20260515b"></script><script type="module" src="assets/js/app.js?v=20260605b"></script>
-  <script type="module" src="assets/js/fax.js?v=20260605b"></script>
+<script src="assets/js/phi-redaction.js?v=20260515b"></script><script type="module" src="assets/js/app.js?v=20260605c"></script>
+  <script type="module" src="assets/js/fax.js?v=20260605c"></script>
   <script type="module" src="assets/js/preop-fax.js?v=20260524a"></script>
   <script type="module" src="assets/js/insurance-sheet.js?v=20260519d"></script>
   <script type="module" src="assets/js/stripe-invoice-matcher.js?v=20260512"></script>
@@ -431,7 +428,7 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
   <script type="module" src="assets/js/deposits.js?v=20260524a"></script>
   <script type="module" src="assets/js/outreach.js?v=20260522a"></script>
   <script type="module" src="assets/js/availability.js?v=20260522b"></script>
-  <script type="module" src="assets/js/scheduler-tracker.js?v=20260605a"></script>
+  <script type="module" src="assets/js/scheduler-tracker.js?v=20260605b"></script>
   <script src="assets/js/jordan-portal-photos.js?v=20260603a"></script>
   <script src="assets/js/jordan-clearance.js?v=20260603k"></script>
   <script src="assets/js/jordan-apple-calendar.js?v=20260603a"></script>

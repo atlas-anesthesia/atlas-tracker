@@ -425,7 +425,11 @@
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
             <div><label style="margin-top:0">Phone <span style="color:var(--warn)">*</span></label><input type="tel" id="strap-phone" placeholder="(555) 123-4567"></div>
+            <div><label style="margin-top:0">Date of birth <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label><input type="date" id="strap-dob"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
             <div><label style="margin-top:0">PCP <span style="font-weight:400;color:var(--text-faint);font-size:11px">(if any)</span></label><input type="text" id="strap-pcp" placeholder="Dr. Smith"></div>
+            <div></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
             <div><label style="margin-top:0">PCP phone <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label><input type="tel" id="strap-pcp-phone" placeholder="(555) 123-4567"></div>
@@ -470,6 +474,7 @@
     const first = (_$('strap-first')?.value || '').trim();
     const last  = (_$('strap-last')?.value || '').trim();
     const phone = (_$('strap-phone')?.value || '').trim();
+    const dob   = (_$('strap-dob')?.value || '').trim();
     const pcp   = (_$('strap-pcp')?.value || '').trim();
     const pcpPhone = (_$('strap-pcp-phone')?.value || '').trim();
     const pcpFax   = (_$('strap-pcp-fax')?.value   || '').trim();
@@ -513,7 +518,7 @@
       }
       const entry = {
         id: newEntryId,
-        patientFirst: first, patientLast: last, patientPhone: phone, pcp, pcpPhone, pcpFax, surgeon,
+        patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, pcp, pcpPhone, pcpFax, surgeon,
         surgeryDate: surgD, surgeryTime: surgT,
         surgeryCenterId, surgeryCenterName,
         pdfFilename: filename,
@@ -632,7 +637,11 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div><label style="margin-top:0">Phone <span style="color:var(--warn)">*</span></label><input type="tel" id="strap-phone" placeholder="(555) 123-4567" value="${_esc(existing?.patientPhone || '')}"></div>
+          <div><label style="margin-top:0">Date of birth <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label><input type="date" id="strap-dob" value="${_esc(existing?.patientDOB || '')}"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div><label style="margin-top:0">PCP <span style="font-weight:400;color:var(--text-faint);font-size:11px">(if any)</span></label><input type="text" id="strap-pcp" placeholder="Dr. Smith" value="${_esc(existing?.pcp || '')}"></div>
+          <div></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div><label style="margin-top:0">PCP phone <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label><input type="tel" id="strap-pcp-phone" placeholder="(555) 123-4567" value="${_esc(existing?.pcpPhone || '')}"></div>
@@ -680,6 +689,7 @@
     const first = (_$('strap-first')?.value || '').trim();
     const last  = (_$('strap-last')?.value || '').trim();
     const phone = (_$('strap-phone')?.value || '').trim();
+    const dob   = (_$('strap-dob')?.value || '').trim();
     const pcp   = (_$('strap-pcp')?.value || '').trim();
     const pcpPhone = (_$('strap-pcp-phone')?.value || '').trim();
     const pcpFax   = (_$('strap-pcp-fax')?.value   || '').trim();
@@ -720,14 +730,14 @@
         if(idx === -1) throw new Error('Entry not found');
         entry = _entries[idx];
         Object.assign(entry, {
-          patientFirst: first, patientLast: last, patientPhone: phone, pcp, pcpPhone, pcpFax, surgeon,
+          patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, pcp, pcpPhone, pcpFax, surgeon,
           surgeryDate: surgD, surgeryTime: surgT,
           surgeryCenterId, surgeryCenterName
         });
       } else {
         entry = {
           id: _uid(),
-          patientFirst: first, patientLast: last, patientPhone: phone, pcp, pcpPhone, pcpFax, surgeon,
+          patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, pcp, pcpPhone, pcpFax, surgeon,
           surgeryDate: surgD, surgeryTime: surgT,
           surgeryCenterId, surgeryCenterName,
           callStatus: 'none',

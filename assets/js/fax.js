@@ -12,98 +12,125 @@ window.previewFax = function() {
   if(preview) preview.innerHTML = buildFaxHTML(record);
 };
 
-// -- PCP dropdown helpers ----------------------------------------------------
-// The fax modal's TO dropdown is the list of PCPs Nicole has added through
-// her Add Patient / inbox modals. Pulls live from window._preopVisitEntries
-// (kept current by the onSnapshot on atlas/preop_visits). PCPs are deduped
-// by name; the freshest entry's pcpPhone + pcpFax win.
-function _faxBuildPcpList() {
+// -- Patient dropdown helpers ------------------------------------------------
+// The fax modal's TO dropdown now lists patients Nicole has added. Picking
+// a patient routes the fax to that patient's PCP (TO field) and pulls every
+// related piece into the cover sheet: patient name, DOB, destination fax,
+// ATTN. Entries with no PCP on file are still shown — Nicole/Jordan can
+// fill the fax number in manually.
+function _faxBuildPatientList() {
   const entries = window._preopVisitEntries || [];
-  const byName = new Map();
-  // Skip "patient has no PCP" style placeholders so they don't clutter the
-  // dropdown. Matches things like "no pcp", "none", "n/a", "patient stated
-  // no PCP", "no primary care", etc.
-  const noPcpRe = /^(none|n\/a|no pcp|no primary( care)?|patient (has|stated|reported|reports) no pcp|patient (has|stated) no primary( care)?)$/i;
-  for(const e of entries) {
-    const name = (e.pcp || '').trim();
-    if(!name) continue;
-    if(noPcpRe.test(name)) continue;
-    const key = name.toLowerCase();
-    const existing = byName.get(key);
-    if(!existing || (e.addedAt || '') > (existing.addedAt || '')) {
-      byName.set(key, e);
-    }
-  }
-  return [...byName.values()].sort((a, b) =>
-    (a.pcp || '').localeCompare(b.pcp || '')
+  return entries.filter(e => (e.patientFirst || e.patientLast)).sort((a, b) =>
+    (a.patientLast || '').localeCompare(b.patientLast || '') ||
+    (a.patientFirst || '').localeCompare(b.patientFirst || '')
   );
 }
 
+// "patient has no PCP" style placeholder detection — used so we don't dump
+// the placeholder text into the TO field when picking a patient who genuinely
+// has no PCP recorded.
+const _NO_PCP_RE = /^(none|n\/a|no pcp|no primary( care)?|patient (has|stated|reported|reports) no pcp|patient (has|stated) no primary( care)?)$/i;
+
 window._populateFaxCenterDropdown = function() {
-  // Kept name for backward-compat with existing callers; now populates PCPs.
+  // Name kept for backward-compat — populates patients now.
   try {
     const sel = document.getElementById('fax-to-select');
     if(!sel) return;
-    const list = _faxBuildPcpList();
-    sel.innerHTML = '<option value="">— Select PCP —</option>'
-      + list.map(e => {
-          const tag = e.pcpFax ? ' (fax on file)' : '';
-          return `<option value="pcp:${e.id}">${e.pcp}${tag}</option>`;
-        }).join('')
+    const list = _faxBuildPatientList();
+    const opts = list.map(e => {
+      const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || 'Patient';
+      const pcp  = (e.pcp || '').trim();
+      const tag  = (!pcp || _NO_PCP_RE.test(pcp))
+        ? ' (no PCP)'
+        : (e.pcpFax ? ' · ' + pcp + ' (fax on file)' : ' · ' + pcp);
+      return `<option value="pt:${e.id}">${name}${tag}</option>`;
+    }).join('');
+    sel.innerHTML = '<option value="">— Select patient —</option>' + opts
       + '<option value="__custom__">✏ Custom / New recipient...</option>';
-  } catch(e) { console.warn('populateFaxPcpDropdown:', e); }
+  } catch(e) { console.warn('populateFaxPatientDropdown:', e); }
 };
 
-window.onFaxPcpChange = function() {
+// Wipe every fax-form field that varies per patient so stale data from a
+// prior selection never bleeds into the new fax. Called by every branch of
+// onFaxPatientChange before anything is filled in.
+function _faxResetPatientFields() {
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.value = v; };
+  const destEl = document.getElementById('fax-destination');
+  set('fax-to', '');
+  if(destEl) {
+    destEl.value = '+1';
+    destEl.readOnly = false;
+    destEl.style.background = '';
+    destEl.style.color = '';
+    destEl.removeAttribute('title');
+  }
+  set('fax-attn', '');
+  set('fax-patient-name', '');
+  set('fax-dob', '');
+  set('fax-requested-docs', '');
+}
+
+window.onFaxPatientChange = function() {
   try {
     const sel = document.getElementById('fax-to-select');
     const customInput = document.getElementById('fax-to-custom');
-    const hiddenTo = document.getElementById('fax-to');
-    const destEl = document.getElementById('fax-destination');
     const val = sel?.value;
+
+    // Always start from a clean slate before applying the new selection.
+    _faxResetPatientFields();
 
     if(val === '__custom__') {
       if(customInput) { customInput.style.display=''; customInput.value=''; customInput.focus(); }
-      if(hiddenTo) hiddenTo.value = '';
-      if(destEl) { destEl.value='+1'; destEl.readOnly=false; destEl.style.background=''; destEl.style.color=''; destEl.removeAttribute('title'); }
+      if(typeof previewFax === 'function') previewFax();
       return;
     }
     if(customInput) { customInput.style.display='none'; customInput.value=''; }
     if(!val) {
-      if(hiddenTo) hiddenTo.value='';
-      if(destEl) { destEl.value='+1'; destEl.readOnly=false; destEl.style.background=''; destEl.style.color=''; }
+      if(typeof previewFax === 'function') previewFax();
       return;
     }
-    // val looks like "pcp:<entryId>" — find the matching preop_visits entry.
-    const entryId = val.startsWith('pcp:') ? val.slice(4) : val;
+    // val looks like "pt:<entryId>" — find the matching preop_visits entry.
+    const entryId = val.startsWith('pt:') ? val.slice(3) : val;
     const entry = (window._preopVisitEntries || []).find(e => e.id === entryId);
-    const pcpName = (entry?.pcp || '').trim();
-    const pcpFax  = (entry?.pcpFax || '').trim();
-    if(hiddenTo) hiddenTo.value = pcpName;
-    if(destEl) {
-      if(pcpFax) {
-        destEl.value = pcpFax;
-        destEl.readOnly = true;
-        destEl.style.background = 'var(--surface2)';
-        destEl.style.color = 'var(--text-muted)';
-        destEl.title = 'From PCP saved on this patient';
-      } else {
-        destEl.value = '+1';
-        destEl.readOnly = false;
-        destEl.style.background = '';
-        destEl.style.color = '';
-        destEl.removeAttribute('title');
+    if(!entry) { if(typeof previewFax === 'function') previewFax(); return; }
+    const pcpName  = ((entry.pcp || '').trim());
+    const pcpClean = (!pcpName || _NO_PCP_RE.test(pcpName)) ? '' : pcpName;
+    const pcpFax   = (entry.pcpFax || '').trim();
+    const patientName = [entry.patientFirst, entry.patientLast].filter(Boolean).join(' ');
+    // TO routes to the PCP for this patient.
+    const hiddenTo = document.getElementById('fax-to');
+    if(hiddenTo) hiddenTo.value = pcpClean;
+    // Destination fax — fill from saved PCP fax if we have one; otherwise
+    // leave editable so Nicole/Jordan can type one in.
+    const destEl = document.getElementById('fax-destination');
+    if(destEl && pcpFax) {
+      destEl.value = pcpFax;
+      destEl.readOnly = true;
+      destEl.style.background = 'var(--surface2)';
+      destEl.style.color = 'var(--text-muted)';
+      destEl.title = 'From PCP fax saved on this patient';
+    }
+    // ATTN defaults to the PCP name (was just reset, so always overwrite).
+    const attn = document.getElementById('fax-attn');
+    if(attn) attn.value = pcpClean;
+    // Patient Name + DOB — auto-fill from the entry.
+    const pn = document.getElementById('fax-patient-name');
+    if(pn) pn.value = patientName;
+    const dob = document.getElementById('fax-dob');
+    if(dob) {
+      const iso = (entry.patientDOB || '').trim();
+      if(iso) {
+        const parts = iso.split('-');
+        dob.value = parts.length === 3 ? `${parts[1]}/${parts[2]}/${parts[0]}` : iso;
       }
     }
-    // Auto-fill the ATTN field with the PCP name if it's empty.
-    const attn = document.getElementById('fax-attn');
-    if(attn && !attn.value.trim()) attn.value = pcpName;
     if(typeof previewFax === 'function') previewFax();
-  } catch(e) { console.warn('onFaxPcpChange:', e); }
+  } catch(e) { console.warn('onFaxPatientChange:', e); }
 };
 
-// Backward-compat alias — old inline onclick=... still calls the old name.
-window.onFaxCenterChange = window.onFaxPcpChange;
+// Backward-compat aliases — older call sites still use these names.
+window.onFaxPcpChange    = window.onFaxPatientChange;
+window.onFaxCenterChange = window.onFaxPatientChange;
 
 // Picker that lets the user choose which cover letter to send before opening
 // the appropriate underlying modal. Replaces two separate "send a fax" entry
@@ -170,19 +197,26 @@ window.openFaxModalFromForm = function() {
 
   _faxRecord = r;
 
-  // Pre-select the PCP for this case if Nicole already saved one on the
-  // linked tracker entry. Matches by PCP name (case-insensitive).
-  const linkedPcpName = (document.getElementById('po-pcp-name')?.value || '').trim();
-  const faxSel = document.getElementById('fax-to-select');
-  if(faxSel && linkedPcpName) {
-    const list = (window._preopVisitEntries || []).filter(e =>
-      ((e.pcp || '').trim().toLowerCase() === linkedPcpName.toLowerCase())
-    );
-    if(list.length) {
-      // Use the freshest entry's data (most recent addedAt).
-      const fresh = list.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''))[0];
-      faxSel.value = 'pcp:' + fresh.id;
-      window.onFaxPcpChange();
+  // Pre-select the patient this pre-op record is for, if the tracker has a
+  // matching entry (linked via po-preopVisitId or by patient name + DOB).
+  const visitId = document.getElementById('po-preopVisitId')?.value || '';
+  const firstName = (document.getElementById('po-patientFirstName')?.value || '').trim();
+  const lastName  = (document.getElementById('po-patientLastName')?.value  || '').trim();
+  const dobIso    = (document.getElementById('po-patientDOB')?.value       || '').trim();
+  const faxSel    = document.getElementById('fax-to-select');
+  if(faxSel) {
+    const entries = window._preopVisitEntries || [];
+    let match = visitId ? entries.find(e => e.id === visitId) : null;
+    if(!match && (firstName || lastName)) {
+      match = entries.find(e =>
+        (e.patientFirst || '').toLowerCase() === firstName.toLowerCase() &&
+        (e.patientLast  || '').toLowerCase() === lastName.toLowerCase()  &&
+        (!dobIso || (e.patientDOB || '') === dobIso)
+      );
+    }
+    if(match) {
+      faxSel.value = 'pt:' + match.id;
+      window.onFaxPatientChange();
     }
   }
 
@@ -221,19 +255,26 @@ window.openFaxModal = async function(id) {
     if(!r) { alert('Record not found. ID: ' + id + '\nCache size: ' + records.length); return; }
     _faxRecord = r;
 
-    // Pre-select the PCP saved on this record. Matches by PCP name against
-    // entries in window._preopVisitEntries (where Nicole's modals store
-    // pcpPhone/pcpFax). Same lookup logic the picker uses.
-    const linkedPcpName = (r['po-pcp-name'] || '').trim();
+    // Pre-select the patient for this record so all the cover-sheet fields
+    // auto-fill. Matches by linked visit id first, then by name+DOB.
+    const visitId  = (r['po-preopVisitId']  || '').trim();
+    const firstName= (r['po-patientFirstName'] || '').trim();
+    const lastName = (r['po-patientLastName']  || '').trim();
+    const dobIso   = (r['po-patientDOB']    || '').trim();
     const faxSel = document.getElementById('fax-to-select');
-    if(faxSel && linkedPcpName) {
-      const list = (window._preopVisitEntries || []).filter(e =>
-        ((e.pcp || '').trim().toLowerCase() === linkedPcpName.toLowerCase())
-      );
-      if(list.length) {
-        const fresh = list.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''))[0];
-        faxSel.value = 'pcp:' + fresh.id;
-        window.onFaxPcpChange();
+    if(faxSel) {
+      const entries = window._preopVisitEntries || [];
+      let match = visitId ? entries.find(e => e.id === visitId) : null;
+      if(!match && (firstName || lastName)) {
+        match = entries.find(e =>
+          (e.patientFirst || '').toLowerCase() === firstName.toLowerCase() &&
+          (e.patientLast  || '').toLowerCase() === lastName.toLowerCase()  &&
+          (!dobIso || (e.patientDOB || '') === dobIso)
+        );
+      }
+      if(match) {
+        faxSel.value = 'pt:' + match.id;
+        window.onFaxPatientChange();
       }
     }
 

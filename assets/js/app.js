@@ -1748,6 +1748,7 @@ window._spvSend = async function() {
   const pcp   = entry.pcp || '';
   const pcpPhone = entry.pcpPhone || '';
   const pcpFax   = entry.pcpFax   || '';
+  const dob   = entry.patientDOB || '';
   const surgeon = entry.surgeon || '';
   const surgeryDate = entry.surgeryDate || '';
   const surgeryTime = entry.surgeryTime || '';
@@ -1844,6 +1845,7 @@ window._spvSend = async function() {
         'po-officeAddress': _scForEntry?.address || '',  // Office address from surgery center setup
         'po-patientFirstName': first,
         'po-patientLastName': last,
+        'po-patientDOB': dob,
         'po-patientEmail': email,
         'po-patientPhone': phone,
         'po-pcp-name': pcp,
