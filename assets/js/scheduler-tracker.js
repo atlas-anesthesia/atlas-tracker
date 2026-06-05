@@ -816,12 +816,26 @@
       // the portal email), patch the Nicole-owned fields on it too so
       // Jordan / Josh / Dev see the freshest patient / PCP / surgery info
       // without having to retype. Jordan's clinical fields aren't touched.
-      if(editId && entry.preopRecordId) {
+      if(editId) {
         try {
           const preopSnap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
           if(preopSnap.exists()) {
             const records = preopSnap.data().records || [];
-            const idx = records.findIndex(r => r && r.id === entry.preopRecordId);
+            // Find the linked pre-op record. Three fallbacks (most → least
+            // specific) so the patch works even if entry.preopRecordId was
+            // never stamped (older entries) or got dropped somehow:
+            //   1) record.id === entry.preopRecordId   (direct pointer)
+            //   2) record['po-preopVisitId'] === entry.id  (back-pointer)
+            //   3) record['po-caseId'] === entry.preopCaseId  (case id)
+            let idx = entry.preopRecordId
+              ? records.findIndex(r => r && r.id === entry.preopRecordId)
+              : -1;
+            if(idx === -1) {
+              idx = records.findIndex(r => r && r['po-preopVisitId'] === entry.id);
+            }
+            if(idx === -1 && entry.preopCaseId) {
+              idx = records.findIndex(r => r && r['po-caseId'] === entry.preopCaseId);
+            }
             if(idx !== -1) {
               const rec = records[idx];
               rec['po-patientFirstName'] = first;
@@ -843,6 +857,16 @@
               await window.setDoc(window.doc(window.db, 'atlas', 'preop'), { records });
               if(Array.isArray(window._rawPreopRecords)) window._rawPreopRecords = records;
               if(Array.isArray(window._cachedPreopRecords)) window._cachedPreopRecords = [...records];
+              // Self-heal: stamp the pointer on the entry so subsequent
+              // edits use the fast path.
+              if(!entry.preopRecordId) {
+                entry.preopRecordId = rec.id;
+                if(!entry.preopCaseId && rec['po-caseId']) entry.preopCaseId = rec['po-caseId'];
+                await _saveEntries();
+              }
+              console.log('Propagated Nicole edits to pre-op record', rec['po-caseId'] || rec.id, '— Jordan/Josh/Dev should see the update on next open.');
+            } else {
+              console.log('No linked pre-op record found for entry', entry.id, '— nothing to propagate (patient hasn\'t been scheduled with Jordan yet).');
             }
           }
         } catch(propErr) { console.warn('Could not propagate edit to linked pre-op record:', propErr); }
