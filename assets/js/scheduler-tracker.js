@@ -928,15 +928,32 @@
     window.renderSchedulerTracker();
   };
 
+  // Cascade delete — removes the patient from EVERY surface the case touches:
+  //   - this Tracker entry (atlas/preop_visits)
+  //   - the linked PDF on the entry (atlas/preop_visit_pdfs.<id>)
+  //   - the linked pre-op record + draft/finalized case + payments / CS log /
+  //     deposits / saved PDFs / payouts, via window._purgeCaseEverywhere
+  // So one click in Nicole's view cleans Josh's, Dev's, and Jordan's surfaces
+  // at the same time.
   window._strDelete = async function(id) {
     const e = _entries.find(x => x.id === id);
     if(!e) return;
     const label = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || '(patient)';
-    if(!confirm(`Remove ${label} from the Tracker?`)) return;
+    const linkedCaseId = e.preopCaseId || '';
+    const msg = linkedCaseId
+      ? `Remove ${label} EVERYWHERE?\n\nThis deletes the Tracker entry plus the linked Pre-Op record, draft / finalized case, payments row, CS log, deposits, saved PDFs, and payouts for ${linkedCaseId}.\n\nThis cannot be undone.`
+      : `Remove ${label} from the Tracker?`;
+    if(!confirm(msg)) return;
+    // Cascade first so a partial failure leaves the Tracker entry behind as
+    // a visible breadcrumb rather than orphaning downstream records.
+    if(linkedCaseId && typeof window._purgeCaseEverywhere === 'function') {
+      try { await window._purgeCaseEverywhere(linkedCaseId); }
+      catch(err) { console.warn('cascade purge failed:', err); }
+    }
     _entries = _entries.filter(x => x.id !== id);
     try { await window.deleteDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + id)); } catch(_){}
     await _saveEntries();
-    try { window.logAudit && window.logAudit('preop-visit-deleted', id, label); } catch(e){}
+    try { window.logAudit && window.logAudit('preop-visit-deleted-cascade', id, label + (linkedCaseId ? ' / ' + linkedCaseId : '')); } catch(e){}
     window.renderSchedulerTracker();
   };
 
