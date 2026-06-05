@@ -7964,7 +7964,11 @@ window.renderFollowupTab = function() {
     // the Pre-Op vs Finalize Case picker. The remaining cells are interactive
     // status buttons and keep their own behavior.
     const openOC = `onclick="openCaseActionModal('${r.id}','${caseId}','${fuLabel}')"`;
-    const preCrnaStyle = isPreCrna ? 'opacity:.5;filter:grayscale(.4)' : '';
+    // Pre-CRNA rows used to be greyed out (opacity:.5, grayscale) to flag
+    // "not ready for review yet." Keeping the From Nicole / From Jordan
+    // tag is enough signal on its own and reading the row is much easier
+    // at full contrast — so the dim-out is gone.
+    const preCrnaStyle = '';
     html += `<div style="display:grid;grid-template-columns:${COLS};gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;background:${rowBg};transition:background .12s;${preCrnaStyle}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${rowBg||'transparent'}'">
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;font-weight:600;overflow:hidden;min-width:0;cursor:pointer">${inlineIndicator}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayId}</span></div>
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;min-width:0;cursor:pointer">${patientName}${reviewTag}</div>
