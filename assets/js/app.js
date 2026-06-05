@@ -1478,7 +1478,7 @@ window.openSchedulePreopVisitModal = function(entryId) {
       <!-- RIGHT: call script panel -->
       <div style="flex:1 1 280px;min-width:0;background:#f8fafc;padding:20px 22px">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#1d3557;margin-bottom:10px">📞 Call script</div>
-        <div id="spv-script" style="font-size:13px;color:#1e293b;line-height:1.6"></div>
+        <div id="spv-script" style="font-size:13px;color:#1e293b;line-height:1.6;font-style:normal"></div>
       </div>
     </div>
   </div>`;
@@ -1499,6 +1499,7 @@ window._spvRenderScript = function() {
   if(!host) return;
   const e = window._spvEntry || {};
   const center = e.surgeryCenterName || '____';
+  const surgeon = e.surgeon || '____';
   const fmtDate = iso => iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }) : '____';
   const fmtTime = t => t ? new Date('2000-01-01T' + t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }) : '____';
   const surgD = fmtDate(e.surgeryDate);
@@ -1508,12 +1509,13 @@ window._spvRenderScript = function() {
   const hl = s => `<strong style="background:#dcfce7;border-radius:4px;padding:1px 5px;color:#166534">${s}</strong>`;
   host.innerHTML = `
     <p style="margin:0 0 10px">Hi, my name is Nicole calling from Atlas Anesthesia.</p>
-    <p style="margin:0 0 10px">I see you have an upcoming procedure scheduled at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</p>
+    <p style="margin:0 0 10px">I see you have an upcoming procedure with ${hl(surgeon)} at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</p>
     <p style="margin:0 0 10px">We wanted to call to schedule anesthesia clearance.</p>
     <p style="margin:0 0 10px">We have our own nurse practitioner, ${hl('Jordan, APRN, FNP')}, who will give you a call and walk you through everything you need to do.</p>
     <p style="margin:0 0 10px">There's a <strong>$100 fee</strong> for the clearance — I'll email you a secure payment link, and once that's paid you'll pick a time to talk with ${hl('Jordan, APRN, FNP')}.</p>
+    <p style="margin:0 0 10px;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:9px 11px;color:#92400e"><strong>📧 Don't forget — ask for their email address</strong> so I can send the payment link and scheduling portal. Drop it in the form to the left before clicking Send.</p>
     <hr style="border:0;border-top:1px solid #e2e8f0;margin:14px 0">
-    <div style="font-size:11px;color:var(--text-faint)">Once they agree, drop their email in the form to the left and pick a visit time from Jordan's open slots. The confirmation email goes out as soon as you book.</div>
+    <div style="font-size:11px;color:var(--text-faint);font-style:normal">Once they agree, drop their email in the form to the left and pick a visit time from Jordan's open slots. The confirmation email goes out as soon as you book.</div>
   `;
 };
 
