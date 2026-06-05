@@ -425,7 +425,7 @@
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
             <div><label style="margin-top:0">Phone <span style="color:var(--warn)">*</span></label><input type="tel" id="strap-phone" placeholder="(555) 123-4567"></div>
-            <div><label style="margin-top:0">Date of birth <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label><input type="date" id="strap-dob"></div>
+            <div><label style="margin-top:0">Date of birth <span style="color:var(--warn)">*</span></label><input type="date" id="strap-dob"></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
             <div><label style="margin-top:0">PCP <span style="font-weight:400;color:var(--text-faint);font-size:11px">(if any)</span></label><input type="text" id="strap-pcp" placeholder="Dr. Smith"></div>
@@ -495,6 +495,7 @@
     const setError = msg => { if(status) { status.textContent = '✗ ' + msg; status.style.color = '#b91c1c'; } };
     if(!first) { setError('First name is required.'); return; }
     if(!phone) { setError('Phone is required.'); return; }
+    if(!dob)   { setError('Date of birth is required.'); return; }
     if(!surgD) { setError('Surgery date is required.'); return; }
 
     const btn = _$('strap-save-btn');
@@ -613,10 +614,34 @@
     const isEdit = !!existing;
     const prior = document.getElementById('strAddPatientModal');
     if(prior) prior.remove();
+
+    // For edit mode with a PDF attached, load the PDF and turn it into a
+    // blob: URL so the iframe can render it without choking on a huge
+    // data: URL. Falls back to single-column if no PDF.
+    let pdfBlobUrl = '';
+    if(isEdit && existing.pdfFilename) {
+      try {
+        const snap = await window.getDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + existing.id));
+        const url = snap.exists() ? (snap.data().dataUrl || '') : '';
+        if(url) {
+          const i = url.indexOf(',');
+          const b64 = i >= 0 ? url.slice(i + 1) : url;
+          const bin = atob(b64);
+          const arr = new Uint8Array(bin.length);
+          for(let k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k);
+          const blob = new Blob([arr], { type: 'application/pdf' });
+          pdfBlobUrl = URL.createObjectURL(blob);
+        }
+      } catch(_){}
+    }
+    const splitScreen = !!pdfBlobUrl;
+
     const wrap = document.createElement('div');
     wrap.id = 'strAddPatientModal';
     wrap.dataset.editId = editId || '';
-    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto';
+    wrap.style.cssText = splitScreen
+      ? 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:stretch;justify-content:center;padding:20px'
+      : 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto';
     wrap.onclick = (e) => { if(e.target === wrap) wrap.remove(); };
 
     // Build the surgery-center dropdown from window.surgeryCenters; fall back
@@ -624,20 +649,15 @@
     const centers = window.surgeryCenters || [];
     const centerOptions = centers.map(c => `<option value="${_esc(c.id)}"${existing && existing.surgeryCenterId === c.id ? ' selected' : ''}>${_esc(c.name)}</option>`).join('');
 
-    wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
-      <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
-        <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">${isEdit ? 'Edit' : 'Add'}</div><div style="font-size:16px;font-weight:600">${isEdit ? 'Patient details' : 'New patient'}</div></div>
-        <button onclick="document.getElementById('strAddPatientModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px">✕</button>
-      </div>
-      <div style="padding:20px 22px">
-        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1e3a8a;line-height:1.5">Load the patient from the surgery center's pre-op sheet. You'll schedule their pre-op visit with Jordan, APRN, FNP from this entry once you reach them by phone.</div>
+    const formInner = `
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1e3a8a;line-height:1.5">${isEdit ? 'Edit the patient\'s details. Anything you change here flows into the auto-created Pre-Op record on the next save.' : 'Load the patient from the surgery center\'s pre-op sheet. You\'ll schedule their pre-op visit with Jordan, APRN, FNP from this entry once you reach them by phone.'}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div><label style="margin-top:0">First name <span style="color:var(--warn)">*</span></label><input type="text" id="strap-first" placeholder="e.g. John" value="${_esc(existing?.patientFirst || '')}"></div>
           <div><label style="margin-top:0">Last name</label><input type="text" id="strap-last" placeholder="e.g. Smith" value="${_esc(existing?.patientLast || '')}"></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div><label style="margin-top:0">Phone <span style="color:var(--warn)">*</span></label><input type="tel" id="strap-phone" placeholder="(555) 123-4567" value="${_esc(existing?.patientPhone || '')}"></div>
-          <div><label style="margin-top:0">Date of birth <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label><input type="date" id="strap-dob" value="${_esc(existing?.patientDOB || '')}"></div>
+          <div><label style="margin-top:0">Date of birth <span style="color:var(--warn)">*</span></label><input type="date" id="strap-dob" value="${_esc(existing?.patientDOB || '')}"></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div><label style="margin-top:0">PCP <span style="font-weight:400;color:var(--text-faint);font-size:11px">(if any)</span></label><input type="text" id="strap-pcp" placeholder="Dr. Smith" value="${_esc(existing?.pcp || '')}"></div>
@@ -667,9 +687,43 @@
         <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--border)">
           <button class="btn btn-ghost" onclick="document.getElementById('strAddPatientModal').remove()">Cancel</button>
           <button class="btn btn-primary" id="strap-save-btn" onclick="window._strSavePatient()" style="background:#1d3557;border-color:#1d3557">${isEdit ? '✓ Save' : '+ Add to Tracker'}</button>
+        </div>`;
+
+    if(splitScreen) {
+      wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:1400px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)">
+        <div style="background:#1d3557;color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="min-width:0">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0">Edit Patient (with attached pre-op PDF)</div>
+            <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📎 ${_esc(existing.pdfFilename || 'attachment.pdf')}</div>
+          </div>
+          <button onclick="document.getElementById('strAddPatientModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;flex-shrink:0">✕</button>
         </div>
-      </div>
-    </div>`;
+        <div class="str-edit-split" style="display:flex;flex:1;min-height:0;flex-wrap:wrap">
+          <div style="flex:1 1 48%;min-width:0;min-height:60vh;background:#525659">
+            <iframe src="${pdfBlobUrl}" style="width:100%;height:100%;border:none;display:block" title="Pre-op PDF"></iframe>
+          </div>
+          <div style="flex:1 1 52%;min-width:300px;overflow-y:auto;padding:20px 22px;background:var(--surface);max-height:90vh">
+            ${formInner}
+          </div>
+        </div>
+      </div>`;
+      // Revoke the blob URL when the modal closes (any path → wrap.remove()).
+      const _origRemove = wrap.remove.bind(wrap);
+      wrap.remove = function() {
+        try { URL.revokeObjectURL(pdfBlobUrl); } catch(_){}
+        _origRemove();
+      };
+    } else {
+      wrap.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
+        <div style="background:#1d3557;color:#fff;padding:18px 22px;border-radius:var(--radius) var(--radius) 0 0;display:flex;justify-content:space-between;align-items:center">
+          <div><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#90b8e0;margin-bottom:3px">${isEdit ? 'Edit' : 'Add'}</div><div style="font-size:16px;font-weight:600">${isEdit ? 'Patient details' : 'New patient'}</div></div>
+          <button onclick="document.getElementById('strAddPatientModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px">✕</button>
+        </div>
+        <div style="padding:20px 22px">
+          ${formInner}
+        </div>
+      </div>`;
+    }
     document.body.appendChild(wrap);
     setTimeout(() => { document.getElementById('strap-first')?.focus(); }, 60);
   };
@@ -712,6 +766,7 @@
     const setError = msg => { if(status) { status.textContent = '✗ ' + msg; status.style.color = '#b91c1c'; } };
     if(!first) { setError('First name is required.'); return; }
     if(!phone) { setError('Phone number is required.'); return; }
+    if(!dob)   { setError('Date of birth is required.'); return; }
     if(!surgD) { setError('Surgery date is required.'); return; }
 
     const file = _$('strap-pdf')?.files?.[0];
