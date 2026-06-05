@@ -12,19 +12,44 @@ window.previewFax = function() {
   if(preview) preview.innerHTML = buildFaxHTML(record);
 };
 
-// -- Surgery center dropdown helpers -----------------------------------------
+// -- PCP dropdown helpers ----------------------------------------------------
+// The fax modal's TO dropdown is the list of PCPs Nicole has added through
+// her Add Patient / inbox modals. Pulls live from window._preopVisitEntries
+// (kept current by the onSnapshot on atlas/preop_visits). PCPs are deduped
+// by name; the freshest entry's pcpPhone + pcpFax win.
+function _faxBuildPcpList() {
+  const entries = window._preopVisitEntries || [];
+  const byName = new Map();
+  for(const e of entries) {
+    const name = (e.pcp || '').trim();
+    if(!name) continue;
+    const key = name.toLowerCase();
+    const existing = byName.get(key);
+    if(!existing || (e.addedAt || '') > (existing.addedAt || '')) {
+      byName.set(key, e);
+    }
+  }
+  return [...byName.values()].sort((a, b) =>
+    (a.pcp || '').localeCompare(b.pcp || '')
+  );
+}
+
 window._populateFaxCenterDropdown = function() {
+  // Kept name for backward-compat with existing callers; now populates PCPs.
   try {
     const sel = document.getElementById('fax-to-select');
     if(!sel) return;
-    const centers = window.surgeryCenters || [];
-    sel.innerHTML = '<option value="">— Select surgery center —</option>'
-      + centers.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
-      + '<option value="__custom__">✏ Custom / New center...</option>';
-  } catch(e) { console.warn('populateFaxCenterDropdown:', e); }
+    const list = _faxBuildPcpList();
+    sel.innerHTML = '<option value="">— Select PCP —</option>'
+      + list.map(e => {
+          const tag = e.pcpFax ? ' (fax on file)' : '';
+          return `<option value="pcp:${e.id}">${e.pcp}${tag}</option>`;
+        }).join('')
+      + '<option value="__custom__">✏ Custom / New recipient...</option>';
+  } catch(e) { console.warn('populateFaxPcpDropdown:', e); }
 };
 
-window.onFaxCenterChange = function() {
+window.onFaxPcpChange = function() {
   try {
     const sel = document.getElementById('fax-to-select');
     const customInput = document.getElementById('fax-to-custom');
@@ -44,20 +69,36 @@ window.onFaxCenterChange = function() {
       if(destEl) { destEl.value='+1'; destEl.readOnly=false; destEl.style.background=''; destEl.style.color=''; }
       return;
     }
-    const center = (window.surgeryCenters||[]).find(c => c.id === val);
-    if(hiddenTo) hiddenTo.value = center?.name || '';
+    // val looks like "pcp:<entryId>" — find the matching preop_visits entry.
+    const entryId = val.startsWith('pcp:') ? val.slice(4) : val;
+    const entry = (window._preopVisitEntries || []).find(e => e.id === entryId);
+    const pcpName = (entry?.pcp || '').trim();
+    const pcpFax  = (entry?.pcpFax || '').trim();
+    if(hiddenTo) hiddenTo.value = pcpName;
     if(destEl) {
-      if(center?.faxNumber) {
-        destEl.value=center.faxNumber; destEl.readOnly=true;
-        destEl.style.background='var(--surface2)'; destEl.style.color='var(--text-muted)';
-        destEl.title='From Surgery Centers tab';
+      if(pcpFax) {
+        destEl.value = pcpFax;
+        destEl.readOnly = true;
+        destEl.style.background = 'var(--surface2)';
+        destEl.style.color = 'var(--text-muted)';
+        destEl.title = 'From PCP saved on this patient';
       } else {
-        destEl.value='+1'; destEl.readOnly=false;
-        destEl.style.background=''; destEl.style.color=''; destEl.removeAttribute('title');
+        destEl.value = '+1';
+        destEl.readOnly = false;
+        destEl.style.background = '';
+        destEl.style.color = '';
+        destEl.removeAttribute('title');
       }
     }
-  } catch(e) { console.warn('onFaxCenterChange:', e); }
+    // Auto-fill the ATTN field with the PCP name if it's empty.
+    const attn = document.getElementById('fax-attn');
+    if(attn && !attn.value.trim()) attn.value = pcpName;
+    if(typeof previewFax === 'function') previewFax();
+  } catch(e) { console.warn('onFaxPcpChange:', e); }
 };
+
+// Backward-compat alias — old inline onclick=... still calls the old name.
+window.onFaxCenterChange = window.onFaxPcpChange;
 
 // Picker that lets the user choose which cover letter to send before opening
 // the appropriate underlying modal. Replaces two separate "send a fax" entry
@@ -124,27 +165,19 @@ window.openFaxModalFromForm = function() {
 
   _faxRecord = r;
 
-  // Pre-select surgery center in dropdown + auto-fill fax number
-  const centerId = document.getElementById('po-surgery-center')?.value;
-  const center = (window.surgeryCenters||surgeryCenters||[]).find(c => c.id === centerId);
+  // Pre-select the PCP for this case if Nicole already saved one on the
+  // linked tracker entry. Matches by PCP name (case-insensitive).
+  const linkedPcpName = (document.getElementById('po-pcp-name')?.value || '').trim();
   const faxSel = document.getElementById('fax-to-select');
-  if(faxSel && centerId) {
-    faxSel.value = centerId;
-    const hiddenTo = document.getElementById('fax-to');
-    if(hiddenTo) hiddenTo.value = center?.name || '';
-  }
-  const faxInput = document.getElementById('fax-destination');
-  if(faxInput) {
-    if(center?.faxNumber) {
-      faxInput.value = center.faxNumber;
-      faxInput.readOnly = true;
-      faxInput.style.background = 'var(--surface2)';
-      faxInput.style.color = 'var(--text-muted)';
-    } else {
-      faxInput.value = '+1';
-      faxInput.readOnly = false;
-      faxInput.style.background = '';
-      faxInput.style.color = '';
+  if(faxSel && linkedPcpName) {
+    const list = (window._preopVisitEntries || []).filter(e =>
+      ((e.pcp || '').trim().toLowerCase() === linkedPcpName.toLowerCase())
+    );
+    if(list.length) {
+      // Use the freshest entry's data (most recent addedAt).
+      const fresh = list.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''))[0];
+      faxSel.value = 'pcp:' + fresh.id;
+      window.onFaxPcpChange();
     }
   }
 
@@ -183,31 +216,19 @@ window.openFaxModal = async function(id) {
     if(!r) { alert('Record not found. ID: ' + id + '\nCache size: ' + records.length); return; }
     _faxRecord = r;
 
-    const centerId = r['po-surgery-center'] || '';
-    const center = (window.surgeryCenters||[]).find(c => c.id === centerId);
-
-    // Pre-select surgery center in dropdown
+    // Pre-select the PCP saved on this record. Matches by PCP name against
+    // entries in window._preopVisitEntries (where Nicole's modals store
+    // pcpPhone/pcpFax). Same lookup logic the picker uses.
+    const linkedPcpName = (r['po-pcp-name'] || '').trim();
     const faxSel = document.getElementById('fax-to-select');
-    if(faxSel && centerId) {
-      faxSel.value = centerId;
-      // Set hidden fax-to to center name
-      const hiddenTo = document.getElementById('fax-to');
-      if(hiddenTo) hiddenTo.value = center?.name || '';
-    }
-
-    // Auto-fill fax number
-    const faxInput = document.getElementById('fax-destination');
-    if(faxInput) {
-      if(center?.faxNumber) {
-        faxInput.value = center.faxNumber;
-        faxInput.readOnly = true;
-        faxInput.style.background = 'var(--surface2)';
-        faxInput.style.color = 'var(--text-muted)';
-      } else {
-        faxInput.value = '+1';
-        faxInput.readOnly = false;
-        faxInput.style.background = '';
-        faxInput.style.color = '';
+    if(faxSel && linkedPcpName) {
+      const list = (window._preopVisitEntries || []).filter(e =>
+        ((e.pcp || '').trim().toLowerCase() === linkedPcpName.toLowerCase())
+      );
+      if(list.length) {
+        const fresh = list.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''))[0];
+        faxSel.value = 'pcp:' + fresh.id;
+        window.onFaxPcpChange();
       }
     }
 

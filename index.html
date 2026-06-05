@@ -364,16 +364,16 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
     <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
         <div>
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax Number</label>
-          <input type="tel" id="fax-destination" placeholder="+12345678901" value="+1" style="width:100%;padding:7px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">To (PCP)</label>
+          <select id="fax-to-select" onchange="window.onFaxPcpChange()" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
+            <option value="">— Select PCP —</option>
+          </select>
+          <input type="text" id="fax-to-custom" placeholder="Enter recipient name" oninput="document.getElementById('fax-to').value=this.value;if(typeof previewFax==='function')previewFax();" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-top:6px;display:none">
+          <input type="hidden" id="fax-to">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">To (Facility)</label>
-          <select id="fax-to-select" onchange="window.onFaxCenterChange()" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-            <option value="">— Select surgery center —</option>
-          </select>
-          <input type="text" id="fax-to-custom" placeholder="Enter facility name" oninput="document.getElementById('fax-to').value=this.value;if(typeof previewFax==='function')previewFax();" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none;margin-top:6px;display:none">
-          <input type="hidden" id="fax-to">
+          <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Destination Fax Number <span style="font-weight:400;color:var(--text-faint);text-transform:none">(auto-fills from PCP if saved)</span></label>
+          <input type="tel" id="fax-destination" placeholder="+12345678901" value="+1" style="width:100%;padding:7px 10px;font-size:13px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
         </div>
         <div>
           <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);display:block;margin-bottom:4px">Attn</label>
@@ -420,7 +420,7 @@ style="border:1.5px solid var(--border);border-radius:var(--radius-sm);width:100
 
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 <script src="assets/js/phi-redaction.js?v=20260515b"></script><script type="module" src="assets/js/app.js?v=20260605b"></script>
-  <script type="module" src="assets/js/fax.js?v=20260603c"></script>
+  <script type="module" src="assets/js/fax.js?v=20260605a"></script>
   <script type="module" src="assets/js/preop-fax.js?v=20260524a"></script>
   <script type="module" src="assets/js/insurance-sheet.js?v=20260519d"></script>
   <script type="module" src="assets/js/stripe-invoice-matcher.js?v=20260512"></script>
