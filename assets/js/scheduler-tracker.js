@@ -780,9 +780,11 @@
     try {
       if(!_entries.length) await _loadEntries();
       let entry;
+      let priorEntry = null;
       if(editId) {
         const idx = _entries.findIndex(e => e.id === editId);
         if(idx === -1) throw new Error('Entry not found');
+        priorEntry = { ..._entries[idx] };  // snapshot before mutation
         entry = _entries[idx];
         Object.assign(entry, {
           patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, pcp, pcpPhone, pcpFax, surgeon,
@@ -810,6 +812,41 @@
         entry.pdfFilename = file.name;
       }
       await _saveEntries();
+      // If this entry has a linked pre-op record (created when Nicole sent
+      // the portal email), patch the Nicole-owned fields on it too so
+      // Jordan / Josh / Dev see the freshest patient / PCP / surgery info
+      // without having to retype. Jordan's clinical fields aren't touched.
+      if(editId && entry.preopRecordId) {
+        try {
+          const preopSnap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
+          if(preopSnap.exists()) {
+            const records = preopSnap.data().records || [];
+            const idx = records.findIndex(r => r && r.id === entry.preopRecordId);
+            if(idx !== -1) {
+              const rec = records[idx];
+              rec['po-patientFirstName'] = first;
+              rec['po-patientLastName']  = last;
+              rec['po-patientPhone']     = phone;
+              rec['po-patientDOB']       = dob;
+              rec['po-pcp-name']         = pcp;
+              rec['po-pcp-phone']        = pcpPhone;
+              rec['po-pcp-fax']          = pcpFax;
+              rec['po-provider']         = surgeon;
+              rec['po-surgeryDate']      = surgD;
+              rec['po-startTime']        = surgT;
+              if(surgeryCenterId) rec['po-surgery-center'] = surgeryCenterId;
+              // Refresh office address from the linked surgery center so
+              // changing the center updates the address too.
+              const sc = (window.surgeryCenters || []).find(c => c.id === surgeryCenterId);
+              if(sc && sc.address) rec['po-officeAddress'] = sc.address;
+              records[idx] = rec;
+              await window.setDoc(window.doc(window.db, 'atlas', 'preop'), { records });
+              if(Array.isArray(window._rawPreopRecords)) window._rawPreopRecords = records;
+              if(Array.isArray(window._cachedPreopRecords)) window._cachedPreopRecords = [...records];
+            }
+          }
+        } catch(propErr) { console.warn('Could not propagate edit to linked pre-op record:', propErr); }
+      }
       try { window.logAudit && window.logAudit(editId ? 'preop-visit-patient-edited' : 'preop-visit-patient-added', entry.id, first + ' ' + last); } catch(e){}
       document.getElementById('strAddPatientModal')?.remove();
       window.renderSchedulerTracker();
