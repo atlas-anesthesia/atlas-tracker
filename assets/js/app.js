@@ -1746,6 +1746,8 @@ window._spvSend = async function() {
   const last  = entry.patientLast || '';
   const phone = entry.patientPhone || '';
   const pcp   = entry.pcp || '';
+  const pcpPhone = entry.pcpPhone || '';
+  const pcpFax   = entry.pcpFax   || '';
   const surgeon = entry.surgeon || '';
   const surgeryDate = entry.surgeryDate || '';
   const surgeryTime = entry.surgeryTime || '';
@@ -1845,6 +1847,8 @@ window._spvSend = async function() {
         'po-patientEmail': email,
         'po-patientPhone': phone,
         'po-pcp-name': pcp,
+        'po-pcp-phone': pcpPhone,
+        'po-pcp-fax':   pcpFax,
         'po-preopVisitId': entryId,
         'po-preopVisitDate': date,
         'po-preopVisitTime': time
@@ -5674,7 +5678,7 @@ data['mallampati'] = mall ? mall.value : '';
 return data;
 }
 function getPreopTextFields() {
-const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-contact-name','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
+const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','po-callDateTime','po-provider','po-surgery-center','po-est-hours','po-patientEmail','po-contact-name','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-fax','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel','po-height-ft','po-height-in','po-weight-lbs','po-height-cm-val','po-weight-kg-val','po-bmi-val','po-iv-difficulty-comment','po-anesthesia-issues-comment','po-cv-other',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment',
 'po-patientFirstName','po-patientLastName','po-patientPhone','po-patientDOB','po-archType','po-officeAddress',
@@ -6042,7 +6046,7 @@ window._preopSetSex = function(value) {
 
 window.clearPreop = function() {
 // Clear text fields
-['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-officeAddress','po-patientEmail','po-patientFirstName','po-patientLastName','po-patientPhone','po-patientDOB','po-archType','po-contact-name','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel',
+['po-caseId','po-surgeryDate','po-startTime','po-callDateTime','po-provider','po-officeAddress','po-patientEmail','po-patientFirstName','po-patientLastName','po-patientPhone','po-patientDOB','po-archType','po-contact-name','po-contact-type','po-contact-phone','po-pcp-name','po-pcp-phone','po-pcp-fax','po-pcp-appt-date','po-bellin-fax-sent-flag','po-driverName','po-driverRel',
 'po-height-ft','po-height-in','po-weight-lbs','po-iv-difficulty-comment','po-anesthesia-issues-comment',
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other',
@@ -6070,6 +6074,8 @@ if(caseIdDisplay) caseIdDisplay.textContent = '';
 // Clear cached PHI-edit state and any PHI-hidden banner
 window._editingPreopRecord = null;
 if(typeof window.removePreopPHIBanner === 'function') window.removePreopPHIBanner();
+// Reset the Procedure Type dropdown back to the empty option + hide custom.
+if(typeof window._poProcedureTypeHydrate === 'function') window._poProcedureTypeHydrate();
 };
 async function renderPreopHistory() {
 const el = document.getElementById('preopHistoryList');
@@ -6296,6 +6302,41 @@ try {
   renderPreopHistory();
 } catch(e) { setSyncing(false); console.error(e); alert('Error deleting: '+e.message); }
 };
+// Procedure Type dropdown (with "Custom…") syncs into the hidden po-procedureType
+// input so the existing save/load arrays don't need changes. Sync runs on
+// user interaction; Hydrate runs after a record loads (or clearPreop) to
+// reflect whatever's already stored in the hidden field.
+window._poProcedureTypeSync = function() {
+  const sel = document.getElementById('po-procedureType-select');
+  const cus = document.getElementById('po-procedureType-custom');
+  const hid = document.getElementById('po-procedureType');
+  if(!sel || !cus || !hid) return;
+  if(sel.value === '__custom') {
+    cus.style.display = '';
+    hid.value = cus.value || '';
+  } else {
+    cus.style.display = 'none';
+    hid.value = sel.value || '';
+  }
+};
+window._poProcedureTypeHydrate = function() {
+  const sel = document.getElementById('po-procedureType-select');
+  const cus = document.getElementById('po-procedureType-custom');
+  const hid = document.getElementById('po-procedureType');
+  if(!sel || !cus || !hid) return;
+  const val = hid.value || '';
+  const known = ['', 'General Anesthesia', 'Monitored Anesthesia Care (MAC) / IV Sedation'];
+  if(known.includes(val)) {
+    sel.value = val;
+    cus.value = '';
+    cus.style.display = 'none';
+  } else {
+    sel.value = '__custom';
+    cus.value = val;
+    cus.style.display = '';
+  }
+};
+
 window.editPreopRecord = async function(id) {
 try {
 const snap = await getDoc(doc(db,'atlas','preop'));
@@ -6370,6 +6411,10 @@ const cb = document.getElementById(p+'-other-cb');
 const row = document.getElementById(p+'-other-row');
 if(cb && row) row.style.display = cb.checked ? 'block' : 'none';
 });
+// Hydrate the Procedure Type dropdown from whatever just landed in the
+// hidden po-procedureType — picks the right option, or falls into Custom…
+// with the saved text shown.
+if(typeof window._poProcedureTypeHydrate === 'function') window._poProcedureTypeHydrate();
 // Check EKG conditions
 checkEKGConditions();
 // Update case ID display
