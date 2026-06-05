@@ -953,10 +953,15 @@ async function _extractCasePhotos(casesArray) {
 // dataUrls so rendering keeps working; this slim version is what gets saved.
 function _stripPhotoData(casesArray) {
   return casesArray.map(c => {
-    const imgs = Array.isArray(c.images)
-      ? c.images.map(im => im && im.id ? { id: im.id } : im)
-      : c.images;
-    return { ...c, images: imgs };
+    // If the case has no images field, return it untouched. The previous
+    // version would set `images: undefined` on such cases via the spread,
+    // which Firestore refuses (setDoc throws "Unsupported field value:
+    // undefined").
+    if(!Array.isArray(c.images)) return c;
+    return {
+      ...c,
+      images: c.images.map(im => (im && im.id) ? { id: im.id } : null)
+    };
   });
 }
 
