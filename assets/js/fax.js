@@ -20,9 +20,14 @@ window.previewFax = function() {
 function _faxBuildPcpList() {
   const entries = window._preopVisitEntries || [];
   const byName = new Map();
+  // Skip "patient has no PCP" style placeholders so they don't clutter the
+  // dropdown. Matches things like "no pcp", "none", "n/a", "patient stated
+  // no PCP", "no primary care", etc.
+  const noPcpRe = /^(none|n\/a|no pcp|no primary( care)?|patient (has|stated|reported|reports) no pcp|patient (has|stated) no primary( care)?)$/i;
   for(const e of entries) {
     const name = (e.pcp || '').trim();
     if(!name) continue;
+    if(noPcpRe.test(name)) continue;
     const key = name.toLowerCase();
     const existing = byName.get(key);
     if(!existing || (e.addedAt || '') > (existing.addedAt || '')) {
