@@ -4324,18 +4324,18 @@ function caseImages(c) {
 window.caseImages = caseImages;
 
 // Resize + JPEG-encode a single uploaded File. Returns {id, dataUrl} or throws.
-// Each photo is stored as a base64 string inside the case record. Firestore
-// caps a document at 1MB total — and the cases doc holds EVERY case — so we
-// have to keep each photo small. 1100px max side + 0.7 JPEG quality lands
-// around 60-120KB per photo (~base64-encoded), comfortable for several photos
-// across many cases.
-const CASE_PHOTO_MAX_SIDE = 1100;
-const CASE_PHOTO_QUALITY = 0.70;
+// Each photo now lives in its own atlas/case_photo_<id> doc (refactored
+// earlier), so the only constraint per photo is the 1 MB Firestore-doc cap.
+// Targeting ~700 KB of base64 (~520 KB binary JPEG) leaves comfortable
+// headroom under the cap and still allows readable photos.
+const CASE_PHOTO_MAX_SIDE = 1600;
+const CASE_PHOTO_QUALITY = 0.80;
 const CASE_PHOTO_LIMIT = 4;
-// Firestore caps a doc at 1 MB. With multiple photos per case + other
-// fields, we need each photo to stay roughly under this. ~180 KB of base64
-// is ~135 KB of binary JPEG — usually plenty for a case-log shot.
-const CASE_PHOTO_TARGET_B64 = 180 * 1024;
+const CASE_PHOTO_TARGET_B64 = 700 * 1024;
+// Hard ceiling — anything still over this after extreme compression gets
+// rejected with a clear error so we never try to save a doc that Firestore
+// will refuse.
+const CASE_PHOTO_HARD_CEILING_B64 = 900 * 1024;
 
 // Lazy-load heic2any from CDN the first time we encounter a HEIC. Avoids
 // pulling ~150 KB of JS on every page load for the 99% of cases that
@@ -4393,21 +4393,35 @@ async function _processCaseImageFile(file) {
     } catch(e) { throw 'HEIC'; }
   }
 
-  // First pass at the standard quality. If the result is still over the
-  // per-photo target, drop quality (and finally max side) in steps until
-  // it fits. Beats the previous "this won't save, sorry" failure mode.
+  // Aggressively iterate until the photo fits comfortably under the target.
+  // Each pass either drops JPEG quality (down to 0.30) or shrinks the longest
+  // side (down to 400 px) — whichever has more headroom left. The loop has a
+  // safety cap of 20 iterations and a hard floor so it always terminates,
+  // and a final guard rejects anything still over the hard ceiling so we
+  // never hand Firestore a doc it'll refuse.
   let maxSide = CASE_PHOTO_MAX_SIDE;
   let quality = CASE_PHOTO_QUALITY;
-  let dataUrl;
-  for(let attempt = 0; attempt < 6; attempt++) {
+  let dataUrl = '';
+  const MIN_QUALITY = 0.30;
+  const MIN_SIDE    = 400;
+  for(let attempt = 0; attempt < 20; attempt++) {
     try { dataUrl = await _renderToJpeg(workingBlob, maxSide, quality); }
     catch(e) { throw 'BAD_IMAGE'; }
     if(dataUrl.length <= CASE_PHOTO_TARGET_B64) break;
-    if(quality > 0.40) {
-      quality = Math.max(0.40, quality - 0.10);
-    } else {
-      maxSide = Math.round(maxSide * 0.85);
+    // Already at the floor on both axes — can't compress any further.
+    if(quality <= MIN_QUALITY && maxSide <= MIN_SIDE) break;
+    if(quality > MIN_QUALITY) {
+      quality = Math.max(MIN_QUALITY, quality - 0.10);
+    } else if(maxSide > MIN_SIDE) {
+      maxSide = Math.max(MIN_SIDE, Math.round(maxSide * 0.82));
     }
+  }
+  if(dataUrl.length > CASE_PHOTO_HARD_CEILING_B64) {
+    // This shouldn't happen with normal phone photos — only if someone
+    // uploads a giant scanned PDF or a multi-megapixel panorama that
+    // doesn't compress well. Tell the user clearly so they can save a
+    // smaller version and retry.
+    throw 'TOO_BIG';
   }
   return { id: uid(), dataUrl };
 }
@@ -4415,7 +4429,7 @@ async function _processCaseImageFile(file) {
 window.handleImageUpload = async function(e) {
   const files = Array.from(e.target.files || []);
   if(!files.length) return;
-  let heicWarned = false, badWarned = false, limitWarned = false;
+  let heicWarned = false, badWarned = false, limitWarned = false, tooBigWarned = false;
   for(const file of files) {
     if(pendingImages.length >= CASE_PHOTO_LIMIT) {
       if(!limitWarned) {
@@ -4431,7 +4445,10 @@ window.handleImageUpload = async function(e) {
       if(err === 'HEIC' && !heicWarned) {
         heicWarned = true;
         alert('Could not convert a HEIC photo automatically.\n\nQuick fix: open the photo in your Photos app and pick "Export Unmodified" or save it as JPEG, then try again. (Or on iPhone: Settings → Camera → Formats → "Most Compatible" so new photos are JPEG by default.)');
-      } else if(err !== 'HEIC' && !badWarned) {
+      } else if(err === 'TOO_BIG' && !tooBigWarned) {
+        tooBigWarned = true;
+        alert('That photo is unusually large and we couldn\'t compress it small enough to save.\n\nTry cropping it first, or take a new photo at a normal size and try again.');
+      } else if(err !== 'HEIC' && err !== 'TOO_BIG' && !badWarned) {
         badWarned = true;
         alert('Could not load one of the images. Try JPEG or PNG.');
       }
