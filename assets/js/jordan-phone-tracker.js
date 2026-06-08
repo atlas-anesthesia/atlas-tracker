@@ -201,6 +201,35 @@
     }
   };
 
+  // Called by scheduler-tracker._strToggleNurseCalled the moment Jordan flips
+  // the "Call Made" pill on the Tracker. Adds a Phone Tracker row for that
+  // patient if one doesn't already exist (idempotent by trackerEntryId — so
+  // toggling the pill off then on doesn't create duplicates). The auto-row's
+  // date/time are stamped to "now"; Jordan can edit afterwards if needed.
+  window._jptLogTrackerCall = async function(trackerEntry) {
+    const trackerEntryId = trackerEntry && trackerEntry.id;
+    if(!trackerEntryId) return;
+    try {
+      const snap = await window.getDoc(window.doc(window.db, 'atlas', DOC_PATH));
+      const list = snap.exists() ? (snap.data().entries || []) : [];
+      if(list.some(e => e && e.trackerEntryId === trackerEntryId)) return; // already logged
+      const now = new Date();
+      const date = now.toISOString().slice(0, 10);
+      const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+      list.push({
+        id: uid(),
+        date, time,
+        patientName: [trackerEntry.patientFirst, trackerEntry.patientLast].filter(Boolean).join(' '),
+        patientDOB: trackerEntry.patientDOB || '',
+        note: 'Auto-logged from Call Made pill',
+        trackerEntryId,
+        addedAt: new Date().toISOString(),
+        addedBy: (window.currentUser?.email) || ''
+      });
+      await window.setDoc(window.doc(window.db, 'atlas', DOC_PATH), { entries: list });
+    } catch(e) { console.warn('phone tracker auto-log failed:', e); }
+  };
+
   window._jptDelete = async function(id) {
     const e = _entries.find(x => x.id === id);
     if(!e) return;

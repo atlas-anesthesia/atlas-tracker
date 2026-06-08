@@ -1043,6 +1043,12 @@
       e.nurseCalledBy = null;
     }
     await _saveEntries();
+    // Auto-log a Phone Tracker entry for this patient the moment Jordan
+    // marks the call made. Idempotent — toggling off and on later won't
+    // create duplicates because _jptLogTrackerCall dedupes by trackerEntryId.
+    if(done && typeof window._jptLogTrackerCall === 'function') {
+      try { await window._jptLogTrackerCall(e); } catch(_){}
+    }
     // Mirror the call status onto the linked pre-op record so Josh/Dev's
     // Follow-up Tracker reflects what Jordan just did. Falls back to a
     // po-preopVisitId lookup for entries that pre-date the preopRecordId
