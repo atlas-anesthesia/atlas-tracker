@@ -597,7 +597,7 @@
     const active = _entries.filter(e => !isFinished(e));
     active.sort((a, b) => (a.surgeryDate || '9999-12-31').localeCompare(b.surgeryDate || '9999-12-31'));
 
-    const COLS = '1.6fr 150px 130px 110px 110px 110px 70px';
+    const COLS = '1.6fr 150px 130px 110px 110px 160px 70px';
     // The rightmost column holds Jordan's 📋 Pre-Op button (assistant view)
     // or the scheduler's ✏ edit / 🗑 delete buttons. Only label it "Pre-Op"
     // for Jordan; for Nicole it stays unlabeled so the icons speak for
