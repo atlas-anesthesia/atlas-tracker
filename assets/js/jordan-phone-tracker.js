@@ -58,9 +58,9 @@
       return (b.time || '').localeCompare(a.time || '');
     });
 
-    const COLS = '110px 90px 1.4fr 110px 1.6fr 80px';
+    const COLS = '130px 110px 1.4fr 130px 1.6fr 50px';
     const header = `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">
-      <span>Date</span><span>Time</span><span>Patient Name</span><span>DOB</span><span>Note</span><span style="text-align:right">Actions</span>
+      <span>Date</span><span>Time</span><span>Patient Name</span><span>DOB</span><span>Note</span><span style="text-align:right"></span>
     </div>`;
 
     if(!rows.length) {
@@ -68,21 +68,48 @@
       return;
     }
 
+    // Inline-editable spreadsheet-style cells. Every field is an input on
+    // the page; onchange writes to Firestore via _jptCellChange.
+    const cellStyle = 'width:100%;padding:6px 8px;font-size:13px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--text);outline:none;font-family:inherit';
+    const focusStyle = "this.style.border='1px solid var(--accent)';this.style.background='#fff'";
+    const blurStyle = "this.style.border='1px solid transparent';this.style.background='transparent'";
     const body = rows.map(r => `
-      <div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;font-size:13px">
-        <span style="color:var(--text);font-weight:500">${esc(fmtDate(r.date))}</span>
-        <span style="color:var(--text);font-family:'DM Mono',monospace">${esc(fmtTime(r.time))}</span>
-        <span style="color:var(--text);font-weight:500">${esc(r.patientName || '')}</span>
-        <span style="color:var(--text-muted);font-family:'DM Mono',monospace">${esc(fmtDate(r.patientDOB))}</span>
-        <span style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.note || '')}">${esc(r.note || '')}</span>
+      <div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);align-items:center">
+        <input type="date" value="${esc(r.date || '')}" onchange="window._jptCellChange('${r.id}','date',this.value)"
+          onfocus="${focusStyle}" onblur="${blurStyle}"
+          style="${cellStyle};font-family:'DM Mono',monospace">
+        <input type="time" value="${esc(r.time || '')}" onchange="window._jptCellChange('${r.id}','time',this.value)"
+          onfocus="${focusStyle}" onblur="${blurStyle}"
+          style="${cellStyle};font-family:'DM Mono',monospace">
+        <input type="text" value="${esc(r.patientName || '')}" placeholder="First Last"
+          onchange="window._jptCellChange('${r.id}','patientName',this.value)"
+          onfocus="${focusStyle}" onblur="${blurStyle}"
+          style="${cellStyle};font-weight:500">
+        <input type="date" value="${esc(r.patientDOB || '')}" onchange="window._jptCellChange('${r.id}','patientDOB',this.value)"
+          onfocus="${focusStyle}" onblur="${blurStyle}"
+          style="${cellStyle};color:var(--text-muted);font-family:'DM Mono',monospace">
+        <input type="text" value="${esc(r.note || '')}" placeholder="Note"
+          onchange="window._jptCellChange('${r.id}','note',this.value)"
+          onfocus="${focusStyle}" onblur="${blurStyle}"
+          style="${cellStyle};color:var(--text-muted)">
         <span style="display:flex;gap:4px;justify-content:flex-end">
-          <button onclick="window._jptOpenEdit('${r.id}')" class="btn btn-ghost btn-sm" title="Edit" style="font-size:11px;padding:3px 7px">✏</button>
-          <button onclick="window._jptDelete('${r.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>
+          <button onclick="window._jptDelete('${r.id}')" title="Delete" style="background:none;border:none;color:var(--warn);font-size:14px;cursor:pointer;padding:4px 6px">🗑</button>
         </span>
       </div>`).join('');
 
     host.innerHTML = header + body;
   }
+
+  // Cell-edit save — one field at a time. Re-renders the list so sort order
+  // updates if date/time changed.
+  window._jptCellChange = async function(id, field, value) {
+    const idx = _entries.findIndex(e => e.id === id);
+    if(idx === -1) return;
+    _entries[idx] = { ..._entries[idx], [field]: (value == null ? '' : String(value)) };
+    try { await save(); } catch(err) { alert('Could not save edit: ' + (err.message || err)); return; }
+    try { window.logAudit && window.logAudit('phone-call-cell-edited', '', _entries[idx].patientName || ''); } catch(_){}
+    render();
+  };
   // Re-render whenever the tab becomes active so it looks fresh.
   setInterval(() => {
     if(document.getElementById('tab-phone-tracker')?.classList.contains('active')) render();
