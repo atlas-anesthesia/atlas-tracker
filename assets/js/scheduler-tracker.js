@@ -205,7 +205,22 @@
     const green  = { bg:'#dcfce7', fg:'#166534', border:'#86efac' };
     const indigo = { bg:'#e0e7ff', fg:'#3730a3', border:'#a5b4fc' };
     const nurseCalled = !!e.nurseCalledAt;
-    const cleared     = !!e.clearedAt;
+    // 4-state clearance pill — pending → faxed → waiting → cleared → pending.
+    // Backward compat: a legacy entry with clearedAt but no clearedStatus
+    // shows as "cleared". Auto-flips to "cleared" when Jordan submits the
+    // final clearance report via _strToggleCleared.
+    const clearedKey = e.clearedStatus || (e.clearedAt ? 'cleared' : '');
+    const clearedStates = {
+      '':        { label: '○ Pending',               bg: '#fff',    fg: '#64748b', border: '#cbd5e1', dashed: true,  weight: 600 },
+      'faxed':   { label: '📠 Faxed',                bg: '#ffedd5', fg: '#9a3412', border: '#fed7aa', dashed: false, weight: 700 },
+      'waiting': { label: '⏳ Waiting for records',  bg: '#fef3c7', fg: '#92400e', border: '#fde68a', dashed: false, weight: 700 },
+      'cleared': { label: '✓ Cleared',               bg: '#e0e7ff', fg: '#3730a3', border: '#a5b4fc', dashed: false, weight: 700 }
+    };
+    const cks = clearedStates[clearedKey] || clearedStates[''];
+    const clearedTip = isAssistant ? 'Tap to cycle: Pending → Faxed → Waiting → Cleared' : 'Jordan updates this';
+    const clearedPill = isAssistant
+      ? `<button onclick="window._strCycleClearedStatus('${e.id}')" title="${clearedTip}" style="background:${cks.bg};color:${cks.fg};border:1px ${cks.dashed?'dashed':'solid'} ${cks.border};font-size:11px;font-weight:${cks.weight};padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap">${cks.label}</button>`
+      : `<span title="${clearedTip}" style="background:${cks.bg};color:${cks.fg};border:1px ${cks.dashed?'dashed':'solid'} ${cks.border};font-size:11px;font-weight:${cks.weight};padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block;white-space:nowrap">${cks.label}</span>`;
 
     const stripe = _stripeStatus[(e.patientEmail||'').toLowerCase()] || {};
     const stripePaid = !!stripe.preopVisitPaid;
@@ -250,7 +265,7 @@
       <div style="${centerCell}">${callPill}</div>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">${paidPill}${nudgePill}</div>
       <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false, false, true)}</div>
-      <div style="${centerCell}">${pill(cleared,     '✓ Cleared',   '○ Pending', indigo, 'window._strToggleCleared', false, true, false)}</div>
+      <div style="${centerCell}">${clearedPill}</div>
       <div style="display:flex;gap:4px;justify-content:center;align-items:center">
         ${openPreopBtn}${editBtn}${delBtn}
       </div>
@@ -1068,19 +1083,49 @@
     window.renderSchedulerTracker();
   };
 
-  // Patient cleared for anesthesia services by Jordan.
+  // Patient cleared for anesthesia services by Jordan.  Called by the
+  // clearance-report submit flow (jordan-clearance.js) — that path bypasses
+  // the cycle and goes straight to the final "cleared" state. Kept binary
+  // (done true/false) for backward compatibility with that caller.
   window._strToggleCleared = async function(id, done) {
     const idx = _entries.findIndex(e => e.id === id);
     if(idx === -1) return;
     if(done) {
+      _entries[idx].clearedStatus = 'cleared';
       _entries[idx].clearedAt = new Date().toISOString();
       _entries[idx].clearedBy = (window.currentUser?.email) || '';
     } else {
+      _entries[idx].clearedStatus = '';
       _entries[idx].clearedAt = null;
       _entries[idx].clearedBy = null;
     }
     await _saveEntries();
     try { window.logAudit && window.logAudit(done ? 'preop-visit-cleared' : 'preop-visit-uncleared', id, _entries[idx].patientFirst + ' ' + _entries[idx].patientLast); } catch(e){}
+    window.renderSchedulerTracker();
+  };
+
+  // Jordan cycles the Cleared pill: '' → 'faxed' → 'waiting' → 'cleared' → ''.
+  const _CLEARED_CYCLE = ['', 'faxed', 'waiting', 'cleared'];
+  window._strCycleClearedStatus = async function(id) {
+    if(window._userRole !== 'assistant') { alert('Only Jordan can update this pill.'); return; }
+    const idx = _entries.findIndex(e => e.id === id);
+    if(idx === -1) return;
+    const e = _entries[idx];
+    const cur = e.clearedStatus || (e.clearedAt ? 'cleared' : '');
+    const next = _CLEARED_CYCLE[(_CLEARED_CYCLE.indexOf(cur) + 1) % _CLEARED_CYCLE.length];
+    e.clearedStatus = next;
+    e.clearedStatusAt = new Date().toISOString();
+    e.clearedStatusBy = (window.currentUser?.email) || '';
+    // Mirror to legacy clearedAt so anything still reading that flag works.
+    if(next === 'cleared') {
+      e.clearedAt = new Date().toISOString();
+      e.clearedBy = (window.currentUser?.email) || '';
+    } else {
+      e.clearedAt = null;
+      e.clearedBy = null;
+    }
+    await _saveEntries();
+    try { window.logAudit && window.logAudit('preop-cleared-status', id, (e.patientFirst + ' ' + e.patientLast).trim() + ' / ' + (next || 'pending')); } catch(_){}
     window.renderSchedulerTracker();
   };
 
