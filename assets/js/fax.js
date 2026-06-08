@@ -180,6 +180,9 @@ window.openFaxPicker = function() {
 
 window.openFaxModalFromForm = function() {
   window._populateFaxCenterDropdown();
+  // Reset every per-fax field to a clean slate so nothing from the last
+  // fax leaks into this one — destination always starts at "+1".
+  if(typeof window.clearFaxFields === 'function') window.clearFaxFields();
   // Read all form fields directly — no save, no clear, nothing changes
   const r = {};
   document.querySelectorAll('#tab-preop input, #tab-preop select, #tab-preop textarea').forEach(el => {
@@ -241,6 +244,9 @@ function _applyFaxModalAssistantUi() {}
 // Called from the 📠 Fax button on a saved pre-op record in the history list
 window.openFaxModal = async function(id) {
   window._populateFaxCenterDropdown();
+  // Reset every per-fax field so destination always starts at "+1" and
+  // nothing from a previous fax bleeds through.
+  if(typeof window.clearFaxFields === 'function') window.clearFaxFields();
   try {
     // Try cached records first, fall back to Firestore
     let records = window._rawPreopRecords || [];
