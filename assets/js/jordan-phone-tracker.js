@@ -248,7 +248,7 @@
         date, time,
         patientName: [trackerEntry.patientFirst, trackerEntry.patientLast].filter(Boolean).join(' '),
         patientDOB: trackerEntry.patientDOB || '',
-        note: 'Auto-logged from Call Made pill',
+        note: '',
         trackerEntryId,
         addedAt: new Date().toISOString(),
         addedBy: (window.currentUser?.email) || ''
