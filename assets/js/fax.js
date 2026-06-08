@@ -50,6 +50,23 @@ window._populateFaxCenterDropdown = function() {
   } catch(e) { console.warn('populateFaxPatientDropdown:', e); }
 };
 
+// Normalize a phone/fax number to E.164-ish form: strips spaces, dashes,
+// parens, and prepends "+1" so the worker / FAXAGE doesn't reject it.
+// Anything already starting with "+" is left as-is. Empty input → "".
+function _faxNormalizeNumber(num) {
+  if(!num) return '';
+  const trimmed = String(num).trim();
+  if(!trimmed) return '';
+  if(trimmed.startsWith('+')) {
+    return '+' + trimmed.slice(1).replace(/[^0-9]/g, '');
+  }
+  const digits = trimmed.replace(/[^0-9]/g, '');
+  if(!digits) return '';
+  // 11 digits starting with 1 → assume US country code is included.
+  if(digits.length === 11 && digits.startsWith('1')) return '+' + digits;
+  return '+1' + digits;
+}
+
 // Wipe every fax-form field that varies per patient so stale data from a
 // prior selection never bleeds into the new fax. Called by every branch of
 // onFaxPatientChange before anything is filled in.
@@ -104,7 +121,7 @@ window.onFaxPatientChange = function() {
     // leave editable so Nicole/Jordan can type one in.
     const destEl = document.getElementById('fax-destination');
     if(destEl && pcpFax) {
-      destEl.value = pcpFax;
+      destEl.value = _faxNormalizeNumber(pcpFax);
       destEl.readOnly = true;
       destEl.style.background = 'var(--surface2)';
       destEl.style.color = 'var(--text-muted)';
@@ -307,9 +324,17 @@ window.closeFaxModal = function() {
 };
 
 window.confirmAndSendFax = async function() {
-  const faxNumber = document.getElementById('fax-destination').value.trim();
+  const destEl = document.getElementById('fax-destination');
+  let faxNumber = (destEl?.value || '').trim();
   if(!faxNumber) { alert('Please enter a destination fax number.'); return; }
-  if(!faxNumber.startsWith('+')) { alert('Please include the country code, e.g. +12345678901'); return; }
+  // Auto-fix: if the number was entered without "+", normalize it so we
+  // don't fail FAXAGE just because the user (or a saved PCP fax) skipped
+  // the "+1" prefix. Writes the normalized value back so the preview /
+  // user sees what's actually being sent.
+  if(!faxNumber.startsWith('+')) {
+    faxNumber = _faxNormalizeNumber(faxNumber);
+    if(destEl) destEl.value = faxNumber;
+  }
   if(!_faxRecord) { alert('No record loaded.'); return; }
 
   const choice = (typeof window.readScheduleChoice === 'function') ? window.readScheduleChoice('fax') : { mode: 'now' };
