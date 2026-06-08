@@ -1283,7 +1283,7 @@ function getUserDisplayName(email, role) {
 // Jordan works exclusively from the Tracker: she opens the linked Pre-Op
 // from each row, manages her Availability, and now has her own Calendar
 // view showing her scheduled clearance calls. Mid-Case is CRNA-only.
-const ASSISTANT_TABS = ['scheduler-tracker','calendar','preop','availability','preop-history'];
+const ASSISTANT_TABS = ['scheduler-tracker','calendar','preop','availability','preop-history','phone-tracker'];
 // Scheduler (Nicole) sees Jordan's availability calendar and the same Tracker
 // table — she manages "Called" + watches $100 Stripe + Jordan's clearance.
 const SCHEDULER_TABS = ['scheduler-tracker','calendar'];
@@ -1319,6 +1319,9 @@ function applyRoleRestrictions(role) {
   // Availability tab — Jordan only.
   const navAvail = document.getElementById('nav-availability');
   if(navAvail) navAvail.style.display = isAssistant ? '' : 'none';
+  // Phone Tracker tab — Jordan only.
+  const navPhone = document.getElementById('nav-phone-tracker');
+  if(navPhone) navPhone.style.display = isAssistant ? '' : 'none';
   // Tracker tab — both Jordan (assistant) and Nicole (scheduler) see it.
   const navTracker = document.getElementById('nav-scheduler-tracker');
   if(navTracker) navTracker.style.display = (isAssistant || isScheduler) ? '' : 'none';
@@ -1877,7 +1880,11 @@ window._spvSend = async function() {
 
     try { logAudit && logAudit('preop-visit-scheduled', '', patientLabel + ' @ ' + (date||'?') + ' / ' + crna); } catch(e){}
 
-    // Fire-and-forget internal notifications: Jordan + admin.
+    // Internal notification — admin only. Jordan deliberately NOT notified
+    // here because there's no scheduled time yet at this stage: Nicole has
+    // only sent the portal link, the patient hasn't picked a slot. Jordan
+    // gets his "Pre-Op Call Confirmed" email later, from patient-schedule.js,
+    // the moment the patient confirms a time on the portal.
     try {
       const jordanHtml = _spvBuildJordanNotificationHTML({
         first, last, email, phone, pcp,
@@ -1885,14 +1892,12 @@ window._spvSend = async function() {
         visitDate: date, visitTime: time,
         crna, note
       });
-      const internalSubject = 'New pre-op visit scheduled — ' + (patientLabel || 'patient');
-      ['jordan@atlasanesthesia.co', 'admin@atlasanesthesia.co'].forEach(addr => {
-        fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/outreach-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: addr, subject: internalSubject, html: jordanHtml })
-        }).catch(() => {});
-      });
+      const internalSubject = 'Portal link sent — ' + (patientLabel || 'patient');
+      fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/outreach-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: 'admin@atlasanesthesia.co', subject: internalSubject, html: jordanHtml })
+      }).catch(() => {});
     } catch(e) { console.warn('Internal booking notifications skipped:', e); }
 
     if(status) { status.textContent = '✓ Visit booked. Confirmation emailed to ' + email + '.'; status.style.color = '#166534'; }
