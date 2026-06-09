@@ -7937,11 +7937,19 @@ window.renderFollowupTab = function() {
   // Compact column widths so the whole chart fits without horizontal scroll.
   // Case ID is truncated — full text appears on hover via the title attr.
   // No indicator column — the ⚠/⏰ icons are inline with the Case ID instead.
-  const COLS = '140px 1fr 90px 56px 110px 130px 110px 110px';
+  const COLS = '140px 1fr 90px 160px 110px 130px 110px 110px';
   const cellCSS = 'display:flex;align-items:center';
   let html = `<div style="display:grid;grid-template-columns:${COLS};gap:6px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text-faint)">
-    <span>Case ID</span><span>Patient</span><span>Surgery</span><span style="text-align:center">Who</span><span style="text-align:center">Call</span><span style="text-align:center">$500 Deposit</span><span style="text-align:center">Rem Payment</span><span style="text-align:center">Reminder</span>
+    <span>Case ID</span><span>Patient</span><span>Surgery</span><span style="text-align:center">Cleared</span><span style="text-align:center">Call</span><span style="text-align:center">$500 Deposit</span><span style="text-align:center">Rem Payment</span><span style="text-align:center">Reminder</span>
   </div>`;
+  // Cleared-status styling — mirrors Jordan's Tracker pill so Josh/Dev see
+  // the exact same state. Read-only here; only Jordan cycles it on his side.
+  const CLEARED_STATES = {
+    '':        { label: '○ Pending',              bg:'#fff',    fg:'#64748b', border:'#cbd5e1', dashed:true  },
+    'faxed':   { label: '📠 Faxed',               bg:'#ffedd5', fg:'#9a3412', border:'#fed7aa', dashed:false },
+    'waiting': { label: '⏳ Waiting for records', bg:'#fef3c7', fg:'#92400e', border:'#fde68a', dashed:false },
+    'cleared': { label: '✓ Cleared',              bg:'#e0e7ff', fg:'#3730a3', border:'#a5b4fc', dashed:false }
+  };
   filtered.forEach(r => {
     const caseId = r['po-caseId'] || '—';
     const surgDate = r['po-surgeryDate'] || '';
@@ -7963,8 +7971,19 @@ window.renderFollowupTab = function() {
     const reviewStatus = r['po-reviewStatus'] || '';
     const reviewTag = '';
     const isPreCrna = reviewStatus === 'by-nicole' || reviewStatus === 'by-jordan';
-    const worker = r.worker === 'dev' ? 'Dev' : 'Josh';
-    const workerClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
+    // Cleared status — mirrors Jordan's Tracker pill so Josh knows when the
+    // patient is medically cleared and ready for him to call. Look up the
+    // matching atlas/preop_visits entry by either preopRecordId (newer) or
+    // po-preopVisitId on the pre-op record.
+    const visitEntries = window._preopVisitEntries || [];
+    const matchingVisit = visitEntries.find(e =>
+      (r.id && e.preopRecordId === r.id) ||
+      (r['po-preopVisitId'] && e.id === r['po-preopVisitId'])
+    );
+    const clearedKey = matchingVisit
+      ? (matchingVisit.clearedStatus || (matchingVisit.clearedAt ? 'cleared' : ''))
+      : '';
+    const clearedState = CLEARED_STATES[clearedKey] || CLEARED_STATES[''];
 
     // Josh/Dev's own call — independent of Nicole's and Jordan's pills.
     const callStatus = r['po-callStatus'] || 'not-called';
@@ -8024,7 +8043,7 @@ window.renderFollowupTab = function() {
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;font-weight:600;overflow:hidden;min-width:0;cursor:pointer">${inlineIndicator}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayId}</span></div>
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;min-width:0;cursor:pointer">${patientName}${reviewTag}</div>
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;color:var(--text-muted);cursor:pointer">${surgDateFmt}${isPast?' <span style="font-size:9px;color:var(--text-faint);margin-left:4px">(past)</span>':''}</div>
-      <div style="${cellCSS};justify-content:center"><span class="worker-pill ${workerClass}" style="font-size:10px;padding:2px 8px">${worker}</span></div>
+      <div style="${cellCSS};justify-content:center" title="Jordan updates this on his Tracker"><span style="display:inline-flex;align-items:center;justify-content:center;background:${clearedState.bg};color:${clearedState.fg};border:1px ${clearedState.dashed?'dashed':'solid'} ${clearedState.border};font-size:11px;font-weight:${clearedKey==='cleared'?'700':'600'};padding:4px 10px;border-radius:10px;white-space:nowrap">${clearedState.label}</span></div>
       <div style="${cellCSS};justify-content:center"><button onclick="openCallStatusModal('${r.id}')" style="background:${callC.bg};color:${callC.color};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${CALL_LABELS[callStatus] || '📞 Pending'}</button></div>
       <div style="${cellCSS};justify-content:center"><button onclick="togglePreopDepositStatus('${r.id}')" style="background:${depBg};color:${depColor};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${depLabel}</button></div>
       <div style="${cellCSS};justify-content:center"><button onclick="togglePreopRemPayment('${r.id}')" style="background:${remPaid?'#dcfce7':'#f1f5f9'};color:${remPaid?'#166534':'#64748b'};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${remPaid?'✓ Rem Paid':'💰 Pending'}</button></div>
