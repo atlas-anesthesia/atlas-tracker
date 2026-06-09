@@ -7957,16 +7957,12 @@ window.renderFollowupTab = function() {
     const patientName = phiHidden
       ? '<span style="color:#94a3b8;font-style:italic">[hidden]</span>'
       : [r['po-patientLastName'], r['po-patientFirstName']].filter(Boolean).join(', ') || '—';
-    // "From X" tag = who last touched the case. Nicole creates it, then Jordan
-    // takes over for clearance, then it's released to the CRNA. Cases still
-    // tagged are pre-CRNA and the whole row is greyed out so Josh/Dev see at a
-    // glance that they aren't ready for review yet.
+    // "From Nicole" / "From Jordan" tags removed per user request — Josh/Dev
+    // don't want the noise on their dashboard tracker. The underlying
+    // po-reviewStatus field is still maintained elsewhere; we just don't
+    // render it here.
     const reviewStatus = r['po-reviewStatus'] || '';
-    const reviewTag = reviewStatus === 'by-nicole'
-      ? '<span title="Nicole created this case — Jordan still needs to do the pre-op clearance" style="display:inline-block;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px;white-space:nowrap">👤 From Nicole</span>'
-      : reviewStatus === 'by-jordan'
-      ? '<span title="Jordan completed the pre-op clearance — case is now with the CRNA" style="display:inline-block;background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px;white-space:nowrap">🩺 From Jordan</span>'
-      : '';
+    const reviewTag = '';
     const isPreCrna = reviewStatus === 'by-nicole' || reviewStatus === 'by-jordan';
     const worker = r.worker === 'dev' ? 'Dev' : 'Josh';
     const workerClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
