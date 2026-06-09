@@ -1933,3 +1933,65 @@ window.sendInvoiceEmail = async function() {
   };
   setTimeout(_install, 0);
 })();
+
+// ─ One-time restore helper ───────────────────────────────────────────────────
+// Use from the browser DevTools console after the page has loaded:
+//   await _restorePaymentsFromBackup('payments_backup_2026-06-03')
+// (or whatever doc ID under `atlas/` holds your backup).
+//
+// What it does:
+//   1. Reads atlas/<docId>.
+//   2. Pulls rows from data.rows (Cloudflare-worker format) or rows (in-app
+//      format) — whichever exists.
+//   3. Diffs against current atlas/payments by caseId.
+//   4. Shows a confirm() with the missing-row count.
+//   5. If you OK, appends ONLY the missing rows to the current list and saves.
+//      Rows that already exist in atlas/payments are left untouched so any
+//      newer Paid/Deposit edits are preserved.
+//
+// This is safe to run multiple times — rows already restored just won't be
+// counted as missing on the second run.
+window._restorePaymentsFromBackup = async function(backupDocId) {
+  if(!backupDocId) {
+    alert('Pass the backup doc ID. Example:\n  _restorePaymentsFromBackup("payments_backup_2026-06-03")');
+    return;
+  }
+  try {
+    const backupSnap = await window.getDoc(window.doc(window.db,'atlas',backupDocId));
+    if(!backupSnap.exists()) {
+      alert('No backup doc found at atlas/' + backupDocId);
+      return;
+    }
+    const bdata = backupSnap.data() || {};
+    // Auto-detect format: Cloudflare worker writes {data:{rows:[...]}, ...};
+    // the in-app backup writes {rows:[...], backedUpAt:...}.
+    const backupRows = Array.isArray(bdata.data?.rows) ? bdata.data.rows
+                     : Array.isArray(bdata.rows)      ? bdata.rows
+                     : [];
+    if(!backupRows.length) {
+      alert('Backup doc has no rows. Check the doc ID.');
+      return;
+    }
+    const curSnap = await window.getDoc(window.doc(window.db,'atlas','payments'));
+    const curData = curSnap.exists() ? curSnap.data() : {};
+    const curRows = Array.isArray(curData.rows) ? curData.rows : [];
+    const haveIds = new Set(curRows.map(r => r.caseId).filter(Boolean));
+    const missing = backupRows.filter(r => r.caseId && !haveIds.has(r.caseId));
+    const msg = 'Backup atlas/' + backupDocId + '\n\n'
+              + '  rows in backup:    ' + backupRows.length + '\n'
+              + '  rows in current:   ' + curRows.length + '\n'
+              + '  missing (to add):  ' + missing.length + '\n\n'
+              + (missing.length
+                  ? 'Add the ' + missing.length + ' missing rows back to atlas/payments?\n\n(Existing rows keep their current status — only missing caseIds get added.)'
+                  : 'Nothing to restore — every backup row is already in atlas/payments.');
+    if(!missing.length) { alert(msg); return; }
+    if(!confirm(msg)) return;
+    const merged = curRows.concat(missing);
+    await window.setDoc(window.doc(window.db,'atlas','payments'), { rows: merged }, { merge: true });
+    alert('Restored ' + missing.length + ' rows. Reload the Payments tab to see them.');
+    if(typeof window.loadPaymentRows === 'function') window.loadPaymentRows();
+  } catch(e) {
+    console.error('Restore failed:', e);
+    alert('Restore failed: ' + (e.message || e));
+  }
+};
