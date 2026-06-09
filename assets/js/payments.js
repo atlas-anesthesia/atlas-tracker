@@ -143,7 +143,33 @@ window.loadPaymentRows = async function loadPaymentRows() {
   // deleted from the Payments table. These should NOT be auto-recreated.
   _excludedCaseIds.clear();
   (paymentsData.excludedCaseIds || []).forEach(id => _excludedCaseIds.add(id));
-  const freshCases = casesSnap.exists() ? (casesSnap.data().cases||[]) : (window.cases||[]);
+  // Cases doc now uses one of two formats:
+  //   • legacy: { cases: [...] }
+  //   • monthly-v2: { format:'monthly-v2', months:['2026-05',...] }, with the
+  //     actual records living in atlas/cases_<YYYY-MM> shards.
+  // The pre-shard read (just .cases) returned [] silently for monthly-v2 and
+  // then the prune block below would delete every payment row that wasn't
+  // also in pre-op. Mirror app.js's loader.
+  let freshCases;
+  if(casesSnap.exists()) {
+    const cdata = casesSnap.data();
+    if(cdata.format === 'monthly-v2' && Array.isArray(cdata.months)) {
+      const shardSnaps = await Promise.all(
+        cdata.months.map(m => window.getDoc(window.doc(window.db,'atlas','cases_'+m)))
+      );
+      freshCases = shardSnaps.flatMap(s => s.exists() ? (s.data().cases || []) : []);
+    } else {
+      freshCases = cdata.cases || [];
+    }
+  } else {
+    freshCases = [];
+  }
+  // Fallback: if the doc read returned nothing but app.js has already
+  // hydrated window.cases, use that. Keeps the table populated even if a
+  // shard read fails or the format changes again later.
+  if(!freshCases.length && Array.isArray(window.cases) && window.cases.length) {
+    freshCases = window.cases;
+  }
   const freshPreop = preopSnap.exists() ? (preopSnap.data().records||[]) : [];
   const freshCenters = scSnap.exists() ? (scSnap.data().centers||[]) : (window.surgeryCenters||[]);
   window._rawPreopRecords = freshPreop;
@@ -194,16 +220,31 @@ window.loadPaymentRows = async function loadPaymentRows() {
   // If a case is deleted from Mid-Case (or never finalized and the pre-op
   // is removed), its payment row should disappear too. Build a Set of
   // valid caseIds (cases + pre-ops) and drop rows that don't match.
-  // This catches cases deleted via Mid-Case, Case History, or Pre-Op tabs.
-  const validIds = new Set();
-  freshCases.forEach(c => { if(c.caseId) validIds.add(c.caseId); });
-  freshPreop.forEach(r => { if(r['po-caseId']) validIds.add(r['po-caseId']); });
-  const beforePrune = _paymentRows.length;
-  _paymentRows = _paymentRows.filter(r => !r.caseId || validIds.has(r.caseId));
-  const pruned = beforePrune - _paymentRows.length;
-  if(pruned > 0) {
-    // Persist the pruned list so the orphaned rows don't return on next load.
-    window.setDoc(window.doc(window.db,'atlas','payments'),{rows:_paymentRows}).catch(()=>{});
+  //
+  // SAFETY: only prune when we actually have a cases load to compare against.
+  // If freshCases came back empty (Firestore hiccup, format change, etc.)
+  // pruning would wipe every row that doesn't also live in pre-op — exactly
+  // the bug that ate payment rows from May 19 onward when cases were sharded.
+  // Better to leave orphans than to nuke real data.
+  if(freshCases.length > 0) {
+    const validIds = new Set();
+    freshCases.forEach(c => { if(c.caseId) validIds.add(c.caseId); });
+    freshPreop.forEach(r => { if(r['po-caseId']) validIds.add(r['po-caseId']); });
+    const beforePrune = _paymentRows.length;
+    _paymentRows = _paymentRows.filter(r => !r.caseId || validIds.has(r.caseId));
+    const pruned = beforePrune - _paymentRows.length;
+    if(pruned > 0) {
+      // Persist the pruned list AND keep the excludedCaseIds field — using
+      // setDoc with only {rows} would also have wiped that, which is its own
+      // smaller bug. Use updateDoc-style merge.
+      window.setDoc(
+        window.doc(window.db,'atlas','payments'),
+        { rows: _paymentRows },
+        { merge: true }
+      ).catch(()=>{});
+    }
+  } else {
+    console.warn('[payments] skipping prune — cases load returned 0 rows');
   }
 
   // ─ Sort: by surgery date (earliest first), then by caseId so same-date
