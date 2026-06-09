@@ -7901,12 +7901,11 @@ window.renderFollowupTab = function() {
     if(surgDate && surgDate < today) return false;
     // Hide PHI-hidden cases (3+ days post-surgery — but those are past anyway).
     if(typeof window.isPHIHidden === 'function' && window.isPHIHidden(surgDate, r['po-caseId'])) return false;
-    // Honor the Tracker's "Call Made" pill even when po-callStatus hasn't
-    // been synced — keeps the Home Follow-up view consistent with Nicole's
-    // and Jordan's screens.
-    const callStatus = (typeof window._effectiveCallStatus === 'function')
-      ? window._effectiveCallStatus(r)
-      : (r['po-callStatus'] || 'not-called');
+    // Josh/Dev's own call status — INTENTIONALLY independent of Nicole's
+    // and Jordan's pills. They each make their own call to the patient
+    // (pre-op vs day-of call), so this column tracks only po-callStatus
+    // updated via Josh/Dev's own Call Status modal.
+    const callStatus = r['po-callStatus'] || 'not-called';
     const row = window._paymentRows && window._paymentRows.find(pr => pr.caseId === r['po-caseId']);
     const remPaid = row ? !!row.paid : false;
     const lastFollowup = r['po-lastFollowupAt'];
@@ -7967,9 +7966,8 @@ window.renderFollowupTab = function() {
     const worker = r.worker === 'dev' ? 'Dev' : 'Josh';
     const workerClass = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
 
-    const callStatus = (typeof window._effectiveCallStatus === 'function')
-      ? window._effectiveCallStatus(r)
-      : (r['po-callStatus'] || 'not-called');
+    // Josh/Dev's own call — independent of Nicole's and Jordan's pills.
+    const callStatus = r['po-callStatus'] || 'not-called';
     const lastFollowup = r['po-lastFollowupAt'];
     const callC = CALL_COLORS[callStatus] || CALL_COLORS['not-called'];
     const needsFollowup = callStatus !== 'spoken' && callStatus !== 'not-called' && lastFollowup
