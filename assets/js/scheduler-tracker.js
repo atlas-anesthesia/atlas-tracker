@@ -643,15 +643,19 @@
     let pdfBlobUrl = '';
     if(isEdit && existing.pdfFilename) {
       try {
-        const snap = await window.getDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + existing.id));
-        const url = snap.exists() ? (snap.data().dataUrl || '') : '';
+        // Use the chunk-aware reader. The old path read just the head doc's
+        // dataUrl and decoded that — fine for tiny PDFs but for anything
+        // chunked (>700KB) it produced a truncated blob and the iframe
+        // failed with "Failed to load PDF".
+        const data = await _readPdfDoc(PDF_DOC_PATH + '.' + existing.id);
+        const url = data?.dataUrl || '';
         if(url) {
           const i = url.indexOf(',');
           const b64 = i >= 0 ? url.slice(i + 1) : url;
           const bin = atob(b64);
           const arr = new Uint8Array(bin.length);
           for(let k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k);
-          const blob = new Blob([arr], { type: 'application/pdf' });
+          const blob = new Blob([arr], { type: data.contentType || 'application/pdf' });
           pdfBlobUrl = URL.createObjectURL(blob);
         }
       } catch(_){}
