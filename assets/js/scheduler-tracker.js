@@ -27,7 +27,7 @@
   const INBOX_DOC_PATH = 'scheduling_inbox';      // single doc { items: [] }
   const INBOX_PDF_PREFIX = 'scheduling_inbox_pdf_';
   const WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
-  const MAX_PDF_BYTES = 700 * 1024; // soft cap so the PDF doc stays under 1 MB
+  const MAX_PDF_BYTES = 8 * 1024 * 1024; // sanity cap; larger-than-1MB PDFs are chunked across docs (_writePdfDoc)
 
   let _entries = [];
   let _stripeStatus = {}; // { email-lower: { preopVisitPaid, preopVisitPaidAt } }
@@ -224,13 +224,21 @@
 
     const stripe = _stripeStatus[(e.patientEmail||'').toLowerCase()] || {};
     const stripePaid = !!stripe.preopVisitPaid;
-    // Phone payments are no longer accepted — the only path to "paid" is the
-    // patient completing Stripe checkout from their portal link. Pill is
-    // display-only: tapping does nothing because the state can't be changed
-    // manually.
-    const paidPill = stripePaid
-      ? `<span title="Confirmed via Stripe" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">✓ Paid · Stripe</span>`
-      : `<span title="Awaiting Stripe confirmation — patient pays via the portal link" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">⏳ Pending</span>`;
+    const manualPaid = !!e.manualPaidAt;
+    // The normal path to "paid" is the patient completing Stripe checkout from
+    // their portal link, matched by email. When a patient pays under a DIFFERENT
+    // email (so Stripe can't auto-match), staff can override with the "Mark paid"
+    // button — it stamps manualPaidAt, which the patient portal honors to unlock
+    // scheduling. The override is reversible (click the green pill to undo).
+    let paidPill;
+    if(stripePaid) {
+      paidPill = `<span title="Confirmed via Stripe" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">✓ Paid · Stripe</span>`;
+    } else if(manualPaid) {
+      const by = e.manualPaidBy ? ' by ' + _esc(e.manualPaidBy) : '';
+      paidPill = `<button onclick="window._strUndoManualPaid('${e.id}')" title="Marked paid manually${by}. Click to undo." style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:pointer;display:inline-block">✓ Paid · Manual</button>`;
+    } else {
+      paidPill = `<button onclick="window._strMarkPaidManually('${e.id}')" title="Paid under a different email and Stripe didn't match? Click to mark paid manually — unlocks scheduling for the patient." style="background:#fff7ed;color:#9a3412;border:1px dashed #fdba74;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:pointer;display:inline-block">⏳ Pending · Mark paid</button>`;
+    }
     // Manual Nudge button removed — the worker's nightly cron now sends a
     // daily payment-link reminder to every patient who's been emailed the
     // portal link but hasn't paid yet. Stops on its own when Stripe shows
@@ -525,7 +533,7 @@
       const merged = _currentMergedInboxPdf;
       const filename = merged?.filename || inboxItem?.pdfFilename || 'preop.pdf';
       if(merged?.dataUrl) {
-        await window.setDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + newEntryId), {
+        await _writePdfDoc(PDF_DOC_PATH + '.' + newEntryId, {
           filename: merged.filename,
           dataUrl: merged.dataUrl,
           contentType: 'application/pdf',
@@ -753,6 +761,62 @@
     });
   }
 
+  // Firestore caps a single string field at ~1 MB (1,048,487 bytes). A merged
+  // multi-page pre-op PDF (base64) routinely blows past that, which is what was
+  // throwing "the value of property 'dataUrl' is longer than 1048487 bytes" when
+  // Nicole added a patient. So we split the data URL across a head doc plus
+  // numbered chunk docs (docId, docId_c1, docId_c2, …); the head records
+  // chunkCount and readers stitch the pieces back together. This matches the
+  // chunk shape the inbox reader (_strOpenInboxItem) already understands.
+  const PDF_CHUNK_CHARS = 700000; // comfortably under the 1 MB per-field limit
+
+  async function _writePdfDoc(docId, { filename, dataUrl, contentType, sizeBytes }) {
+    const url = dataUrl || '';
+    const chunks = [];
+    for(let i = 0; i < url.length; i += PDF_CHUNK_CHARS) chunks.push(url.slice(i, i + PDF_CHUNK_CHARS));
+    if(!chunks.length) chunks.push('');
+    await window.setDoc(window.doc(window.db, 'atlas', docId), {
+      filename: filename || 'preop.pdf',
+      contentType: contentType || 'application/pdf',
+      sizeBytes: sizeBytes || 0,
+      chunkCount: chunks.length,
+      dataUrl: chunks[0]
+    });
+    for(let i = 1; i < chunks.length; i++) {
+      await window.setDoc(window.doc(window.db, 'atlas', docId + '_c' + i), { dataUrl: chunks[i] });
+    }
+    return chunks.length;
+  }
+
+  async function _readPdfDoc(docId) {
+    const head = await window.getDoc(window.doc(window.db, 'atlas', docId));
+    if(!head.exists()) return null;
+    const d = head.data();
+    const chunkCount = d.chunkCount || 1;
+    let full = d.dataUrl || '';
+    if(chunkCount > 1) {
+      const extra = await Promise.all(
+        Array.from({ length: chunkCount - 1 }, (_, i) =>
+          window.getDoc(window.doc(window.db, 'atlas', docId + '_c' + (i + 1))))
+      );
+      for(const cs of extra) full += (cs.exists() ? (cs.data().dataUrl || '') : '');
+    }
+    return { filename: d.filename, dataUrl: full, contentType: d.contentType, sizeBytes: d.sizeBytes, chunkCount };
+  }
+
+  // Delete a chunked PDF doc and any extra chunk docs it spilled into.
+  async function _deletePdfDoc(docId) {
+    let chunkCount = 1;
+    try {
+      const head = await window.getDoc(window.doc(window.db, 'atlas', docId));
+      if(head.exists()) chunkCount = head.data().chunkCount || 1;
+    } catch(_){}
+    try { await window.deleteDoc(window.doc(window.db, 'atlas', docId)); } catch(_){}
+    for(let i = 1; i < chunkCount; i++) {
+      try { await window.deleteDoc(window.doc(window.db, 'atlas', docId + '_c' + i)); } catch(_){}
+    }
+  }
+
   window._strSavePatient = async function() {
     const editId = document.getElementById('strAddPatientModal')?.dataset.editId || '';
     const first = (_$('strap-first')?.value || '').trim();
@@ -821,7 +885,7 @@
       // Upload PDF first so its filename can be stamped on the entry.
       if(file) {
         const dataUrl = await _readFileAsDataUrl(file);
-        await window.setDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + entry.id), {
+        await _writePdfDoc(PDF_DOC_PATH + '.' + entry.id, {
           filename: file.name, dataUrl, contentType: file.type, sizeBytes: file.size
         });
         entry.pdfFilename = file.name;
@@ -921,7 +985,7 @@
       if(idx === -1) return;
       try {
         const dataUrl = await _readFileAsDataUrl(file);
-        await window.setDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + id), {
+        await _writePdfDoc(PDF_DOC_PATH + '.' + id, {
           filename: file.name, dataUrl, contentType: file.type, sizeBytes: file.size
         });
         _entries[idx].pdfFilename = file.name;
@@ -935,17 +999,19 @@
 
   window._strViewPDF = async function(id) {
     try {
-      const snap = await window.getDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + id));
-      if(!snap.exists()) { alert('PDF not found.'); return; }
-      const data = snap.data();
-      // Open the PDF in a new tab via the data URL. Some browsers block large
-      // data: URLs from new windows — fall back to a download link if so.
-      const w = window.open();
-      if(w) {
-        w.document.write(`<title>${_esc(data.filename || 'Pre-op PDF')}</title><iframe src="${data.dataUrl}" style="position:fixed;inset:0;border:0;width:100%;height:100%"></iframe>`);
-      } else {
+      const data = await _readPdfDoc(PDF_DOC_PATH + '.' + id);
+      if(!data || !data.dataUrl) { alert('PDF not found.'); return; }
+      // Browsers cap the length of data: URLs, so big (chunked) PDFs won't open
+      // that way. Convert to a Blob + blob: URL, which has no such limit.
+      let url;
+      try {
+        const blob = new Blob([_dataUrlToBytes(data.dataUrl)], { type: data.contentType || 'application/pdf' });
+        url = URL.createObjectURL(blob);
+      } catch(_) { url = data.dataUrl; }
+      const w = window.open(url, '_blank');
+      if(!w) {
         const a = document.createElement('a');
-        a.href = data.dataUrl;
+        a.href = url;
         a.download = data.filename || 'preop.pdf';
         document.body.appendChild(a); a.click(); a.remove();
       }
@@ -957,7 +1023,7 @@
     const idx = _entries.findIndex(e => e.id === id);
     if(idx === -1) return;
     try {
-      await window.deleteDoc(window.doc(window.db, 'atlas', PDF_DOC_PATH + '.' + id));
+      await _deletePdfDoc(PDF_DOC_PATH + '.' + id);
     } catch(e) { /* deletion is best-effort — even if it fails we still want to clear the pointer */ }
     _entries[idx].pdfFilename = null;
     await _saveEntries();
@@ -1101,6 +1167,39 @@
     }
     await _saveEntries();
     try { window.logAudit && window.logAudit(done ? 'preop-visit-cleared' : 'preop-visit-uncleared', id, _entries[idx].patientFirst + ' ' + _entries[idx].patientLast); } catch(e){}
+    window.renderSchedulerTracker();
+  };
+
+  // Manually mark the $100 pre-op fee as paid. Used when the patient paid in
+  // Stripe but under a different email than we have on file, so the automatic
+  // email match can't find it. Stamps manualPaidAt on the entry — the patient
+  // portal (patient-schedule.js) honors this and unlocks scheduling. Reversible
+  // via _strUndoManualPaid.
+  window._strMarkPaidManually = async function(id) {
+    const idx = _entries.findIndex(e => e.id === id);
+    if(idx === -1) return;
+    const e = _entries[idx];
+    const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || 'this patient';
+    if(!confirm('Mark ' + name + ' as PAID for the $100 pre-op fee?\n\nUse this ONLY after you have confirmed the $100 actually landed in Stripe (e.g. they paid under a different email, so it didn\'t auto-match).\n\nThis unlocks scheduling for the patient.')) return;
+    e.manualPaidAt = new Date().toISOString();
+    e.manualPaidBy = (window.currentUser?.email) || '';
+    await _saveEntries();
+    try { window.logAudit && window.logAudit('preop-visit-manual-paid', id, name); } catch(_){}
+    window.renderSchedulerTracker();
+  };
+
+  // Undo a manual paid stamp (e.g. it was clicked by mistake). Re-locks the
+  // patient's scheduling step unless Stripe shows them paid.
+  window._strUndoManualPaid = async function(id) {
+    const idx = _entries.findIndex(e => e.id === id);
+    if(idx === -1) return;
+    const e = _entries[idx];
+    const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || 'this patient';
+    if(!confirm('Undo the manual "paid" mark for ' + name + '?\n\nIf they haven\'t actually paid, this will re-lock their scheduling step.')) return;
+    e.manualPaidAt = null;
+    e.manualPaidBy = null;
+    await _saveEntries();
+    try { window.logAudit && window.logAudit('preop-visit-manual-unpaid', id, name); } catch(_){}
     window.renderSchedulerTracker();
   };
 
