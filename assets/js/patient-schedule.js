@@ -545,7 +545,19 @@ async function confirmBooking() {
                     : _entry.crna === 'dev'  ? 'dev@atlasanesthesia.co'
                     : 'admin@atlasanesthesia.co';
     const consentHtml = buildSignedConsentEmailHTML(patientName, _sigDataUrl, new Date());
-    fireEmail(crnaEmail, 'Signed Anesthesia Consent — ' + patientName, consentHtml);
+    // Strip the "data:image/png;base64," prefix so the worker can hand the
+    // raw base64 bytes to SES as a Content-Transfer-Encoding: base64 part.
+    const sigAttachments = (() => {
+      if(!_sigDataUrl) return [];
+      const i = _sigDataUrl.indexOf(',');
+      const b64 = i >= 0 ? _sigDataUrl.slice(i + 1) : _sigDataUrl;
+      return [{
+        filename:    'Patient-Signature.png',
+        contentType: 'image/png',
+        base64:      b64
+      }];
+    })();
+    fireEmail(crnaEmail, 'Signed Anesthesia Consent — ' + patientName, consentHtml, sigAttachments);
 
     showConfirm(_selected);
   } catch(err) {
@@ -563,12 +575,15 @@ function showConfirm(sel) {
     + '<div style="font-size:18px;font-weight:700;color:var(--accent);font-family:DM Mono,monospace">' + esc(fmtTime(sel.time)) + ' Central Time</div>';
 }
 
-// Build the CRNA-bound email body that contains the full signed consent +
-// the patient's inline signature image. The signature is a data:image/png
-// URL so it renders directly inside the email client without an attachment.
+// Build the CRNA-bound email body that contains the full signed consent.
+// The signature image is sent as an actual file attachment (Patient-
+// Signature.png) rather than inlined as a data: URL — Gmail/Outlook/
+// Apple Mail block inline data: URLs for security, so inlining showed a
+// broken placeholder instead of the signature. Most clients render
+// image attachments as a thumbnail at the bottom of the email anyway.
 function buildSignedConsentEmailHTML(patientName, sigDataUrl, signedAt) {
   const sigImg = sigDataUrl
-    ? '<img src="' + sigDataUrl + '" alt="Patient signature" style="display:block;border:1px solid #cbd5e1;border-radius:8px;background:#fff;max-width:520px;width:100%;height:auto">'
+    ? '<div style="border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc;padding:14px 16px;color:#475569;font-size:13px"><strong>📎 Patient signature</strong> is attached as <code style="background:#fff;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;font-family:DM Mono,monospace;font-size:12px">Patient-Signature.png</code> below.</div>'
     : '<div style="font-style:italic;color:#94a3b8">No signature captured.</div>';
   const when = signedAt instanceof Date
     ? signedAt.toLocaleString('en-US', { dateStyle:'long', timeStyle:'short' })
@@ -604,12 +619,16 @@ function buildSignedConsentEmailHTML(patientName, sigDataUrl, signedAt) {
 }
 
 // ── email helpers ──────────────────────────────────────────────────────────
-function fireEmail(to, subject, html) {
+// `attachments` is optional — pass [{filename, contentType, base64}, ...] to
+// include real file attachments alongside the HTML body.
+function fireEmail(to, subject, html, attachments) {
   if(!to || !html) return;
+  const body = { to, subject, html };
+  if(Array.isArray(attachments) && attachments.length) body.attachments = attachments;
   fetch(WORKER_URL + '/outreach-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to, subject, html })
+    body: JSON.stringify(body)
   }).catch(() => {});
 }
 function buildPatientConfirmHTML(firstName, sel) {
