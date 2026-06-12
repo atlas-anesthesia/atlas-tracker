@@ -532,7 +532,7 @@ function buildJoshReceiptHTML() {
     <div style="display:grid;grid-template-columns:1fr 200px;gap:18px;align-items:end;margin-top:18px">
       <div>
         <div style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase;margin-bottom:2px">Signed</div>
-        <img src="${pInfo.sigPath}" style="height:46px;mix-blend-mode:multiply;display:block" alt="Signature" onerror="this.style.display='none'">
+        <img src="${pInfo.sigPath}" style="height:60px;mix-blend-mode:multiply;filter:contrast(1.6) brightness(.75);display:block" alt="Signature" onerror="this.style.display='none'">
         <div style="border-top:1px solid #000;width:240px;font-size:10px;padding-top:2px;margin-top:2px">${pInfo.name} · Atlas Anesthesia, LLC</div>
       </div>
       <div style="text-align:right;font-size:10px;color:#555">DATE: <span style="border-bottom:1px solid #888;padding:0 6px">${fmtDate(today)}</span></div>
