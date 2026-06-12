@@ -225,19 +225,18 @@
     const stripe = _stripeStatus[(e.patientEmail||'').toLowerCase()] || {};
     const stripePaid = !!stripe.preopVisitPaid;
     const manualPaid = !!e.manualPaidAt;
-    // The normal path to "paid" is the patient completing Stripe checkout from
-    // their portal link, matched by email. When a patient pays under a DIFFERENT
-    // email (so Stripe can't auto-match), staff can override with the "Mark paid"
-    // button — it stamps manualPaidAt, which the patient portal honors to unlock
-    // scheduling. The override is reversible (click the green pill to undo).
+    // Pill is DISPLAY-ONLY. Stripe is the source of truth; everything here is
+    // a read of state, not a button. The manual override lives in a hidden
+    // panel that opens when staff triple-click the "Pre-Op Visit Tracker"
+    // heading at the top of the tab — see _strOpenOverridePanel below.
     let paidPill;
     if(stripePaid) {
       paidPill = `<span title="Confirmed via Stripe" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">✓ Paid · Stripe</span>`;
     } else if(manualPaid) {
       const by = e.manualPaidBy ? ' by ' + _esc(e.manualPaidBy) : '';
-      paidPill = `<button onclick="window._strUndoManualPaid('${e.id}')" title="Marked paid manually${by}. Click to undo." style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:pointer;display:inline-block">✓ Paid · Manual</button>`;
+      paidPill = `<span title="Marked paid manually${by}. Use the override panel to undo." style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">✓ Paid · Manual</span>`;
     } else {
-      paidPill = `<button onclick="window._strMarkPaidManually('${e.id}')" title="Paid under a different email and Stripe didn't match? Click to mark paid manually — unlocks scheduling for the patient." style="background:#fff7ed;color:#9a3412;border:1px dashed #fdba74;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:pointer;display:inline-block">⏳ Pending · Mark paid</button>`;
+      paidPill = `<span title="Awaiting Stripe confirmation — patient pays via the portal link" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">⏳ Pending</span>`;
     }
     // Manual Nudge button removed — the worker's nightly cron now sends a
     // daily payment-link reminder to every patient who's been emailed the
@@ -1201,6 +1200,95 @@
     await _saveEntries();
     try { window.logAudit && window.logAudit('preop-visit-manual-unpaid', id, name); } catch(_){}
     window.renderSchedulerTracker();
+    if(document.getElementById('strOverridePanel')) window._strOpenOverridePanel();
+  };
+
+  // ── $100 Pre-Op Fee Override Panel ──────────────────────────────────────────
+  // Hidden surface — opens when staff triple-click the "Pre-Op Visit Tracker"
+  // heading. Lists every patient awaiting their $100 Stripe payment plus the
+  // ones already marked paid manually, with one click to toggle. The Tracker
+  // pill itself is display-only so people see Stripe state at a glance and
+  // can't accidentally flip the override.
+  window._strOpenOverridePanel = function() {
+    const prior = document.getElementById('strOverridePanel');
+    if(prior) prior.remove();
+    const rows = _entries.slice().sort((a,b) => (a.surgeryDate||'').localeCompare(b.surgeryDate||''));
+    const list = rows.map(e => {
+      const stripe = _stripeStatus[(e.patientEmail||'').toLowerCase()] || {};
+      const stripePaid = !!stripe.preopVisitPaid;
+      const manualPaid = !!e.manualPaidAt;
+      const name = [e.patientLast, e.patientFirst].filter(Boolean).join(', ') || '(no name)';
+      const dob  = e.patientDOB ? _fmtDate(e.patientDOB) : '—';
+      const surg = e.surgeryDate ? _fmtDate(e.surgeryDate) : '—';
+      const email = e.patientEmail || '(no email)';
+      let statusPill, actionBtn;
+      if(stripePaid) {
+        statusPill = `<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px">✓ Stripe</span>`;
+        actionBtn  = `<span style="font-size:11px;color:var(--text-faint)">Stripe handled this — no override needed.</span>`;
+      } else if(manualPaid) {
+        const by = e.manualPaidBy ? ' by ' + _esc(e.manualPaidBy) : '';
+        statusPill = `<span title="Manually marked${by}" style="background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px">✓ Manual</span>`;
+        actionBtn  = `<button onclick="window._strUndoManualPaid('${e.id}')" class="btn btn-ghost btn-sm" style="color:#b91c1c;border-color:#fecaca;font-size:11px;padding:3px 9px">Undo override</button>`;
+      } else {
+        statusPill = `<span style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px">⏳ Pending</span>`;
+        actionBtn  = `<button onclick="window._strMarkPaidManually('${e.id}')" class="btn btn-primary btn-sm" style="background:#166534;border-color:#166534;font-size:11px;padding:3px 9px">Mark paid</button>`;
+      }
+      return `<div style="display:grid;grid-template-columns:1.5fr 1fr 110px 110px 130px 170px;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px">
+        <div style="font-weight:600">${_esc(name)}</div>
+        <div style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(email)}">${_esc(email)}</div>
+        <div style="color:var(--text-muted)">DOB ${_esc(dob)}</div>
+        <div style="color:var(--text-muted)">Surg ${_esc(surg)}</div>
+        <div>${statusPill}</div>
+        <div style="text-align:right">${actionBtn}</div>
+      </div>`;
+    }).join('') || `<div style="padding:30px;text-align:center;color:var(--text-faint);font-size:13px">No patients on the Tracker yet.</div>`;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'strOverridePanel';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto';
+    wrap.onclick = (ev) => { if(ev.target === wrap) wrap.remove(); };
+    wrap.innerHTML = `
+      <div style="background:#fff;border-radius:12px;width:100%;max-width:1100px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+        <div style="background:#1d3557;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#90b8e0">Override panel</div>
+            <div style="font-size:15px;font-weight:700">$100 Pre-Op Fee — Manual Paid Override</div>
+          </div>
+          <button onclick="document.getElementById('strOverridePanel').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px">✕ Close</button>
+        </div>
+        <div style="background:#fef3c7;border-bottom:1px solid #fde68a;padding:10px 18px;font-size:12px;color:#92400e">
+          ⚠ Use only after you've confirmed the patient actually paid through Stripe under a different email. Tracker pills stay display-only — overrides happen here.
+        </div>
+        <div style="overflow-y:auto;flex:1">${list}</div>
+      </div>`;
+    document.body.appendChild(wrap);
+  };
+
+  // Triple-click on the tracker heading reveals the override panel. Installed
+  // once per session — re-renders of the tracker body don't touch the h2.
+  function _installOverrideTripleClick() {
+    const section = document.getElementById('tab-scheduler-tracker');
+    if(!section) return;
+    const h2 = section.querySelector('h2');
+    if(!h2 || h2.dataset.overrideWired) return;
+    h2.dataset.overrideWired = '1';
+    h2.style.userSelect = 'none';
+    h2.title = 'Pre-Op Visit Tracker';
+    let clicks = 0, lastClick = 0;
+    h2.addEventListener('click', () => {
+      const now = performance.now();
+      clicks = (now - lastClick < 600) ? clicks + 1 : 1;
+      lastClick = now;
+      if(clicks >= 3) { clicks = 0; window._strOpenOverridePanel(); }
+    });
+  }
+  // Run on every tracker render — first render wires up, subsequent renders
+  // hit the early-return guard.
+  const _origRender = window.renderSchedulerTracker;
+  window.renderSchedulerTracker = async function(...args) {
+    const r = await _origRender.apply(this, args);
+    try { _installOverrideTripleClick(); } catch(_){}
+    return r;
   };
 
   // Jordan cycles the Cleared pill: '' → 'faxed' → 'waiting' → 'cleared' → ''.
