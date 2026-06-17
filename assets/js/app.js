@@ -6360,15 +6360,8 @@ const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records || []) : [];
 const record = records.find(r => r.id === id);
 if(!record) { alert('Record not found.'); return; }
-// Jordan is only allowed to work on pre-ops that came through Nicole's
-// booking flow (tagged 'by-nicole' or her own in-progress 'by-jordan').
-if(window._userRole === 'assistant') {
-  const status = record['po-reviewStatus'] || '';
-  if(status !== 'by-nicole' && status !== 'by-jordan') {
-    alert('You can only edit pre-ops that Nicole has scheduled. This case was created by a CRNA.');
-    return;
-  }
-}
+// (Prior to 2026-06-11 Jordan was blocked from CRNA-created records;
+// removed per user feedback — he needs visibility on every case.)
 // Navigate to pre-op tab FIRST so DOM elements exist
 showTab('preop');
 // Small delay to ensure tab is visible and DOM is ready

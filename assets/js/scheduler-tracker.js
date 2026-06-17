@@ -253,6 +253,12 @@
     const openPreopBtn = (isAssistant && linkedPreopId)
       ? `<button onclick="window._strOpenPreop('${linkedPreopId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:3px 7px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`
       : '';
+    // Patient-portal viewer — Jordan sees exactly what the patient sees on
+    // schedule.html (uploaded airway photos, $100 payment step, time picker).
+    // Same URL Nicole emails out; entry id is the portal token.
+    const portalBtn = isAssistant
+      ? `<button onclick="window.open('schedule.html?t=' + encodeURIComponent('${e.id}'), '_blank')" class="btn btn-ghost btn-sm" title="Open this patient's portal in a new tab" style="font-size:11px;padding:3px 7px;color:#7c3aed;border-color:#ddd6fe">👁 Portal</button>`
+      : '';
     // Show patient details button — only on history rows (where PHI is masked).
     const revealCaseId = e.preopCaseId || e.id;
     const revealBtn = (phiHidden && typeof window.phiRevealButtonHTML === 'function')
@@ -273,8 +279,8 @@
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">${paidPill}${nudgePill}</div>
       <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false, false, true)}</div>
       <div style="${centerCell}">${clearedPill}</div>
-      <div style="display:flex;gap:4px;justify-content:center;align-items:center">
-        ${openPreopBtn}${editBtn}${delBtn}
+      <div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap">
+        ${openPreopBtn}${portalBtn}${editBtn}${delBtn}
       </div>
     </div>`;
   }
