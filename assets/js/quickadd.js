@@ -68,12 +68,14 @@
     }
     try {
       window.setSyncing && window.setSyncing(true);
+      console.log('[bundles] saving', bundles.length, 'bundle(s):', bundles.map(b => b.name).join(', '));
       await window.setDoc(window.doc(window.db, 'atlas', 'bundles'), { bundles });
+      console.log('[bundles] save confirmed by Firestore');
       window.setSyncing && window.setSyncing(false);
       return true;
     } catch(e) {
       window.setSyncing && window.setSyncing(false);
-      console.error('quickadd: saveBundles error:', e);
+      console.error('[bundles] save error:', e);
       alert('Could not save bundle: ' + e.message);
       return false;
     }
@@ -421,7 +423,7 @@
   };
 
   // ── QUICK ADD SUPPLIES MODAL ────────────────────────────────────────────────
-  window.openSuppliesQuickAddModal = function() {
+  window.openSuppliesQuickAddModal = async function() {
     const modal = document.getElementById('suppliesQuickAddModal');
     if(!modal) return;
     if(!window.items || !window.items.length) {
@@ -432,6 +434,22 @@
     // Pre-fill modal from any existing caseItems already in the form
     window._qaInitial = {};
     (window.caseItems || []).forEach(ci => { window._qaInitial[ci.id] = ci.qty; });
+    // Defensive refetch — the snapshot listener should keep bundles fresh
+    // but in case it hasn't fired yet (cold load) or got out of sync, pull
+    // the latest copy straight from Firestore before we render so saved
+    // bundles always show up. Cheap (single small doc).
+    try {
+      if(window.getDoc && window.doc && window.db) {
+        const snap = await window.getDoc(window.doc(window.db, 'atlas', 'bundles'));
+        if(snap.exists()) {
+          const raw = snap.data().bundles || [];
+          bundles = raw.map(normalizeBundle).filter(Boolean);
+          console.log('[bundles] modal open — loaded', bundles.length, 'bundle(s):', bundles.map(b => b.name).join(', '));
+        } else {
+          console.log('[bundles] modal open — atlas/bundles doc does not exist yet');
+        }
+      }
+    } catch(e) { console.warn('[bundles] modal open refetch failed:', e); }
     renderSuppliesQuickAddModal();
     setTimeout(() => document.getElementById('quickAddSearch')?.focus(), 50);
   };
