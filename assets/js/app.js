@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, getDocs, onSnapshot, collection, addDoc, query, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, getDocs, onSnapshot, collection, addDoc, query, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 // -- FIREBASE CONFIG --
 const firebaseConfig = {
 apiKey: "AIzaSyAAY9Ajrx4PJRqhxW5MgRY3wgZni9rJhMo",
@@ -12,7 +12,20 @@ appId: "1:677020713040:web:07f52f77fd225c607a5155"
 };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+// Offline persistence: cache reads in IndexedDB, queue writes locally, and
+// sync them when the network comes back. persistentMultipleTabManager lets
+// Nicole/Jordan/Josh/Dev all have the app open in parallel tabs without
+// fighting over the same cache. Falls back to in-memory if IndexedDB isn't
+// available (e.g. private browsing on some browsers).
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch(e) {
+  console.warn('Firestore offline cache init failed — falling back to memory:', e);
+  db = getFirestore(app);
+}
 
 // ── LOCAL-TIMEZONE DATE HELPERS ──────────────────────────────────────────────
 // Use these instead of `todayStr()`. The ISO
@@ -11478,3 +11491,28 @@ Object.defineProperty(window, 'caseItems', {
 Object.defineProperty(window, 'csEntries', {
   get: () => csEntries, set: v => { csEntries = v; }, configurable: true
 });
+
+// ── Offline / Online indicator ──────────────────────────────────────────────
+// Tiny pill in the top-right corner that lights up when the browser loses
+// network. Firebase offline persistence keeps the app working: writes queue
+// in IndexedDB, reads come from cache. We still want the user to *know*
+// they're offline so they don't panic when emails / faxes / Stripe sync
+// don't fire (those need internet — only Firestore is offline-safe).
+(function installOfflineIndicator() {
+  if(document.getElementById('netStatusPill')) return;
+  const pill = document.createElement('div');
+  pill.id = 'netStatusPill';
+  pill.style.cssText = 'position:fixed;top:14px;right:14px;z-index:99998;background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;font-size:11px;font-weight:700;padding:6px 11px;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.08);display:none;align-items:center;gap:6px;pointer-events:none';
+  pill.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626"></span> Offline — changes will sync when you\'re back online';
+  document.body.appendChild(pill);
+  const update = () => {
+    if(navigator.onLine) {
+      pill.style.display = 'none';
+    } else {
+      pill.style.display = 'inline-flex';
+    }
+  };
+  window.addEventListener('online',  update);
+  window.addEventListener('offline', update);
+  update();
+})();
