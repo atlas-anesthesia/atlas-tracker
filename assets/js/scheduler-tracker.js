@@ -141,7 +141,16 @@
     //   Row 4: PDF attach link
     // Each row has its own top margin so the column reads as 3-4 calm
     // chunks instead of 5 tightly stacked one-liners.
-    const nameHtml = phiHidden ? hiddenSpan : _esc([e.patientFirst, e.patientLast].filter(Boolean).join(' ') || '—');
+    const _canceledNow = !!e.canceledAt;
+    const nameText = _esc([e.patientFirst, e.patientLast].filter(Boolean).join(' ') || '—');
+    const canceledBadge = _canceledNow
+      ? `<span title="${_esc(e.canceledReason || 'Canceled')}" style="display:inline-block;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-size:9px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:8px;letter-spacing:.4px;text-transform:uppercase">✕ Canceled</span>`
+      : '';
+    const nameHtml = phiHidden
+      ? hiddenSpan
+      : (_canceledNow
+          ? `<span style="text-decoration:line-through;color:var(--text-muted)">${nameText}</span>${canceledBadge}`
+          : nameText);
     let contactParts = [];
     if(!phiHidden) {
       if(e.patientPhone) contactParts.push('📞 ' + _esc(e.patientPhone));
@@ -278,6 +287,16 @@
     const recordsFaxBtn = (!phiHidden && isScheduler && e.pcpFax)
       ? `<button onclick="window._strOpenRecordsFax('${e.id}')" class="btn btn-ghost btn-sm" title="${recordsFaxTip}" style="font-size:11px;padding:3px 7px;color:${recordsFaxSent?'#166534':'#0369a1'};border-color:${recordsFaxSent?'#86efac':'#bfdbfe'}">${recordsFaxSent?'📠 ✓':'📠 Records'}</button>`
       : '';
+    // Mark Canceled — staff (Nicole or Jordan) can flag a case as canceled.
+    // Emails jordan@atlasanesthesia.co with the patient/case details and
+    // stops every cron reminder for this entry. Reversible via _strUncancel.
+    const isCanceled = !!e.canceledAt;
+    const cancelBtn = (!phiHidden && (isScheduler || isAssistant) && !isCanceled)
+      ? `<button onclick="window._strMarkCanceled('${e.id}')" class="btn btn-ghost btn-sm" title="Mark this case canceled — Jordan is emailed" style="font-size:11px;padding:3px 7px;color:#dc2626;border-color:#fecaca">✕ Cancel</button>`
+      : '';
+    const uncancelBtn = (!phiHidden && (isScheduler || isAssistant) && isCanceled)
+      ? `<button onclick="window._strUncancel('${e.id}')" class="btn btn-ghost btn-sm" title="Undo cancel" style="font-size:11px;padding:3px 7px;color:#475569;border-color:#cbd5e1">↶ Uncancel</button>`
+      : '';
     const delBtn = (!phiHidden && isScheduler)
       ? `<button onclick="window._strDelete('${e.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>`
       : '';
@@ -291,7 +310,7 @@
       <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false, false, true)}</div>
       <div style="${centerCell}">${clearedPill}</div>
       <div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap">
-        ${openPreopBtn}${portalBtn}${editBtn}${recordsFaxBtn}${delBtn}
+        ${openPreopBtn}${portalBtn}${editBtn}${recordsFaxBtn}${cancelBtn}${uncancelBtn}${delBtn}
       </div>
     </div>`;
   }
@@ -1498,6 +1517,82 @@
   //     deposits / saved PDFs / payouts, via window._purgeCaseEverywhere
   // So one click in Nicole's view cleans Josh's, Dev's, and Jordan's surfaces
   // at the same time.
+
+  // Mark Canceled — flags the entry as canceled, stops every worker cron
+  // reminder for this case (each one checks `if(e.canceledAt) continue;`),
+  // and emails jordan@atlasanesthesia.co with the case details so he's
+  // looped in without having to spot it on the Tracker.
+  window._strMarkCanceled = async function(id) {
+    const idx = _entries.findIndex(x => x.id === id);
+    if(idx === -1) return;
+    const e = _entries[idx];
+    const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || '(patient)';
+    const reason = prompt('Cancellation reason for ' + name + '? (optional — shown to Jordan)\n\nThis stops all automatic reminders and emails jordan@atlasanesthesia.co.', '');
+    if(reason === null) return; // user clicked Cancel on the prompt
+    e.canceledAt = new Date().toISOString();
+    e.canceledBy = (window.currentUser?.email) || '';
+    e.canceledReason = (reason || '').trim();
+    await _saveEntries();
+    try { window.logAudit && window.logAudit('preop-visit-canceled', id, name + (reason ? ' — ' + reason : '')); } catch(_){}
+    // Notify Jordan via the existing outreach-email worker endpoint.
+    try {
+      const surg = e.surgeryDate ? _fmtDate(e.surgeryDate) : '—';
+      const dob  = e.patientDOB ? _fmtDate(e.patientDOB) : '—';
+      const phone = e.patientPhone || '—';
+      const email = e.patientEmail || '—';
+      const surgeon = e.surgeon || '—';
+      const center = e.surgeryCenterName || '—';
+      const reasonRow = e.canceledReason
+        ? `<tr style="background:#f8fafc"><td style="padding:8px 14px;font-weight:700">Reason</td><td style="padding:8px 14px">${_esc(e.canceledReason)}</td></tr>`
+        : '';
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+        <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,sans-serif">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">
+        <table width="560" style="max-width:560px;width:100%;background:#fff;border-radius:12px;overflow:hidden">
+          <tr><td style="background:#991b1b;color:#fff;padding:18px 22px"><div style="font-size:11px;letter-spacing:.8px;text-transform:uppercase">Atlas Anesthesia · Case Canceled</div><div style="font-size:18px;font-weight:700;margin-top:2px">${_esc(name)}</div></td></tr>
+          <tr><td style="padding:20px 22px;font-size:14px;color:#1e293b;line-height:1.6">
+            <p style="margin:0 0 12px">Heads up — this case has been marked <strong>canceled</strong>. No more automatic reminders will go out for it.</p>
+            <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:13px">
+              <tr><td style="padding:8px 14px;font-weight:700;width:120px">Patient</td><td style="padding:8px 14px">${_esc(name)}</td></tr>
+              <tr style="background:#f8fafc"><td style="padding:8px 14px;font-weight:700">DOB</td><td style="padding:8px 14px">${_esc(dob)}</td></tr>
+              <tr><td style="padding:8px 14px;font-weight:700">Phone</td><td style="padding:8px 14px">${_esc(phone)}</td></tr>
+              <tr style="background:#f8fafc"><td style="padding:8px 14px;font-weight:700">Email</td><td style="padding:8px 14px">${_esc(email)}</td></tr>
+              <tr><td style="padding:8px 14px;font-weight:700">Surgery</td><td style="padding:8px 14px">${_esc(surg)}</td></tr>
+              <tr style="background:#f8fafc"><td style="padding:8px 14px;font-weight:700">Surgeon</td><td style="padding:8px 14px">${_esc(surgeon)}</td></tr>
+              <tr><td style="padding:8px 14px;font-weight:700">Center</td><td style="padding:8px 14px">${_esc(center)}</td></tr>
+              ${reasonRow}
+              <tr style="background:#f8fafc"><td style="padding:8px 14px;font-weight:700">Canceled by</td><td style="padding:8px 14px">${_esc(e.canceledBy || 'staff')}</td></tr>
+            </table>
+            <p style="margin:16px 0 0;font-size:12px;color:#64748b">Reopen the case anytime from Nicole's Tracker via the ↶ Uncancel button.</p>
+          </td></tr>
+        </table></td></tr></table></body></html>`;
+      await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/outreach-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: 'jordan@atlasanesthesia.co', subject: 'Case Canceled — ' + name, html })
+      });
+    } catch(emailErr) { console.warn('cancel email send failed:', emailErr); }
+    if(typeof window.toastSuccess === 'function') window.toastSuccess('Canceled — Jordan notified');
+    window.renderSchedulerTracker();
+  };
+
+  window._strUncancel = async function(id) {
+    const idx = _entries.findIndex(x => x.id === id);
+    if(idx === -1) return;
+    const e = _entries[idx];
+    if(!confirm('Reopen this case? Reminders will resume on the normal schedule.')) return;
+    e.canceledAt = null;
+    e.canceledBy = null;
+    e.canceledReason = null;
+    // Clear the once-per-entry flags so reminders can fire again.
+    e.threeDayNoScheduleAlertAt = null;
+    e.recordsFaxFollowupAt = null;
+    await _saveEntries();
+    try { window.logAudit && window.logAudit('preop-visit-uncanceled', id); } catch(_){}
+    if(typeof window.toastSuccess === 'function') window.toastSuccess('Case reopened');
+    window.renderSchedulerTracker();
+  };
+
   window._strDelete = async function(id) {
     const e = _entries.find(x => x.id === id);
     if(!e) return;
