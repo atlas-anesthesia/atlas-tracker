@@ -452,6 +452,13 @@ function paintSlots() {
   });
   const surgIso = _entry.surgeryDate || '';
   const todayIso = new Date().toISOString().split('T')[0];
+  // Patients have to book at least 48 hours out — same-day or next-day spots
+  // don't give Jordan enough time to prep, and we had one patient grab a
+  // 1:00 PM slot at 12:45 PM. cutoffMs is a wall-clock timestamp; the slot
+  // datetime is built from the slot's date + time assuming the patient's
+  // local clock matches Central (where the slots are published).
+  const MIN_LEAD_MS = 48 * 60 * 60 * 1000;
+  const cutoffMs = Date.now() + MIN_LEAD_MS;
 
   const grouped = {};
   Object.keys(_slots).sort().forEach(date => {
@@ -459,7 +466,12 @@ function paintSlots() {
     if(surgIso && date >= surgIso) return;
     const all = new Set();
     (_slots[date] || []).forEach(s => expand15(s.start, s.end).forEach(t => all.add(t)));
-    const free = [...all].filter(t => !taken.has(date + ' ' + t)).sort();
+    const free = [...all].filter(t => {
+      if(taken.has(date + ' ' + t)) return false;
+      const slotMs = new Date(date + 'T' + t + ':00').getTime();
+      if(isNaN(slotMs)) return false;
+      return slotMs >= cutoffMs;
+    }).sort();
     if(free.length) grouped[date] = free;
   });
   const dates = Object.keys(grouped).sort();
