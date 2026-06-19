@@ -267,6 +267,17 @@
     const editBtn = (!phiHidden && isScheduler)
       ? `<button onclick="window._strOpenAddPatient('${e.id}')" class="btn btn-ghost btn-sm" title="Edit patient info" style="font-size:11px;padding:3px 7px">✏</button>`
       : '';
+    // Records-request fax — Nicole sends this to the patient's PCP from her
+    // own row, no need to bounce it through Jordan anymore. Pre-fills PCP
+    // info from the entry. Button styled green when a fax has already gone
+    // out so she can tell at a glance.
+    const recordsFaxSent = !!e.pcpRecordsFaxSentAt;
+    const recordsFaxTip = recordsFaxSent
+      ? ('Records request faxed ' + new Date(e.pcpRecordsFaxSentAt).toLocaleDateString() + ' — click to resend')
+      : 'Fax a records request to the PCP';
+    const recordsFaxBtn = (!phiHidden && isScheduler && e.pcpFax)
+      ? `<button onclick="window._strOpenRecordsFax('${e.id}')" class="btn btn-ghost btn-sm" title="${recordsFaxTip}" style="font-size:11px;padding:3px 7px;color:${recordsFaxSent?'#166534':'#0369a1'};border-color:${recordsFaxSent?'#86efac':'#bfdbfe'}">${recordsFaxSent?'📠 ✓':'📠 Records'}</button>`
+      : '';
     const delBtn = (!phiHidden && isScheduler)
       ? `<button onclick="window._strDelete('${e.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>`
       : '';
@@ -280,7 +291,7 @@
       <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false, false, true)}</div>
       <div style="${centerCell}">${clearedPill}</div>
       <div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap">
-        ${openPreopBtn}${portalBtn}${editBtn}${delBtn}
+        ${openPreopBtn}${portalBtn}${editBtn}${recordsFaxBtn}${delBtn}
       </div>
     </div>`;
   }
@@ -1059,6 +1070,160 @@
     }
     window.editPreopRecord(recordId);
   };
+
+  // ── PCP Records-Request Fax (Nicole's flow) ─────────────────────────────────
+  // Self-contained modal that lives on the Tracker row 📠 Records button.
+  // Auto-fills PCP info from the entry; lets Nicole pick which records to
+  // request (H&P / labs / EKG default-checked; Echo + Stress optional);
+  // sends through the same /fax worker the CRNA flow uses.
+  const _NIC_FAX_WORKER = 'https://atlas-reminder.blue-disk-9b10.workers.dev/fax';
+  const _NIC_RETURN_FAX = '317-608-3539'; // Atlas's return fax line (matches fax.js)
+  const _NIC_FAX_DOCS = [
+    { key:'hp',       label:'Complete History & Physical', def:true  },
+    { key:'labs',     label:'Most Recent Labs (CBC, BMP, HbA1c)', def:true  },
+    { key:'ekg',      label:'Most Recent EKG', def:true  },
+    { key:'echo',     label:'Echocardiogram (if applicable)', def:false },
+    { key:'stress',   label:'Stress Test (if applicable)', def:false }
+  ];
+
+  window._strOpenRecordsFax = function(entryId) {
+    const e = _entries.find(x => x.id === entryId);
+    if(!e) return;
+    if(!e.pcpFax) { alert('No PCP fax number on file. Add it via ✏ Edit first.'); return; }
+    const prior = document.getElementById('strRecordsFaxModal');
+    if(prior) prior.remove();
+    const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || '(patient)';
+    const dob  = e.patientDOB ? _fmtDate(e.patientDOB) : '—';
+    const surg = e.surgeryDate ? _fmtDate(e.surgeryDate) : '—';
+    const docChecks = _NIC_FAX_DOCS.map(d =>
+      `<label style="display:flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;background:#fff">
+         <input type="checkbox" id="nrf-doc-${d.key}" ${d.def?'checked':''} style="width:16px;height:16px">
+         <span>${d.label}</span>
+       </label>`
+    ).join('');
+    const wrap = document.createElement('div');
+    wrap.id = 'strRecordsFaxModal';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto';
+    wrap.onclick = (ev) => { if(ev.target === wrap) wrap.remove(); };
+    wrap.innerHTML = `
+      <div style="background:#fff;border-radius:12px;width:100%;max-width:640px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+        <div style="background:#1d3557;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#90b8e0">Atlas Anesthesia · PCP Records Request</div>
+            <div style="font-size:15px;font-weight:700">📠 Send Records Request — ${_esc(name)}</div>
+          </div>
+          <button onclick="document.getElementById('strRecordsFaxModal').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px">✕</button>
+        </div>
+        <div style="padding:18px 20px;font-size:13px;color:#1e293b">
+          <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px">
+            <div><strong>Patient:</strong> ${_esc(name)} &nbsp;·&nbsp; <strong>DOB:</strong> ${_esc(dob)}</div>
+            <div style="margin-top:4px"><strong>Surgery:</strong> ${_esc(surg)}</div>
+            <div style="margin-top:4px"><strong>PCP:</strong> ${_esc(e.pcp || '—')}</div>
+          </div>
+          <label style="margin-top:0">PCP fax number</label>
+          <input type="tel" id="nrf-fax" value="${_esc(e.pcpFax)}" style="margin-bottom:14px">
+          <label style="margin-top:0">Urgency</label>
+          <select id="nrf-urgency" style="margin-bottom:14px">
+            <option value="Routine">Routine</option>
+            <option value="Expedited">Expedited</option>
+            <option value="Urgent">Urgent</option>
+            <option value="STAT">STAT</option>
+          </select>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Records to request</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">${docChecks}</div>
+          <label style="margin-top:0">Additional notes <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label>
+          <textarea id="nrf-note" rows="2" placeholder="e.g. patient has diabetes, please include recent A1C"></textarea>
+          <div id="nrf-status" style="font-size:13px;margin-top:10px;min-height:18px"></div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:12px;border-top:1px solid var(--border);margin-top:12px">
+            <button class="btn btn-ghost" onclick="document.getElementById('strRecordsFaxModal').remove()">Cancel</button>
+            <button class="btn btn-primary" id="nrf-send-btn" onclick="window._strSendRecordsFax('${entryId}')" style="background:#0369a1;border-color:#0369a1">📠 Send Fax</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+  };
+
+  window._strSendRecordsFax = async function(entryId) {
+    const idx = _entries.findIndex(x => x.id === entryId);
+    if(idx === -1) return;
+    const e = _entries[idx];
+    const status = document.getElementById('nrf-status');
+    const btn = document.getElementById('nrf-send-btn');
+    const setErr = msg => { if(status) { status.textContent = '✗ ' + msg; status.style.color = '#b91c1c'; } };
+    const setOk  = msg => { if(status) { status.textContent = '✓ ' + msg; status.style.color = '#166534'; } };
+    let to = (document.getElementById('nrf-fax')?.value || '').replace(/\D/g, '');
+    if(to.length === 10) to = '1' + to;
+    if(to.length !== 11) { setErr('Fax number must be 10 digits.'); return; }
+    const urgency = document.getElementById('nrf-urgency')?.value || 'Routine';
+    const note    = (document.getElementById('nrf-note')?.value || '').trim();
+    const picked  = _NIC_FAX_DOCS.filter(d => document.getElementById('nrf-doc-'+d.key)?.checked);
+    if(!picked.length) { setErr('Pick at least one record to request.'); return; }
+    if(btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    try {
+      const html = _strBuildRecordsFaxHtml(e, picked, urgency, note);
+      const res = await fetch(_NIC_FAX_WORKER, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: '+' + to,
+          caseId: e.preopCaseId || ('TRACKER-' + e.id.slice(0, 8)),
+          worker: 'nicole',
+          html
+        })
+      });
+      const out = await res.json().catch(() => ({}));
+      if(!res.ok || !out.success) throw new Error(out.error || ('Worker ' + res.status));
+      e.pcpRecordsFaxSentAt = new Date().toISOString();
+      e.pcpRecordsFaxSentBy = (window.currentUser?.email) || '';
+      e.pcpRecordsFaxJobId  = out.sid || '';
+      await _saveEntries();
+      try { window.logAudit && window.logAudit('pcp-records-fax-sent', e.id, [e.patientFirst, e.patientLast].filter(Boolean).join(' ')); } catch(_){}
+      setOk('Fax sent — Job ' + (out.sid || '?'));
+      setTimeout(() => { document.getElementById('strRecordsFaxModal')?.remove(); window.renderSchedulerTracker(); }, 900);
+    } catch(err) {
+      setErr(err.message || String(err));
+      if(btn) { btn.disabled = false; btn.textContent = '📠 Send Fax'; }
+    }
+  };
+
+  function _strBuildRecordsFaxHtml(e, picked, urgency, note) {
+    const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || '(patient)';
+    const dob  = e.patientDOB || '';
+    const surg = e.surgeryDate || '';
+    const surgeon = e.surgeon || '';
+    const pcp  = e.pcp || '';
+    const today = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    const docRows = picked.map(d => `<tr><td style="padding:5px 0;font-size:13px">☑ ${d.label}</td></tr>`).join('');
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+      <body style="font-family:Arial,sans-serif;color:#111;padding:24px;max-width:760px;margin:0 auto">
+        <div style="border-bottom:2px solid #1d3557;padding-bottom:10px;margin-bottom:18px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.6px;color:#1d3557;text-transform:uppercase">Atlas Anesthesia, LLC</div>
+          <div style="font-size:22px;font-weight:700;color:#1d3557">PCP Records Request</div>
+          <div style="font-size:11px;color:#555;margin-top:2px">Pre-op clearance documentation — Confidential / HIPAA</div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
+          <tr><td style="padding:5px 10px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:90px;font-size:12px">DATE</td><td style="padding:5px 10px;border:1px solid #bbb;font-size:12px">${today}</td><td style="padding:5px 10px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:90px;font-size:12px">URGENCY</td><td style="padding:5px 10px;border:1px solid #bbb;font-size:12px;font-weight:bold">${urgency}</td></tr>
+          <tr><td style="padding:5px 10px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;font-size:12px">TO</td><td colspan="3" style="padding:5px 10px;border:1px solid #bbb;font-size:12px">${_esc(pcp || 'Primary Care Physician')}</td></tr>
+          <tr><td style="padding:5px 10px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;font-size:12px">FROM</td><td colspan="3" style="padding:5px 10px;border:1px solid #bbb;font-size:12px">Nicole · Atlas Anesthesia · Return fax ${_NIC_RETURN_FAX}</td></tr>
+        </table>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:12px;line-height:1.55">
+          <div><strong>Patient:</strong> ${_esc(name)}</div>
+          <div><strong>DOB:</strong> ${_esc(dob)} &nbsp;·&nbsp; <strong>Scheduled procedure:</strong> ${_esc(surg)}</div>
+          ${surgeon ? `<div><strong>Surgeon:</strong> ${_esc(surgeon)}</div>` : ''}
+        </div>
+        <div style="font-size:13px;margin-bottom:10px">
+          Please send the following records to Atlas Anesthesia at <strong>${_NIC_RETURN_FAX}</strong> so we can complete pre-op clearance for the patient above:
+        </div>
+        <table style="margin-bottom:14px"><tbody>${docRows}</tbody></table>
+        ${note ? `<div style="border:1px solid #fde68a;background:#fef3c7;border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:12px"><strong>Additional notes:</strong> ${_esc(note)}</div>` : ''}
+        <div style="font-size:12px;color:#555;line-height:1.55;margin-top:24px">
+          Thank you for your assistance. If you have any questions, please call Atlas Anesthesia.
+        </div>
+        <div style="margin-top:34px;font-size:12px">
+          <div style="border-top:1px solid #000;width:280px;padding-top:4px">Nicole · Atlas Anesthesia, LLC</div>
+        </div>
+      </body></html>`;
+  }
 
   // Manual nudge is removed — the worker's nightly cron now emails every
   // patient who's been sent the portal link but hasn't paid the $100 yet,
