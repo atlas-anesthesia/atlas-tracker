@@ -249,6 +249,12 @@ function updatePhotosStatus() {
     $('step-pay').classList.add('locked');
     $('step-sched').classList.add('locked');
   }
+  // In-step "you must finish the previous step" banners. CSS already greys
+  // out locked steps, but the banner makes the *reason* unmissable.
+  const payNotice = $('pay-locked-notice');
+  if(payNotice) payNotice.style.display = (done === 6) ? 'none' : 'block';
+  const schedNotice = $('sched-locked-notice');
+  if(schedNotice) schedNotice.style.display = (done === 6 && _entry._paid) ? 'none' : 'block';
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -304,6 +310,9 @@ function updatePayUI() {
     $('step-pay').classList.remove('done');
     $('step-sched').classList.add('locked');
   }
+  // Keep the locked-step banner accurate when payment state changes too.
+  const schedNotice = $('sched-locked-notice');
+  if(schedNotice) schedNotice.style.display = (photosDone && paid) ? 'none' : 'block';
 }
 
 // ══════════════════════════════════════════════════════════════════════════

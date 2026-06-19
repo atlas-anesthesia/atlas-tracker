@@ -166,6 +166,9 @@
             <div class="step-status pending" id="pay-status-pill">Pending</div>
           </div>
           <div class="step-body">
+            <div id="pay-locked-notice" style="display:none;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:#92400e">
+              <strong>📷 Please complete Step 1 first.</strong> Upload all 6 airway photos and Step 2 will unlock automatically.
+            </div>
             <div class="pay-block">
               <div class="pay-amount">$100.00</div>
               <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Pre-op clearance fee — required before scheduling</div>
@@ -190,6 +193,9 @@
             <div class="step-status pending" id="sched-status-pill">Not yet scheduled</div>
           </div>
           <div class="step-body">
+            <div id="sched-locked-notice" style="display:none;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:#92400e">
+              <strong>⏳ Please finish Steps 1 and 2 first.</strong> Upload your 6 photos and pay the $100 fee — then this step unlocks automatically.
+            </div>
             <p class="lede">Pick a 15-minute window. All times are <strong>Central Time</strong>. Jordan, APRN, FNP will call you from a <strong>317</strong> area code.</p>
             <div id="sched-error"></div>
             <div id="slot-list"><div style="text-align:center;color:var(--text-faint);padding:20px"><span class="spinner"></span> Loading available times…</div></div>
@@ -434,6 +440,6 @@
 
 <!-- HEIC → JPG converter (only loads if the patient uploads a HEIC file) -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
-<script type="module" src="assets/js/patient-schedule.js?v=20260611a"></script>
+<script type="module" src="assets/js/patient-schedule.js?v=20260611b"></script>
 </body>
 </html>
