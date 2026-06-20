@@ -283,6 +283,27 @@ async function refreshStripeStatus() {
     const data = await res.json();
     _entry._paid = !!data.preopVisitPaid;
     updatePayUI();
+    // If we just confirmed payment, persist the flag to Firestore so the
+    // worker's daily reminder cron stops nagging. Before this, the cron had
+    // to re-look-up Stripe by email — any case mismatch (different email,
+    // +tag, etc.) meant the patient kept getting reminders even after they
+    // paid. Now the portal IS the source of truth and writes the flag once
+    // confirmed.
+    if(_entry._paid && !_entry.preopVisitPaidConfirmed) {
+      try {
+        const snap = await getDoc(doc(db, 'atlas', 'preop_visits'));
+        const entries = snap.exists() ? (snap.data().entries || []) : [];
+        const idx = entries.findIndex(x => x.id === _entry.id);
+        if(idx !== -1) {
+          entries[idx].preopVisitPaidConfirmed = true;
+          entries[idx].preopVisitPaidAt = data.preopVisitPaidAt || new Date().toISOString();
+          entries[idx].preopVisitPaidAmount = data.preopVisitAmount || 100;
+          await setDoc(doc(db, 'atlas', 'preop_visits'), { entries });
+          _entry.preopVisitPaidConfirmed = true;
+          _allEntries = entries;
+        }
+      } catch(persistErr) { console.warn('failed to persist paid flag:', persistErr); }
+    }
   } catch(_) {
     // leave previous state
   } finally {
