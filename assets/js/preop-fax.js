@@ -610,7 +610,7 @@ function buildPreviewHTML() {
     <div style="margin-top:14px;display:grid;grid-template-columns:1fr 200px;gap:18px;align-items:end">
       <div>
         <div style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase;margin-bottom:2px">Requested By</div>
-        <img src="assets/signatures/${w === 'josh' ? 'josh' : 'dev'}.png" style="height:60px;mix-blend-mode:multiply;filter:contrast(1.6) brightness(.75);display:block" alt="Signature" onerror="this.style.display='none'">
+        <img src="assets/signatures/${w === 'josh' ? 'josh' : 'dev'}.png" style="height:78px;mix-blend-mode:multiply;filter:contrast(2.2) brightness(.55) saturate(0);display:block" alt="Signature" onerror="this.style.display='none'">
         <div style="border-top:1px solid #000;width:240px;font-size:10px;padding-top:2px;margin-top:2px">${providerName(w)} &middot; Atlas Anesthesia</div>
       </div>
       <div style="text-align:right;font-size:10px;color:#555">DATE: <span style="border-bottom:1px solid #888;padding:0 6px">${fmtDate(today)}</span></div>

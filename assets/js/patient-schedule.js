@@ -394,21 +394,34 @@ async function renderSchedule() {
 
 // ── Signature pad ─────────────────────────────────────────────────────────
 let _sigCtx, _sigDrawing = false, _sigHasInk = false, _sigDataUrl = '';
-function _initSignaturePad() {
+let _sigListenersBound = false;
+// Resize the backing pixels of the signature canvas to match its visible
+// CSS size. Must be called AFTER the consent modal becomes visible —
+// when called while hidden, getBoundingClientRect() returns 0×0 and the
+// canvas gets clamped to 1×1, which produced blank PNG signatures.
+function _resizeSignatureCanvas() {
   const c = $('sig-canvas');
   if(!c) return;
-  // Match the canvas backing pixels to its CSS size for crisp lines on
-  // retina screens.
   const ratio = window.devicePixelRatio || 1;
   const rect = c.getBoundingClientRect();
+  if(rect.width === 0) return; // still hidden, nothing to size to
   c.width  = Math.max(1, Math.round(rect.width  * ratio));
   c.height = Math.max(1, Math.round(rect.height * ratio));
   _sigCtx = c.getContext('2d');
   _sigCtx.scale(ratio, ratio);
-  _sigCtx.lineWidth   = 2;
+  _sigCtx.lineWidth   = 2.5;
   _sigCtx.lineCap     = 'round';
   _sigCtx.lineJoin    = 'round';
   _sigCtx.strokeStyle = '#0f172a';
+  _sigHasInk = false;
+  _updateSigStatus();
+}
+function _initSignaturePad() {
+  const c = $('sig-canvas');
+  if(!c) return;
+  _resizeSignatureCanvas();
+  if(_sigListenersBound) return;
+  _sigListenersBound = true;
   const pos = (ev) => {
     const r = c.getBoundingClientRect();
     const t = ev.touches ? ev.touches[0] : ev;
@@ -447,7 +460,17 @@ function _updateSigStatus() {
 function _onConsentAgree() {
   if(!_sigHasInk) return;
   const c = $('sig-canvas');
-  _sigDataUrl = c.toDataURL('image/png');
+  // Flatten onto white so the PNG attachment isn't transparent. Some mail
+  // clients render a transparent PNG against their dark theme background
+  // — which makes dark-navy ink basically invisible.
+  const flat = document.createElement('canvas');
+  flat.width = c.width;
+  flat.height = c.height;
+  const fctx = flat.getContext('2d');
+  fctx.fillStyle = '#ffffff';
+  fctx.fillRect(0, 0, flat.width, flat.height);
+  fctx.drawImage(c, 0, 0);
+  _sigDataUrl = flat.toDataURL('image/png');
   const ccb = $('consent-checkbox');
   if(ccb) { ccb.checked = true; }
   _closeConsentModal();
@@ -456,7 +479,13 @@ function _onConsentAgree() {
 
 function _openTermsModal()   { const m = $('terms-modal'); if(m) m.classList.remove('hidden'); }
 function _closeTermsModal()  { const m = $('terms-modal'); if(m) m.classList.add('hidden'); }
-function _openConsentModal() { const m = $('consent-modal'); if(m) m.classList.remove('hidden'); }
+function _openConsentModal() {
+  const m = $('consent-modal');
+  if(m) m.classList.remove('hidden');
+  // Resize the canvas every time the modal opens — first open sized to 0×0
+  // while still hidden, so without this the captured PNG was 1×1 blank.
+  setTimeout(_resizeSignatureCanvas, 30);
+}
 function _closeConsentModal(){ const m = $('consent-modal'); if(m) m.classList.add('hidden'); }
 function _termsAccepted()   { return !!($('terms-checkbox')?.checked); }
 function _consentAccepted() { return !!($('consent-checkbox')?.checked); }
