@@ -8439,8 +8439,14 @@ const draftIds = new Set(drafts.map(d => d.caseId));
 const finalizedIds = new Set(cases.filter(c => !c.draft).map(c => c.caseId).filter(Boolean));
 // Only show pre-ops that don't have a finalized case yet
 preopRecords = preopRecords.filter(r => !finalizedIds.has(r['po-caseId']));
-// Combine: show all pre-ops, with draft status if applicable
-const allPreops = preopRecords.sort((a,b) => {
+// Hide past cases by default — they clutter the active list. CRNAs who
+// forgot to finalize can still get to them via the "Show N past" toggle
+// at the top. window._midCaseShowPast persists across tab switches within
+// the session so the toggle stays where they left it.
+const _todayForMidCase = todayStr();
+const _pastPreops   = preopRecords.filter(r => (r['po-surgeryDate'] || '') && r['po-surgeryDate'] < _todayForMidCase);
+const _activePreops = preopRecords.filter(r => !r['po-surgeryDate'] || r['po-surgeryDate'] >= _todayForMidCase);
+const _sortPreops = arr => arr.sort((a,b) => {
   const dateA = a['po-surgeryDate']||'', dateB = b['po-surgeryDate']||'';
   if(dateA !== dateB) return dateA.localeCompare(dateB);
   const timeA = a['po-startTime'] || '99:99';
@@ -8448,7 +8454,11 @@ const allPreops = preopRecords.sort((a,b) => {
   if(timeA !== timeB) return timeA.localeCompare(timeB);
   return (a['po-caseId']||'').localeCompare(b['po-caseId']||'');
 });
-if(!allPreops.length && !drafts.length) {
+_sortPreops(_activePreops);
+_sortPreops(_pastPreops);
+const _showPast = !!window._midCaseShowPast;
+const allPreops = _showPast ? _activePreops.concat(_pastPreops) : _activePreops;
+if(!allPreops.length && !drafts.length && !_pastPreops.length) {
 el.innerHTML = '<div class="empty-state"><span class="empty-state-icon">🩺</span><div class="empty-state-title">No mid-case records yet</div><div class="empty-state-sub">Cases waiting to be finalized will appear here once you save a Pre-Op.</div><button class="empty-state-cta" onclick="showTab(\'preop\')">+ New Pre-Op →</button></div>';
 return;
 }
@@ -8551,13 +8561,24 @@ return `<div class="case-item" style="border-left:3px solid ${dBorder};backgroun
 ${d.caseId}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>${dDateLabel}<span style="background:var(--warn-light);color:var(--warn);font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">✏ DRAFT</span></div><div class="case-date">${fmtDate(d.date)} · ${d.provider||'—'}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><button onclick="resumeCase('${d.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize Case →</button><button onclick="editFinalizedCase('${d.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit Draft</button><button onclick="deleteMidCase('draft','${d.id}','${d.caseId}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">🗑 Delete</button></div></div></div>`;
 }).join('');
-el.innerHTML = (items_html + orphanHtml) || '<div class="empty-state">No mid-case records yet.</div>';
+// Show/hide-past toggle — only shown if there are past unfinalized cases.
+const pastToggleHtml = _pastPreops.length
+  ? `<div style="margin:0 0 12px 0;padding:10px 14px;background:${_showPast?'#fef3c7':'#f8fafc'};border:1px solid ${_showPast?'#fde68a':'var(--border)'};border-radius:8px;display:flex;justify-content:space-between;align-items:center;font-size:13px">
+       <div style="color:${_showPast?'#92400e':'var(--text-muted)'}">${_showPast?'⚠':'📁'} ${_pastPreops.length} past pre-op${_pastPreops.length===1?'':'s'} were never finalized${_showPast?' — shown below':' (hidden)'}</div>
+       <button onclick="window._midCaseTogglePast()" class="btn btn-ghost btn-sm" style="font-size:11px">${_showPast?'Hide past':'Show past'}</button>
+     </div>`
+  : '';
+el.innerHTML = pastToggleHtml + ((items_html + orphanHtml) || '<div class="empty-state">No mid-case records yet.</div>');
 // Deposit status is now manual — no Stripe check needed
 // Render Review For Tomorrow
 renderReviewTomorrow();
 }
 window.toggleMidCase = function(id) {
 document.getElementById('midcase-detail-'+id).classList.toggle('open');
+};
+window._midCaseTogglePast = function() {
+  window._midCaseShowPast = !window._midCaseShowPast;
+  if(typeof renderMidCase === 'function') renderMidCase();
 };
 window.deleteMidCase = async function(type, id, caseId) {
 const label = caseId || id;
