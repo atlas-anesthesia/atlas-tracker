@@ -11563,3 +11563,121 @@ Object.defineProperty(window, 'csEntries', {
   window.addEventListener('offline', update);
   update();
 })();
+
+// ── One-time case-restore helpers ───────────────────────────────────────────
+// Run from the browser DevTools console after the page has loaded.
+//   1. _listCaseBackups()             → shows what dates are available
+//   2. _restoreCasesFromBackup('2026-06-20')  → restores cases from that date
+// Both are safe to run multiple times. The restore prompts a confirm() with
+// counts before writing anything.
+window._listCaseBackups = async function() {
+  console.log('[restore] scanning for backup docs …');
+  const found = [];
+  // The manifest doc for a given day is atlas/backup_<date>. Scan the last
+  // 45 days to find dates that actually have a backup.
+  const today = new Date();
+  for(let daysAgo = 0; daysAgo < 45; daysAgo++) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysAgo);
+    const iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    try {
+      const snap = await getDoc(doc(db, 'atlas', 'backup_' + iso));
+      if(snap.exists()) {
+        const m = snap.data() || {};
+        const casesEntry = m.collections?.cases || {};
+        found.push({
+          date: iso,
+          format: m.format || '(unknown)',
+          casesRecords: casesEntry.recordCount ?? '?',
+          totalRecords: m.totalRecords ?? '?'
+        });
+      }
+    } catch(_){}
+  }
+  if(!found.length) { console.log('[restore] no backup manifests found in the last 45 days.'); return []; }
+  console.log('[restore] Available backups:');
+  console.table(found);
+  console.log('[restore] To restore cases from one of these dates, run:');
+  console.log('           _restoreCasesFromBackup(\'YYYY-MM-DD\')');
+  return found;
+};
+
+window._restoreCasesFromBackup = async function(dateStr) {
+  if(!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    alert('Pass a date like _restoreCasesFromBackup("2026-06-20")');
+    return;
+  }
+  try {
+    // 1) Read the manifest to confirm the backup exists and see what shards
+    //    it holds.
+    const manifestSnap = await getDoc(doc(db, 'atlas', 'backup_' + dateStr));
+    if(!manifestSnap.exists()) {
+      alert('No backup manifest found for ' + dateStr + '.\nRun _listCaseBackups() to see available dates.');
+      return;
+    }
+    const manifest = manifestSnap.data() || {};
+    const cols = manifest.collections || {};
+    // Every cases-related entry in the manifest — the pointer doc "cases"
+    // plus each monthly shard "cases_YYYY-MM".
+    const caseKeys = Object.keys(cols).filter(k => k === 'cases' || k.startsWith('cases_'));
+    if(!caseKeys.length) {
+      alert('The backup for ' + dateStr + ' does not include any cases collection docs.');
+      return;
+    }
+    // 2) Pull all the backup docs and count records.
+    console.log('[restore] reading backup docs for ' + dateStr + ' …');
+    const payloads = {};
+    let totalCases = 0;
+    for(const key of caseKeys) {
+      const snap = await getDoc(doc(db, 'atlas', 'backup_' + dateStr + '_' + key));
+      if(!snap.exists()) { console.warn('[restore] missing backup doc:', 'backup_' + dateStr + '_' + key); continue; }
+      const bundle = snap.data() || {};
+      payloads[key] = bundle.data || {};
+      const arr = payloads[key].cases;
+      if(Array.isArray(arr)) totalCases += arr.length;
+    }
+    // 3) Read the CURRENT live cases so the user knows what they'd be
+    //    losing (if the current state has more/different records).
+    const liveMeta = await getDoc(doc(db, 'atlas', 'cases'));
+    let liveTotal = 0;
+    if(liveMeta.exists()) {
+      const m = liveMeta.data() || {};
+      if(m.format === 'monthly-v2' && Array.isArray(m.months)) {
+        for(const mn of m.months) {
+          const s = await getDoc(doc(db, 'atlas', 'cases_' + mn));
+          if(s.exists()) liveTotal += (s.data()?.cases || []).length;
+        }
+      } else if(Array.isArray(m.cases)) {
+        liveTotal = m.cases.length;
+      }
+    }
+    // 4) Confirm.
+    const shardList = caseKeys.filter(k => k !== 'cases').map(k => k.replace('cases_','')).join(', ') || '(pointer only)';
+    const msg = 'Restore cases from backup dated ' + dateStr + '?\n\n'
+              + '  Backup contains:  ' + totalCases + ' case(s)\n'
+              + '  Shards in backup: ' + shardList + '\n\n'
+              + '  Currently live:   ' + liveTotal + ' case(s)\n\n'
+              + 'This OVERWRITES the live atlas/cases pointer and every monthly shard listed above. Any changes made after ' + dateStr + ' will be LOST.\n\nProceed?';
+    if(!confirm(msg)) { console.log('[restore] cancelled by user'); return; }
+    // 5) Write back — pointer first, then every shard.
+    console.log('[restore] writing pointer + ' + (caseKeys.length - 1) + ' shard(s) …');
+    if(payloads.cases) {
+      await setDoc(doc(db, 'atlas', 'cases'), payloads.cases);
+      console.log('[restore]   ✓ wrote atlas/cases (pointer)');
+    } else {
+      console.warn('[restore]   ! no pointer doc in backup, live pointer left as-is');
+    }
+    for(const key of caseKeys) {
+      if(key === 'cases') continue;
+      const p = payloads[key];
+      if(!p) continue;
+      await setDoc(doc(db, 'atlas', key), p);
+      console.log('[restore]   ✓ wrote atlas/' + key + ' (' + (p.cases?.length || 0) + ' case(s))');
+    }
+    try { logAudit && logAudit('cases-restored', dateStr, 'Restored ' + totalCases + ' case(s) from backup ' + dateStr); } catch(_){}
+    alert('Restored ' + totalCases + ' case(s) from ' + dateStr + '.\n\nReloading the page to pick up the restored data.');
+    setTimeout(() => location.reload(), 500);
+  } catch(err) {
+    console.error('[restore] failed:', err);
+    alert('Restore failed: ' + (err.message || err));
+  }
+};
