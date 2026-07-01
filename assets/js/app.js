@@ -5201,7 +5201,8 @@ const _unfinalizedHtml = _unfinalizedPast.length ? (
           <div class="case-date">${surgDateFmt} · ${provider}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-          <button onclick="editPreopRecord('${r.id}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize →</button>
+          <button onclick="loadDraftCaseById('${caseId}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize →</button>
+          <button onclick="editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit Pre-Op</button>
         </div>
       </div>
     </div>`;
