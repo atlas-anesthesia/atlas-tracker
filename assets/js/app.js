@@ -1868,57 +1868,43 @@ window._spvSend = async function() {
       }
     } catch(e) { console.warn('Could not update tracker entry:', e); }
 
-    // Auto-create a pre-op case for Josh/Dev pre-filled with what Nicole knows,
-    // tagged "to review by Nicole" so the CRNA sees who created it and that
-    // Jordan still needs to do the clearance.
+    // Pre-Op record was already auto-created when Nicole first added the
+    // patient to the Tracker. Now that she's picked a CRNA + time + email
+    // via "Book & Send Confirmation", update those specific fields on the
+    // existing record (or create it fresh if this entry pre-dates the
+    // auto-create flow).
     try {
       const preSnap = await getDoc(doc(db, 'atlas', 'preop'));
-      const existing = preSnap.exists() ? (preSnap.data().records || []) : [];
+      let existing = preSnap.exists() ? (preSnap.data().records || []) : [];
       window._cachedPreopRecords = existing;
-      const newCaseId = generateCaseId(crna, surgeryDate);
-      const newRecordId = uid ? uid() : Math.random().toString(36).slice(2,11);
-      // Pull surgery center details so the auto-created record also pre-fills
-      // the Dentist Office Address from whatever Josh/Dev set up in the
-      // Surgery Centers tab.
-      const _scForEntry = (window.surgeryCenters || []).find(c => c.id === entry.surgeryCenterId);
-      const newRecord = {
-        id: newRecordId,
-        worker: crna,
-        savedAt: new Date().toISOString(),
-        createdBy: 'nicole',
-        'po-reviewStatus': 'by-nicole',
-        'po-caseId': newCaseId,
-        'po-surgeryDate': surgeryDate,
-        'po-startTime': surgeryTime || '',
-        'po-surgery-center': entry.surgeryCenterId || '',
-        'po-provider': surgeon,                          // Dentist (surgeon from inbox modal)
-        'po-officeAddress': _scForEntry?.address || '',  // Office address from surgery center setup
-        'po-patientFirstName': first,
-        'po-patientLastName': last,
-        'po-patientDOB': dob,
-        'po-patientEmail': email,
-        'po-patientPhone': phone,
-        'po-pcp-name': pcp,
-        'po-pcp-phone': pcpPhone,
-        'po-pcp-fax':   pcpFax,
-        'po-preopVisitId': entryId,
-        'po-preopVisitDate': date,
-        'po-preopVisitTime': time
-      };
-      existing.unshift(newRecord);
-      await savePreopRecords(existing);
-      // Stamp the tracker entry with a pointer to the new pre-op so Jordan's
-      // "Open Pre-Op" button on the Tracker row can jump straight to it.
-      try {
-        if(typeof window._strUpdateEntry === 'function') {
-          await window._strUpdateEntry(entryId, {
-            preopRecordId: newRecordId,
-            preopCaseId: newCaseId
-          });
+      const idx = existing.findIndex(r => r && r['po-preopVisitId'] === entryId);
+      if(idx !== -1) {
+        // Reassign the CRNA + generate a matching new caseId ONLY if the
+        // worker changed. Otherwise leave the existing caseId untouched.
+        const prev = existing[idx];
+        if((prev.worker || 'josh') !== crna) {
+          prev.worker = crna;
+          prev['po-caseId'] = generateCaseId(crna, surgeryDate);
+          try {
+            if(typeof window._strUpdateEntry === 'function') {
+              await window._strUpdateEntry(entryId, { preopCaseId: prev['po-caseId'] });
+            }
+          } catch(_){}
         }
-      } catch(_) {}
-      try { logAudit && logAudit('preop-autocreated-by-nicole', newCaseId, patientLabel); } catch(e){}
-    } catch(e) { console.warn('Could not auto-create pre-op case:', e); }
+        // Merge the freshest info Nicole just entered.
+        prev['po-patientEmail'] = email || prev['po-patientEmail'] || '';
+        prev['po-preopVisitDate'] = date;
+        prev['po-preopVisitTime'] = time;
+        prev.savedAt = new Date().toISOString();
+        existing[idx] = prev;
+        await savePreopRecords(existing);
+        try { logAudit && logAudit('preop-updated-by-nicole', prev['po-caseId'] || '', patientLabel); } catch(_){}
+      } else if(typeof window._ensurePreopForEntry === 'function') {
+        // Older entry that missed the auto-create — fall back to the shared
+        // helper so it still gets a Pre-Op record now.
+        await window._ensurePreopForEntry(entry, { crna, email, date, time });
+      }
+    } catch(e) { console.warn('Could not sync pre-op case:', e); }
 
     try { logAudit && logAudit('preop-visit-scheduled', '', patientLabel + ' @ ' + (date||'?') + ' / ' + crna); } catch(e){}
 
@@ -6124,6 +6110,76 @@ if(window._userRole === 'assistant') {
   clearPreop();
   showTab('mid-case');
 }
+};
+
+// Auto-create a Pre-Op record for a Tracker entry — safe to call multiple
+// times. Returns the existing record if one already exists (linked via
+// po-preopVisitId), otherwise creates a new one with whatever info the
+// Tracker entry has right now. Called from:
+//   - scheduler-tracker.js _strSavePatient (Nicole adds a patient)
+//   - app.js _spvSend (Nicole hits "Book & Send Confirmation")
+// so Jordan sees every patient the moment they land on the Tracker, not
+// just those who reached the schedule step.
+window._ensurePreopForEntry = async function(entry, opts) {
+  if(!entry || !entry.id) return null;
+  opts = opts || {};
+  const preSnap = await getDoc(doc(db, 'atlas', 'preop'));
+  const existing = preSnap.exists() ? (preSnap.data().records || []) : [];
+  // Already have one? Return it.
+  const already = existing.find(r => r && r['po-preopVisitId'] === entry.id);
+  if(already) return already;
+  // Default CRNA: 'josh' unless caller specifies. Reassignable later via
+  // the Pre-Op form's CRNA toggle.
+  const crna = (opts.crna || 'josh').toLowerCase();
+  const surgeryDate = entry.surgeryDate || '';
+  if(!surgeryDate) {
+    // Case ID generator needs a date. Skip auto-create if the entry has
+    // no surgery date yet — Nicole can hit Save again once she adds one.
+    console.warn('_ensurePreopForEntry: skipping — no surgery date on entry');
+    return null;
+  }
+  const newCaseId = generateCaseId(crna, surgeryDate);
+  const newRecordId = (typeof uid === 'function' ? uid() : Math.random().toString(36).slice(2, 11));
+  const centerId = entry.surgeryCenterId || '';
+  const centerForEntry = (window.surgeryCenters || []).find(c => c.id === centerId);
+  const newRecord = {
+    id: newRecordId,
+    worker: crna,
+    savedAt: new Date().toISOString(),
+    createdBy: 'nicole',
+    'po-reviewStatus': 'by-nicole',
+    'po-caseId': newCaseId,
+    'po-surgeryDate': surgeryDate,
+    'po-startTime': entry.surgeryTime || '',
+    'po-surgery-center': centerId,
+    'po-provider': entry.surgeon || '',
+    'po-officeAddress': centerForEntry?.address || '',
+    'po-patientFirstName': entry.patientFirst || '',
+    'po-patientLastName': entry.patientLast || '',
+    'po-patientDOB': entry.patientDOB || '',
+    'po-patientEmail': opts.email || entry.patientEmail || '',
+    'po-patientPhone': entry.patientPhone || '',
+    'po-pcp-name':  entry.pcp || '',
+    'po-pcp-phone': entry.pcpPhone || '',
+    'po-pcp-fax':   entry.pcpFax || '',
+    'po-preopVisitId':   entry.id,
+    'po-preopVisitDate': opts.date || '',
+    'po-preopVisitTime': opts.time || ''
+  };
+  existing.unshift(newRecord);
+  await savePreopRecords(existing);
+  // Stamp the tracker entry with a pointer back to the new pre-op so
+  // Jordan's "Open Pre-Op" button jumps straight to it.
+  try {
+    if(typeof window._strUpdateEntry === 'function') {
+      await window._strUpdateEntry(entry.id, {
+        preopRecordId: newRecordId,
+        preopCaseId:   newCaseId
+      });
+    }
+  } catch(_){}
+  try { logAudit && logAudit('preop-autocreated', newCaseId, [entry.patientFirst, entry.patientLast].filter(Boolean).join(' ')); } catch(_){}
+  return newRecord;
 };
 
 // Fires an internal email to the CRNA assigned to the case with Jordan's

@@ -1012,6 +1012,15 @@
         entry.pdfFilename = file.name;
       }
       await _saveEntries();
+      // Auto-generate a Pre-Op record so Jordan can see and start on the
+      // patient right away. Previously this only happened when Nicole hit
+      // "Book & Send Confirmation" from the Schedule modal — meaning
+      // patients who hadn't hit that step yet were invisible to Jordan.
+      // Only fire on NEW entries (not edits) so we don't create duplicates.
+      if(!editId && typeof window._ensurePreopForEntry === 'function') {
+        try { await window._ensurePreopForEntry(entry); }
+        catch(err) { console.warn('Pre-Op auto-create at Add Patient failed:', err); }
+      }
       // If this entry has a linked pre-op record (created when Nicole sent
       // the portal email), patch the Nicole-owned fields on it too so
       // Jordan / Josh / Dev see the freshest patient / PCP / surgery info
