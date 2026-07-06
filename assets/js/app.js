@@ -1326,13 +1326,18 @@ function applyRoleRestrictions(role) {
   // Top-level nav buttons assistants/schedulers shouldn't see.
   // Jordan: no Pre-Op nav entry (she opens pre-ops from the Tracker row),
   //         no Mid-Case (her workflow lives entirely on the Tracker).
-  const assistantHide = ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'];
-  const schedulerHide = ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'];
+  const assistantHide = ['nav-home','nav-preop','nav-mid-case','nav-payments'];
+  const schedulerHide = ['nav-home','nav-preop','nav-mid-case','nav-payments'];
   const toHide = isScheduler ? schedulerHide : (isAssistant ? assistantHide : []);
-  ['nav-home','nav-preop','nav-mid-case','nav-new-case','nav-payments'].forEach(id => {
+  ['nav-home','nav-preop','nav-mid-case','nav-payments'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.style.display = toHide.includes(id) ? 'none' : '';
   });
+  // nav-new-case (Finalize Case) is ALWAYS hidden from the top nav on every
+  // role — CRNAs open it through Mid-Case / Case History buttons. Excluded
+  // from the loop above so this hide sticks.
+  const navNewCase = document.getElementById('nav-new-case');
+  if(navNewCase) navNewCase.style.display = 'none';
 
   // Reports + Setup dropdowns — hidden for restricted roles.
   const reportsDd = document.getElementById('reports-dropdown');
@@ -11550,35 +11555,49 @@ Object.defineProperty(window, 'csEntries', {
 // see no pill.
 window._installOwnerSwitcher = function() {
   if(!OWNER_EMAILS.has(window._ownerEmail || '')) return;
-  let host = document.getElementById('ownerRoleSwitcher');
-  if(host) host.remove();
+  const existing = document.getElementById('ownerRoleSwitcherBtn');
+  if(existing) existing.remove();
+  const existingMenu = document.getElementById('ownerRoleSwitcherMenu');
+  if(existingMenu) existingMenu.remove();
+  // Tiny icon-only button in the bottom-right. Click to open a small menu
+  // listing all four roles; pick one to swap-and-reload. No always-visible
+  // label so it doesn't nag or clutter.
+  const btn = document.createElement('button');
+  btn.id = 'ownerRoleSwitcherBtn';
+  btn.title = 'Switch view (Josh / Dev / Jordan / Nicole)';
+  btn.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:99998;width:32px;height:32px;border-radius:50%;background:#1d3557;color:#fff;border:none;cursor:pointer;font-size:14px;box-shadow:0 3px 8px rgba(0,0,0,.18);opacity:.5;transition:opacity .12s;display:flex;align-items:center;justify-content:center;padding:0';
+  btn.innerHTML = '👤';
+  btn.onmouseenter = () => { btn.style.opacity = '.9'; };
+  btn.onmouseleave = () => { btn.style.opacity = '.5'; };
+  document.body.appendChild(btn);
+
   const view = window._ownerViewAs || 'crna-josh';
-  // Compact single-line pill anchored to the bottom-right corner so it
-  // doesn't crowd the header and doesn't wrap. It DOES stay visible on
-  // every tab — that's on purpose so you can swap views without hunting
-  // for the control.
-  host = document.createElement('div');
-  host.id = 'ownerRoleSwitcher';
-  host.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:99998;display:flex;align-items:center;background:#1d3557;color:#fff;border-radius:16px;padding:0 4px 0 12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.18);opacity:.9;transition:opacity .12s;white-space:nowrap;font-size:11px;font-weight:700;height:30px';
-  host.onmouseenter = () => { host.style.opacity = '1'; };
-  host.onmouseleave = () => { host.style.opacity = '.9'; };
-  host.innerHTML = `
-    <span style="letter-spacing:.3px;margin-right:4px">👤</span>
-    <select id="ownerViewAsSelect" style="background:transparent;color:#fff;border:none;padding:6px 8px 6px 4px;font-size:11px;font-family:inherit;font-weight:700;cursor:pointer;outline:none;letter-spacing:.3px;-webkit-appearance:none;appearance:none">
-      <option value="crna-josh" ${view==='crna-josh'?'selected':''} style="color:#1d3557">Josh</option>
-      <option value="crna-dev"  ${view==='crna-dev' ?'selected':''} style="color:#1d3557">Dev</option>
-      <option value="assistant" ${view==='assistant'?'selected':''} style="color:#1d3557">Jordan</option>
-      <option value="scheduler" ${view==='scheduler'?'selected':''} style="color:#1d3557">Nicole</option>
-    </select>
-    <span style="pointer-events:none;margin-left:-14px;font-size:9px;opacity:.85">▾</span>`;
-  document.body.appendChild(host);
-  document.getElementById('ownerViewAsSelect').addEventListener('change', (e) => {
-    const val = e.target.value;
+  const options = [
+    { val: 'crna-josh', label: 'Josh' },
+    { val: 'crna-dev',  label: 'Dev' },
+    { val: 'assistant', label: 'Jordan' },
+    { val: 'scheduler', label: 'Nicole' }
+  ];
+  const menu = document.createElement('div');
+  menu.id = 'ownerRoleSwitcherMenu';
+  menu.style.cssText = 'position:fixed;bottom:52px;right:14px;z-index:99999;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:6px 0;display:none;min-width:140px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+  menu.innerHTML = `<div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;padding:4px 14px 6px;font-weight:700">View as</div>` +
+    options.map(o => `<button data-val="${o.val}" style="display:block;width:100%;text-align:left;padding:8px 14px;font-size:13px;background:${view===o.val?'#eff6ff':'transparent'};color:${view===o.val?'#1d3557':'#0f172a'};border:none;cursor:pointer;font-family:inherit;font-weight:${view===o.val?'700':'500'}">${view===o.val?'✓ ':''}${o.label}</button>`).join('');
+  document.body.appendChild(menu);
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+  });
+  menu.addEventListener('click', (e) => {
+    const val = e.target.dataset && e.target.dataset.val;
+    if(!val) return;
     localStorage.setItem('atlas_view_as', val);
     // Hard reload so every role-dependent piece of state (nav, worker,
     // filters, restrictions) rebuilds from scratch cleanly.
     location.reload();
   });
+  document.addEventListener('click', () => { menu.style.display = 'none'; });
 };
 
 // ── Offline / Online indicator ──────────────────────────────────────────────
