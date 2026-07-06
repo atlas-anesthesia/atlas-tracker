@@ -297,6 +297,14 @@
     const uncancelBtn = (!phiHidden && (isScheduler || isAssistant) && isCanceled)
       ? `<button onclick="window._strUncancel('${e.id}')" class="btn btn-ghost btn-sm" title="Undo cancel" style="font-size:11px;padding:3px 7px;color:#475569;border-color:#cbd5e1">↶ Uncancel</button>`
       : '';
+    // "Called Directly" — patient was reached outside the portal (e.g. Jordan
+    // phoned them and got them scheduled the old-fashioned way). Stops every
+    // reminder cron for this entry without marking the case as canceled.
+    // Reversible via the same button (toggles the flag).
+    const remindersOff = !!e.remindersDisabledAt;
+    const stopReminderBtn = (!phiHidden && (isScheduler || isAssistant) && !isCanceled)
+      ? `<button onclick="window._strToggleRemindersDisabled('${e.id}')" class="btn btn-ghost btn-sm" title="${remindersOff ? 'Reminders are OFF for this patient. Click to turn them back on.' : 'Stop reminder emails — use when Jordan called the patient directly and no automated nudges are needed.'}" style="font-size:11px;padding:3px 7px;color:${remindersOff?'#166534':'#a16207'};border-color:${remindersOff?'#86efac':'#fde68a'}">${remindersOff?'🔔 Resume':'🔕 Called Directly'}</button>`
+      : '';
     const delBtn = (!phiHidden && isScheduler)
       ? `<button onclick="window._strDelete('${e.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>`
       : '';
@@ -310,7 +318,7 @@
       <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false, false, true)}</div>
       <div style="${centerCell}">${clearedPill}</div>
       <div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap">
-        ${openPreopBtn}${portalBtn}${editBtn}${recordsFaxBtn}${cancelBtn}${uncancelBtn}${delBtn}
+        ${openPreopBtn}${portalBtn}${editBtn}${recordsFaxBtn}${stopReminderBtn}${cancelBtn}${uncancelBtn}${delBtn}
       </div>
     </div>`;
   }
@@ -1590,6 +1598,36 @@
     await _saveEntries();
     try { window.logAudit && window.logAudit('preop-visit-uncanceled', id); } catch(_){}
     if(typeof window.toastSuccess === 'function') window.toastSuccess('Case reopened');
+    window.renderSchedulerTracker();
+  };
+
+  // Toggle "reminders disabled" — patient was reached directly (e.g. Jordan
+  // called them), so the automated cron nudges shouldn't fire anymore. The
+  // three worker crons (sendPaymentReminders, sendPaidNotScheduledReminders,
+  // sendThreeDayNoScheduleAlerts) all skip when remindersDisabledAt is set.
+  window._strToggleRemindersDisabled = async function(id) {
+    const idx = _entries.findIndex(x => x.id === id);
+    if(idx === -1) return;
+    const e = _entries[idx];
+    const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || 'this patient';
+    if(e.remindersDisabledAt) {
+      if(!confirm('Resume reminder emails for ' + name + '?')) return;
+      e.remindersDisabledAt = null;
+      e.remindersDisabledBy = null;
+      // Also clear the once-per-entry alert flags so the crons can fire again.
+      e.threeDayNoScheduleAlertAt = null;
+      e.recordsFaxFollowupAt = null;
+      await _saveEntries();
+      try { window.logAudit && window.logAudit('preop-visit-reminders-resumed', id, name); } catch(_){}
+      if(typeof window.toastSuccess === 'function') window.toastSuccess('Reminders resumed');
+    } else {
+      if(!confirm('Stop reminder emails for ' + name + '?\n\nUse this when Jordan reached them directly. The patient will no longer get automated reminder emails. You can turn reminders back on any time.')) return;
+      e.remindersDisabledAt = new Date().toISOString();
+      e.remindersDisabledBy = (window.currentUser?.email) || '';
+      await _saveEntries();
+      try { window.logAudit && window.logAudit('preop-visit-reminders-disabled', id, name); } catch(_){}
+      if(typeof window.toastSuccess === 'function') window.toastSuccess('Reminders stopped for ' + name);
+    }
     window.renderSchedulerTracker();
   };
 
