@@ -1324,40 +1324,19 @@ async function _savePIFormula() {
 }
 
 function _calcPersonalIncome(worker) {
-  const formula = _piFormula; // shared formula
-  // PI reflects WORK DONE rather than work BILLED — a case counts the
-  // moment its scheduled date arrives (date ≤ today), regardless of
-  // whether the invoice has been marked sent OR whether the case has
-  // been finalized yet. The source of truth is _paymentRows because
-  // every scheduled case (pre-op done) lives there, even before it's
-  // finalized in window.cases. Looping window.cases would miss today's
-  // not-yet-finalized cases, so a worker with 3 cases happening today
-  // would see $0 PI in Payments until they finalized each one.
-  // For from_invoice rule centers, _calcPIForCase still returns 0 until
-  // invoicedAmount is populated (the math literally needs the invoice
-  // amount), so those cases naturally remain 0 in PI until invoiced.
+  // Personal Income = sum of invoicedAmount for this worker's cases.
+  // Per user, we no longer derive PI from the formula (per-hour × hours,
+  // flat rates, from_invoice math, etc.) — the number that shows on the
+  // site under "Inv. Amt" is the source of truth. If a case has no
+  // invoiced amount entered yet, it contributes 0 to PI until you
+  // enter one.
   const _today = new Date();
   const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
-  const eligible = (_paymentRows || []).filter(r => {
-    if(r.worker !== worker) return false;
-    if(!r.caseId) return false;
-    // Exclude future-dated cases. Cases with no date stay counted (we
-    // can't classify them either way; preserve prior behavior).
-    if(r.caseDate && r.caseDate > todayStr) return false;
-    return true;
-  });
   let total = 0;
-  eligible.forEach(r => {
-    // Pull the matching finalized case for richer data (start/end times
-    // used by hourly rules). If not finalized yet, synthesize a minimal
-    // case object — _calcPIForCase falls back to estHrs from preop for
-    // hourly billing, so this still computes correctly.
-    const matchedCase = (window.cases || []).find(c => c.caseId === r.caseId && !c.draft);
-    const c = matchedCase || {
-      caseId: r.caseId, date: r.caseDate, worker: r.worker,
-      surgeryCenter: r.surgeryCenter
-    };
-    total += _calcPIForCase(c, r, formula);
+  (_paymentRows || []).forEach(r => {
+    if(r.worker !== worker) return;
+    if(r.caseDate && r.caseDate > todayStr) return; // future case
+    total += parseFloat(r.invoicedAmount) || 0;
   });
   return total;
 }
@@ -1455,50 +1434,16 @@ function _calcPIForCase(c, row, formula) {
 }
 
 function _calcProjectedPersonalIncome(worker) {
-  // Projected = PI from cases STILL TO HAPPEN (date > today). Past/today
-  // cases now flow into _calcPersonalIncome the moment their date arrives,
-  // so showing them here too would double-count. Pending rows without a
-  // date still count (we can't classify them as past or future).
-  const formula = _piFormula;
+  // Projected = sum of invoicedAmount for cases STILL TO HAPPEN
+  // (date > today) plus undated pending rows. Matches the invoiced-based
+  // realized PI so both cards use the same source of truth.
   const _today = new Date();
   const todayStr = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
-  const pending = (_paymentRows || []).filter(r => {
-    if(r.worker !== worker) return false;
-    // Truly future cases (date > today) OR undated cases. Today/past cases
-    // belong to realized PI now.
-    return !r.caseDate || r.caseDate > todayStr;
-  });
-  // Mirror the realized-PI dedupe rule for flat-rate centers: each
-  // (worker, date, center) day-bucket should contribute the rate once,
-  // not once per case. We pre-compute, for each pending row, whether
-  // this row is the "primary" of its day-bucket (lowest caseId in the
-  // bucket); only primaries collect the flat rate. Hourly rules stay
-  // per-case since they're driven by each case's own est. hours.
-  const primaryByBucket = new Map();   // bucketKey → caseId of primary row
-  pending.forEach(r => {
-    const rule = formula.centers.find(f => f.id === r.surgeryCenter);
-    if(!rule || rule.type !== 'flat') return;
-    if(!r.caseId || !r.caseDate) return;
-    const key = (r.caseDate || '') + '|' + (r.surgeryCenter || '');
-    const existing = primaryByBucket.get(key);
-    if(!existing || (r.caseId || '').localeCompare(existing) < 0) {
-      primaryByBucket.set(key, r.caseId);
-    }
-  });
   let total = 0;
-  pending.forEach(r => {
-    const rule = formula.centers.find(f => f.id === r.surgeryCenter);
-    if(rule) {
-      if(rule.type === 'flat') {
-        const key = (r.caseDate || '') + '|' + (r.surgeryCenter || '');
-        const primary = primaryByBucket.get(key);
-        const isPrimary = !primary || primary === r.caseId;
-        if(isPrimary) total += parseFloat(rule.rate) || 0;
-      } else if(rule.type === 'hourly') {
-        const hrs = parseFloat(r.estHrs) || 0;
-        total += hrs * (parseFloat(rule.rate) || 0);
-      }
-    }
+  (_paymentRows || []).forEach(r => {
+    if(r.worker !== worker) return;
+    if(r.caseDate && r.caseDate <= todayStr) return; // already past → realized side
+    total += parseFloat(r.invoicedAmount) || 0;
   });
   return total;
 }
