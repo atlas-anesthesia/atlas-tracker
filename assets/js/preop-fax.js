@@ -203,35 +203,53 @@ function buildPmhFromPreop(r) {
 function autofillFromSelectedCase() {
   if(!_selectedPreop) return;
   const r = _selectedPreop;
-  const setVal = (id, v) => { const el = $(id); if(el) el.value = v || ''; };
-  const fullName = [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ').trim()
-                || r['po-patient'] || '';
+  // Only overwrite the field if the pre-op has a real value AND the target
+  // is currently blank. Prevents autofill from wiping something the user
+  // just typed by hand when they change the case selector.
+  const setVal = (id, v) => {
+    const el = $(id);
+    if(!el) return;
+    const val = (v == null ? '' : String(v)).trim();
+    if(!val) return;
+    if(el.value && el.value.trim()) return;   // don't clobber user input
+    el.value = val;
+  };
+  // Patient identity — real field names are po-patientFirstName /
+  // po-patientLastName / po-patientDOB / po-patientPhone. The previous
+  // autofill was using non-existent field names (po-firstName, po-dob,
+  // po-contact-phone) and silently filled nothing.
+  const fullName = [r['po-patientFirstName'] || '', r['po-patientLastName'] || '']
+    .filter(Boolean).join(' ').trim();
   setVal('pof-pt-name',  fullName);
-  setVal('pof-pt-dob',   r['po-dob']);
-  setVal('pof-pt-phone', r['po-contact-phone']);
+  setVal('pof-pt-dob',   r['po-patientDOB']);
+  setVal('pof-pt-phone', r['po-patientPhone']);
+  // TO / practice / fax — pre-fill from the PCP fields Nicole entered on
+  // the tracker. Nice-to-have so the CRNA doesn't retype what's on the row.
+  setVal('pof-to',       r['po-pcp-name']);
+  setVal('pof-fax',      r['po-pcp-fax']);
+  setVal('pof-phone',    r['po-pcp-phone']);
+  // Procedure details.
   setVal('pof-proc-date', r['po-surgeryDate']);
   setVal('pof-proc-type', r['po-procedureType']);
   setVal('pof-surgeon',   r['po-provider']);
-  // Procedure location — surgery center ID → name, fall back to the ID string
+  // Procedure location — surgery center ID → name, fall back to the ID string.
   const centerId = r['po-surgery-center'] || '';
   const center = (window.surgeryCenters || []).find(c => c.id === centerId);
   setVal('pof-proc-loc', center?.name || centerId);
-  // Estimated length
   const hrs = r['po-est-hours'];
-  setVal('pof-proc-length', hrs ? `${hrs} hour${parseFloat(hrs) === 1 ? '' : 's'}` : '');
-  // Medical summary
+  if(hrs) setVal('pof-proc-length', hrs + ' hour' + (parseFloat(hrs) === 1 ? '' : 's'));
+  // Medical summary.
   setVal('pof-pmh',       buildPmhFromPreop(r));
   setVal('pof-allergies', r['po-allergies']);
   setVal('pof-meds',      r['po-medications']);
   setVal('pof-past-surg', r['po-surgicalHistory']);
-  // Tobacco/alcohol — auto-Yes if smoker flag is checked, otherwise leave blank
-  document.querySelectorAll('input[name="pof-tobacco-alcohol"]').forEach(rad => rad.checked = false);
+  // Tobacco/alcohol — auto-Yes if smoker flag is checked, otherwise leave blank.
   if(r['po-pulm-smoker']) {
     const yes = document.querySelector('input[name="pof-tobacco-alcohol"][value="Yes"]');
-    if(yes) yes.checked = true;
+    if(yes && !document.querySelector('input[name="pof-tobacco-alcohol"]:checked')) yes.checked = true;
   }
-  // Anesthesia type stays blank — user picks MAC or General manually.
-  document.querySelectorAll('input[name="pof-anesth-type"]').forEach(rad => rad.checked = false);
+  // Live preview refresh so the printed cover mirrors what just landed.
+  if(typeof window._pofPreview === 'function') { try { window._pofPreview(); } catch(_){} }
 }
 
 async function onCaseSelected() {
