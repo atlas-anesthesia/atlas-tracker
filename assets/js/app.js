@@ -11565,10 +11565,10 @@ window._installOwnerSwitcher = function() {
   const btn = document.createElement('button');
   btn.id = 'ownerRoleSwitcherBtn';
   btn.title = 'Switch view (Josh / Dev / Jordan / Nicole)';
-  btn.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:99998;width:32px;height:32px;border-radius:50%;background:#1d3557;color:#fff;border:none;cursor:pointer;font-size:14px;box-shadow:0 3px 8px rgba(0,0,0,.18);opacity:.5;transition:opacity .12s;display:flex;align-items:center;justify-content:center;padding:0';
+  btn.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:99998;width:44px;height:44px;border-radius:50%;background:#1d3557;color:#fff;border:2px solid #fff;cursor:pointer;font-size:18px;box-shadow:0 4px 14px rgba(29,53,87,.35);opacity:1;transition:transform .12s;display:flex;align-items:center;justify-content:center;padding:0';
   btn.innerHTML = '👤';
-  btn.onmouseenter = () => { btn.style.opacity = '.9'; };
-  btn.onmouseleave = () => { btn.style.opacity = '.5'; };
+  btn.onmouseenter = () => { btn.style.transform = 'scale(1.08)'; };
+  btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; };
   document.body.appendChild(btn);
 
   const view = window._ownerViewAs || 'crna-josh';
@@ -11580,7 +11580,7 @@ window._installOwnerSwitcher = function() {
   ];
   const menu = document.createElement('div');
   menu.id = 'ownerRoleSwitcherMenu';
-  menu.style.cssText = 'position:fixed;bottom:52px;right:14px;z-index:99999;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:6px 0;display:none;min-width:140px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+  menu.style.cssText = 'position:fixed;bottom:70px;right:16px;z-index:99999;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:6px 0;display:none;min-width:160px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
   menu.innerHTML = `<div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;padding:4px 14px 6px;font-weight:700">View as</div>` +
     options.map(o => `<button data-val="${o.val}" style="display:block;width:100%;text-align:left;padding:8px 14px;font-size:13px;background:${view===o.val?'#eff6ff':'transparent'};color:${view===o.val?'#1d3557':'#0f172a'};border:none;cursor:pointer;font-family:inherit;font-weight:${view===o.val?'700':'500'}">${view===o.val?'✓ ':''}${o.label}</button>`).join('');
   document.body.appendChild(menu);
