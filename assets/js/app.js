@@ -5151,8 +5151,10 @@ toggleAddForm();refreshItemSelect();
 window.renderHistory = renderHistory;
 function renderHistory() {
 const el=document.getElementById('caseHistoryList');
-let filtered=cases;
-if(currentHistoryFilter!=='all') filtered=cases.filter(c=>c.worker===currentHistoryFilter);
+// Case History = actually-finalized cases only. Drafts belong in Mid-Case
+// where the CRNA can pick them back up and finish them.
+let filtered = cases.filter(c => !c.draft);
+if(currentHistoryFilter!=='all') filtered = filtered.filter(c=>c.worker===currentHistoryFilter);
 // Sort: upcoming cases first (soonest first), then past cases (most recent
 // first). This puts what's most relevant — what's coming up and what just
 // happened — at the top.
