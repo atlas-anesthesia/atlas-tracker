@@ -88,6 +88,43 @@
     return 'data:application/pdf;base64,' + btoa(bin);
   }
 
+  // Wrap a JPG/PNG image data URL into a single-page PDF sized to the
+  // image's own dimensions. Used when a sender attached a photo of a
+  // pre-op form as an image — we still want it to open as a PDF so the
+  // rest of the tracker's PDF flow (view / merge / save) works uniformly.
+  async function _imageToPdf(imageDataUrl) {
+    await _ensurePdfLib();
+    const { PDFDocument } = window.PDFLib;
+    const bytes = _dataUrlToBytes(imageDataUrl);
+    const doc = await PDFDocument.create();
+    const isPng = /^data:image\/png/i.test(imageDataUrl) ||
+      (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47);
+    let img;
+    if(isPng) img = await doc.embedPng(bytes);
+    else      img = await doc.embedJpg(bytes);
+    // Page sized to image, with a small margin so it doesn't touch the edge.
+    const margin = 24;
+    const page = doc.addPage([img.width + margin * 2, img.height + margin * 2]);
+    page.drawImage(img, { x: margin, y: margin, width: img.width, height: img.height });
+    const out = await doc.save();
+    let bin = '';
+    const chunk = 0x8000;
+    for(let i = 0; i < out.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, out.subarray(i, i + chunk));
+    }
+    return 'data:application/pdf;base64,' + btoa(bin);
+  }
+
+  // Auto-detect: if the data URL is an image, wrap it in a single-page PDF.
+  // If it's already a PDF (or content looks like PDF bytes), return as-is.
+  async function _ensurePdfDataUrl(dataUrl) {
+    if(!dataUrl) return dataUrl;
+    const isImage = /^data:image\//i.test(dataUrl);
+    if(!isImage) return dataUrl;
+    try { return await _imageToPdf(dataUrl); }
+    catch(e) { console.warn('image → pdf conversion failed, using original:', e); return dataUrl; }
+  }
+
   function _$(id) { return document.getElementById(id); }
   function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function _uid() { return Math.random().toString(36).slice(2, 11); }
@@ -450,6 +487,13 @@
       parts = parts.filter(p => p.dataUrl);
     } catch(_){}
     if(!parts.length) { alert('Could not load the PDF for this inbox item.'); return; }
+    // Any part that arrived as an image (JPG/PNG) gets wrapped into a
+    // single-page PDF on the fly so downstream flow doesn't care whether
+    // the sender attached a scan or a photo.
+    parts = await Promise.all(parts.map(async p => ({
+      dataUrl:  await _ensurePdfDataUrl(p.dataUrl),
+      filename: (p.filename || 'attachment').replace(/\.(jpg|jpeg|png|heic)$/i, '.pdf')
+    })));
     // One PDF — show as-is. Multiple PDFs — merge into a single combined PDF
     // so Jordan sees one document with all pages in order.
     let pdfDataUrl, mergedFilename, mergedSize;
