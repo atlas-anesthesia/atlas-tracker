@@ -259,55 +259,75 @@
       const match = recs.find(r => r && r['po-preopVisitId'] === e.id);
       if(match) linkedPreopId = match.id;
     }
-    const openPreopBtn = (isAssistant && linkedPreopId)
-      ? `<button onclick="window._strOpenPreop('${linkedPreopId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:3px 7px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`
-      : '';
-    // Patient-portal viewer — Jordan sees exactly what the patient sees on
-    // schedule.html (uploaded airway photos, $100 payment step, time picker).
-    // Same URL Nicole emails out; entry id is the portal token.
-    const portalBtn = isAssistant
-      ? `<button onclick="window.open('schedule.html?t=' + encodeURIComponent('${e.id}'), '_blank')" class="btn btn-ghost btn-sm" title="Open this patient's portal in a new tab" style="font-size:11px;padding:3px 7px;color:#7c3aed;border-color:#ddd6fe">👁 Portal</button>`
-      : '';
     // Show patient details button — only on history rows (where PHI is masked).
     const revealCaseId = e.preopCaseId || e.id;
     const revealBtn = (phiHidden && typeof window.phiRevealButtonHTML === 'function')
       ? window.phiRevealButtonHTML(revealCaseId, 'renderSchedulerTracker')
       : '';
-    const editBtn = (!phiHidden && isScheduler)
-      ? `<button onclick="window._strOpenAddPatient('${e.id}')" class="btn btn-ghost btn-sm" title="Edit patient info" style="font-size:11px;padding:3px 7px">✏</button>`
-      : '';
-    // Records-request fax — Nicole sends this to the patient's PCP from her
-    // own row, no need to bounce it through Jordan anymore. Pre-fills PCP
-    // info from the entry. Button styled green when a fax has already gone
-    // out so she can tell at a glance.
-    const recordsFaxSent = !!e.pcpRecordsFaxSentAt;
-    const recordsFaxTip = recordsFaxSent
-      ? ('Records request faxed ' + new Date(e.pcpRecordsFaxSentAt).toLocaleDateString() + ' — click to resend')
-      : 'Fax a records request to the PCP';
-    const recordsFaxBtn = (!phiHidden && isScheduler && e.pcpFax)
-      ? `<button onclick="window._strOpenRecordsFax('${e.id}')" class="btn btn-ghost btn-sm" title="${recordsFaxTip}" style="font-size:11px;padding:3px 7px;color:${recordsFaxSent?'#166534':'#0369a1'};border-color:${recordsFaxSent?'#86efac':'#bfdbfe'}">${recordsFaxSent?'📠 ✓':'📠 Records'}</button>`
-      : '';
-    // Mark Canceled — staff (Nicole or Jordan) can flag a case as canceled.
-    // Emails jordan@atlasanesthesia.co with the patient/case details and
-    // stops every cron reminder for this entry. Reversible via _strUncancel.
+    // ── Row actions: one primary button + a "⋯" menu with everything else ──
+    // Previously each row had 5–8 stacked buttons which read as clutter. Now
+    // the row shows only the primary action for the current role, and the
+    // rest live inside a single popup menu that opens next to a "⋯" button.
     const isCanceled = !!e.canceledAt;
-    const cancelBtn = (!phiHidden && (isScheduler || isAssistant) && !isCanceled)
-      ? `<button onclick="window._strMarkCanceled('${e.id}')" class="btn btn-ghost btn-sm" title="Mark this case canceled — Jordan is emailed" style="font-size:11px;padding:3px 7px;color:#dc2626;border-color:#fecaca">✕ Cancel</button>`
-      : '';
-    const uncancelBtn = (!phiHidden && (isScheduler || isAssistant) && isCanceled)
-      ? `<button onclick="window._strUncancel('${e.id}')" class="btn btn-ghost btn-sm" title="Undo cancel" style="font-size:11px;padding:3px 7px;color:#475569;border-color:#cbd5e1">↶ Uncancel</button>`
-      : '';
-    // "Called Directly" — patient was reached outside the portal (e.g. Jordan
-    // phoned them and got them scheduled the old-fashioned way). Stops every
-    // reminder cron for this entry without marking the case as canceled.
-    // Reversible via the same button (toggles the flag).
     const remindersOff = !!e.remindersDisabledAt;
-    const stopReminderBtn = (!phiHidden && (isScheduler || isAssistant) && !isCanceled)
-      ? `<button onclick="window._strToggleRemindersDisabled('${e.id}')" class="btn btn-ghost btn-sm" title="${remindersOff ? 'Reminders are OFF for this patient. Click to turn them back on.' : 'Stop reminder emails — use when Jordan called the patient directly and no automated nudges are needed.'}" style="font-size:11px;padding:3px 7px;color:${remindersOff?'#166534':'#a16207'};border-color:${remindersOff?'#86efac':'#fde68a'}">${remindersOff?'🔔 Resume':'🔕 Called Directly'}</button>`
-      : '';
-    const delBtn = (!phiHidden && isScheduler)
-      ? `<button onclick="window._strDelete('${e.id}')" class="btn btn-ghost btn-sm" title="Delete" style="font-size:11px;color:var(--warn);padding:3px 7px">🗑</button>`
-      : '';
+    const recordsFaxSent = !!e.pcpRecordsFaxSentAt;
+    // Primary action per role.
+    let primaryBtn = '';
+    if(!phiHidden) {
+      if(isAssistant && linkedPreopId) {
+        primaryBtn = `<button onclick="window._strOpenPreop('${linkedPreopId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:4px 9px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`;
+      } else if(isScheduler) {
+        primaryBtn = `<button onclick="window._strOpenAddPatient('${e.id}')" class="btn btn-ghost btn-sm" title="Edit patient info" style="font-size:11px;padding:4px 9px">✏ Edit</button>`;
+      }
+    }
+    // Secondary items — one array of {label, onclick, color, hide?}.
+    const menuItems = [];
+    if(!phiHidden && isAssistant) {
+      menuItems.push({ label: '👁 Open Patient Portal',
+        onclick: `window.open('schedule.html?t=' + encodeURIComponent('${e.id}'), '_blank')`,
+        color: '#7c3aed' });
+    }
+    if(!phiHidden && isScheduler && e.pcpFax) {
+      menuItems.push({
+        label: recordsFaxSent
+          ? '📠 Records — sent ' + new Date(e.pcpRecordsFaxSentAt).toLocaleDateString() + ' (resend)'
+          : '📠 Fax Records Request to PCP',
+        onclick: `window._strOpenRecordsFax('${e.id}')`,
+        color: recordsFaxSent ? '#166534' : '#0369a1' });
+    }
+    if(!phiHidden && (isScheduler || isAssistant) && !isCanceled) {
+      menuItems.push({
+        label: remindersOff ? '🔔 Resume reminder emails' : '🔕 Called Directly — stop reminders',
+        onclick: `window._strToggleRemindersDisabled('${e.id}')`,
+        color: remindersOff ? '#166534' : '#a16207' });
+    }
+    if(!phiHidden && (isScheduler || isAssistant) && !isCanceled) {
+      menuItems.push({
+        label: '✕ Mark Canceled',
+        onclick: `window._strMarkCanceled('${e.id}')`,
+        color: '#dc2626' });
+    }
+    if(!phiHidden && (isScheduler || isAssistant) && isCanceled) {
+      menuItems.push({
+        label: '↶ Uncancel',
+        onclick: `window._strUncancel('${e.id}')`,
+        color: '#475569' });
+    }
+    if(!phiHidden && isScheduler) {
+      menuItems.push({
+        label: '🗑 Delete patient',
+        onclick: `window._strDelete('${e.id}')`,
+        color: '#b91c1c', divider: true });
+    }
+    const menuHtml = menuItems.length ? `
+      <div style="position:relative;display:inline-block">
+        <button onclick="event.stopPropagation();window._strToggleRowMenu('${e.id}')" class="btn btn-ghost btn-sm" title="More actions" style="font-size:14px;padding:4px 8px;line-height:1;font-weight:700">⋯</button>
+        <div id="strRowMenu-${e.id}" style="display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:100;min-width:220px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:5px 0;text-align:left">
+          ${menuItems.map(it => (it.divider ? '<div style="border-top:1px solid var(--border);margin:4px 0"></div>' : '') +
+            `<button onclick="document.getElementById('strRowMenu-${e.id}').style.display='none';${it.onclick}" style="display:block;width:100%;text-align:left;padding:8px 14px;font-size:12px;background:transparent;border:none;cursor:pointer;color:${it.color};font-family:inherit" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">${it.label}</button>`
+          ).join('')}
+        </div>
+      </div>` : '';
 
     const centerCell = 'display:flex;justify-content:center;align-items:center';
     return `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center${phiHidden ? ';opacity:.85' : ''}">
@@ -317,8 +337,8 @@
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">${paidPill}${nudgePill}</div>
       <div style="${centerCell}">${pill(nurseCalled, '✓ Call Made', '○ Not yet', green,  'window._strToggleNurseCalled', false, false, true)}</div>
       <div style="${centerCell}">${clearedPill}</div>
-      <div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap">
-        ${openPreopBtn}${portalBtn}${editBtn}${recordsFaxBtn}${stopReminderBtn}${cancelBtn}${uncancelBtn}${delBtn}
+      <div style="display:flex;gap:6px;justify-content:center;align-items:center">
+        ${primaryBtn}${menuHtml}
       </div>
     </div>`;
   }
@@ -1600,6 +1620,25 @@
     if(typeof window.toastSuccess === 'function') window.toastSuccess('Case reopened');
     window.renderSchedulerTracker();
   };
+
+  // Toggle a Tracker row's "⋯" action menu. Closes any OTHER open row menu
+  // first (only one at a time). Clicking anywhere outside closes it.
+  window._strToggleRowMenu = function(rowId) {
+    const target = document.getElementById('strRowMenu-' + rowId);
+    if(!target) return;
+    document.querySelectorAll('[id^="strRowMenu-"]').forEach(el => {
+      if(el !== target) el.style.display = 'none';
+    });
+    target.style.display = target.style.display === 'block' ? 'none' : 'block';
+  };
+  // Global click dismisser — clicks outside a menu close it. Installed once.
+  if(!window._strRowMenuDismisserInstalled) {
+    window._strRowMenuDismisserInstalled = true;
+    document.addEventListener('click', (ev) => {
+      if(ev.target && (ev.target.closest && ev.target.closest('[id^="strRowMenu-"]'))) return;
+      document.querySelectorAll('[id^="strRowMenu-"]').forEach(el => { el.style.display = 'none'; });
+    });
+  }
 
   // Toggle "reminders disabled" — patient was reached directly (e.g. Jordan
   // called them), so the automated cron nudges shouldn't fire anymore. The
