@@ -5168,47 +5168,7 @@ filtered = [...filtered].sort((a,b) => {
   return bDate.localeCompare(aDate);
 });
 const invoices = window._savedInvoices || [];
-// Past pre-ops that were never finalized — surfaced here (instead of
-// clogging Mid-Case) so CRNAs have one place to catch up on their
-// backlog. Detected by: has a surgery date in the past AND its po-caseId
-// isn't found in cases (neither draft nor finalized).
-const _finalizedCaseIds = new Set((cases || []).map(c => c.caseId).filter(Boolean));
-let _unfinalizedPast = (window._rawPreopRecords || []).filter(r =>
-  r && r['po-surgeryDate'] && r['po-surgeryDate'] < today_ &&
-  r['po-caseId'] && !_finalizedCaseIds.has(r['po-caseId'])
-);
-if(currentHistoryFilter !== 'all') {
-  _unfinalizedPast = _unfinalizedPast.filter(r => (r.worker || 'dev') === currentHistoryFilter);
-}
-_unfinalizedPast.sort((a,b) => (b['po-surgeryDate']||'').localeCompare(a['po-surgeryDate']||''));
-const _unfinalizedHtml = _unfinalizedPast.length ? (
-  `<div class="history-group-header"><span>⚠ Past Pre-Ops · Never Finalized (${_unfinalizedPast.length})</span></div>` +
-  _unfinalizedPast.map(r => {
-    const caseId = r['po-caseId'] || '—';
-    const displayCaseId = typeof window.getCaseDisplayIdFromPreop === 'function' ? window.getCaseDisplayIdFromPreop(r) : caseId;
-    const pill = r.worker === 'dev' ? 'pill-dev' : 'pill-josh';
-    const wname = r.worker === 'dev' ? 'Devarsh' : 'Josh';
-    const surgDateFmt = fmtDate(r['po-surgeryDate']) || '—';
-    const provider = r['po-provider'] || '—';
-    return `<div class="case-item" style="border-left:3px solid var(--warn);background:rgba(217,119,6,0.04)">
-      <div class="case-item-header">
-        <div>
-          <div class="case-name" style="display:flex;align-items:center;gap:8px">
-            ${displayCaseId}
-            <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span>
-            <span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">⚠ NEEDS FINALIZING</span>
-          </div>
-          <div class="case-date">${surgDateFmt} · ${provider}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-          <button onclick="loadDraftCaseById('${caseId}')" class="btn btn-primary btn-sm" style="font-size:11px">Finalize →</button>
-          <button onclick="editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit Pre-Op</button>
-        </div>
-      </div>
-    </div>`;
-  }).join('')
-) : '';
-if(!filtered.length && !_unfinalizedPast.length){el.innerHTML='<div class="empty-state"><span class="empty-state-icon">📋</span><div class="empty-state-title">No cases recorded yet</div><div class="empty-state-sub">Cases will appear here after you finalize them. Start by saving a Pre-Op record.</div><button class="empty-state-cta" onclick="showTab(\'preop\')">+ New Pre-Op →</button></div>';return;}
+if(!filtered.length){el.innerHTML='<div class="empty-state"><span class="empty-state-icon">📋</span><div class="empty-state-title">No cases recorded yet</div><div class="empty-state-sub">Cases will appear here after you finalize them. Start by saving a Pre-Op record.</div><button class="empty-state-cta" onclick="showTab(\'preop\')">+ New Pre-Op →</button></div>';return;}
 const today = todayStr();
 // Helper: format the date into a group label like "May 2026" or "This Week"
 function _historyGroupFor(dateStr, todayStr) {
@@ -5290,7 +5250,6 @@ ${c.preopId?`<div style="margin-top:8px"><button onclick="event.stopPropagation(
 }).join('');
 // Prepend the "past pre-ops not finalized" block so it's the first thing
 // the CRNA sees when opening Case History.
-el.innerHTML = _unfinalizedHtml + el.innerHTML;
 // Auto-check Stripe deposits for history cases
 setTimeout(() => checkHistoryDeposits(filtered), 500);
 }
@@ -8482,11 +8441,9 @@ const draftIds = new Set(drafts.map(d => d.caseId));
 const finalizedIds = new Set(cases.filter(c => !c.draft).map(c => c.caseId).filter(Boolean));
 // Only show pre-ops that don't have a finalized case yet
 preopRecords = preopRecords.filter(r => !finalizedIds.has(r['po-caseId']));
-// Past pre-ops that were never finalized are silently omitted from Mid-Case
-// and appear in Case History instead — see renderHistory's "Past Pre-Ops"
-// group. Keeps Mid-Case focused on what still needs action *now*.
-const _todayForMidCase = todayStr();
-preopRecords = preopRecords.filter(r => !r['po-surgeryDate'] || r['po-surgeryDate'] >= _todayForMidCase);
+// Past pre-ops that were never finalized stay visible in Mid-Case so the
+// CRNAs can catch up on their backlog. Case History is reserved for
+// actually-finalized cases.
 const allPreops = preopRecords.sort((a,b) => {
   const dateA = a['po-surgeryDate']||'', dateB = b['po-surgeryDate']||'';
   if(dateA !== dateB) return dateA.localeCompare(dateB);
