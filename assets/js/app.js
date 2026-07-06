@@ -11552,24 +11552,25 @@ window._installOwnerSwitcher = function() {
   if(!OWNER_EMAILS.has(window._ownerEmail || '')) return;
   let host = document.getElementById('ownerRoleSwitcher');
   if(host) host.remove();
+  const view = window._ownerViewAs || 'crna-josh';
+  // Compact single-line pill anchored to the bottom-right corner so it
+  // doesn't crowd the header and doesn't wrap. It DOES stay visible on
+  // every tab — that's on purpose so you can swap views without hunting
+  // for the control.
   host = document.createElement('div');
   host.id = 'ownerRoleSwitcher';
-  host.style.cssText = 'position:fixed;top:14px;right:170px;z-index:99998;background:#1d3557;color:#fff;padding:0;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.15);display:flex;align-items:center;overflow:hidden';
-  const view = window._ownerViewAs || 'crna-josh';
-  const label = {
-    'crna-josh': '👤 Viewing as Josh',
-    'crna-dev':  '👤 Viewing as Dev',
-    'assistant': '👤 Viewing as Jordan',
-    'scheduler': '👤 Viewing as Nicole'
-  }[view] || '👤 Owner';
+  host.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:99998;display:flex;align-items:center;background:#1d3557;color:#fff;border-radius:16px;padding:0 4px 0 12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.18);opacity:.9;transition:opacity .12s;white-space:nowrap;font-size:11px;font-weight:700;height:30px';
+  host.onmouseenter = () => { host.style.opacity = '1'; };
+  host.onmouseleave = () => { host.style.opacity = '.9'; };
   host.innerHTML = `
-    <span style="padding:7px 12px;font-size:12px;font-weight:700;letter-spacing:.3px">${label}</span>
-    <select id="ownerViewAsSelect" style="background:rgba(255,255,255,.12);color:#fff;border:none;padding:8px 10px;font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;outline:none;border-left:1px solid rgba(255,255,255,.2)">
-      <option value="crna-josh" ${view==='crna-josh'?'selected':''}>Switch to Josh</option>
-      <option value="crna-dev"  ${view==='crna-dev' ?'selected':''}>Switch to Dev</option>
-      <option value="assistant" ${view==='assistant'?'selected':''}>Switch to Jordan</option>
-      <option value="scheduler" ${view==='scheduler'?'selected':''}>Switch to Nicole</option>
-    </select>`;
+    <span style="letter-spacing:.3px;margin-right:4px">👤</span>
+    <select id="ownerViewAsSelect" style="background:transparent;color:#fff;border:none;padding:6px 8px 6px 4px;font-size:11px;font-family:inherit;font-weight:700;cursor:pointer;outline:none;letter-spacing:.3px;-webkit-appearance:none;appearance:none">
+      <option value="crna-josh" ${view==='crna-josh'?'selected':''} style="color:#1d3557">Josh</option>
+      <option value="crna-dev"  ${view==='crna-dev' ?'selected':''} style="color:#1d3557">Dev</option>
+      <option value="assistant" ${view==='assistant'?'selected':''} style="color:#1d3557">Jordan</option>
+      <option value="scheduler" ${view==='scheduler'?'selected':''} style="color:#1d3557">Nicole</option>
+    </select>
+    <span style="pointer-events:none;margin-left:-14px;font-size:9px;opacity:.85">▾</span>`;
   document.body.appendChild(host);
   document.getElementById('ownerViewAsSelect').addEventListener('change', (e) => {
     const val = e.target.value;
