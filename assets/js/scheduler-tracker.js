@@ -209,13 +209,23 @@
       pdfLine = `<div style="font-size:11px;margin-top:6px;color:var(--text-faint)">📎 ${hiddenSpan}</div>`;
     }
 
-    // Pre-Op Visit column — scheduled date stays visible (no PHI), Schedule
-    // button is scheduler-only.
+    // Pre-Op Visit column. Three possible states:
+    //   1) Patient has picked a time in the portal → show date + time.
+    //   2) Nicole hit "Book & Send Confirmation" (callStatus=called) but the
+    //      patient hasn't picked a time yet → show "📧 Email sent" so Nicole
+    //      knows the portal link is out and she doesn't need to hit
+    //      Schedule again.
+    //   3) Not touched yet → show the Schedule button (Nicole) or a
+    //      "Not scheduled yet" placeholder (everyone else).
+    const _emailSent = e.callStatus === 'called' || !!e.callStatusAt;
+    const _sentDate = e.callStatusAt ? new Date(e.callStatusAt).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
     const scheduledCell = e.scheduledAt
       ? `<div style="font-size:12px;color:var(--text)">${_esc(_fmtDate(e.date))}${e.time ? '<br><span style="color:var(--text-faint)">' + _esc(_fmtTime(e.time)) + '</span>' : ''}</div>`
-      : (isScheduler
-          ? `<button onclick="window._strOpenSchedule('${e.id}')" class="btn btn-primary btn-sm" style="background:#1d3557;border-color:#1d3557;font-size:11px;padding:5px 10px;white-space:nowrap">📅 Schedule</button>`
-          : `<div style="font-size:12px;color:var(--text-faint);font-style:italic">Not scheduled yet</div>`);
+      : (_emailSent
+          ? `<div style="font-size:12px;color:#166534;font-weight:600" title="Portal link emailed${_sentDate ? ' on ' + _sentDate : ''} — waiting for the patient to pick a time.">📧 Email sent${_sentDate ? '<br><span style=\"font-size:10px;color:var(--text-faint);font-weight:400\">' + _esc(_sentDate) + '</span>' : ''}</div>`
+          : (isScheduler
+              ? `<button onclick="window._strOpenSchedule('${e.id}')" class="btn btn-primary btn-sm" style="background:#1d3557;border-color:#1d3557;font-size:11px;padding:5px 10px;white-space:nowrap">📅 Schedule</button>`
+              : `<div style="font-size:12px;color:var(--text-faint);font-style:italic">Not scheduled yet</div>`));
 
     const cs = _callStateByKey[e.callStatus || 'none'] || _callStateByKey.none;
     // The call-status pill belongs to Nicole — Jordan sees the current state

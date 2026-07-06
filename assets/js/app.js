@@ -1375,6 +1375,10 @@ function applyRoleRestrictions(role) {
   }
 
   // CRNA-assignment toggle on the Pre-Op form — only relevant for assistants.
+  // Jordan-only "Internal Call Notes" card at the top of the Pre-Op form.
+  // Emailed to the assigned CRNA on save (savePreop handles the send).
+  const jordanNotesCard = document.getElementById('po-jordan-notes-wrap');
+  if(jordanNotesCard) jordanNotesCard.style.display = isAssistant ? '' : 'none';
   const crnaPick = document.getElementById('po-assign-crna-row');
   if(crnaPick) crnaPick.style.display = isAssistant ? '' : 'none';
 
@@ -5764,7 +5768,8 @@ const fields = ['po-caseId','po-surgeryDate','po-startTime','po-procedureType','
 'po-allergies','po-medications','po-surgicalHistory','po-venipuncture','po-totalFluids','po-ebl',
 'po-comments','po-heart-notes','po-lungs-notes','po-abd-notes','po-assessTime','po-cv-other','po-pupil-comment','po-cv-comment','po-ekg-comment','po-pulm-comment','po-gastro-comment','po-renal-comment','po-neuro-comment','po-meta-comment','po-teeth-comment','po-other-comment','po-other-other-comment','po-providerSignature','po-pupil-other-val','po-pupil-comment','po-cv-other-val','po-cv-comment','po-ekg-other-val','po-ekg-comment','po-pulm-other-val','po-pulm-comment','po-gastro-other-val','po-gastro-comment','po-renal-other-val','po-renal-comment','po-neuro-other-val','po-neuro-comment','po-meta-other-val','po-meta-comment','po-teeth-other-val','po-teeth-comment','po-other-other-val','po-other-comment',
 'po-patientFirstName','po-patientLastName','po-patientPhone','po-patientDOB','po-archType','po-officeAddress',
-'po-callStatus','po-invoiceStatus','po-paymentStatus','po-lastFollowupAt','po-reminderDate','po-depositSentAt'];
+'po-callStatus','po-invoiceStatus','po-paymentStatus','po-lastFollowupAt','po-reminderDate','po-depositSentAt',
+'po-jordanNotes'];
 const data = {};
 fields.forEach(id => {
 const el = document.getElementById(id);
@@ -5960,6 +5965,16 @@ setSyncing(true);
 await savePreopRecords(cleaned);
 setSyncing(false);
 try { logAudit('preop-edit', updated['po-caseId'] || ''); } catch(e){}
+// If Jordan wrote fresh call notes on this save, ship a copy to the
+// assigned CRNA so they see it before the case. Only fires when the
+// notes ACTUALLY changed (or are net-new) so re-saves don't spam.
+try {
+  if(window._userRole === 'assistant' && typeof window._maybeEmailJordanNotes === 'function') {
+    const prev = (idx !== -1 ? records[idx]['po-jordanNotes'] : '') || '';
+    const next = (updated['po-jordanNotes'] || '').trim();
+    if(next && next !== prev.trim()) window._maybeEmailJordanNotes(updated, next);
+  }
+} catch(_){}
 // Jordan stays on the form after editing too — keep _editingPreopId set so
 // the next save continues to update this same record.
 if(window._userRole === 'assistant') {
@@ -6091,6 +6106,14 @@ getDoc(doc(db,'atlas','preop')).then(ps => {
   _globalRefresh();
 }).catch(()=>{});
 alert('✓ Pre-Op record saved!');
+// Same "notes changed → email the CRNA" hook as the edit path. Fires when
+// Jordan saves a brand-new Pre-Op with notes populated.
+try {
+  const noteTxt = (record['po-jordanNotes'] || '').trim();
+  if(window._userRole === 'assistant' && noteTxt && typeof window._maybeEmailJordanNotes === 'function') {
+    window._maybeEmailJordanNotes(record, noteTxt);
+  }
+} catch(_){}
 // Jordan stays on the Pre-Op form so he can keep working on the same patient
 // (attach docs, mark cleared, etc.) — set the editing id so the next save
 // updates this record instead of duplicating it. Everyone else jumps back
@@ -6101,6 +6124,50 @@ if(window._userRole === 'assistant') {
   clearPreop();
   showTab('mid-case');
 }
+};
+
+// Fires an internal email to the CRNA assigned to the case with Jordan's
+// call notes. Fire-and-forget so the save UX isn't gated on the send.
+window._maybeEmailJordanNotes = async function(record, notes) {
+  try {
+    const worker  = (record.worker || 'josh').toLowerCase();
+    const to      = worker === 'dev'
+      ? 'dev@atlasanesthesia.co'
+      : 'josh@atlasanesthesia.co';
+    const patient = [record['po-patientFirstName'], record['po-patientLastName']]
+      .filter(Boolean).join(' ').trim() || '(patient)';
+    const caseId  = record['po-caseId'] || record.id || '';
+    const surg    = record['po-surgeryDate'] || '';
+    const surgFmt = surg ? new Date(surg + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'long', day:'numeric', year:'numeric' }) : '—';
+    const esc = s => String(s || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c]);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+      <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,sans-serif">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px"><tr><td align="center">
+      <table width="600" style="max-width:600px;width:100%;background:#fff;border-radius:12px;overflow:hidden">
+        <tr><td style="background:#1d4ed8;color:#fff;padding:18px 22px">
+          <div style="font-size:11px;letter-spacing:.8px;text-transform:uppercase">Atlas · Jordan's Pre-Op Call Notes</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px">${esc(patient)} · ${esc(caseId)}</div>
+        </td></tr>
+        <tr><td style="padding:22px;font-size:14px;color:#1e293b;line-height:1.6">
+          <div style="font-size:12px;color:var(--text-faint);margin-bottom:6px">Surgery date</div>
+          <div style="font-size:14px;font-weight:600;margin-bottom:16px">${esc(surgFmt)}</div>
+          <div style="font-size:12px;color:var(--text-faint);margin-bottom:6px">Jordan wrote:</div>
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;white-space:pre-wrap;font-size:14px;color:#0f172a">${esc(notes)}</div>
+          <p style="margin:16px 0 0;font-size:12px;color:#64748b">Sent automatically when Jordan saved the Pre-Op record. This email will only fire again if she updates and re-saves the notes.</p>
+        </td></tr>
+      </table></td></tr></table></body></html>`;
+    await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/outreach-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to,
+        subject: `Pre-Op Notes — ${patient} (${caseId})`,
+        html,
+        from: '"Jordan Vallieres, APRN, FNP" <jordan@atlasanesthesia.co>'
+      })
+    });
+    if(typeof toastSuccess === 'function') toastSuccess('Notes emailed to ' + (worker === 'dev' ? 'Dev' : 'Josh'));
+  } catch(e) { console.warn('Jordan notes email failed:', e); }
 };
 function prefillNewCase(preopRecord) {
 const caseIdEl = document.getElementById('caseId');
