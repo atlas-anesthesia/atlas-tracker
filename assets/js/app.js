@@ -206,12 +206,16 @@ window.toggleSurgeryMode = async function() {
     try { if(typeof renderLiveCase === 'function') renderLiveCase(); } catch(e){}
     // Return to Mid-Case when leaving surgery mode (most natural landing spot)
     try { showTab('mid-case'); } catch(e){}
-    // Reapply the current user's role restrictions — the surgery-mode nav
-    // hides everything except Live Case; on exit we bring back only the
-    // tabs the CURRENT role should see, not Jordan's assistant tabs.
-    try { if(typeof applyRoleRestrictions === 'function') applyRoleRestrictions(window._userRole); } catch(e){}
   }
   _applySurgeryModeNav();
+  // Reapply the current user's role restrictions AFTER _applySurgeryModeNav
+  // (which un-hides every nav child when leaving surgery mode). Order
+  // matters — without this second pass, Jordan-specific tabs like Phone
+  // Tracker, Availability, and the Scheduler Tracker leak into the CRNA
+  // view every time surgery mode exits.
+  if(!window._surgeryModeActive) {
+    try { if(typeof applyRoleRestrictions === 'function') applyRoleRestrictions(window._userRole); } catch(e){}
+  }
   _renderSurgeryModeBanner();
   // Update the toggle button text/style
   const btn = document.getElementById('surgery-mode-toggle');
@@ -1270,8 +1274,15 @@ const EMAIL_ROLE_MAP = {
 'jxcondado@gmail.com': 'crna',
 'murthy.devarsh@gmail.com': 'crna',
 'vallieresjordan@gmail.com': 'assistant', // Jordan — pre-op nurse
-'condadonicole@gmail.com':   'scheduler'  // Nicole — schedules pre-op visits
+'condadonicole@gmail.com':   'scheduler', // Nicole — schedules pre-op visits
+// Owner login — gets a role-switcher dropdown in the header so he can
+// view the app as any teammate without logging out. Actual role starts
+// as 'crna' (full access); UI in the switcher lets him swap.
+'olivercmucka@gmail.com':    'crna',
+'admin@atlasanesthesia.co':  'crna'
 };
+// Emails that get the role-switcher dropdown (view-as any role, no logout).
+const OWNER_EMAILS = new Set(['olivercmucka@gmail.com', 'admin@atlasanesthesia.co']);
 // Stripe link the patient can use to pay the $100 pre-op fee directly, used
 // only as a backup when card info couldn't be collected over the phone.
 const PREOP_VISIT_STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
@@ -1974,8 +1985,33 @@ if(isNewLogin) {
 }
 // Determine role (crna vs assistant) — drives what the user can see.
 window._userRole = getUserRole(user.email);
-// Auto-set worker based on email
-const mappedWorker = EMAIL_WORKER_MAP[user.email.toLowerCase()] || 'dev';
+// Owner override: if this is the master account, honor the "view as"
+// selection stashed in localStorage so a page refresh keeps the chosen
+// perspective. Also stamp the login email onto window so the switcher
+// UI can decide whether to render.
+window._ownerEmail = (user.email || '').toLowerCase();
+if(OWNER_EMAILS.has(window._ownerEmail)) {
+  const savedViewAs = localStorage.getItem('atlas_view_as') || '';
+  if(savedViewAs === 'crna-josh' || savedViewAs === 'crna-dev') {
+    window._userRole = 'crna';
+    window._ownerViewAs = savedViewAs;
+  } else if(savedViewAs === 'assistant' || savedViewAs === 'scheduler') {
+    window._userRole = savedViewAs;
+    window._ownerViewAs = savedViewAs;
+  } else {
+    window._ownerViewAs = 'crna-josh';
+  }
+}
+// Auto-set worker based on email. Owner uses the "view as" selection —
+// crna-josh → josh, crna-dev → dev, otherwise fall back to josh.
+let mappedWorker;
+if(window._ownerViewAs === 'crna-dev') {
+  mappedWorker = 'dev';
+} else if(window._ownerViewAs === 'crna-josh') {
+  mappedWorker = 'josh';
+} else {
+  mappedWorker = EMAIL_WORKER_MAP[user.email.toLowerCase()] || 'dev';
+}
 currentWorker = mappedWorker;
 currentInvTab = mappedWorker;
 // Lock worker toggle to their own account
@@ -2010,6 +2046,9 @@ const payoutNavBtn = document.getElementById('subnav-payout');
 if(payoutNavBtn) payoutNavBtn.style.display = '';
 // Apply role-based UI restrictions (assistant = pre-op only)
 try { applyRoleRestrictions(window._userRole); } catch(e) { console.warn('applyRoleRestrictions:', e); }
+// Owner sees a role-switcher pill in the top-right so he can view as any
+// role without logging out. Non-owner accounts skip the install silently.
+try { if(typeof window._installOwnerSwitcher === 'function') window._installOwnerSwitcher(); } catch(e){}
 // Default Case Log, CS Log, and Case History to logged-in user's perspective
 currentCaseLogTab = mappedWorker;
 ['dev','josh'].forEach(x => { const el=document.getElementById('cltab-'+x); if(el) el.classList.toggle('active', x===mappedWorker); });
@@ -11501,6 +11540,45 @@ Object.defineProperty(window, 'caseItems', {
 Object.defineProperty(window, 'csEntries', {
   get: () => csEntries, set: v => { csEntries = v; }, configurable: true
 });
+
+// ── Owner role-switcher ─────────────────────────────────────────────────────
+// When the master account (olivercmucka@gmail.com or admin@atlasanesthesia.co)
+// is signed in, a dropdown appears in the top-right corner that lets the
+// owner swap between Josh / Dev / Jordan / Nicole views without logging out.
+// Selection is persisted to localStorage['atlas_view_as'] and re-applied on
+// every auth callback so a refresh keeps the current view. Non-owner accounts
+// see no pill.
+window._installOwnerSwitcher = function() {
+  if(!OWNER_EMAILS.has(window._ownerEmail || '')) return;
+  let host = document.getElementById('ownerRoleSwitcher');
+  if(host) host.remove();
+  host = document.createElement('div');
+  host.id = 'ownerRoleSwitcher';
+  host.style.cssText = 'position:fixed;top:14px;right:170px;z-index:99998;background:#1d3557;color:#fff;padding:0;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.15);display:flex;align-items:center;overflow:hidden';
+  const view = window._ownerViewAs || 'crna-josh';
+  const label = {
+    'crna-josh': '👤 Viewing as Josh',
+    'crna-dev':  '👤 Viewing as Dev',
+    'assistant': '👤 Viewing as Jordan',
+    'scheduler': '👤 Viewing as Nicole'
+  }[view] || '👤 Owner';
+  host.innerHTML = `
+    <span style="padding:7px 12px;font-size:12px;font-weight:700;letter-spacing:.3px">${label}</span>
+    <select id="ownerViewAsSelect" style="background:rgba(255,255,255,.12);color:#fff;border:none;padding:8px 10px;font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;outline:none;border-left:1px solid rgba(255,255,255,.2)">
+      <option value="crna-josh" ${view==='crna-josh'?'selected':''}>Switch to Josh</option>
+      <option value="crna-dev"  ${view==='crna-dev' ?'selected':''}>Switch to Dev</option>
+      <option value="assistant" ${view==='assistant'?'selected':''}>Switch to Jordan</option>
+      <option value="scheduler" ${view==='scheduler'?'selected':''}>Switch to Nicole</option>
+    </select>`;
+  document.body.appendChild(host);
+  document.getElementById('ownerViewAsSelect').addEventListener('change', (e) => {
+    const val = e.target.value;
+    localStorage.setItem('atlas_view_as', val);
+    // Hard reload so every role-dependent piece of state (nav, worker,
+    // filters, restrictions) rebuilds from scratch cleanly.
+    location.reload();
+  });
+};
 
 // ── Offline / Online indicator ──────────────────────────────────────────────
 // Tiny pill in the top-right corner that lights up when the browser loses
