@@ -260,8 +260,8 @@ window.loadPaymentRows = async function loadPaymentRows() {
   renderPaymentSummary();
   // Auto-sync all invoiced rows to Expenses & Distributions on every load
   _syncAllInvoicedToPayouts(_paymentRows).catch(()=>{});
-  // Auto-sync from Stripe for patient cases (silent — runs in background)
-  setTimeout(() => window.syncStripeToPayments(true).catch(()=>{}), 800);
+  // Stripe auto-sync disabled per user — every payment amount, deposit
+  // date, and paid date is entered manually. No API calls to Stripe.
   } catch(e) { console.error('loadPaymentRows error:', e); const body=document.getElementById('payments-table-body'); if(body) body.innerHTML='<div style="padding:32px;color:red;font-size:13px">Error loading payments: '+e.message+'<br><small>'+e.stack+'</small></div>'; }
 }
 
