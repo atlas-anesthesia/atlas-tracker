@@ -206,6 +206,10 @@ window.toggleSurgeryMode = async function() {
     try { if(typeof renderLiveCase === 'function') renderLiveCase(); } catch(e){}
     // Return to Mid-Case when leaving surgery mode (most natural landing spot)
     try { showTab('mid-case'); } catch(e){}
+    // Reapply the current user's role restrictions — the surgery-mode nav
+    // hides everything except Live Case; on exit we bring back only the
+    // tabs the CURRENT role should see, not Jordan's assistant tabs.
+    try { if(typeof applyRoleRestrictions === 'function') applyRoleRestrictions(window._userRole); } catch(e){}
   }
   _applySurgeryModeNav();
   _renderSurgeryModeBanner();
