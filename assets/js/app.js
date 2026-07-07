@@ -1283,6 +1283,13 @@ const EMAIL_ROLE_MAP = {
 };
 // Emails that get the role-switcher dropdown (view-as any role, no logout).
 const OWNER_EMAILS = new Set(['olivercmucka@gmail.com', 'admin@atlasanesthesia.co']);
+// Non-owner accounts that also get a switcher, but restricted to a specific
+// list of "peer views" they're allowed to swap into. Owners always see the
+// full 4-role menu regardless.
+//   Josh ↔ Nicole so he can check her Tracker without logging out.
+const PEER_VIEWS = {
+  'jxcondado@gmail.com': ['crna-josh', 'scheduler']
+};
 // Stripe link the patient can use to pay the $100 pre-op fee directly, used
 // only as a backup when card info couldn't be collected over the phone.
 const PREOP_VISIT_STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
@@ -1985,16 +1992,30 @@ window._userRole = getUserRole(user.email);
 // perspective. Also stamp the login email onto window so the switcher
 // UI can decide whether to render.
 window._ownerEmail = (user.email || '').toLowerCase();
-if(OWNER_EMAILS.has(window._ownerEmail)) {
+// Full-access owner emails OR peer emails with a restricted view list both
+// participate in the switcher. Peer emails are constrained to their own
+// allow-list (Josh can only swap to Nicole; can't accidentally land on
+// Dev's inventory or Jordan's queue).
+const _allowedViews = OWNER_EMAILS.has(window._ownerEmail)
+  ? ['crna-josh', 'crna-dev', 'assistant', 'scheduler']
+  : (PEER_VIEWS[window._ownerEmail] || null);
+if(_allowedViews) {
+  window._allowedViews = _allowedViews;
   const savedViewAs = localStorage.getItem('atlas_view_as') || '';
-  if(savedViewAs === 'crna-josh' || savedViewAs === 'crna-dev') {
-    window._userRole = 'crna';
-    window._ownerViewAs = savedViewAs;
-  } else if(savedViewAs === 'assistant' || savedViewAs === 'scheduler') {
-    window._userRole = savedViewAs;
+  if(_allowedViews.includes(savedViewAs)) {
+    if(savedViewAs === 'crna-josh' || savedViewAs === 'crna-dev') {
+      window._userRole = 'crna';
+    } else if(savedViewAs === 'assistant' || savedViewAs === 'scheduler') {
+      window._userRole = savedViewAs;
+    }
     window._ownerViewAs = savedViewAs;
   } else {
-    window._ownerViewAs = 'crna-josh';
+    // Default = the first allowed view for their account. For Josh peer
+    // that's 'crna-josh' (his own). For the owner it's Josh too.
+    window._ownerViewAs = _allowedViews[0];
+    if(_allowedViews[0] === 'assistant' || _allowedViews[0] === 'scheduler') {
+      window._userRole = _allowedViews[0];
+    }
   }
 }
 // Auto-set worker based on email. Owner uses the "view as" selection —
@@ -11677,7 +11698,11 @@ Object.defineProperty(window, 'csEntries', {
 // every auth callback so a refresh keeps the current view. Non-owner accounts
 // see no pill.
 window._installOwnerSwitcher = function() {
-  if(!OWNER_EMAILS.has(window._ownerEmail || '')) return;
+  const email = window._ownerEmail || '';
+  const allowed = OWNER_EMAILS.has(email)
+    ? ['crna-josh', 'crna-dev', 'assistant', 'scheduler']
+    : (PEER_VIEWS[email] || null);
+  if(!allowed) return;
   const existing = document.getElementById('ownerRoleSwitcherBtn');
   if(existing) existing.remove();
   const existingMenu = document.getElementById('ownerRoleSwitcherMenu');
@@ -11694,13 +11719,14 @@ window._installOwnerSwitcher = function() {
   btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; };
   document.body.appendChild(btn);
 
-  const view = window._ownerViewAs || 'crna-josh';
-  const options = [
+  const view = window._ownerViewAs || allowed[0];
+  const allOptions = [
     { val: 'crna-josh', label: 'Josh' },
     { val: 'crna-dev',  label: 'Dev' },
     { val: 'assistant', label: 'Jordan' },
     { val: 'scheduler', label: 'Nicole' }
   ];
+  const options = allOptions.filter(o => allowed.includes(o.val));
   const menu = document.createElement('div');
   menu.id = 'ownerRoleSwitcherMenu';
   menu.style.cssText = 'position:fixed;bottom:70px;right:16px;z-index:99999;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:6px 0;display:none;min-width:160px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
