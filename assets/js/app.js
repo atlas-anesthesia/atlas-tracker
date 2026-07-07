@@ -2065,6 +2065,9 @@ try { applyRoleRestrictions(window._userRole); } catch(e) { console.warn('applyR
 // Owner sees a role-switcher pill in the top-right so he can view as any
 // role without logging out. Non-owner accounts skip the install silently.
 try { if(typeof window._installOwnerSwitcher === 'function') window._installOwnerSwitcher(); } catch(e){}
+// Show the "what's new" popup once per release. Waits a beat so it lands
+// after the app has fully painted the Home tab.
+try { setTimeout(() => { if(typeof window._showReleaseNotesIfNew === 'function') window._showReleaseNotesIfNew(); }, 800); } catch(e){}
 // Default Case Log, CS Log, and Case History to logged-in user's perspective
 currentCaseLogTab = mappedWorker;
 ['dev','josh'].forEach(x => { const el=document.getElementById('cltab-'+x); if(el) el.classList.toggle('active', x===mappedWorker); });
@@ -11747,6 +11750,85 @@ window._installOwnerSwitcher = function() {
     location.reload();
   });
   document.addEventListener('click', () => { menu.style.display = 'none'; });
+};
+
+// ── Release Notes popup ─────────────────────────────────────────────────────
+// One-time modal shown after login when the release version below is newer
+// than what the user has acknowledged. Copy per role so Nicole doesn't see
+// changes only Josh cares about, and vice versa.
+//
+// To ship an update: bump ATLAS_RELEASE and prepend an entry to
+// ATLAS_RELEASE_NOTES with the changes. Every user sees it once on their
+// next visit, then it goes away for them.
+const ATLAS_RELEASE = '2026-07-06.a';
+const ATLAS_RELEASE_NOTES = [
+  {
+    version: '2026-07-06.a',
+    date: 'July 6, 2026',
+    title: "What's new",
+    changes: [
+      { forRoles: ['scheduler'], text: "🟢 Pre-Op Visit column now shows '📧 Email sent' after you hit Book & Send Confirmation — no more re-clicking the Schedule button." },
+      { forRoles: ['scheduler', 'crna'], text: "Pre-Op records now auto-generate the moment you add a patient to the Tracker — Jordan can start prep immediately." },
+      { forRoles: ['assistant'], text: "New 📞 Internal Call Notes box at the top of every Pre-Op — your notes email straight to Josh or Dev on save." },
+      { forRoles: ['scheduler', 'assistant'], text: "🔕 Called Directly button on every Tracker row — stops all reminder emails when you reach a patient outside the portal." },
+      { forRoles: ['scheduler', 'assistant'], text: "Row buttons cleaned up into one ⋯ menu so the Tracker isn't cluttered." },
+      { forRoles: ['crna'], text: "'Scheduled Procedure' replaces 'Procedure Type' on the Pre-Op form; anesthesia-type preset options removed." },
+      { forRoles: ['crna'], text: "Josh's login now has a 👤 toggle in the bottom-right — swap into Nicole's view without logging out." },
+      { forAll: true, text: "Patient portal now requires 5 airway photos instead of 6 (the throat angle is gone)." },
+      { forAll: true, text: "Nicole's inbox accepts JPG and PNG attachments; real PDFs mislabeled as .jpg are auto-detected and converted." }
+    ]
+  }
+];
+
+window._showReleaseNotesIfNew = function() {
+  try {
+    const storageKey = 'atlas_seen_release_v2';
+    const seen = localStorage.getItem(storageKey) || '';
+    if(seen === ATLAS_RELEASE) return;
+    const latest = ATLAS_RELEASE_NOTES[0];
+    if(!latest || latest.version !== ATLAS_RELEASE) return;
+    // Filter changes to just those relevant to this user's active role.
+    // window._userRole is 'crna' | 'assistant' | 'scheduler'.
+    const role = window._userRole || 'crna';
+    const items = (latest.changes || []).filter(c =>
+      c.forAll || (Array.isArray(c.forRoles) && c.forRoles.includes(role))
+    );
+    if(!items.length) {
+      // Nothing to show for this role — still mark seen so we don't check
+      // again until the next release.
+      localStorage.setItem(storageKey, ATLAS_RELEASE);
+      return;
+    }
+    if(document.getElementById('atlasReleaseModal')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'atlasReleaseModal';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+    const esc = s => String(s || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c]);
+    wrap.innerHTML = `
+      <div style="background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+        <div style="background:#1d3557;color:#fff;padding:18px 22px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#90b8e0">${esc(latest.date)}</div>
+          <div style="font-size:20px;font-weight:700;margin-top:2px">${esc(latest.title)}</div>
+        </div>
+        <div style="padding:20px 24px;overflow-y:auto;flex:1">
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Here's what's changed since you were last here:</div>
+          <ul style="margin:0;padding-left:0;list-style:none">
+            ${items.map(c => `<li style="padding:10px 0;border-top:1px solid #f1f5f9;font-size:14px;line-height:1.55;color:#0f172a">${esc(c.text)}</li>`).join('')}
+          </ul>
+        </div>
+        <div style="padding:14px 22px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end">
+          <button id="atlasReleaseModalOk" style="background:#1d3557;color:#fff;border:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Got it</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const dismiss = () => {
+      localStorage.setItem(storageKey, ATLAS_RELEASE);
+      wrap.remove();
+    };
+    document.getElementById('atlasReleaseModalOk').addEventListener('click', dismiss);
+    // Click outside the modal card also dismisses.
+    wrap.addEventListener('click', (e) => { if(e.target === wrap) dismiss(); });
+  } catch(e) { console.warn('release notes popup failed:', e); }
 };
 
 // ── Offline / Online indicator ──────────────────────────────────────────────
