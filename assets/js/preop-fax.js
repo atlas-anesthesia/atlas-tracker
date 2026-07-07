@@ -375,7 +375,7 @@ function buildModal() {
         <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Procedure Information</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div>
-            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Procedure Type</label>
+            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Scheduled Procedure</label>
             <input type="text" id="pof-proc-type" oninput="window._pofPreview()" placeholder="e.g. Wisdom teeth extraction" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
           </div>
           <div>
