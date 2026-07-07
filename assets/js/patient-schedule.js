@@ -32,15 +32,14 @@ const db = getFirestore(app);
 const WORKER_URL = 'https://atlas-reminder.blue-disk-9b10.workers.dev';
 const STRIPE_LINK = 'https://buy.stripe.com/7sY28q4dF5JrfSI6aZejK03';
 
-// Six required photos. Order + copy comes straight from the instruction
+// Five required photos. Order + copy comes straight from the instruction
 // sheet — keep the labels short, the bullets actionable.
 const ANGLES = [
   { key: 'neckExt',  label: 'Neck extended', bullets: ['Tilt head back as far as comfortably possible.', 'Look up toward the ceiling.', 'Camera in front of you.', 'Top of chest to top of head.'] },
   { key: 'profile',  label: 'Profile (side)', bullets: ['Turn so the camera sees your side.', 'Head in a natural, neutral position.', 'Camera at eye level.', 'Top of chest to top of head.'] },
   { key: 'straight', label: 'Straight on',    bullets: ['Look straight ahead.', 'Head in a natural, neutral position.', 'Camera at eye level.', 'Top of chest to top of head.'] },
   { key: 'right',    label: 'Head turned right', bullets: ['Turn your head as far right as comfortable.', 'Keep eyes level, face relaxed.', 'Camera in front of you.', 'Top of chest to top of head.'] },
-  { key: 'left',     label: 'Head turned left',  bullets: ['Turn your head as far left as comfortable.', 'Keep eyes level, face relaxed.', 'Camera in front of you.', 'Top of chest to top of head.'] },
-  { key: 'throat',   label: 'Back of the throat', bullets: ['Open your mouth wide.', 'Stick your tongue out and say "ahh".', 'Camera in front of you.', 'Top of chest to top of head.'] }
+  { key: 'left',     label: 'Head turned left',  bullets: ['Turn your head as far left as comfortable.', 'Keep eyes level, face relaxed.', 'Camera in front of you.', 'Top of chest to top of head.'] }
 ];
 
 const PHOTO_MAX_DIMENSION = 1400;   // longest side, in px
@@ -238,12 +237,12 @@ function updatePhotosStatus() {
   const status = _entry.photoStatus || {};
   const done = ANGLES.filter(a => status[a.key]).length;
   const pill = $('photos-status');
-  if(done === 0) { pill.className = 'step-status pending'; pill.textContent = '0 / 6 uploaded'; }
-  else if(done < 6) { pill.className = 'step-status inprogress'; pill.textContent = done + ' / 6 uploaded'; }
-  else { pill.className = 'step-status done'; pill.textContent = 'All 6 uploaded'; }
+  if(done === 0) { pill.className = 'step-status pending'; pill.textContent = '0 / 5 uploaded'; }
+  else if(done < 5) { pill.className = 'step-status inprogress'; pill.textContent = done + ' / 5 uploaded'; }
+  else { pill.className = 'step-status done'; pill.textContent = 'All 5 uploaded'; }
   // Toggle step lock state
-  $('step-photos').classList.toggle('done', done === 6);
-  if(done === 6) {
+  $('step-photos').classList.toggle('done', done === 5);
+  if(done === 5) {
     $('step-pay').classList.remove('locked');
   } else {
     $('step-pay').classList.add('locked');
@@ -252,7 +251,7 @@ function updatePhotosStatus() {
   // In-step "you must finish the previous step" banners. CSS already greys
   // out locked steps, but the banner makes the *reason* unmissable.
   const payNotice = $('pay-locked-notice');
-  if(payNotice) payNotice.style.display = (done === 6) ? 'none' : 'block';
+  if(payNotice) payNotice.style.display = (done === 5) ? 'none' : 'block';
   const schedNotice = $('sched-locked-notice');
   if(schedNotice) schedNotice.style.display = (done === 6 && _entry._paid) ? 'none' : 'block';
 }
@@ -553,7 +552,7 @@ async function confirmBooking() {
   if(!_selected || !_entry) return;
   // Re-check gates before committing.
   const photosDone = (_entry.photoStatus && ANGLES.every(a => _entry.photoStatus[a.key]));
-  if(!photosDone) { alert('Please upload all 6 photos first.'); return; }
+  if(!photosDone) { alert('Please upload all 5 photos first.'); return; }
   if(!_entry._paid) { alert('Please complete the $100 payment first.'); return; }
   if(!_termsAccepted()) { alert('Please review and check the Patient Terms & Privacy Acknowledgment box before scheduling.'); return; }
   if(!_consentAccepted()) { alert('Please review and check the Anesthesia Informed Consent box before scheduling.'); return; }
@@ -742,7 +741,7 @@ function buildInternalHTML(patientName, sel) {
           <div style="font-size:16px;font-weight:700;color:#0f172a">${esc(fmtDate(sel.date))}</div>
           <div style="font-size:14px;color:#1d4ed8;font-family:'DM Mono',monospace;margin-top:4px">${esc(fmtTime(sel.time))} Central Time</div>
         </div>
-        <p style="margin:18px 0 0;font-size:13px;color:#64748b">The Tracker row is now marked scheduled. Six airway photos and the $100 fee were captured before the patient reached this step.</p>
+        <p style="margin:18px 0 0;font-size:13px;color:#64748b">The Tracker row is now marked scheduled. Five airway photos and the $100 fee were captured before the patient reached this step.</p>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">Sent by Atlas Tracker · self-scheduling portal.</div></td></tr>
     </table></td></tr></table></body></html>`;

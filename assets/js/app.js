@@ -1724,7 +1724,7 @@ function _spvBuildEmailHTML() {
         <p style="margin:0 0 14px">Thanks for your time on the phone. Use your <strong>personal patient portal</strong> below — it has three quick steps:</p>
         <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 18px;margin:18px 0">
           <div style="font-size:13px;color:#1e293b;line-height:1.7">
-            <div><strong>1.</strong> Upload 6 short airway photos (we'll guide you through each angle).</div>
+            <div><strong>1.</strong> Upload 5 short airway photos (we'll guide you through each angle).</div>
             <div><strong>2.</strong> Pay the $100 pre-op clearance fee (secure Stripe checkout).</div>
             <div><strong>3.</strong> Pick a time for your pre-op call with our nurse practitioner <strong>Jordan, APRN, FNP</strong>.</div>
           </div>
