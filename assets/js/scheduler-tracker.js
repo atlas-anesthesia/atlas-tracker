@@ -348,6 +348,18 @@
         onclick: `window._strToggleRemindersDisabled('${e.id}')`,
         color: remindersOff ? '#166534' : '#a16207' });
     }
+    // Undo Email Sent — reverts the "📧 Email sent" state back to the
+    // Schedule button if Shannon hit Book & Send by accident. Only offered
+    // when the flag IS set AND the patient hasn't scheduled yet. Doesn't
+    // recall the email that already went out (impossible), just resets
+    // the UI state on the row.
+    const _emailSentInRow = e.callStatus === 'called' || !!e.callStatusAt;
+    if(!phiHidden && isScheduler && !isCanceled && _emailSentInRow && !e.scheduledAt) {
+      menuItems.push({
+        label: '↶ Undo "Email sent"',
+        onclick: `window._strUndoEmailSent('${e.id}')`,
+        color: '#0369a1' });
+    }
     if(!phiHidden && (isScheduler || isAssistant) && !isCanceled) {
       menuItems.push({
         label: '✕ Mark Canceled',
@@ -1702,6 +1714,28 @@
       document.querySelectorAll('[id^="strRowMenu-"]').forEach(el => { el.style.display = 'none'; });
     });
   }
+
+  // Undo the "📧 Email sent" state on a row. Resets callStatus/callStatusAt
+  // and any of the follow-up state that only makes sense after the portal
+  // link went out. The already-sent email can't be recalled — this is
+  // purely a UI/data undo so Shannon can hit "📅 Schedule" again.
+  window._strUndoEmailSent = async function(id) {
+    const idx = _entries.findIndex(x => x.id === id);
+    if(idx === -1) return;
+    const e = _entries[idx];
+    const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || 'this patient';
+    if(!confirm('Undo "Email sent" for ' + name + '?\n\nThis resets the row so you can hit 📅 Schedule again. It does NOT recall the email that already went out.')) return;
+    e.callStatus = 'none';
+    e.callStatusAt = null;
+    e.callStatusBy = null;
+    // Also reset the once-per-entry alert flag so if the portal link goes
+    // out again, the "no schedule after 3 days" clock restarts cleanly.
+    e.threeDayNoScheduleAlertAt = null;
+    await _saveEntries();
+    try { window.logAudit && window.logAudit('preop-visit-email-sent-undone', id, name); } catch(_){}
+    if(typeof window.toastSuccess === 'function') window.toastSuccess('Email-sent state reset');
+    window.renderSchedulerTracker();
+  };
 
   // Toggle "reminders disabled" — patient was reached directly (e.g. Jordan
   // called them), so the automated cron nudges shouldn't fire anymore. The
