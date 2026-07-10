@@ -94,7 +94,7 @@
         <button onclick="document.getElementById('jcalSubscribeModal').remove()" style="background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:14px;font-family:inherit">✕</button>
       </div>
       <div style="padding:22px 24px;font-size:14px;line-height:1.55;color:#0f172a">
-        <p style="margin:0 0 12px 0">Tap the button below on your iPhone, iPad, or Mac. iOS/macOS will ask permission to subscribe to a new calendar called <strong>Atlas — Jordan Pre-Op Calls</strong>. It refreshes every ~15 minutes, so any new patient Nicole schedules with you appears automatically.</p>
+        <p style="margin:0 0 12px 0">Tap the button below on your iPhone, iPad, or Mac. iOS/macOS will ask permission to subscribe to a new calendar called <strong>Atlas — Jordan Pre-Op Calls</strong>. It refreshes every ~15 minutes, so any new patient Shannon schedules with you appears automatically.</p>
         <a href="${webcalUrl}" style="display:block;background:#166534;color:#fff;text-decoration:none;text-align:center;padding:14px 18px;border-radius:10px;font-size:15px;font-weight:700;margin:14px 0">📲 Add to Apple Calendar</a>
         <div style="font-size:12px;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-top:14px">
           <div style="font-weight:600;margin-bottom:4px">Manual setup (other calendar apps)</div>

@@ -231,7 +231,7 @@
     // The call-status pill belongs to Nicole — Jordan sees the current state
     // but can't change it. Render as a non-clickable span when he's viewing.
     const callPill = isAssistant
-      ? `<span title="Only Nicole can update this" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;font-family:inherit;white-space:nowrap;cursor:not-allowed;display:inline-block">${cs.label}</span>`
+      ? `<span title="Only Shannon can update this" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;font-family:inherit;white-space:nowrap;cursor:not-allowed;display:inline-block">${cs.label}</span>`
       : `<button onclick="window._strCycleCallStatus('${e.id}')" style="background:${cs.bg};color:${cs.fg};border:1px ${cs.dashed?'dashed':'solid'} ${cs.border};font-size:11px;font-weight:${cs.key==='none'?'600':'700'};padding:4px 10px;border-radius:11px;cursor:pointer;font-family:inherit;white-space:nowrap">${cs.label}</button>`;
 
     // pill helper:
@@ -248,7 +248,7 @@
         || (assistantOnly && isScheduler);
       const tip = readOnlyAll
         ? "Auto-flips when Jordan submits the final clearance report"
-        : (assistantOnly ? "Only Jordan can update this" : "Only Nicole can update this");
+        : (assistantOnly ? "Only Jordan can update this" : "Only Shannon can update this");
       if(showAsReadOnly) {
         return done
           ? `<span title="${tip}" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border};font-size:11px;font-weight:700;padding:4px 10px;border-radius:11px;font-family:inherit;cursor:default;display:inline-block">${onLabel}</span>`
@@ -729,7 +729,7 @@
     // themselves.
     const isAssistantView = (window._userRole === 'assistant');
     const headerRow = `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint)">
-      <span>Patient</span><span style="text-align:center">Pre-Op Visit</span><span style="text-align:center">Nicole's Call</span><span style="text-align:center">${isAssistantView ? 'Deposit Paid' : '$100 Paid'}</span><span style="text-align:center">Jordan Called</span><span style="text-align:center">Cleared</span><span style="text-align:center">${isAssistantView ? 'Pre-Op' : ''}</span>
+      <span>Patient</span><span style="text-align:center">Pre-Op Visit</span><span style="text-align:center">Shannon's Call</span><span style="text-align:center">${isAssistantView ? 'Deposit Paid' : '$100 Paid'}</span><span style="text-align:center">Jordan Called</span><span style="text-align:center">Cleared</span><span style="text-align:center">${isAssistantView ? 'Pre-Op' : ''}</span>
     </div>`;
 
     let html = '';
@@ -1314,7 +1314,7 @@
         <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
           <tr><td style="padding:5px 10px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:90px;font-size:12px">DATE</td><td style="padding:5px 10px;border:1px solid #bbb;font-size:12px">${today}</td><td style="padding:5px 10px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;width:90px;font-size:12px">URGENCY</td><td style="padding:5px 10px;border:1px solid #bbb;font-size:12px;font-weight:bold">${urgency}</td></tr>
           <tr><td style="padding:5px 10px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;font-size:12px">TO</td><td colspan="3" style="padding:5px 10px;border:1px solid #bbb;font-size:12px">${_esc(pcp || 'Primary Care Physician')}</td></tr>
-          <tr><td style="padding:5px 10px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;font-size:12px">FROM</td><td colspan="3" style="padding:5px 10px;border:1px solid #bbb;font-size:12px">Nicole · Atlas Anesthesia · Return fax ${_NIC_RETURN_FAX}</td></tr>
+          <tr><td style="padding:5px 10px;border:1px solid #bbb;background:#f0f0f0;font-weight:bold;font-size:12px">FROM</td><td colspan="3" style="padding:5px 10px;border:1px solid #bbb;font-size:12px">Shannon · Atlas Anesthesia · Return fax ${_NIC_RETURN_FAX}</td></tr>
         </table>
         <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:12px;line-height:1.55">
           <div><strong>Patient:</strong> ${_esc(name)}</div>
@@ -1330,7 +1330,7 @@
           Thank you for your assistance. If you have any questions, please call Atlas Anesthesia.
         </div>
         <div style="margin-top:34px;font-size:12px">
-          <div style="border-top:1px solid #000;width:280px;padding-top:4px">Nicole · Atlas Anesthesia, LLC</div>
+          <div style="border-top:1px solid #000;width:280px;padding-top:4px">Shannon · Atlas Anesthesia, LLC</div>
         </div>
       </body></html>`;
   }
@@ -1357,7 +1357,7 @@
 
   // ── Multi-state call pill: none → called → voicemail → failed → none ───────
   window._strCycleCallStatus = async function(id) {
-    if(window._userRole === 'assistant') { alert('Only Nicole can update call status.'); return; }
+    if(window._userRole === 'assistant') { alert('Only Shannon can update call status.'); return; }
     const idx = _entries.findIndex(e => e.id === id);
     if(idx === -1) return;
     const e = _entries[idx];
@@ -1654,7 +1654,7 @@
               ${reasonRow}
               <tr style="background:#f8fafc"><td style="padding:8px 14px;font-weight:700">Canceled by</td><td style="padding:8px 14px">${_esc(e.canceledBy || 'staff')}</td></tr>
             </table>
-            <p style="margin:16px 0 0;font-size:12px;color:#64748b">Reopen the case anytime from Nicole's Tracker via the ↶ Uncancel button.</p>
+            <p style="margin:16px 0 0;font-size:12px;color:#64748b">Reopen the case anytime from Shannon's Tracker via the ↶ Uncancel button.</p>
           </td></tr>
         </table></td></tr></table></body></html>`;
       await fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/outreach-email', {

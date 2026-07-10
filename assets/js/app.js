@@ -1304,7 +1304,7 @@ const EMAIL_NAME_MAP = {
   'jxcondado@gmail.com':       'Josh',
   'murthy.devarsh@gmail.com':  'Devarsh',
   'vallieresjordan@gmail.com': 'Jordan',
-  'condadonicole@gmail.com':   'Nicole'
+  'condadonicole@gmail.com':   'Shannon'   // was Nicole — Shannon took over the scheduler role
 };
 function getUserDisplayName(email, role) {
   const known = EMAIL_NAME_MAP[(email||'').toLowerCase()];
@@ -1560,7 +1560,7 @@ window._spvRenderScript = function() {
   // "you" stay plain so the script reads naturally.
   const hl = s => `<strong style="background:#dcfce7;border-radius:4px;padding:1px 5px;color:#166534">${s}</strong>`;
   host.innerHTML = `
-    <p style="margin:0 0 10px">Hi, my name is Nicole calling from Atlas Anesthesia.</p>
+    <p style="margin:0 0 10px">Hi, my name is Shannon calling from Atlas Anesthesia.</p>
     <p style="margin:0 0 10px">I see you have an upcoming procedure with ${hl(surgeon)} at ${hl(center)} on ${hl(surgD)} at ${hl(surgT)}.</p>
     <p style="margin:0 0 10px">We wanted to call to schedule anesthesia clearance.</p>
     <p style="margin:0 0 10px">We have our own nurse practitioner, ${hl('Jordan, APRN, FNP')}, who will give you a call and walk you through everything you need to do.</p>
@@ -1568,7 +1568,7 @@ window._spvRenderScript = function() {
     <p style="margin:0 0 10px;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:9px 11px;color:#92400e"><strong>📧 Don't forget — ask for their email address</strong> so I can send the payment link and scheduling portal. Drop it in the form to the left before clicking Send.</p>
     <div style="margin-top:14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:11px 12px;color:#1e3a8a">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1d4ed8;margin-bottom:6px">📨 If you reach voicemail</div>
-      <p style="margin:0 0 8px">Hello, my name is Nicole from Atlas Anesthesia. I see you have an upcoming procedure with ${hl(surgeon)} at ${hl(center)}.</p>
+      <p style="margin:0 0 8px">Hello, my name is Shannon from Atlas Anesthesia. I see you have an upcoming procedure with ${hl(surgeon)} at ${hl(center)}.</p>
       <p style="margin:0">I'm calling to schedule your clearance for anesthesia. Please give us a call back at your earliest convenience so we can proceed to schedule anesthesia for your case.</p>
     </div>
     <hr style="border:0;border-top:1px solid #e2e8f0;margin:14px 0">
@@ -1776,7 +1776,7 @@ function _spvBuildJordanNotificationHTML(p) {
       <tr><td style="background:#1d3557;padding:22px 28px"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#90b8e0;margin-bottom:4px">Atlas Anesthesia · Internal</div><div style="font-size:20px;font-weight:700;color:#fff">New pre-op visit scheduled</div></td></tr>
       <tr><td style="padding:24px 28px;font-size:14px;color:#1e293b;line-height:1.6">
         <p style="margin:0 0 14px;font-size:16px;font-weight:600">Hi Jordan, APRN, FNP,</p>
-        <p style="margin:0 0 18px">Nicole just scheduled a new pre-op clearance visit. Here are the details — please reach out to the patient for the clearance call before surgery.</p>
+        <p style="margin:0 0 18px">Shannon just scheduled a new pre-op clearance visit. Here are the details — please reach out to the patient for the clearance call before surgery.</p>
         <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 18px">
           ${row('Patient', esc(fullName))}
           ${row('Email', esc(p.email))}
@@ -1786,7 +1786,7 @@ function _spvBuildJordanNotificationHTML(p) {
           ${row('Pre-op visit', esc(fmtDate(p.visitDate)) + (p.visitTime ? ' · ' + esc(fmtTime(p.visitTime)) : ''))}
           ${row('CRNA on case', esc(crnaName))}
         </table>
-        ${p.note ? `<div style="background:#f1f5f9;border-left:3px solid #1d3557;padding:10px 14px;font-size:13px;color:#1e293b;line-height:1.5;margin:0 0 18px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:4px">Note from Nicole</div>${esc(p.note).replace(/\n/g,'<br>')}</div>` : ''}
+        ${p.note ? `<div style="background:#f1f5f9;border-left:3px solid #1d3557;padding:10px 14px;font-size:13px;color:#1e293b;line-height:1.5;margin:0 0 18px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:4px">Note from Shannon</div>${esc(p.note).replace(/\n/g,'<br>')}</div>` : ''}
         <p style="margin:0;font-size:13px;color:#64748b">A pre-op case has already been created in Atlas Tracker and tagged for your review. Open it from the Mid-Case list when you're ready.</p>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px 28px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#94a3b8;text-align:center">Sent by Atlas Tracker — this is an internal notification, no patient action required.</div></td></tr>
@@ -5900,7 +5900,7 @@ window.savePreop = async function() {
 // booking flow. She can't start a brand-new pre-op from scratch — they
 // must come through the Schedule Pre-Op Visit modal first.
 if(window._userRole === 'assistant' && !window._editingPreopId) {
-  alert('You can only fill in pre-ops created by Nicole. Open a case from the Mid-Case list to edit it.');
+  alert('You can only fill in pre-ops created by Shannon. Open a case from the Mid-Case list to edit it.');
   return;
 }
 const textData = getPreopTextFields();
@@ -11715,7 +11715,7 @@ window._installOwnerSwitcher = function() {
   // label so it doesn't nag or clutter.
   const btn = document.createElement('button');
   btn.id = 'ownerRoleSwitcherBtn';
-  btn.title = 'Switch view (Josh / Dev / Jordan / Nicole)';
+  btn.title = 'Switch view (Josh / Dev / Jordan / Shannon)';
   btn.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:99998;width:44px;height:44px;border-radius:50%;background:#1d3557;color:#fff;border:2px solid #fff;cursor:pointer;font-size:18px;box-shadow:0 4px 14px rgba(29,53,87,.35);opacity:1;transition:transform .12s;display:flex;align-items:center;justify-content:center;padding:0';
   btn.innerHTML = '👤';
   btn.onmouseenter = () => { btn.style.transform = 'scale(1.08)'; };
@@ -11727,7 +11727,7 @@ window._installOwnerSwitcher = function() {
     { val: 'crna-josh', label: 'Josh' },
     { val: 'crna-dev',  label: 'Dev' },
     { val: 'assistant', label: 'Jordan' },
-    { val: 'scheduler', label: 'Nicole' }
+    { val: 'scheduler', label: 'Shannon' }
   ];
   const options = allOptions.filter(o => allowed.includes(o.val));
   const menu = document.createElement('div');
@@ -11773,9 +11773,9 @@ const ATLAS_RELEASE_NOTES = [
       { forRoles: ['scheduler', 'assistant'], text: "🔕 Called Directly button on every Tracker row — stops all reminder emails when you reach a patient outside the portal." },
       { forRoles: ['scheduler', 'assistant'], text: "Row buttons cleaned up into one ⋯ menu so the Tracker isn't cluttered." },
       { forRoles: ['crna'], text: "'Scheduled Procedure' replaces 'Procedure Type' on the Pre-Op form; anesthesia-type preset options removed." },
-      { forRoles: ['crna'], text: "Josh's login now has a 👤 toggle in the bottom-right — swap into Nicole's view without logging out." },
+      { forRoles: ['crna'], text: "Josh's login now has a 👤 toggle in the bottom-right — swap into Shannon's view without logging out." },
       { forAll: true, text: "Patient portal now requires 5 airway photos instead of 6 (the throat angle is gone)." },
-      { forAll: true, text: "Nicole's inbox accepts JPG and PNG attachments; real PDFs mislabeled as .jpg are auto-detected and converted." }
+      { forAll: true, text: "Shannon's inbox accepts JPG and PNG attachments; real PDFs mislabeled as .jpg are auto-detected and converted." }
     ]
   }
 ];
