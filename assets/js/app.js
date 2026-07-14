@@ -1318,7 +1318,7 @@ function getUserDisplayName(email, role) {
 // Jordan works exclusively from the Tracker: she opens the linked Pre-Op
 // from each row, manages her Availability, and now has her own Calendar
 // view showing her scheduled clearance calls. Mid-Case is CRNA-only.
-const ASSISTANT_TABS = ['scheduler-tracker','calendar','preop','availability','preop-history','phone-tracker'];
+const ASSISTANT_TABS = ['home','scheduler-tracker','calendar','preop','availability','preop-history','phone-tracker'];
 // Scheduler (Nicole) sees Jordan's availability calendar and the same Tracker
 // table — she manages "Called" + watches $100 Stripe + Jordan's clearance.
 const SCHEDULER_TABS = ['scheduler-tracker','calendar'];
@@ -1331,9 +1331,11 @@ function applyRoleRestrictions(role) {
   const restricted = isAssistant || isScheduler;
 
   // Top-level nav buttons assistants/schedulers shouldn't see.
-  // Jordan: no Pre-Op nav entry (she opens pre-ops from the Tracker row),
-  //         no Mid-Case (her workflow lives entirely on the Tracker).
-  const assistantHide = ['nav-home','nav-preop','nav-mid-case','nav-payments'];
+  // Jordan: Home + Pre-Op nav are visible now (per user, needed for
+  //         emergency quick-turn pre-op creation from a dashboard).
+  //         No Mid-Case (her workflow lives entirely on the Tracker).
+  //         No Payments (CRNA-only).
+  const assistantHide = ['nav-mid-case','nav-payments'];
   const schedulerHide = ['nav-home','nav-preop','nav-mid-case','nav-payments'];
   const toHide = isScheduler ? schedulerHide : (isAssistant ? assistantHide : []);
   ['nav-home','nav-preop','nav-mid-case','nav-payments'].forEach(id => {
@@ -5896,13 +5898,10 @@ window.cleanupPreopDuplicates = async function() {
 };
 
 window.savePreop = async function() {
-// Jordan (assistant) can ONLY edit pre-ops that were spawned by Nicole's
-// booking flow. She can't start a brand-new pre-op from scratch — they
-// must come through the Schedule Pre-Op Visit modal first.
-if(window._userRole === 'assistant' && !window._editingPreopId) {
-  alert('You can only fill in pre-ops created by Shannon. Open a case from the Mid-Case list to edit it.');
-  return;
-}
+// Jordan (assistant) can now create brand-new pre-ops from scratch too —
+// used for emergency quick-turn cases where Shannon hasn't done the
+// intake yet. Normal flow (Shannon creates entry → Jordan clears) still
+// works the same via _editingPreopId.
 const textData = getPreopTextFields();
 const checkData = getPreopCheckboxes();
 // Always generate Case ID fresh from surgery date at save time
@@ -6134,6 +6133,26 @@ if(window._userRole === 'assistant') {
   clearPreop();
   showTab('mid-case');
 }
+};
+
+// Jordan's Home page "🚨 + New Pre-Op" button — clears the Pre-Op form
+// and jumps to the tab so she can fill in a brand-new emergency intake.
+// The savePreop guard that used to block her was removed, so hitting Save
+// on this form creates a fresh record.
+window._jordanEmergencyNewPreop = function() {
+  try {
+    // Clear any leftover editing state so this is a true new record.
+    window._editingPreopId = null;
+    const editBanner = document.getElementById('preop-edit-banner');
+    if(editBanner) editBanner.remove();
+    if(typeof clearPreop === 'function') clearPreop();
+    if(typeof showTab === 'function') showTab('preop');
+    // Focus something obvious once the tab is visible.
+    setTimeout(() => {
+      const firstName = document.getElementById('po-patientFirstName');
+      if(firstName) firstName.focus();
+    }, 200);
+  } catch(e) { console.warn('emergency-new-preop failed:', e); }
 };
 
 // Auto-create a Pre-Op record for a Tracker entry — safe to call multiple
@@ -11485,11 +11504,44 @@ function _renderDashboardImpl() {
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const name = (window.currentUser && window.currentWorker === 'dev') ? 'Dev' : (window.currentWorker === 'josh' ? 'Josh' : '');
+  const isAssistantHome = window._userRole === 'assistant';
+  let name = '';
+  if(isAssistantHome) name = 'Jordan';
+  else if(window.currentWorker === 'dev') name = 'Dev';
+  else if(window.currentWorker === 'josh') name = 'Josh';
   const greetEl = document.getElementById('dashboard-greeting');
   if(greetEl) greetEl.textContent = name ? `${greeting}, ${name}` : greeting;
   const dateEl = document.getElementById('dashboard-date');
   if(dateEl) dateEl.textContent = now.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  // Jordan's home has a big emergency-create Pre-Op card injected at the
+  // top of the dashboard container so quick-turn intakes are one click.
+  // Injected AFTER the greeting so it survives normal dashboard re-renders.
+  try {
+    const home = document.getElementById('tab-home');
+    let banner = document.getElementById('jordanEmergencyBanner');
+    if(isAssistantHome && home) {
+      if(!banner) {
+        banner = document.createElement('div');
+        banner.id = 'jordanEmergencyBanner';
+        banner.style.cssText = 'background:linear-gradient(135deg,#1d3557 0%,#2563eb 100%);color:#fff;border-radius:14px;padding:22px 26px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;box-shadow:0 6px 20px rgba(29,53,87,.25)';
+        banner.innerHTML = `
+          <div style="flex:1;min-width:220px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#90b8e0">Emergency / quick-turn</div>
+            <div style="font-size:20px;font-weight:700;margin-top:4px">Start a Pre-Op right now</div>
+            <div style="font-size:13px;color:#cfe0ee;margin-top:6px;line-height:1.45">Skip the normal intake flow. Opens a blank Pre-Op form so you can capture the essentials before the case rolls in.</div>
+          </div>
+          <button onclick="window._jordanEmergencyNewPreop && window._jordanEmergencyNewPreop()" style="background:#fff;color:#1d3557;border:none;padding:13px 22px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.15)">🚨 + New Pre-Op</button>`;
+        // Insert immediately after the .action-bar (greeting row) so it
+        // sits above the stat cards.
+        const actionBar = home.querySelector('.action-bar');
+        if(actionBar && actionBar.nextSibling) home.insertBefore(banner, actionBar.nextSibling);
+        else home.insertBefore(banner, home.firstChild);
+      }
+      banner.style.display = 'flex';
+    } else if(banner) {
+      banner.style.display = 'none';
+    }
+  } catch(e){}
 
   const today = (typeof todayStr === 'function') ? todayStr() : new Date().toISOString().split('T')[0];
   const weekOut = (typeof addDays === 'function') ? addDays(today, 7) : '';

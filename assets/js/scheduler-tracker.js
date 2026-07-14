@@ -321,8 +321,15 @@
     // Primary action per role.
     let primaryBtn = '';
     if(!phiHidden) {
-      if(isAssistant && linkedPreopId) {
-        primaryBtn = `<button onclick="window._strOpenPreop('${linkedPreopId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:4px 9px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`;
+      if(isAssistant) {
+        // Jordan's primary action is ALWAYS 📋 Pre-Op — regardless of
+        // whether the portal email went out, deposit was paid, or the
+        // patient scheduled a time. If a linked Pre-Op record already
+        // exists, jump straight to it; otherwise auto-create one on the
+        // fly and then open it. Emergency quick-turn workflow.
+        primaryBtn = linkedPreopId
+          ? `<button onclick="window._strOpenPreop('${linkedPreopId}')" class="btn btn-ghost btn-sm" title="Open the linked pre-op assessment" style="font-size:11px;padding:4px 9px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`
+          : `<button onclick="window._strOpenOrCreatePreop('${e.id}')" class="btn btn-ghost btn-sm" title="Create + open pre-op for this patient" style="font-size:11px;padding:4px 9px;color:#1d4ed8;border-color:#bfdbfe">📋 Pre-Op</button>`;
       } else if(isScheduler) {
         primaryBtn = `<button onclick="window._strOpenAddPatient('${e.id}')" class="btn btn-ghost btn-sm" title="Edit patient info" style="font-size:11px;padding:4px 9px">✏ Edit</button>`;
       }
@@ -1714,6 +1721,38 @@
       document.querySelectorAll('[id^="strRowMenu-"]').forEach(el => { el.style.display = 'none'; });
     });
   }
+
+  // For Jordan: open the linked Pre-Op if one exists, otherwise auto-
+  // create one from whatever data the Tracker entry has right now and
+  // then open it. This is what the row's 📋 Pre-Op button calls when
+  // linkedPreopId is empty (unusual — most entries now auto-create at
+  // Add Patient time — but this handles pre-migration entries and any
+  // gap where the auto-create didn't fire).
+  window._strOpenOrCreatePreop = async function(entryId) {
+    const e = _entries.find(x => x.id === entryId);
+    if(!e) return;
+    if(typeof window._ensurePreopForEntry !== 'function') {
+      alert('Pre-Op helper not ready — refresh the page and try again.');
+      return;
+    }
+    try {
+      const rec = await window._ensurePreopForEntry(e);
+      const recId = rec && rec.id;
+      if(!recId) {
+        alert('Could not create a Pre-Op for this patient. Make sure a surgery date is set.');
+        return;
+      }
+      // Stamp the link back onto the tracker entry so the next click hits
+      // the fast path.
+      e.preopRecordId = recId;
+      e.preopCaseId   = rec['po-caseId'] || '';
+      await _saveEntries();
+      window._strOpenPreop(recId);
+    } catch(err) {
+      console.warn('open-or-create Pre-Op failed:', err);
+      alert('Could not open the Pre-Op: ' + (err.message || err));
+    }
+  };
 
   // Undo the "📧 Email sent" state on a row. Resets callStatus/callStatusAt
   // and any of the follow-up state that only makes sense after the portal
