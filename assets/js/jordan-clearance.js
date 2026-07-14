@@ -84,18 +84,24 @@
     block.style.cssText = 'margin-top:18px;border-left:4px solid #166534;padding:18px 22px';
     block.innerHTML = `
       <div class="card-title" style="color:#166534;margin-bottom:6px">Additional Documents &amp; Clearance</div>
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Attach extra PDFs (lab results, EKGs, supporting notes), then mark this case Cleared. You'll preview the combined report before it's sent to the CRNA.</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Two-step flow so you don't have to wait on the medical records to mark the case cleared:<br><strong>1.</strong> Mark Cleared now (no email fires) — the CRNA sees ✓ Cleared on the Tracker immediately.<br><strong>2.</strong> When the medical records arrive, upload them below and hit Send Records — a follow-up email goes to the CRNA with the report + attachments.</div>
       <input type="file" id="jclr-file-input" accept="application/pdf" multiple style="display:none">
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('jclr-file-input').click()" style="color:#7c3aed;border-color:#7c3aed">+ Additional Documents</button>
         <div id="jclr-upload-status" style="font-size:12px;color:var(--text-faint)"></div>
       </div>
       <div id="jclr-doc-list" style="margin-bottom:16px"></div>
-      <button id="jclr-cleared-btn" style="background:#166534;color:#fff;border:none;border-radius:10px;width:100%;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">✓ Mark Cleared &amp; Send Report to CRNA</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button id="jclr-mark-btn" style="background:#166534;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">✓ Mark Cleared</button>
+        <button id="jclr-send-btn" style="background:#1d3557;color:#fff;border:none;border-radius:10px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">📎 Send Records to CRNA</button>
+      </div>
+      <div id="jclr-flow-status" style="font-size:12px;color:var(--text-faint);margin-top:10px;min-height:18px"></div>
     `;
     host.appendChild(block);
     $('jclr-file-input').addEventListener('change', onFilesPicked);
-    $('jclr-cleared-btn').addEventListener('click', onClearedClicked);
+    $('jclr-mark-btn').addEventListener('click', onMarkClearedClicked);
+    $('jclr-send-btn').addEventListener('click', onClearedClicked);
+    refreshMarkButtonState();
     _lastRecordId = getPreopRecordId();
     refreshDocList();
   }
@@ -482,20 +488,91 @@
     return await out.save();
   }
 
-  // ── "Mark Cleared" → preview modal → send ─────────────────────────────────
+  // ── "Mark Cleared" (no email) ────────────────────────────────────────────
+  // Flips the Cleared pill on the linked Tracker entry so the CRNA sees
+  // ✓ Cleared immediately, without waiting on medical records. No email
+  // fires here — that happens later via Send Records.
+  async function onMarkClearedClicked() {
+    if(!getPreopRecordId()) { alert('Save the pre-op record first.'); return; }
+    const btn = $('jclr-mark-btn');
+    if(btn.dataset.state === 'cleared') {
+      if(!confirm('Un-mark this case as Cleared? The Tracker pill will flip back to pending.')) return;
+      const visitId = getPreopVisitId();
+      if(visitId && typeof window._strCycleClearedStatus === 'function') {
+        // Un-cleared via direct entry update (cycle would jump to 'faxed').
+        // Use _strUpdateEntry to just clear the fields.
+        try {
+          if(typeof window._strUpdateEntry === 'function') {
+            await window._strUpdateEntry(visitId, { clearedStatus: '', clearedAt: null, clearedBy: null });
+          }
+        } catch(_){}
+      }
+      refreshMarkButtonState();
+      const status = $('jclr-flow-status');
+      if(status) { status.textContent = '✓ Un-cleared. Records-send button still available whenever you\'re ready.'; status.style.color = '#166534'; }
+      return;
+    }
+    const visitId = getPreopVisitId();
+    if(!visitId) { alert('Could not find the linked Tracker entry. Save the pre-op first.'); return; }
+    btn.disabled = true; btn.textContent = 'Marking…';
+    try {
+      if(typeof window._strToggleCleared === 'function') {
+        await window._strToggleCleared(visitId, true);
+      } else if(typeof window._strUpdateEntry === 'function') {
+        await window._strUpdateEntry(visitId, {
+          clearedStatus: 'cleared',
+          clearedAt: new Date().toISOString(),
+          clearedBy: (window.currentUser?.email) || ''
+        });
+      }
+      try { window.logAudit && window.logAudit('preop-marked-cleared', getPreopRecordId(), getPatientName()); } catch(_){}
+      const status = $('jclr-flow-status');
+      if(status) { status.textContent = '✓ Marked Cleared. Send records to the CRNA whenever they arrive — the case pill on the Tracker already reads Cleared.'; status.style.color = '#166534'; }
+      refreshMarkButtonState();
+    } catch(err) {
+      alert('Could not mark cleared: ' + (err.message || err));
+      btn.disabled = false; btn.textContent = '✓ Mark Cleared';
+    }
+  }
+
+  // Reflect current cleared state onto the Mark button (green "Mark Cleared"
+  // if not yet cleared, gray "↶ Un-mark" if already cleared). Called after
+  // any state change and on initial mount.
+  function refreshMarkButtonState() {
+    const btn = $('jclr-mark-btn');
+    if(!btn) return;
+    const visitId = getPreopVisitId();
+    const entries = window._preopVisitEntries || [];
+    const entry = entries.find(e => e.id === visitId);
+    const isCleared = !!(entry && (entry.clearedStatus === 'cleared' || entry.clearedAt));
+    btn.disabled = false;
+    if(isCleared) {
+      btn.dataset.state = 'cleared';
+      btn.textContent = '↶ Un-mark Cleared';
+      btn.style.background = '#e2e8f0';
+      btn.style.color = '#475569';
+    } else {
+      btn.dataset.state = 'open';
+      btn.textContent = '✓ Mark Cleared';
+      btn.style.background = '#166534';
+      btn.style.color = '#fff';
+    }
+  }
+
+  // ── "Send Records to CRNA" — preview modal → send ────────────────────────
   async function onClearedClicked() {
     if(!getPreopRecordId()) { alert('Save the pre-op record first.'); return; }
-    const btn = $('jclr-cleared-btn');
+    const btn = $('jclr-send-btn');
     btn.disabled = true; btn.textContent = 'Building report…';
     let bytes;
     try { bytes = await buildCombinedReport(); }
     catch(e) {
       console.error(e);
       alert('Could not build the report: ' + (e.message || e));
-      btn.disabled = false; btn.textContent = '✓ Mark Cleared & Send Report to CRNA';
+      btn.disabled = false; btn.textContent = '📎 Send Records to CRNA';
       return;
     }
-    btn.disabled = false; btn.textContent = '✓ Mark Cleared & Send Report to CRNA';
+    btn.disabled = false; btn.textContent = '📎 Send Records to CRNA';
     openConfirmModal(bytes);
   }
 
