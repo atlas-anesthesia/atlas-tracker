@@ -1331,10 +1331,9 @@ function applyRoleRestrictions(role) {
   const restricted = isAssistant || isScheduler;
 
   // Top-level nav buttons assistants/schedulers shouldn't see.
-  // Jordan: no Home tab (her workflow starts on the Tracker), no
-  //         Mid-Case, no Payments. Pre-Op nav is visible so she can
-  //         land on a blank form for emergency intakes.
-  const assistantHide = ['nav-home','nav-mid-case','nav-payments'];
+  // Jordan: no Home, no Pre-Op nav (she reaches Pre-Ops via each
+  //         Tracker row's 📋 button), no Mid-Case, no Payments.
+  const assistantHide = ['nav-home','nav-preop','nav-mid-case','nav-payments'];
   const schedulerHide = ['nav-home','nav-preop','nav-mid-case','nav-payments'];
   const toHide = isScheduler ? schedulerHide : (isAssistant ? assistantHide : []);
   ['nav-home','nav-preop','nav-mid-case','nav-payments'].forEach(id => {
