@@ -1396,6 +1396,13 @@ function applyRoleRestrictions(role) {
     const el = document.getElementById(id);
     if(el) el.style.display = isAssistant ? 'none' : '';
   });
+  // Rewire the "Print Anesthesia Record" button to preview the record the user
+  // is currently on instead of bouncing them to the Pre-Op History tab.
+  const _printBtn = document.getElementById('preop-print-record-btn');
+  if(_printBtn && !_printBtn.dataset.wired) {
+    _printBtn.dataset.wired = '1';
+    _printBtn.onclick = () => { if(typeof window._printCurrentPreop === 'function') window._printCurrentPreop(); };
+  }
   const surgeryModeBtn = document.getElementById('surgery-mode-toggle');
   if(surgeryModeBtn) surgeryModeBtn.style.display = (isAssistant || isScheduler) ? 'none' : '';
 
@@ -6112,6 +6119,15 @@ getDoc(doc(db,'atlas','preop')).then(ps => {
   window._cachedPreopRecords = [...(window._rawPreopRecords||[])];
   _globalRefresh();
 }).catch(()=>{});
+// If a CRNA (Josh/Dev) just made a fresh Pre-Op from scratch, mirror it as a
+// Tracker entry so Jordan sees the patient. Skips when Jordan created the
+// record (she's already on the Tracker view) and when a Tracker row already
+// links to this Pre-Op.
+try {
+  if(window._userRole !== 'assistant' && typeof window._strEnsureEntryForPreop === 'function') {
+    window._strEnsureEntryForPreop(record).catch(err => console.warn('mirror-to-tracker failed:', err));
+  }
+} catch(_){}
 alert('✓ Pre-Op record saved!');
 // Same "notes changed → email the CRNA" hook as the edit path. Fires when
 // Jordan saves a brand-new Pre-Op with notes populated.
@@ -6151,6 +6167,28 @@ window._jordanEmergencyNewPreop = function() {
       if(firstName) firstName.focus();
     }, 200);
   } catch(e) { console.warn('emergency-new-preop failed:', e); }
+};
+
+// Print the Pre-Op record the user is currently on. Called by the "Print
+// Anesthesia Record" button so it no longer bounces to the Pre-Op History tab.
+// Uses whatever is currently in the form (including unsaved edits) merged over
+// the saved record so the preview reflects the latest state.
+window._printCurrentPreop = function() {
+  try {
+    const text  = (typeof getPreopTextFields  === 'function') ? getPreopTextFields()  : {};
+    const check = (typeof getPreopCheckboxes  === 'function') ? getPreopCheckboxes()  : {};
+    const base  = window._editingPreopRecord || {};
+    const worker = base.worker || (typeof window.currentWorker !== 'undefined' ? window.currentWorker : 'josh');
+    const merged = { ...base, ...text, ...check, worker };
+    if(typeof window.previewAnesthesiaRecord === 'function') {
+      window.previewAnesthesiaRecord(merged);
+    } else {
+      alert('Print preview not available.');
+    }
+  } catch(e) {
+    console.error('_printCurrentPreop failed', e);
+    alert('Could not open print preview: ' + (e.message || e));
+  }
 };
 
 // Auto-create a Pre-Op record for a Tracker entry — safe to call multiple
@@ -6350,8 +6388,9 @@ const pill = r.worker==='dev' ? 'pill-dev' : 'pill-josh';
 const wname = r.worker==='dev' ? 'Devarsh' : 'Josh';
 const cvChecked = ['neg','htn','cad','angina','mi','chf','murmur','arrythmia'].filter(x=>r['po-cv-'+x]).join(', ').toUpperCase();
 const pulmChecked = ['neg','asthma','copd','uri','o2','cpap','sleep-apnea','bl-breath-sounds','smoker'].filter(x=>r['po-pulm-'+x]).map(x=>x.replace(/-/g,' ')).join(', ').toUpperCase();
+const _pName = [r['po-patientFirstName'], r['po-patientLastName']].filter(Boolean).join(' ').trim();
 return `<div class="case-item"><div class="case-item-header" onclick="togglePreop('${r.id}')"><div><div class="case-name" style="display:flex;align-items:center;gap:8px">
-${r['po-caseId'] || 'No Case ID'}
+${_pName ? _pName + ' · ' : ''}${r['po-caseId'] || 'No Case ID'}
 <span class="worker-pill ${pill}" style="font-size:10px">${wname}</span></div><div class="case-date">Surgery: ${fmtDate(r['po-surgeryDate'])||'—'} · Dentist: ${r['po-provider']||'—'}</div></div><div style="display:flex;gap:8px;align-items:center"><button onclick="event.stopPropagation();editPreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px">✏ Edit</button><button onclick="event.stopPropagation();previewAnesthesiaRecord(window._rawPreopRecords?.find(x=>x.id==='${r.id}')||{})" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--info);border-color:var(--info)">🖨 Print Record</button><button onclick="event.stopPropagation();deletePreopRecord('${r.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--warn)">Delete</button><div style="font-size:12px;color:var(--text-faint)">Saved ${new Date(r.savedAt).toLocaleDateString()}</div></div></div><div class="case-items-list" id="preop-detail-${r.id}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px"><div>
 ${r['po-contact-phone']?`<div style="margin-bottom:8px;padding:8px 10px;background:var(--info-light);border-radius:var(--radius-sm)"><strong style="font-size:11px;text-transform:uppercase;color:var(--info)">📞 Contact${r['po-contact-type']?' · '+r['po-contact-type']:''}</strong><div style="font-size:13px;margin-top:3px;color:var(--text)">${r['po-contact-phone']}</div></div>`:''}
 ${r['po-allergies']?`<div style="margin-bottom:8px"><strong style="font-size:11px;text-transform:uppercase;color:var(--text-faint)">Allergies</strong><div style="font-size:13px;margin-top:3px">${r['po-allergies']}</div></div>`:''}

@@ -335,8 +335,15 @@ window.previewAnesthesiaRecord = async function(record) {
     const box = document.createElement('div');
     box.style.cssText = 'background:#fff;border-radius:10px;width:100%;max-width:700px;box-shadow:0 20px 60px rgba(0,0,0,.5)';
     const hdr = document.createElement('div');
-    hdr.style.cssText = 'background:#1d3557;color:#fff;padding:14px 20px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center';
-    hdr.innerHTML = '<span style="font-weight:600;font-size:15px">Anesthesia Record Preview</span>';
+    hdr.style.cssText = 'background:#1d3557;color:#fff;padding:14px 20px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap';
+    const _rec = record || {};
+    const _who = [_rec['po-patientFirstName'], _rec['po-patientLastName']].filter(Boolean).join(' ').trim();
+    const _when = _rec['po-surgeryDate'] ? (typeof fmtDate === 'function' ? fmtDate(_rec['po-surgeryDate']) : _rec['po-surgeryDate']) : '';
+    const _titleLine = _who ? `Anesthesia Record — ${_who}${_when ? ' · ' + _when : ''}` : 'Anesthesia Record Preview';
+    const _titleSpan = document.createElement('span');
+    _titleSpan.style.cssText = 'font-weight:600;font-size:15px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    _titleSpan.textContent = _titleLine;
+    hdr.appendChild(_titleSpan);
     const btns = document.createElement('div');
     btns.style.display = 'flex'; btns.style.gap = '10px';
     const dlBtn = document.createElement('button');

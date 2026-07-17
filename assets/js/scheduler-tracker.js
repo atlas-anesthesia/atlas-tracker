@@ -197,8 +197,11 @@
     const contactLine = contactParts.length
       ? `<div style="font-size:11px;color:var(--text-faint);margin-top:5px;line-height:1.5">${contactParts.join('<span style="color:#cbd5e1;margin:0 6px">·</span>')}</div>`
       : '';
+    const _centerDisplay = e.surgeryCenterName
+      ? _esc(e.surgeryCenterName) + (e.surgeryCenterLocation ? ' (' + _esc(e.surgeryCenterLocation) + ')' : '')
+      : '';
     const surgeryLine = e.surgeryDate
-      ? `<div style="font-size:11px;color:#9a3412;font-weight:600;margin-top:6px;line-height:1.4">🔴 ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}${e.surgeryCenterName ? ' · ' + _esc(e.surgeryCenterName) : ''}${e.surgeon ? ' · ' + _esc(e.surgeon) : ''}</div>`
+      ? `<div style="font-size:11px;color:#9a3412;font-weight:600;margin-top:6px;line-height:1.4">🔴 ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}${_centerDisplay ? ' · ' + _centerDisplay : ''}${e.surgeon ? ' · ' + _esc(e.surgeon) : ''}${e.estimatedDuration ? ' · ⏱ ' + _esc(e.estimatedDuration) : ''}</div>`
       : '';
     let pdfLine = '';
     if(!phiHidden) {
@@ -811,6 +814,26 @@
     // to a free-text input if the list isn't loaded yet.
     const centers = window.surgeryCenters || [];
     const centerOptions = centers.map(c => `<option value="${_esc(c.id)}"${existing && existing.surgeryCenterId === c.id ? ' selected' : ''}>${_esc(c.name)}</option>`).join('');
+    // Surgeon autocomplete — dedupe from previously-entered entries so Shannon
+    // can pick a returning surgeon instead of retyping.
+    const surgeonHistory = Array.from(new Set(
+      (_entries || []).map(e => (e.surgeon || '').trim()).filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b));
+    const surgeonDatalist = surgeonHistory.map(s => `<option value="${_esc(s)}"></option>`).join('');
+    // Sub-locations for centers that operate multiple physical offices under
+    // one name. Matched by case-insensitive substring on the center name.
+    const CENTER_SUBLOCATIONS = { 'bay oral': ['West', 'East'] };
+    const _initialCenterId = existing?.surgeryCenterId || '';
+    const _initialCenterName = (_initialCenterId && centers.find(c => c.id === _initialCenterId)?.name) || existing?.surgeryCenterName || '';
+    const _initialSubs = (() => {
+      const n = (_initialCenterName || '').toLowerCase();
+      for(const key in CENTER_SUBLOCATIONS) if(n.includes(key)) return CENTER_SUBLOCATIONS[key];
+      return null;
+    })();
+    const subLocValue = existing?.surgeryCenterLocation || '';
+    // Estimated case time options
+    const DURATION_OPTS = ['30 min','45 min','1 hr','1.5 hr','2 hr','2.5 hr','3 hr','3.5 hr','4 hr'];
+    const durValue = existing?.estimatedDuration || '';
 
     const formInner = `
         <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#1e3a8a;line-height:1.5">${isEdit ? 'Edit the patient\'s details. Anything you change here flows into the auto-created Pre-Op record on the next save.' : 'Load the patient from the surgery center\'s pre-op sheet. You\'ll schedule their pre-op visit with Jordan, APRN, FNP from this entry once you reach them by phone.'}</div>
@@ -831,15 +854,30 @@
           <div><label style="margin-top:0">PCP fax <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label><input type="tel" id="strap-pcp-fax" placeholder="(555) 123-4567" value="${_esc(existing?.pcpFax || '')}"></div>
         </div>
         <div style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9a3412;margin-bottom:8px">Surgery details</div>
-          <div style="margin-bottom:12px"><label style="margin-top:0">Surgeon <span style="font-weight:400;color:var(--text-faint);font-size:11px">(performing the procedure)</span></label><input type="text" id="strap-surgeon" placeholder="Dr. Patel" value="${_esc(existing?.surgeon || '')}"></div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9a3412;margin-bottom:4px">Schedule surgery</div>
+          <div style="font-size:11px;color:#9a3412;margin-bottom:10px">These fields feed the Pre-Op record and every other place surgery info is used.</div>
+          <div style="margin-bottom:12px"><label style="margin-top:0">Surgeon <span style="font-weight:400;color:var(--text-faint);font-size:11px">(performing the procedure)</span></label><input type="text" id="strap-surgeon" list="strap-surgeon-history" placeholder="Dr. Patel" value="${_esc(existing?.surgeon || '')}" autocomplete="off"><datalist id="strap-surgeon-history">${surgeonDatalist}</datalist></div>
           <div style="display:grid;grid-template-columns:1fr 140px;gap:14px;margin-bottom:12px">
             <div><label style="margin-top:0">Surgery date <span style="color:var(--warn)">*</span></label><input type="date" id="strap-surg-date" value="${_esc(existing?.surgeryDate || '')}"></div>
             <div><label style="margin-top:0">Start time</label><input type="time" id="strap-surg-time" value="${_esc(existing?.surgeryTime || '')}"></div>
           </div>
-          <div><label style="margin-top:0">Surgery center</label>${centers.length
-            ? `<select id="strap-center"><option value="">— Pick a center —</option>${centerOptions}</select>`
+          <div style="margin-bottom:12px"><label style="margin-top:0">Estimated case time <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label>
+            <select id="strap-duration">
+              <option value="">— Not set —</option>
+              ${DURATION_OPTS.map(opt => `<option value="${_esc(opt)}"${durValue === opt ? ' selected' : ''}>${_esc(opt)}</option>`).join('')}
+              ${durValue && !DURATION_OPTS.includes(durValue) ? `<option value="${_esc(durValue)}" selected>${_esc(durValue)}</option>` : ''}
+            </select>
+          </div>
+          <div style="margin-bottom:12px"><label style="margin-top:0">Surgery center</label>${centers.length
+            ? `<select id="strap-center" onchange="window._strApplyCenterSubloc && window._strApplyCenterSubloc()"><option value="">— Pick a center —</option>${centerOptions}</select>`
             : `<input type="text" id="strap-center" placeholder="e.g. Bellin Surgery Center" value="${_esc(existing?.surgeryCenterName || '')}">`}</div>
+          <div id="strap-subloc-wrap" style="display:${_initialSubs ? 'block' : 'none'}">
+            <label style="margin-top:0">Location <span style="font-weight:400;color:var(--text-faint);font-size:11px">(which office)</span></label>
+            <select id="strap-subloc">
+              <option value="">— Pick a location —</option>
+              ${(_initialSubs || []).map(l => `<option value="${_esc(l)}"${subLocValue === l ? ' selected' : ''}>${_esc(l)}</option>`).join('')}
+            </select>
+          </div>
         </div>
         <div style="margin-bottom:14px">
           <label style="margin-top:0">Pre-op PDF <span style="font-weight:400;color:var(--text-faint);font-size:11px">(from the surgery center, optional)</span></label>
@@ -957,6 +995,37 @@
     }
   }
 
+  // Sub-locations for centers that operate multiple physical offices under
+  // one name. Kept in sync with the map in _strOpenAddPatient's form builder.
+  const _STR_CENTER_SUBLOCATIONS = { 'bay oral': ['West', 'East'] };
+  function _strSubLocsForCenterName(name) {
+    const n = (name || '').toLowerCase();
+    for(const key in _STR_CENTER_SUBLOCATIONS) if(n.includes(key)) return _STR_CENTER_SUBLOCATIONS[key];
+    return null;
+  }
+  // Called when Shannon picks a different center — show/hide the sub-location
+  // dropdown and swap in the right options.
+  window._strApplyCenterSubloc = function() {
+    const centerEl = document.getElementById('strap-center');
+    const wrap     = document.getElementById('strap-subloc-wrap');
+    const sel      = document.getElementById('strap-subloc');
+    if(!centerEl || !wrap || !sel) return;
+    let name = '';
+    if(centerEl.tagName === 'SELECT') {
+      const c = (window.surgeryCenters || []).find(x => x.id === centerEl.value);
+      name = c ? c.name : '';
+    } else { name = centerEl.value || ''; }
+    const subs = _strSubLocsForCenterName(name);
+    if(subs && subs.length) {
+      sel.innerHTML = '<option value="">— Pick a location —</option>' +
+        subs.map(l => `<option value="${l}">${l}</option>`).join('');
+      wrap.style.display = 'block';
+    } else {
+      sel.innerHTML = '<option value=""></option>';
+      wrap.style.display = 'none';
+    }
+  };
+
   window._strSavePatient = async function() {
     const editId = document.getElementById('strAddPatientModal')?.dataset.editId || '';
     const first = (_$('strap-first')?.value || '').trim();
@@ -969,6 +1038,8 @@
     const surgeon = (_$('strap-surgeon')?.value || '').trim();
     const surgD = _$('strap-surg-date')?.value || '';
     const surgT = _$('strap-surg-time')?.value || '';
+    const estimatedDuration = (_$('strap-duration')?.value || '').trim();
+    const surgeryCenterLocation = (_$('strap-subloc')?.value || '').trim();
     const centerEl = _$('strap-center');
     const centers = window.surgeryCenters || [];
     let surgeryCenterId = '', surgeryCenterName = '';
@@ -1008,14 +1079,16 @@
         Object.assign(entry, {
           patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, pcp, pcpPhone, pcpFax, surgeon,
           surgeryDate: surgD, surgeryTime: surgT,
-          surgeryCenterId, surgeryCenterName
+          surgeryCenterId, surgeryCenterName, surgeryCenterLocation,
+          estimatedDuration
         });
       } else {
         entry = {
           id: _uid(),
           patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, pcp, pcpPhone, pcpFax, surgeon,
           surgeryDate: surgD, surgeryTime: surgT,
-          surgeryCenterId, surgeryCenterName,
+          surgeryCenterId, surgeryCenterName, surgeryCenterLocation,
+          estimatedDuration,
           callStatus: 'none',
           addedAt: new Date().toISOString(),
           addedBy: (window.currentUser?.email) || ''
@@ -1077,6 +1150,8 @@
               rec['po-surgeryDate']      = surgD;
               rec['po-startTime']        = surgT;
               if(surgeryCenterId) rec['po-surgery-center'] = surgeryCenterId;
+              if(surgeryCenterLocation) rec['po-surgery-center-location'] = surgeryCenterLocation;
+              if(estimatedDuration) rec['po-estimatedDuration'] = estimatedDuration;
               // Refresh office address from the linked surgery center so
               // changing the center updates the address too.
               const sc = (window.surgeryCenters || []).find(c => c.id === surgeryCenterId);
@@ -1804,6 +1879,63 @@
       if(typeof window.toastSuccess === 'function') window.toastSuccess('Reminders stopped for ' + name);
     }
     window.renderSchedulerTracker();
+  };
+
+  // Called from savePreop in app.js when a CRNA creates a Pre-Op from scratch
+  // (no Tracker entry existed first). Ensures Jordan can see that patient on
+  // her Tracker instead of the case being invisible until someone edits it.
+  // Idempotent — silently returns if an entry already links to this Pre-Op.
+  window._strEnsureEntryForPreop = async function(record) {
+    if(!record || !record['po-caseId']) return null;
+    try {
+      if(!_entries.length) await _loadEntries();
+      const caseId = record['po-caseId'];
+      const preopId = record.id;
+      // Already linked? (either direct pointer, back-pointer, or shared caseId)
+      const existing = _entries.find(e =>
+        (preopId && e.preopRecordId === preopId) ||
+        (caseId  && e.preopCaseId    === caseId)  ||
+        (preopId && e['po-preopVisitId'] === preopId)
+      );
+      if(existing) return existing;
+      const now = new Date().toISOString();
+      const centers = window.surgeryCenters || [];
+      const centerId = record['po-surgery-center'] || '';
+      const centerName = (centerId && centers.find(c => c.id === centerId)?.name) || '';
+      const entry = {
+        id: _uid(),
+        patientFirst: record['po-patientFirstName'] || '',
+        patientLast:  record['po-patientLastName']  || '',
+        patientPhone: record['po-patientPhone']     || '',
+        patientDOB:   record['po-patientDOB']       || '',
+        patientEmail: record['po-patientEmail']     || '',
+        pcp:          record['po-pcp-name']         || '',
+        pcpPhone:     record['po-pcp-phone']        || '',
+        pcpFax:       record['po-pcp-fax']          || '',
+        surgeon:      record['po-provider']         || '',
+        surgeryDate:  record['po-surgeryDate']      || '',
+        surgeryTime:  record['po-startTime']        || '',
+        surgeryCenterId: centerId,
+        surgeryCenterName: centerName,
+        callStatus: 'none',
+        // Mark that this row came from a CRNA-created Pre-Op so it's obvious
+        // where it originated when Shannon reviews it.
+        addedAt: now,
+        addedBy: (window.currentUser?.email) || '',
+        source: 'preop-crna',
+        preopRecordId: preopId,
+        preopCaseId: caseId
+      };
+      _entries.unshift(entry);
+      await _saveEntries();
+      if(typeof window.renderSchedulerTracker === 'function') {
+        try { window.renderSchedulerTracker(); } catch(_){}
+      }
+      return entry;
+    } catch(err) {
+      console.warn('_strEnsureEntryForPreop failed:', err);
+      return null;
+    }
   };
 
   window._strDelete = async function(id) {

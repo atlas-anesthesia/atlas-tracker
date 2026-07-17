@@ -85,9 +85,9 @@
     block.innerHTML = `
       <div class="card-title" style="color:#166534;margin-bottom:6px">Additional Documents &amp; Clearance</div>
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Two-step flow so you don't have to wait on the medical records to mark the case cleared:<br><strong>1.</strong> Mark Cleared now (no email fires) — the CRNA sees ✓ Cleared on the Tracker immediately.<br><strong>2.</strong> When the medical records arrive, upload them below and hit Send Records — a follow-up email goes to the CRNA with the report + attachments.</div>
-      <input type="file" id="jclr-file-input" accept="application/pdf" multiple style="display:none">
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('jclr-file-input').click()" style="color:#7c3aed;border-color:#7c3aed">+ Additional Documents</button>
+      <input type="file" id="jclr-file-input" accept="application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic" multiple style="display:none">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('jclr-file-input').click()" style="color:#7c3aed;border-color:#7c3aed">+ Add PDF or Photo</button>
         <div id="jclr-upload-status" style="font-size:12px;color:var(--text-faint)"></div>
       </div>
       <div id="jclr-doc-list" style="margin-bottom:16px"></div>
@@ -200,16 +200,31 @@
     const status = $('jclr-upload-status');
     const docs = await loadDocsMeta();
     for(const file of files) {
-      if(file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
-        if(status) status.textContent = `Skipped "${file.name}" — only PDFs are supported.`;
+      const isPdf   = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      const isImage = file.type?.startsWith('image/') || /\.(jpg|jpeg|png|heic)$/i.test(file.name);
+      if(!isPdf && !isImage) {
+        if(status) status.textContent = `Skipped "${file.name}" — only PDFs or images (jpg/png/heic) are supported.`;
         continue;
       }
       try {
         if(status) status.textContent = `Uploading ${file.name}…`;
-        const dataUrl = await fileToDataUrl(file);
+        let dataUrl = await fileToDataUrl(file);
+        let finalName = file.name;
+        // Wrap images into a single-page PDF so the combined-report merge
+        // (which uses pdf-lib.PDFDocument.load) can read them uniformly.
+        if(isImage) {
+          try {
+            dataUrl = await imageDataUrlToPdf(dataUrl);
+            finalName = file.name.replace(/\.(jpg|jpeg|png|heic)$/i, '') + '.pdf';
+          } catch(convErr) {
+            console.warn('image→pdf conversion failed:', convErr);
+            if(status) status.textContent = `Could not convert ${file.name} to PDF — ${convErr.message || convErr}`;
+            continue;
+          }
+        }
         const docId = uid();
-        const chunkCount = await writeChunkedDoc(docId, file.name, dataUrl);
-        docs.push({ id: docId, filename: file.name, sizeBytes: file.size, chunkCount, addedAt: new Date().toISOString() });
+        const chunkCount = await writeChunkedDoc(docId, finalName, dataUrl);
+        docs.push({ id: docId, filename: finalName, sizeBytes: file.size, chunkCount, addedAt: new Date().toISOString() });
       } catch(err) {
         console.warn('Upload failed:', err);
         if(status) status.textContent = `Could not upload ${file.name} — ${err.message || err}`;
@@ -226,6 +241,33 @@
       r.onerror = () => reject(new Error('Could not read file.'));
       r.readAsDataURL(file);
     });
+  }
+  // Wrap a JPG/PNG data URL into a single-page PDF using pdf-lib. Same
+  // shape as the tracker inbox's image handling so the downstream merge
+  // treats every extra doc as a PDF uniformly.
+  async function imageDataUrlToPdf(imageDataUrl) {
+    if(!window.PDFLib) throw new Error('PDF library not loaded');
+    const { PDFDocument } = window.PDFLib;
+    // Strip prefix, decode base64.
+    const comma = imageDataUrl.indexOf(',');
+    const b64 = comma >= 0 ? imageDataUrl.slice(comma + 1) : imageDataUrl;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const doc = await PDFDocument.create();
+    const isPng = /^data:image\/png/i.test(imageDataUrl) ||
+      (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47);
+    const img = isPng ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
+    const margin = 24;
+    const page = doc.addPage([img.width + margin * 2, img.height + margin * 2]);
+    page.drawImage(img, { x: margin, y: margin, width: img.width, height: img.height });
+    const out = await doc.save();
+    let s = '';
+    const chunk = 0x8000;
+    for(let i = 0; i < out.length; i += chunk) {
+      s += String.fromCharCode.apply(null, out.subarray(i, i + chunk));
+    }
+    return 'data:application/pdf;base64,' + btoa(s);
   }
 
   async function refreshDocList() {
