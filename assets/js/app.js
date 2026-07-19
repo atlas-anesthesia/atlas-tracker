@@ -1286,9 +1286,12 @@ const OWNER_EMAILS = new Set(['olivercmucka@gmail.com', 'admin@atlasanesthesia.c
 // Non-owner accounts that also get a switcher, but restricted to a specific
 // list of "peer views" they're allowed to swap into. Owners always see the
 // full 4-role menu regardless.
-//   Josh ↔ Nicole so he can check her Tracker without logging out.
+//   Josh ↔ Shannon and Dev ↔ Shannon so they can add patients from the
+//   scheduler view without logging out (Shannon's the primary but they cover
+//   for her when needed).
 const PEER_VIEWS = {
-  'jxcondado@gmail.com': ['crna-josh', 'scheduler']
+  'jxcondado@gmail.com':      ['crna-josh', 'scheduler'],
+  'murthy.devarsh@gmail.com': ['crna-dev',  'scheduler']
 };
 // Stripe link the patient can use to pay the $100 pre-op fee directly, used
 // only as a backup when card info couldn't be collected over the phone.

@@ -707,8 +707,16 @@ function renderPaymentRows() {
     const greyCell = 'background:rgba(0,0,0,0.06);border-radius:4px;opacity:0.4;pointer-events:none;user-select:none;display:flex;align-items:center;justify-content:center;height:32px';
     const caseFmt = r.caseDate?new Date(r.caseDate+'T12:00:00Z').toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'}):'';
     const invAmt = r.invoicedAmount>0?`<span style="font-size:11px;font-weight:600;font-family:DM Mono,monospace;color:var(--info)">$${Number(r.invoicedAmount).toFixed(2)}</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`:`<span style="color:var(--text-faint);font-size:11px">—</span><button onclick="editPaymentField('invamt',${i})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-faint);padding:0 2px" title="Edit">✏</button>`;
+    // Look up patient name + email live from the pre-op so the invoice line
+    // reflects the newest info without needing a payments-row migration.
+    const _prPreop = (window._rawPreopRecords||[]).find(p => p && p['po-caseId'] === r.caseId);
+    const _prName  = _prPreop ? [_prPreop['po-patientFirstName'], _prPreop['po-patientLastName']].filter(Boolean).join(' ').trim() : '';
+    const _prEmail = _prPreop?.['po-patientEmail'] || r.patientEmail || '';
+    const _prSubtitle = _prName
+      ? `<div style="font-size:10px;font-weight:500;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_prName}${_prEmail ? ' — ' + _prEmail : ''}">${_prName}${_prEmail ? ` · <a href="mailto:${_prEmail}?subject=${encodeURIComponent('Atlas Anesthesia invoice — ' + (r.name||''))}" onclick="event.stopPropagation()" style="color:var(--info);text-decoration:none">✉</a>` : ''}</div>`
+      : '';
     return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${bl};align-items:center;min-height:40px">
-      <div style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>
+      <div style="padding:4px 8px;overflow:hidden;min-width:0"><div style="font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>${_prSubtitle}</div>
       <div style="padding:4px 3px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${r.worker==='dev'?'Dev':'Josh'}</div>
       <div style="padding:4px 6px;display:flex;align-items:center;gap:5px;min-width:0" title="${scName}${center ? (centerPays?' — Surgery center is billed':' — Patient is billed directly') : ''}">
         ${center ? `<span style="font-size:9px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:1px 5px;border-radius:3px;flex-shrink:0;${centerPays?'background:#dbeafe;color:#1e40af':'background:#fef3c7;color:#92400e'}">${centerPays?'Surgery':'Patient'}</span>` : ''}
