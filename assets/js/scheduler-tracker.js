@@ -1717,6 +1717,35 @@
     e.canceledAt = new Date().toISOString();
     e.canceledBy = (window.currentUser?.email) || '';
     e.canceledReason = (reason || '').trim();
+    // Remove the linked Pre-Op record so it disappears from Josh/Dev's
+    // Pre-Op History (single shared atlas/preop doc). We stash the deleted
+    // record on the entry so Uncancel can restore it verbatim instead of
+    // rebuilding from scratch.
+    try {
+      const preopId = e.preopRecordId || '';
+      const preopCaseId = e.preopCaseId || '';
+      if(preopId || preopCaseId) {
+        const psnap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
+        if(psnap.exists()) {
+          const records = psnap.data().records || [];
+          const kept = [];
+          let removed = null;
+          for(const rec of records) {
+            if(!rec) continue;
+            const match = (preopId && rec.id === preopId) ||
+                          (preopCaseId && rec['po-caseId'] === preopCaseId);
+            if(match && !removed) { removed = rec; continue; }
+            kept.push(rec);
+          }
+          if(removed) {
+            await window.setDoc(window.doc(window.db, 'atlas', 'preop'), { records: kept });
+            e._canceledPreopSnapshot = removed;
+            if(Array.isArray(window._rawPreopRecords))    window._rawPreopRecords    = kept;
+            if(Array.isArray(window._cachedPreopRecords)) window._cachedPreopRecords = [...kept];
+          }
+        }
+      }
+    } catch(preopErr) { console.warn('cancel: preop delete failed:', preopErr); }
     await _saveEntries();
     try { window.logAudit && window.logAudit('preop-visit-canceled', id, name + (reason ? ' — ' + reason : '')); } catch(_){}
     // Notify Jordan via the existing outreach-email worker endpoint.
@@ -1772,6 +1801,27 @@
     // Clear the once-per-entry flags so reminders can fire again.
     e.threeDayNoScheduleAlertAt = null;
     e.recordsFaxFollowupAt = null;
+    // Put the Pre-Op record back so Josh/Dev see the case again. Prefer the
+    // exact snapshot we stashed on Cancel; fall back to rebuilding it via the
+    // idempotent auto-creator so older canceled entries still recover.
+    try {
+      const snap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
+      const records = snap.exists() ? (snap.data().records || []) : [];
+      const alreadyBack = records.some(r => r &&
+        ((e.preopRecordId && r.id === e.preopRecordId) ||
+         (e.preopCaseId   && r['po-caseId'] === e.preopCaseId)));
+      if(!alreadyBack) {
+        if(e._canceledPreopSnapshot) {
+          records.unshift(e._canceledPreopSnapshot);
+          await window.setDoc(window.doc(window.db, 'atlas', 'preop'), { records });
+          if(Array.isArray(window._rawPreopRecords))    window._rawPreopRecords    = records;
+          if(Array.isArray(window._cachedPreopRecords)) window._cachedPreopRecords = [...records];
+        } else if(typeof window._ensurePreopForEntry === 'function') {
+          try { await window._ensurePreopForEntry(e); } catch(_){}
+        }
+      }
+    } catch(preopErr) { console.warn('uncancel: preop restore failed:', preopErr); }
+    e._canceledPreopSnapshot = null;
     await _saveEntries();
     try { window.logAudit && window.logAudit('preop-visit-uncanceled', id); } catch(_){}
     if(typeof window.toastSuccess === 'function') window.toastSuccess('Case reopened');
