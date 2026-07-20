@@ -5704,8 +5704,20 @@ refreshItemSelect();
 };
 // -- RESUME DRAFT CASE --
 window.resumeCase = function(draftId) {
+console.log('[resumeCase] called for draftId=', draftId, 'cases.length=', cases?.length);
 const c = cases.find(x => x.id === draftId);
-if(!c) return;
+if(!c) {
+  // Silent-return used to leave the user staring at nothing. Search by
+  // caseId as a fallback, then loudly surface if we still can't find it.
+  const byCaseId = cases.find(x => x.draft && x.caseId === draftId);
+  if(byCaseId) {
+    console.warn('[resumeCase] draftId did not match id, resolved via caseId', draftId);
+    return window.resumeCase(byCaseId.id);
+  }
+  console.error('[resumeCase] no matching draft in cases for', draftId);
+  alert('Could not open that draft. Try refreshing the page — the case list may be stale.');
+  return;
+}
 // Clear first
 clearCase();
 // Pre-fill all fields
@@ -9115,11 +9127,18 @@ window._currentPreopCaseId = r['po-caseId'] || null;
 updateCaseIdDisplays();
 }
 window.startCaseFromPreop = async function(preopId) {
+console.log('[startCaseFromPreop] preopId=', preopId);
 try {
 const snap = await getDoc(doc(db,'atlas','preop'));
 const records = snap.exists() ? (snap.data().records||[]) : [];
-const r = records.find(x => x.id === preopId);
-if(!r) { alert('Pre-op record not found.'); return; }
+let r = records.find(x => x.id === preopId);
+if(!r) {
+  // Also try matching by caseId (older callers pass the case ID instead of
+  // the internal record UUID). Prevents the silent "nothing happened" case.
+  r = records.find(x => x['po-caseId'] === preopId);
+  if(r) console.warn('[startCaseFromPreop] resolved via caseId fallback', preopId);
+}
+if(!r) { console.error('[startCaseFromPreop] no matching pre-op for', preopId); alert('Pre-op record not found.'); return; }
 const caseId = r['po-caseId'] || '';
 // Check if a draft already exists for this caseId
 const existingDraft = cases.find(c => c.draft && c.caseId === caseId);
