@@ -183,11 +183,15 @@
     const canceledBadge = _canceledNow
       ? `<span title="${_esc(e.canceledReason || 'Canceled')}" style="display:inline-block;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-size:9px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:8px;letter-spacing:.4px;text-transform:uppercase">✕ Canceled</span>`
       : '';
+    const _bypassCrnaLabel = e.bypassJordanCrna === 'dev' ? 'Dev' : 'Josh';
+    const bypassBadge = e.bypassJordan
+      ? `<span title="Jordan bypassed — ${_bypassCrnaLabel} is taking the pre-op call" style="display:inline-block;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;font-size:9px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:8px;letter-spacing:.4px;text-transform:uppercase">🚫 Jordan · Direct ${_bypassCrnaLabel}</span>`
+      : '';
     const nameHtml = phiHidden
       ? hiddenSpan
       : (_canceledNow
-          ? `<span style="text-decoration:line-through;color:var(--text-muted)">${nameText}</span>${canceledBadge}`
-          : nameText);
+          ? `<span style="text-decoration:line-through;color:var(--text-muted)">${nameText}</span>${canceledBadge}${bypassBadge}`
+          : nameText + bypassBadge);
     let contactParts = [];
     if(!phiHidden) {
       if(e.patientPhone) contactParts.push('📞 ' + _esc(e.patientPhone));
@@ -197,11 +201,16 @@
     const contactLine = contactParts.length
       ? `<div style="font-size:11px;color:var(--text-faint);margin-top:5px;line-height:1.5">${contactParts.join('<span style="color:#cbd5e1;margin:0 6px">·</span>')}</div>`
       : '';
+    const _centerRec = (window.surgeryCenters || []).find(c => c.id === e.surgeryCenterId);
+    const _centerAddr = _centerRec?.address || '';
     const _centerDisplay = e.surgeryCenterName
       ? _esc(e.surgeryCenterName) + (e.surgeryCenterLocation ? ' (' + _esc(e.surgeryCenterLocation) + ')' : '')
       : '';
     const surgeryLine = e.surgeryDate
       ? `<div style="font-size:11px;color:#9a3412;font-weight:600;margin-top:6px;line-height:1.4">🔴 ${_esc(_fmtDate(e.surgeryDate))}${e.surgeryTime ? ' · ' + _esc(_fmtTime(e.surgeryTime)) : ''}${_centerDisplay ? ' · ' + _centerDisplay : ''}${e.surgeon ? ' · ' + _esc(e.surgeon) : ''}${e.estimatedDuration ? ' · ⏱ ' + _esc(e.estimatedDuration) : ''}</div>`
+      : '';
+    const addressLine = _centerAddr
+      ? `<div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;line-height:1.35">📍 ${_esc(_centerAddr)}</div>`
       : '';
     let pdfLine = '';
     if(!phiHidden) {
@@ -344,6 +353,15 @@
         onclick: `window.open('schedule.html?t=' + encodeURIComponent('${e.id}'), '_blank')`,
         color: '#7c3aed' });
     }
+    // Print anesthesia record — CRNAs (and Shannon-role peers) can print
+    // straight from the row so they don't have to hop to Pre-Op History
+    // and hunt for the right case.
+    if(!phiHidden && linkedPreopId) {
+      menuItems.push({
+        label: '🖨 Print Anesthesia Record',
+        onclick: `window._strPrintRecord('${linkedPreopId}')`,
+        color: '#0369a1' });
+    }
     if(!phiHidden && isScheduler && e.pcpFax) {
       menuItems.push({
         label: recordsFaxSent
@@ -357,6 +375,19 @@
         label: remindersOff ? '🔔 Resume reminder emails' : '🔕 Called Directly — stop reminders',
         onclick: `window._strToggleRemindersDisabled('${e.id}')`,
         color: remindersOff ? '#166534' : '#a16207' });
+    }
+    // Bypass Jordan: schedulers (and their CRNA peers via the switcher) can
+    // route the pre-op call directly to the CRNA instead of Jordan.
+    if(!phiHidden && isScheduler && !isCanceled) {
+      const bypassed = !!e.bypassJordan;
+      const bypassCrna = e.bypassJordanCrna || (e.crna || 'josh');
+      const bypassLabel = bypassed
+        ? `↶ Un-bypass Jordan (currently direct with ${bypassCrna === 'dev' ? 'Dev' : 'Josh'})`
+        : '🚫 Bypass Jordan — CRNA takes the call';
+      menuItems.push({
+        label: bypassLabel,
+        onclick: `window._strToggleBypassJordan('${e.id}')`,
+        color: bypassed ? '#166534' : '#7c3aed' });
     }
     // Undo Email Sent — reverts the "📧 Email sent" state back to the
     // Schedule button if Shannon hit Book & Send by accident. Only offered
@@ -400,7 +431,7 @@
 
     const centerCell = 'display:flex;justify-content:center;align-items:center';
     return `<div style="display:grid;grid-template-columns:${COLS};gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);align-items:center${phiHidden ? ';opacity:.85' : ''}">
-      <div><div style="font-size:14px;font-weight:600;color:var(--text)">${nameHtml}</div>${contactLine}${surgeryLine}${pdfLine}${revealBtn ? '<div style=\"margin-top:8px\">' + revealBtn + '</div>' : ''}</div>
+      <div><div style="font-size:14px;font-weight:600;color:var(--text)">${nameHtml}</div>${contactLine}${surgeryLine}${addressLine}${pdfLine}${revealBtn ? '<div style=\"margin-top:8px\">' + revealBtn + '</div>' : ''}</div>
       <div style="display:flex;justify-content:center;align-items:center;text-align:center">${scheduledCell}</div>
       <div style="${centerCell}">${callPill}</div>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center">${paidPill}${nudgePill}</div>
@@ -590,8 +621,8 @@
             <div><label style="margin-top:0">Date of birth <span style="color:var(--warn)">*</span></label><input type="date" id="strap-dob"></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div><label style="margin-top:0">Email <span style="font-weight:400;color:var(--text-faint);font-size:11px">(portal / invoice)</span></label><input type="email" id="strap-email" placeholder="patient@example.com" autocomplete="off"></div>
             <div><label style="margin-top:0">PCP <span style="font-weight:400;color:var(--text-faint);font-size:11px">(if any)</span></label><input type="text" id="strap-pcp" placeholder="Dr. Smith"></div>
-            <div></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
             <div><label style="margin-top:0">PCP phone <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label><input type="tel" id="strap-pcp-phone" placeholder="(555) 123-4567"></div>
@@ -637,6 +668,7 @@
     const last  = (_$('strap-last')?.value || '').trim();
     const phone = (_$('strap-phone')?.value || '').trim();
     const dob   = (_$('strap-dob')?.value || '').trim();
+    const email = (_$('strap-email')?.value || '').trim();
     const pcp   = (_$('strap-pcp')?.value || '').trim();
     const pcpPhone = (_$('strap-pcp-phone')?.value || '').trim();
     const pcpFax   = (_$('strap-pcp-fax')?.value   || '').trim();
@@ -659,6 +691,7 @@
     if(!phone) { setError('Phone is required.'); return; }
     if(!dob)   { setError('Date of birth is required.'); return; }
     if(!surgD) { setError('Surgery date is required.'); return; }
+    if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Email looks invalid.'); return; }
 
     const btn = _$('strap-save-btn');
     if(btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -681,7 +714,7 @@
       }
       const entry = {
         id: newEntryId,
-        patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, pcp, pcpPhone, pcpFax, surgeon,
+        patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, patientEmail: email, pcp, pcpPhone, pcpFax, surgeon,
         surgeryDate: surgD, surgeryTime: surgT,
         surgeryCenterId, surgeryCenterName,
         pdfFilename: filename,
@@ -846,8 +879,8 @@
           <div><label style="margin-top:0">Date of birth <span style="color:var(--warn)">*</span></label><input type="date" id="strap-dob" value="${_esc(existing?.patientDOB || '')}"></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+          <div><label style="margin-top:0">Email <span style="font-weight:400;color:var(--text-faint);font-size:11px">(for portal / invoice)</span></label><input type="email" id="strap-email" placeholder="patient@example.com" value="${_esc(existing?.patientEmail || '')}" autocomplete="off"></div>
           <div><label style="margin-top:0">PCP <span style="font-weight:400;color:var(--text-faint);font-size:11px">(if any)</span></label><input type="text" id="strap-pcp" placeholder="Dr. Smith" value="${_esc(existing?.pcp || '')}"></div>
-          <div></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
           <div><label style="margin-top:0">PCP phone <span style="font-weight:400;color:var(--text-faint);font-size:11px">(optional)</span></label><input type="tel" id="strap-pcp-phone" placeholder="(555) 123-4567" value="${_esc(existing?.pcpPhone || '')}"></div>
@@ -880,8 +913,8 @@
           </div>
         </div>
         <div style="margin-bottom:14px">
-          <label style="margin-top:0">Pre-op PDF <span style="font-weight:400;color:var(--text-faint);font-size:11px">(from the surgery center, optional)</span></label>
-          <input type="file" id="strap-pdf" accept="application/pdf" style="font-size:13px">
+          <label style="margin-top:0">Pre-op file <span style="font-weight:400;color:var(--text-faint);font-size:11px">(PDF, image, or screenshot — optional)</span></label>
+          <input type="file" id="strap-pdf" accept="application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic" style="font-size:13px">
           ${existing?.pdfFilename ? `<div style="font-size:11px;color:var(--text-faint);margin-top:4px">Currently attached: <strong>${_esc(existing.pdfFilename)}</strong>. Pick a new file to replace it, or leave blank to keep.</div>` : ''}
         </div>
         <div id="strap-status" style="font-size:13px;padding:6px 0;min-height:18px"></div>
@@ -1032,6 +1065,7 @@
     const last  = (_$('strap-last')?.value || '').trim();
     const phone = (_$('strap-phone')?.value || '').trim();
     const dob   = (_$('strap-dob')?.value || '').trim();
+    const email = (_$('strap-email')?.value || '').trim();
     const pcp   = (_$('strap-pcp')?.value || '').trim();
     const pcpPhone = (_$('strap-pcp-phone')?.value || '').trim();
     const pcpFax   = (_$('strap-pcp-fax')?.value   || '').trim();
@@ -1058,11 +1092,14 @@
     if(!phone) { setError('Phone number is required.'); return; }
     if(!dob)   { setError('Date of birth is required.'); return; }
     if(!surgD) { setError('Surgery date is required.'); return; }
+    if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Email looks invalid.'); return; }
 
     const file = _$('strap-pdf')?.files?.[0];
     if(file) {
-      if(file.type !== 'application/pdf') { setError('Pre-op file must be a PDF.'); return; }
-      if(file.size > MAX_PDF_BYTES) { setError(`PDF is too large (${Math.round(file.size/1024)} KB). Keep it under ${Math.round(MAX_PDF_BYTES/1024)} KB.`); return; }
+      const isPdf   = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      const isImage = file.type?.startsWith('image/')  || /\.(jpe?g|png|heic)$/i.test(file.name);
+      if(!isPdf && !isImage) { setError('Pre-op file must be a PDF or an image (JPG / PNG / HEIC).'); return; }
+      if(file.size > MAX_PDF_BYTES) { setError(`File is too large (${Math.round(file.size/1024)} KB). Keep it under ${Math.round(MAX_PDF_BYTES/1024)} KB.`); return; }
     }
 
     const btn = _$('strap-save-btn');
@@ -1077,7 +1114,7 @@
         priorEntry = { ..._entries[idx] };  // snapshot before mutation
         entry = _entries[idx];
         Object.assign(entry, {
-          patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, pcp, pcpPhone, pcpFax, surgeon,
+          patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, patientEmail: email, pcp, pcpPhone, pcpFax, surgeon,
           surgeryDate: surgD, surgeryTime: surgT,
           surgeryCenterId, surgeryCenterName, surgeryCenterLocation,
           estimatedDuration
@@ -1085,7 +1122,7 @@
       } else {
         entry = {
           id: _uid(),
-          patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, pcp, pcpPhone, pcpFax, surgeon,
+          patientFirst: first, patientLast: last, patientPhone: phone, patientDOB: dob, patientEmail: email, pcp, pcpPhone, pcpFax, surgeon,
           surgeryDate: surgD, surgeryTime: surgT,
           surgeryCenterId, surgeryCenterName, surgeryCenterLocation,
           estimatedDuration,
@@ -1095,13 +1132,30 @@
         };
         _entries.unshift(entry);
       }
-      // Upload PDF first so its filename can be stamped on the entry.
+      // Upload PDF/image first so its filename can be stamped on the entry.
+      // Images (JPG/PNG/HEIC) are wrapped into a single-page PDF so downstream
+      // viewers / merge flow keep working without a special case.
       if(file) {
-        const dataUrl = await _readFileAsDataUrl(file);
+        let dataUrl = await _readFileAsDataUrl(file);
+        let finalName = file.name;
+        let contentType = file.type || 'application/pdf';
+        let sizeBytes = file.size;
+        const isImage = file.type?.startsWith('image/') || /\.(jpe?g|png|heic)$/i.test(file.name);
+        if(isImage) {
+          try {
+            dataUrl = await _imageToPdf(dataUrl);
+            finalName = file.name.replace(/\.(jpe?g|png|heic)$/i, '') + '.pdf';
+            contentType = 'application/pdf';
+            // We can't easily recompute the wrapped PDF's byte length; approximate.
+            sizeBytes = Math.round(dataUrl.length * 0.75);
+          } catch(imgErr) {
+            console.warn('image→PDF conversion failed, storing raw:', imgErr);
+          }
+        }
         await _writePdfDoc(PDF_DOC_PATH + '.' + entry.id, {
-          filename: file.name, dataUrl, contentType: file.type, sizeBytes: file.size
+          filename: finalName, dataUrl, contentType, sizeBytes
         });
-        entry.pdfFilename = file.name;
+        entry.pdfFilename = finalName;
       }
       await _saveEntries();
       // Auto-generate a Pre-Op record so Jordan can see and start on the
@@ -1143,6 +1197,7 @@
               rec['po-patientLastName']  = last;
               rec['po-patientPhone']     = phone;
               rec['po-patientDOB']       = dob;
+              if(email) rec['po-patientEmail'] = email;
               rec['po-pcp-name']         = pcp;
               rec['po-pcp-phone']        = pcpPhone;
               rec['po-pcp-fax']          = pcpFax;
@@ -1929,6 +1984,89 @@
       if(typeof window.toastSuccess === 'function') window.toastSuccess('Reminders stopped for ' + name);
     }
     window.renderSchedulerTracker();
+  };
+
+  // Route the pre-op call directly to the assigned CRNA (bypassing Jordan).
+  // Shannon flips this ON when she's already lined up a slot with Josh/Dev
+  // over the phone and doesn't want the patient scheduling with Jordan too.
+  // Flipping OFF returns to the default (Jordan handles the pre-op call).
+  window._strToggleBypassJordan = async function(id) {
+    const idx = _entries.findIndex(x => x.id === id);
+    if(idx === -1) return;
+    const e = _entries[idx];
+    const name = [e.patientFirst, e.patientLast].filter(Boolean).join(' ') || 'this patient';
+    if(e.bypassJordan) {
+      if(!confirm('Un-bypass Jordan for ' + name + '?\n\nJordan will resume handling the pre-op call again.')) return;
+      e.bypassJordan = false;
+      e.bypassJordanAt = null;
+      e.bypassJordanBy = null;
+      e.bypassJordanCrna = null;
+    } else {
+      // Default to whichever CRNA is already on the entry; fall back to Josh.
+      const crna = (e.crna === 'dev' ? 'dev' : 'josh');
+      const crnaLabel = crna === 'dev' ? 'Dev' : 'Josh';
+      if(!confirm('Bypass Jordan for ' + name + '?\n\n' + crnaLabel + ' will take the pre-op call directly. Jordan will not receive the scheduling email for this patient, and reminders for her clearance step will stop.')) return;
+      e.bypassJordan = true;
+      e.bypassJordanAt = new Date().toISOString();
+      e.bypassJordanBy = (window.currentUser?.email) || '';
+      e.bypassJordanCrna = crna;
+      // Suppress the reminder crons that nag Jordan for a clearance she
+      // won't be doing.
+      if(!e.remindersDisabledAt) {
+        e.remindersDisabledAt = new Date().toISOString();
+        e.remindersDisabledBy = 'bypass-jordan';
+      }
+    }
+    await _saveEntries();
+    // Mirror the flag onto the linked Pre-Op record so downstream views
+    // (Jordan's Follow-up Tracker, Josh's schedule view) also know to skip
+    // the Jordan step.
+    try {
+      const preopId = e.preopRecordId || '';
+      if(preopId) {
+        const snap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
+        if(snap.exists()) {
+          const records = snap.data().records || [];
+          const ri = records.findIndex(r => r && r.id === preopId);
+          if(ri !== -1) {
+            records[ri]['po-bypassJordan']     = !!e.bypassJordan;
+            records[ri]['po-bypassJordanCrna'] = e.bypassJordanCrna || '';
+            records[ri].savedAt = new Date().toISOString();
+            await window.setDoc(window.doc(window.db, 'atlas', 'preop'), { records });
+            if(Array.isArray(window._rawPreopRecords))    window._rawPreopRecords    = records;
+            if(Array.isArray(window._cachedPreopRecords)) window._cachedPreopRecords = [...records];
+          }
+        }
+      }
+    } catch(err) { console.warn('bypass mirror to preop failed:', err); }
+    try { window.logAudit && window.logAudit(e.bypassJordan ? 'preop-visit-bypass-jordan' : 'preop-visit-unbypass-jordan', id, name); } catch(_){}
+    if(typeof window.toastSuccess === 'function') {
+      window.toastSuccess(e.bypassJordan ? ('Bypass on — ' + (e.bypassJordanCrna === 'dev' ? 'Dev' : 'Josh') + ' takes the call') : 'Jordan back on');
+    }
+    window.renderSchedulerTracker();
+  };
+
+  // Print the anesthesia record for a given pre-op record id — used by the
+  // Tracker row's ⋯ menu so the user doesn't have to navigate to Pre-Op
+  // History to find and print the right case.
+  window._strPrintRecord = async function(preopId) {
+    try {
+      let rec = (window._rawPreopRecords || []).find(r => r && r.id === preopId);
+      if(!rec) {
+        const snap = await window.getDoc(window.doc(window.db, 'atlas', 'preop'));
+        const records = snap.exists() ? (snap.data().records || []) : [];
+        rec = records.find(r => r && r.id === preopId);
+        if(records.length) window._rawPreopRecords = records;
+      }
+      if(!rec) { alert('Anesthesia record not found for this patient.'); return; }
+      if(typeof window.previewAnesthesiaRecord !== 'function') {
+        alert('Print preview isn\'t loaded yet — try again in a second.'); return;
+      }
+      await window.previewAnesthesiaRecord(rec);
+    } catch(err) {
+      console.warn('_strPrintRecord failed:', err);
+      alert('Could not open the print preview: ' + (err.message || err));
+    }
   };
 
   // Called from savePreop in app.js when a CRNA creates a Pre-Op from scratch

@@ -136,7 +136,8 @@ function populateCaseDropdown() {
   const choices = preopChoices();
   sel.innerHTML = '<option value="">— Pick a case —</option>'
     + choices.map(r => {
-        const name = [r['po-firstName']||'', r['po-lastName']||''].filter(Boolean).join(' ').trim()
+        const name = [r['po-patientFirstName']||r['po-firstName']||'', r['po-patientLastName']||r['po-lastName']||'']
+                    .filter(Boolean).join(' ').trim()
                   || r['po-patient'] || '';
         const date = r['po-surgeryDate'] ? fmtDate(r['po-surgeryDate']) : '';
         const bits = [r['po-caseId']];
@@ -233,9 +234,21 @@ function renderReceiptForm() {
   // Defaults for patient/office fields come from the selected pre-op record.
   // The user can override before sending if the chart is out of date.
   const ctx = readCaseContext();
+  // Look the surgery center up so we can:
+  //   1) Fall back its saved `address` when po-officeAddress is empty on the
+  //      pre-op (older records that never had it stamped).
+  //   2) Show the center name as a Location label on the form, since that's
+  //      what Oliver reads as "location" on the paper sheet.
+  const _centerId = _selectedPreop?.['po-surgery-center'] || '';
+  const _center   = (window.surgeryCenters || []).find(c => c.id === _centerId) || null;
   const defaultOffice = _selectedPreop?.['po-officeAddress']
     || _selectedPreop?.['po-dentistAddress']
+    || _center?.address
     || '';
+  const _subLoc = _selectedPreop?.['po-surgery-center-location'] || '';
+  const defaultLocationName = _center
+    ? _center.name + (_subLoc ? ' (' + _subLoc + ')' : '')
+    : (_selectedPreop?.['po-surgeryCenterName'] || '');
   const defaultSex = _selectedPreop?.['po-sex'] || '';
   const defaultName = (ctx.patientName || '').replace(/"/g,'&quot;');
   const defaultDob  = ctx.patientDob || '';
@@ -294,8 +307,16 @@ function renderReceiptForm() {
       </div>
     </div>
     <div style="margin-bottom:14px;padding:10px;background:#f8fafc;border:1px solid var(--border);border-radius:6px">
-      <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Dentist Office Address</label>
-      <input type="text" id="ins-jr-office-address" value="${defaultOffice.replace(/"/g,'&quot;')}" oninput="window._insPreview()" placeholder="e.g. 123 Main St, Green Bay, WI 54301" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);box-sizing:border-box;height:30px">
+      <div style="display:grid;grid-template-columns:1fr;gap:8px">
+        ${defaultLocationName ? `<div>
+          <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Surgery Location <span style="font-size:10px;color:var(--text-faint);font-style:italic">(pre-fills from case)</span></label>
+          <input type="text" id="ins-jr-location-name" value="${defaultLocationName.replace(/"/g,'&quot;')}" oninput="window._insPreview()" placeholder="e.g. Bay Oral Surgery Center (West)" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);box-sizing:border-box;height:30px">
+        </div>` : ''}
+        <div>
+          <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Dentist Office Address ${_center?.address ? '<span style="font-size:10px;color:var(--text-faint);font-style:italic">(pulled from surgery center)</span>' : ''}</label>
+          <input type="text" id="ins-jr-office-address" value="${defaultOffice.replace(/"/g,'&quot;')}" oninput="window._insPreview()" placeholder="e.g. 123 Main St, Green Bay, WI 54301" style="width:100%;padding:6px 9px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--text);box-sizing:border-box;height:30px">
+        </div>
+      </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:14px">
@@ -404,6 +425,7 @@ function buildJoshReceiptHTML() {
 
   const sexFromDob = document.querySelector('input[name="ins-jr-sex"]:checked')?.value || '';
   const dentistOffice = $('ins-jr-office-address')?.value.trim() || '';
+  const locationName  = $('ins-jr-location-name')?.value.trim()  || '';
   const dentistName = $('ins-jr-provider')?.value.trim() || ctx.provider || '';
   const serviceDate = $('ins-jr-surgery-date')?.value.trim() || ctx.surgeryDate || '';
 
@@ -483,6 +505,9 @@ function buildJoshReceiptHTML() {
       ${field('Sex', sexFromDob, 60)}
       ${field('Dentist', dentistName, 200)}
     </div>
+    ${locationName ? `<div style="margin-bottom:6px">
+      ${field('Surgery Location', locationName, 400)}
+    </div>` : ''}
     <div style="margin-bottom:14px">
       ${field('Dentist Office Address', dentistOffice, 400)}
     </div>

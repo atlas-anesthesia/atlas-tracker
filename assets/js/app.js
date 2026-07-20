@@ -11819,8 +11819,22 @@ window._installOwnerSwitcher = function() {
 // To ship an update: bump ATLAS_RELEASE and prepend an entry to
 // ATLAS_RELEASE_NOTES with the changes. Every user sees it once on their
 // next visit, then it goes away for them.
-const ATLAS_RELEASE = '2026-07-06.a';
+const ATLAS_RELEASE = '2026-07-20.a';
 const ATLAS_RELEASE_NOTES = [
+  {
+    version: '2026-07-20.a',
+    date: 'July 20, 2026',
+    title: "What's new",
+    changes: [
+      { forRoles: ['scheduler'], text: "Add Patient form now takes a patient email up front, and accepts photos / screenshots on top of PDFs (they're auto-wrapped into a PDF)." },
+      { forRoles: ['scheduler', 'crna'], text: "🖨 Print Anesthesia Record is on every Tracker row's ⋯ menu now — no more hunting through Pre-Op History." },
+      { forRoles: ['scheduler', 'crna'], text: "Surgery-center address shows on every Tracker row and pre-fills the Insurance Sheet's Dentist Office Address + a new Surgery Location field." },
+      { forRoles: ['scheduler'], text: "🚫 Bypass Jordan on any Tracker row — routes the pre-op call directly to Josh or Dev and mutes Jordan's clearance reminders for that patient." },
+      { forRoles: ['crna'], text: "Dev now has the same 👤 view-switcher Josh does — swap into Shannon's view to add patients on her behalf." },
+      { forRoles: ['crna'], text: "Payments row shows the patient name under the Case ID, with a one-click ✉ to email an invoice." },
+      { forRoles: ['crna'], text: "Finalize-reminder emails now skip any case you've already finalized — no more nag after you wrap up." },
+    ]
+  },
   {
     version: '2026-07-06.a',
     date: 'July 6, 2026',
