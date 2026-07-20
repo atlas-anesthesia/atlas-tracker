@@ -1391,6 +1391,26 @@ function applyRoleRestrictions(role) {
   if(jordanNotesCard) jordanNotesCard.style.display = isAssistant ? '' : 'none';
   const crnaPick = document.getElementById('po-assign-crna-row');
   if(crnaPick) crnaPick.style.display = isAssistant ? '' : 'none';
+  // CRNA-only "I'll take this pre-op call myself" card. Sits right next to
+  // Jordan's Notes card (which is Jordan-only) so exactly one of them shows
+  // per role. Only injected once; refreshCrnaBypassCard() updates its state
+  // whenever a Pre-Op record loads.
+  if(!isAssistant && !isScheduler && jordanNotesCard) {
+    if(!document.getElementById('po-crna-bypass-wrap')) {
+      const card = document.createElement('div');
+      card.id = 'po-crna-bypass-wrap';
+      card.style.cssText = 'grid-column:1/-1;margin-bottom:16px;padding:14px 16px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap';
+      card.innerHTML = `
+        <div style="min-width:0">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6;margin-bottom:4px">Pre-Op Call — Assignment</div>
+          <div id="po-crna-bypass-status" style="font-size:13px;color:#312e81">Currently routed through Jordan. Click to take the call yourself instead.</div>
+        </div>
+        <button id="po-crna-bypass-btn" type="button" onclick="window._crnaTogglePreopBypass()" style="background:#5b21b6;color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0">🚫 Bypass Jordan — I'll call the patient</button>`;
+      jordanNotesCard.parentNode.insertBefore(card, jordanNotesCard.nextSibling);
+    }
+  }
+  const crnaBypassCard = document.getElementById('po-crna-bypass-wrap');
+  if(crnaBypassCard) crnaBypassCard.style.display = (!isAssistant && !isScheduler) ? '' : 'none';
 
   // Buttons on the Pre-Op tab + the header Surgery Mode toggle.
   // Jordan: no $500 deposit, no anesthesia record, no surgery mode.
@@ -6172,6 +6192,92 @@ window._jordanEmergencyNewPreop = function() {
   } catch(e) { console.warn('emergency-new-preop failed:', e); }
 };
 
+// CRNA-only handler for the "Bypass Jordan" card on the Pre-Op form.
+// Flips po-bypassJordan on the record + mirrors the same flag onto the
+// linked Tracker entry so Jordan's clearance flow is suppressed for this
+// patient. Uses the currently-edited record's own worker as the assignee.
+window._crnaTogglePreopBypass = async function() {
+  try {
+    const btn  = document.getElementById('po-crna-bypass-btn');
+    const stat = document.getElementById('po-crna-bypass-status');
+    const preopId = window._editingPreopId || (window._editingPreopRecord && window._editingPreopRecord.id) || '';
+    if(!preopId) {
+      alert('Save this Pre-Op first — then you can toggle the bypass.');
+      return;
+    }
+    const snap = await getDoc(doc(db, 'atlas', 'preop'));
+    const records = snap.exists() ? (snap.data().records || []) : [];
+    const idx = records.findIndex(r => r && r.id === preopId);
+    if(idx === -1) { alert('Pre-Op record not found.'); return; }
+    const rec = records[idx];
+    const willBypass = !rec['po-bypassJordan'];
+    const crna = rec.worker === 'dev' ? 'dev' : 'josh';
+    const patientLabel = [rec['po-patientFirstName'], rec['po-patientLastName']].filter(Boolean).join(' ') || rec['po-caseId'] || 'this patient';
+    const promptMsg = willBypass
+      ? `Bypass Jordan for ${patientLabel}?\n\n${crna === 'dev' ? 'Dev' : 'Josh'} will take the pre-op call directly. Jordan's clearance reminders for this patient will stop.`
+      : `Return this pre-op call to Jordan for ${patientLabel}?`;
+    if(!confirm(promptMsg)) return;
+    if(btn) { btn.disabled = true; }
+    rec['po-bypassJordan']     = willBypass;
+    rec['po-bypassJordanCrna'] = willBypass ? crna : '';
+    rec.savedAt = new Date().toISOString();
+    records[idx] = rec;
+    await setDoc(doc(db, 'atlas', 'preop'), { records });
+    window._rawPreopRecords    = records;
+    window._cachedPreopRecords = [...records];
+    // Mirror onto the linked Tracker entry (best-effort — the entry might
+    // not exist for CRNA-only test rows).
+    try {
+      const entryId = rec['po-preopVisitId'] || '';
+      if(entryId && typeof window._strUpdateEntry === 'function') {
+        await window._strUpdateEntry(entryId, {
+          bypassJordan: willBypass,
+          bypassJordanAt: willBypass ? new Date().toISOString() : null,
+          bypassJordanBy: willBypass ? ((currentUser?.email) || '') : null,
+          bypassJordanCrna: willBypass ? crna : null,
+          ...(willBypass ? { remindersDisabledAt: new Date().toISOString(), remindersDisabledBy: 'bypass-jordan' } : {})
+        });
+      }
+    } catch(_){}
+    try { logAudit && logAudit(willBypass ? 'preop-bypass-jordan' : 'preop-unbypass-jordan', rec['po-caseId'] || '', patientLabel); } catch(_){}
+    if(typeof window._refreshCrnaBypassCard === 'function') window._refreshCrnaBypassCard(rec);
+    if(typeof window.toastSuccess === 'function') {
+      window.toastSuccess(willBypass ? 'Bypass on — you\'ll call ' + patientLabel : 'Jordan back on for ' + patientLabel);
+    }
+    if(btn) btn.disabled = false;
+  } catch(err) {
+    console.error('_crnaTogglePreopBypass failed:', err);
+    alert('Could not update: ' + (err.message || err));
+    const btn = document.getElementById('po-crna-bypass-btn');
+    if(btn) btn.disabled = false;
+  }
+};
+// Called by editPreopRecord after a record is loaded so the card's button
+// and status label match the record's current bypass state.
+window._refreshCrnaBypassCard = function(record) {
+  const card = document.getElementById('po-crna-bypass-wrap');
+  const btn  = document.getElementById('po-crna-bypass-btn');
+  const stat = document.getElementById('po-crna-bypass-status');
+  if(!card || !btn || !stat) return;
+  const bypassed = !!(record && record['po-bypassJordan']);
+  const crnaLabel = (record && record['po-bypassJordanCrna'] === 'dev') ? 'Dev' : 'Josh';
+  if(bypassed) {
+    card.style.background   = '#dcfce7';
+    card.style.borderColor  = '#86efac';
+    stat.style.color        = '#14532d';
+    stat.textContent        = `Bypass ON — ${crnaLabel} is taking this pre-op call. Jordan is skipped.`;
+    btn.style.background    = '#166534';
+    btn.textContent         = '↶ Return call to Jordan';
+  } else {
+    card.style.background   = '#f5f3ff';
+    card.style.borderColor  = '#ddd6fe';
+    stat.style.color        = '#312e81';
+    stat.textContent        = 'Currently routed through Jordan. Click to take the call yourself instead.';
+    btn.style.background    = '#5b21b6';
+    btn.textContent         = '🚫 Bypass Jordan — I\'ll call the patient';
+  }
+};
+
 // Print the Pre-Op record the user is currently on. Called by the "Print
 // Anesthesia Record" button so it no longer bounces to the Pre-Op History tab.
 // Uses whatever is currently in the form (including unsaved edits) merged over
@@ -6649,6 +6755,8 @@ if(window._userRole === 'assistant' && typeof window._assistantSetCrna === 'func
 // HIPAA: hide PHI fields if case is 3+ days post-surgery (until reveal)
 const phiHiddenInModal = typeof window.isPHIHidden === 'function' && window.isPHIHidden(record['po-surgeryDate'], record['po-caseId']);
 window._editingPreopRecord = record; // stored so reveal can fill PHI fields later
+// Sync the CRNA "Bypass Jordan" card to whatever this record currently has.
+try { if(typeof window._refreshCrnaBypassCard === 'function') window._refreshCrnaBypassCard(record); } catch(_){}
 // Fill saved fields (skip PHI fields when hidden — they'll fill on reveal)
 Object.keys(record).forEach(fid => {
 if(phiHiddenInModal && typeof window.isPHIField === 'function' && window.isPHIField(fid)) return;
