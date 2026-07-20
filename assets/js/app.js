@@ -1399,13 +1399,14 @@ function applyRoleRestrictions(role) {
     if(!document.getElementById('po-crna-bypass-wrap')) {
       const card = document.createElement('div');
       card.id = 'po-crna-bypass-wrap';
-      card.style.cssText = 'grid-column:1/-1;margin-bottom:16px;padding:14px 16px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap';
+      // Compact one-line segmented switch — Jordan (default) vs Me. Sits
+      // full-width but stays short so it doesn't crowd the action bar.
+      card.style.cssText = 'grid-column:1/-1;margin:0 0 12px 0;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)';
       card.innerHTML = `
-        <div style="min-width:0">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#5b21b6;margin-bottom:4px">Pre-Op Call — Assignment</div>
-          <div id="po-crna-bypass-status" style="font-size:13px;color:#312e81">Currently routed through Jordan. Click to take the call yourself instead.</div>
-        </div>
-        <button id="po-crna-bypass-btn" type="button" onclick="window._crnaTogglePreopBypass()" style="background:#5b21b6;color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0">🚫 Bypass Jordan — I'll call the patient</button>`;
+        <span style="font-weight:600;color:var(--text);letter-spacing:.2px">Pre-Op call:</span>
+        <span id="po-crna-bypass-status" style="color:var(--text-muted)">Jordan</span>
+        <div style="flex:1"></div>
+        <button id="po-crna-bypass-btn" type="button" onclick="window._crnaTogglePreopBypass()" style="background:transparent;color:#5b21b6;border:1px solid #ddd6fe;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0">I'll take this call →</button>`;
       jordanNotesCard.parentNode.insertBefore(card, jordanNotesCard.nextSibling);
     }
   }
@@ -6262,19 +6263,27 @@ window._refreshCrnaBypassCard = function(record) {
   const bypassed = !!(record && record['po-bypassJordan']);
   const crnaLabel = (record && record['po-bypassJordanCrna'] === 'dev') ? 'Dev' : 'Josh';
   if(bypassed) {
-    card.style.background   = '#dcfce7';
-    card.style.borderColor  = '#86efac';
-    stat.style.color        = '#14532d';
-    stat.textContent        = `Bypass ON — ${crnaLabel} is taking this pre-op call. Jordan is skipped.`;
-    btn.style.background    = '#166534';
-    btn.textContent         = '↶ Return call to Jordan';
+    // Green "you've got it" state — subtle background tint, matching pill.
+    card.style.background   = '#f0fdf4';
+    card.style.borderColor  = '#bbf7d0';
+    stat.style.color        = '#166534';
+    stat.style.fontWeight   = '600';
+    stat.textContent        = `${crnaLabel} · direct (Jordan skipped)`;
+    btn.style.background    = 'transparent';
+    btn.style.color         = '#166534';
+    btn.style.borderColor   = '#bbf7d0';
+    btn.textContent         = '↶ Return to Jordan';
   } else {
-    card.style.background   = '#f5f3ff';
-    card.style.borderColor  = '#ddd6fe';
-    stat.style.color        = '#312e81';
-    stat.textContent        = 'Currently routed through Jordan. Click to take the call yourself instead.';
-    btn.style.background    = '#5b21b6';
-    btn.textContent         = '🚫 Bypass Jordan — I\'ll call the patient';
+    // Neutral default — just a muted strip that gets out of the way.
+    card.style.background   = 'var(--surface2)';
+    card.style.borderColor  = 'var(--border)';
+    stat.style.color        = 'var(--text-muted)';
+    stat.style.fontWeight   = '400';
+    stat.textContent        = 'Jordan';
+    btn.style.background    = 'transparent';
+    btn.style.color         = '#5b21b6';
+    btn.style.borderColor   = '#ddd6fe';
+    btn.textContent         = 'I\'ll take this call →';
   }
 };
 
