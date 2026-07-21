@@ -4627,8 +4627,93 @@ window.removeImage = function(id) {
   if(input) input.value = '';
   renderCaseImagePreviews();
 };
+// -- FINALIZE AMOUNTS PROMPT --
+// Small modal shown right before a fresh case save. Captures the invoice
+// amount (what we charged) + the amount the CRNA is paying themselves so
+// both land on the case + payment row in one shot. Skipped on edits (user
+// already answered the first time). Resolves to {charged, takeHome} or
+// null if the user cancels the save.
+window._promptFinalizeAmounts = function(defaults) {
+  defaults = defaults || {};
+  return new Promise((resolve) => {
+    const prior = document.getElementById('finalizeAmountsModal');
+    if(prior) prior.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'finalizeAmountsModal';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+    const dollar = v => (v && !isNaN(v)) ? Number(v).toFixed(2) : '';
+    wrap.innerHTML = `
+      <div style="background:#fff;border-radius:14px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">
+        <div style="background:#1d3557;color:#fff;padding:18px 22px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#90b8e0">Almost done</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px">Case amounts</div>
+        </div>
+        <div style="padding:20px 22px;display:grid;gap:14px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#0f172a;margin-bottom:6px">How much did we charge? <span style="color:#94a3b8;font-weight:400">(invoice total)</span></label>
+            <div style="position:relative">
+              <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;color:#64748b;font-weight:600">$</span>
+              <input id="fa-charged" type="number" step="0.01" min="0" placeholder="0.00" value="${dollar(defaults.charged)}" style="width:100%;padding:11px 12px 11px 26px;font-size:18px;font-weight:700;font-family:'DM Mono',monospace;border:2px solid #cbd5e1;border-radius:8px;background:#fff;color:#0f172a;text-align:right;outline:none;box-sizing:border-box">
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#0f172a;margin-bottom:6px">How much are you paying yourself? <span style="color:#94a3b8;font-weight:400">(personal take-home)</span></label>
+            <div style="position:relative">
+              <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;color:#64748b;font-weight:600">$</span>
+              <input id="fa-takehome" type="number" step="0.01" min="0" placeholder="0.00" value="${dollar(defaults.takeHome)}" style="width:100%;padding:11px 12px 11px 26px;font-size:18px;font-weight:700;font-family:'DM Mono',monospace;border:2px solid #cbd5e1;border-radius:8px;background:#fff;color:#0f172a;text-align:right;outline:none;box-sizing:border-box">
+            </div>
+          </div>
+          <div style="font-size:11px;color:#64748b;line-height:1.5;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px">You can edit either number later on the Payments tab. Leave blank if you don't know yet.</div>
+        </div>
+        <div style="padding:12px 22px 18px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #e2e8f0;background:#f8fafc">
+          <button id="fa-cancel" style="background:#fff;color:#475569;border:1px solid #cbd5e1;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>
+          <button id="fa-ok" style="background:#166534;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Save & Finalize →</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    const cleanup = () => wrap.remove();
+    const cancel = () => { cleanup(); resolve(null); };
+    const ok = () => {
+      const charged  = parseFloat(document.getElementById('fa-charged')?.value)  || 0;
+      const takeHome = parseFloat(document.getElementById('fa-takehome')?.value) || 0;
+      cleanup();
+      resolve({ charged, takeHome });
+    };
+    document.getElementById('fa-cancel').addEventListener('click', cancel);
+    document.getElementById('fa-ok').addEventListener('click', ok);
+    wrap.addEventListener('click', e => { if(e.target === wrap) cancel(); });
+    document.getElementById('fa-charged')?.focus();
+    document.getElementById('fa-charged')?.select();
+    // Enter on either input submits.
+    ['fa-charged','fa-takehome'].forEach(id => {
+      document.getElementById(id)?.addEventListener('keydown', e => {
+        if(e.key === 'Enter') { e.preventDefault(); ok(); }
+        if(e.key === 'Escape') { e.preventDefault(); cancel(); }
+      });
+    });
+  });
+};
+
 // -- SAVE CASE --
 window.saveCase = async function() {
+// Fresh finalization (not an edit) → prompt for invoice + take-home amounts
+// once, so they land on the case in the same write. Skipped on edits (user
+// already answered) and on test cases (they never touch payments).
+if(!window._editingCaseId && !window._finalizeAmountsProvided) {
+  const _fcaseId = document.getElementById('caseId')?.value.trim() || '';
+  if(!_fcaseId.startsWith('TEST-')) {
+    // Pre-fill from any existing payment row so re-runs remember the last number.
+    const _priorRow = (Array.isArray(window._paymentRows) ? window._paymentRows : [])
+      .find(r => r && r.caseId === _fcaseId);
+    const amounts = await window._promptFinalizeAmounts({
+      charged:  _priorRow?.invoicedAmount,
+      takeHome: _priorRow?.personalTakeHome
+    });
+    if(amounts === null) return; // user cancelled
+    window._pendingFinalizeAmounts = amounts;
+    window._finalizeAmountsProvided = true;
+  }
+}
 const caseId=document.getElementById('caseId').value.trim()||'CASE-'+Date.now();
 // Test cases (caseId prefixed with TEST-) are sandbox-only — they save a
 // case record so the UI flow can be tested end-to-end, but they MUST NOT
@@ -4773,6 +4858,7 @@ if(existingFinalIdx !== -1) {
     csTotal:csTotal2, savedAt:new Date().toISOString()
   };
 } else {
+const _amtPend = window._pendingFinalizeAmounts || null;
 cases.unshift({
 id:uid(),caseId,procedure:proc,provider,date,notes,worker:currentWorker,
 startTime: document.getElementById('caseStartTime')?.value || '',
@@ -4785,9 +4871,14 @@ items:caseItems.map(i=>({id:i.id,generic:i.generic,name:i.name,cost:i.cost,qty:i
 savedCsEntries:csEntries.map(e=>({...e})),
 csTotal:csTotal2,
 total, images: pendingImages.map(im => ({ id: im.id, dataUrl: im.dataUrl })),
+invoicedAmount: _amtPend ? _amtPend.charged : 0,
+personalTakeHome: _amtPend ? _amtPend.takeHome : 0,
 savedAt:new Date().toISOString()
 });
 } // end duplicate guard
+// Consume the pending amounts so subsequent saves re-prompt.
+window._pendingFinalizeAmounts = null;
+window._finalizeAmountsProvided = false;
 // Drop the matching draft locally before saving so the cloud copy is clean.
 cases = cases.filter(x => !(x.draft && x.caseId === caseId));
 let _step = 'saving case record';

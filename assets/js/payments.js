@@ -53,6 +53,16 @@ function syncPaymentRowsFromCases() {
       if(_paymentRows[rowIdx].caseDate !== c.date) { _paymentRows[rowIdx].caseDate = c.date||''; changed=true; }
       if(_paymentRows[rowIdx].worker !== c.worker) { _paymentRows[rowIdx].worker = c.worker; changed=true; }
       if(c.total && _paymentRows[rowIdx].caseCost !== c.total) { _paymentRows[rowIdx].caseCost = c.total; changed=true; }
+      // Copy over the finalize-time amounts if the case has them (Josh/Dev
+      // filled in the Charged + Pay-Yourself modal). Don't stomp non-zero
+      // values already on the row — the user may have adjusted them in
+      // Payments and we don't want to blow those edits away.
+      if(c.invoicedAmount && !_paymentRows[rowIdx].invoicedAmount) {
+        _paymentRows[rowIdx].invoicedAmount = c.invoicedAmount; changed = true;
+      }
+      if(c.personalTakeHome && !_paymentRows[rowIdx].personalTakeHome) {
+        _paymentRows[rowIdx].personalTakeHome = c.personalTakeHome; changed = true;
+      }
     } else {
       const preop = (window._rawPreopRecords||[]).find(r => r['po-caseId']===c.caseId);
       const sc = preop?.['po-surgery-center']||'';
@@ -61,7 +71,9 @@ function syncPaymentRowsFromCases() {
         caseDate:c.date||preop?.['po-surgeryDate']||'',
         callDate:preop?.['po-callDateTime']?.split('T')[0]||'',
         depositDate:'', paidDate:'', dep500Paid:false, paid:false, invoiceSent:false,
-        invoicedAmount:0, projOverride:null, caseCost:c.total||0,
+        invoicedAmount: c.invoicedAmount || 0,
+        personalTakeHome: c.personalTakeHome || 0,
+        projOverride:null, caseCost:c.total||0,
         estHrs:parseFloat(preop?.['po-est-hours'])||0,
         surgeryCenter:sc, surgeryCenterName:center?.name||'',
         patientEmail: preop?.['po-patientEmail']||'' });
@@ -189,7 +201,10 @@ window.loadPaymentRows = async function loadPaymentRows() {
     if(existIdx===-1) {
       _paymentRows.push({ id:window.uid(), caseId:c.caseId, name:c.caseId||'', worker:c.worker||'josh',
         caseDate, callDate, depositDate:'', paidDate:'', dep500Paid:false, paid:false,
-        invoiceSent:false, invoicedAmount:0, projOverride:null, caseCost:c.total||0,
+        invoiceSent:false,
+        invoicedAmount:   c.invoicedAmount   || 0,
+        personalTakeHome: c.personalTakeHome || 0,
+        projOverride:null, caseCost:c.total||0,
         estHrs, surgeryCenter:sc, surgeryCenterName:center?.name||'',
         patientEmail: preop?.['po-patientEmail']||'' });
     } else {
@@ -202,7 +217,10 @@ window.loadPaymentRows = async function loadPaymentRows() {
         estHrs: estHrs||_paymentRows[existIdx].estHrs,
         surgeryCenter: sc||_paymentRows[existIdx].surgeryCenter,
         surgeryCenterName: center?.name||_paymentRows[existIdx].surgeryCenterName||'',
-        patientEmail: preop?.['po-patientEmail'] || _paymentRows[existIdx].patientEmail || '' };
+        patientEmail: preop?.['po-patientEmail'] || _paymentRows[existIdx].patientEmail || '',
+        // Only fill from case if row doesn't already have a value.
+        invoicedAmount:   _paymentRows[existIdx].invoicedAmount   || c.invoicedAmount   || 0,
+        personalTakeHome: _paymentRows[existIdx].personalTakeHome || c.personalTakeHome || 0 };
     }
   });
 
@@ -712,9 +730,13 @@ function renderPaymentRows() {
     const _prPreop = (window._rawPreopRecords||[]).find(p => p && p['po-caseId'] === r.caseId);
     const _prName  = _prPreop ? [_prPreop['po-patientFirstName'], _prPreop['po-patientLastName']].filter(Boolean).join(' ').trim() : '';
     const _prEmail = _prPreop?.['po-patientEmail'] || r.patientEmail || '';
-    const _prSubtitle = _prName
-      ? `<div style="font-size:10px;font-weight:500;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_prName}${_prEmail ? ' — ' + _prEmail : ''}">${_prName}${_prEmail ? ` · <a href="mailto:${_prEmail}?subject=${encodeURIComponent('Atlas Anesthesia invoice — ' + (r.name||''))}" onclick="event.stopPropagation()" style="color:var(--info);text-decoration:none">✉</a>` : ''}</div>`
+    const _payMe = Number(r.personalTakeHome) || 0;
+    const _payMeChip = _payMe > 0
+      ? ` <span title="Personal take-home from Finalize" style="display:inline-block;background:#dcfce7;color:#166534;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px">Me $${_payMe.toFixed(0)}</span>`
       : '';
+    const _prSubtitle = _prName
+      ? `<div style="font-size:10px;font-weight:500;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_prName}${_prEmail ? ' — ' + _prEmail : ''}">${_prName}${_prEmail ? ` · <a href="mailto:${_prEmail}?subject=${encodeURIComponent('Atlas Anesthesia invoice — ' + (r.name||''))}" onclick="event.stopPropagation()" style="color:var(--info);text-decoration:none">✉</a>` : ''}${_payMeChip}</div>`
+      : (_payMe > 0 ? `<div style="font-size:10px;font-weight:500;color:var(--text-muted);margin-top:2px">${_payMeChip}</div>` : '');
     return `<div style="display:grid;grid-template-columns:${COLS};gap:0;background:${bg};border-bottom:1px solid var(--border);border-left:${bl};align-items:center;min-height:40px">
       <div style="padding:4px 8px;overflow:hidden;min-width:0"><div style="font-size:11px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.name||''}">${r.name||'—'}</div>${_prSubtitle}</div>
       <div style="padding:4px 3px;font-size:11px;font-weight:600;color:${wcolor(r.worker)}">${r.worker==='dev'?'Dev':'Josh'}</div>
