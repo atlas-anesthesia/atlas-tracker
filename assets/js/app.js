@@ -1946,25 +1946,10 @@ window._spvSend = async function() {
 
     try { logAudit && logAudit('preop-visit-scheduled', '', patientLabel + ' @ ' + (date||'?') + ' / ' + crna); } catch(e){}
 
-    // Internal notification — admin only. Jordan deliberately NOT notified
-    // here because there's no scheduled time yet at this stage: Nicole has
-    // only sent the portal link, the patient hasn't picked a slot. Jordan
-    // gets his "Pre-Op Call Confirmed" email later, from patient-schedule.js,
-    // the moment the patient confirms a time on the portal.
-    try {
-      const jordanHtml = _spvBuildJordanNotificationHTML({
-        first, last, email, phone, pcp,
-        surgeryDate, surgeryTime,
-        visitDate: date, visitTime: time,
-        crna, note
-      });
-      const internalSubject = 'Portal link sent — ' + (patientLabel || 'patient');
-      fetch('https://atlas-reminder.blue-disk-9b10.workers.dev/outreach-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: 'admin@atlasanesthesia.co', subject: internalSubject, html: jordanHtml })
-      }).catch(() => {});
-    } catch(e) { console.warn('Internal booking notifications skipped:', e); }
+    // Internal "portal link sent" FYI email removed at Josh's request — the
+    // milestone now shows as a 📧 Portal Sent pill on his Follow-up Tracker
+    // instead. The row appears there the moment Shannon adds the patient,
+    // and the pill flips as soon as she hits Book & Send Confirmation.
 
     if(status) { status.textContent = '✓ Visit booked. Confirmation emailed to ' + email + '.'; status.style.color = '#166534'; }
     setTimeout(() => { document.getElementById('schedulePreopVisitModal')?.remove(); if(window.buildCalendar) window.buildCalendar(); }, 1500);
@@ -8426,10 +8411,12 @@ window.renderFollowupTab = function() {
   // Compact column widths so the whole chart fits without horizontal scroll.
   // Case ID is truncated — full text appears on hover via the title attr.
   // No indicator column — the ⚠/⏰ icons are inline with the Case ID instead.
-  const COLS = '140px 1fr 90px 160px 110px 130px 110px 110px';
+  // The "Pre-Op Visit" column shows Josh the Shannon → Jordan milestones
+  // (portal sent, call scheduled) so he doesn't need internal FYI emails.
+  const COLS = '130px 1fr 85px 150px 140px 100px 120px 100px 100px';
   const cellCSS = 'display:flex;align-items:center';
   let html = `<div style="display:grid;grid-template-columns:${COLS};gap:6px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text-faint)">
-    <span>Case ID</span><span>Patient</span><span>Surgery</span><span style="text-align:center">Cleared</span><span style="text-align:center">Call</span><span style="text-align:center">$500 Deposit</span><span style="text-align:center">Rem Payment</span><span style="text-align:center">Reminder</span>
+    <span>Case ID</span><span>Patient</span><span>Surgery</span><span style="text-align:center">Pre-Op Visit</span><span style="text-align:center">Cleared</span><span style="text-align:center">Call</span><span style="text-align:center">$500 Deposit</span><span style="text-align:center">Rem Payment</span><span style="text-align:center">Reminder</span>
   </div>`;
   // Cleared-status styling — mirrors Jordan's Tracker pill so Josh/Dev see
   // the exact same state. Read-only here; only Jordan cycles it on his side.
@@ -8473,6 +8460,24 @@ window.renderFollowupTab = function() {
       ? (matchingVisit.clearedStatus || (matchingVisit.clearedAt ? 'cleared' : ''))
       : '';
     const clearedState = CLEARED_STATES[clearedKey] || CLEARED_STATES[''];
+
+    // Pre-Op Visit milestone — the "Shannon → Jordan" progress that used to
+    // trigger internal FYI emails. Three states, most-recent wins:
+    //   1. patient booked the call (has scheduledAt/date/time) → 📅 Call
+    //   2. Shannon hit Book & Send Confirmation (callStatus called or callStatusAt)
+    //   3. neither → dashed placeholder
+    let preopVisitPill;
+    if(matchingVisit && (matchingVisit.scheduledAt || matchingVisit.date)) {
+      const _pvDate = matchingVisit.date || (matchingVisit.scheduledAt || '').split('T')[0];
+      const _pvTime = matchingVisit.time || '';
+      const _pvLbl  = _pvDate ? fmtDate(_pvDate) + (_pvTime ? ' · ' + _pvTime : '') : 'booked';
+      preopVisitPill = `<span title="Patient booked the pre-op call with Jordan" style="display:inline-flex;align-items:center;justify-content:center;background:#dcfce7;color:#166534;border:1px solid #86efac;font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;white-space:nowrap">📅 ${_pvLbl}</span>`;
+    } else if(matchingVisit && (matchingVisit.callStatus === 'called' || matchingVisit.callStatusAt)) {
+      const _sentAt = matchingVisit.callStatusAt ? new Date(matchingVisit.callStatusAt).toLocaleDateString('en-US', {month:'numeric',day:'numeric'}) : '';
+      preopVisitPill = `<span title="Shannon sent the patient portal link — awaiting booking" style="display:inline-flex;align-items:center;justify-content:center;background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;font-size:11px;font-weight:600;padding:4px 10px;border-radius:10px;white-space:nowrap">📧 Portal sent${_sentAt ? ' ' + _sentAt : ''}</span>`;
+    } else {
+      preopVisitPill = `<span style="display:inline-flex;align-items:center;justify-content:center;background:#fff;color:#64748b;border:1px dashed #cbd5e1;font-size:11px;font-weight:500;padding:4px 10px;border-radius:10px;white-space:nowrap">○ Not sent</span>`;
+    }
 
     // Josh/Dev's own call — independent of Nicole's and Jordan's pills.
     const callStatus = r['po-callStatus'] || 'not-called';
@@ -8532,6 +8537,7 @@ window.renderFollowupTab = function() {
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;font-weight:600;overflow:hidden;min-width:0;cursor:pointer">${inlineIndicator}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayId}</span></div>
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;min-width:0;cursor:pointer">${patientName}${reviewTag}</div>
       <div ${openOC} title="Open Pre-Op or Finalize Case" style="${cellCSS};font-size:12px;color:var(--text-muted);cursor:pointer">${surgDateFmt}${isPast?' <span style="font-size:9px;color:var(--text-faint);margin-left:4px">(past)</span>':''}</div>
+      <div style="${cellCSS};justify-content:center">${preopVisitPill}</div>
       <div style="${cellCSS};justify-content:center" title="Jordan updates this on his Tracker"><span style="display:inline-flex;align-items:center;justify-content:center;background:${clearedState.bg};color:${clearedState.fg};border:1px ${clearedState.dashed?'dashed':'solid'} ${clearedState.border};font-size:11px;font-weight:${clearedKey==='cleared'?'700':'600'};padding:4px 10px;border-radius:10px;white-space:nowrap">${clearedState.label}</span></div>
       <div style="${cellCSS};justify-content:center"><button onclick="openCallStatusModal('${r.id}')" style="background:${callC.bg};color:${callC.color};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${CALL_LABELS[callStatus] || '📞 Pending'}</button></div>
       <div style="${cellCSS};justify-content:center"><button onclick="togglePreopDepositStatus('${r.id}')" style="background:${depBg};color:${depColor};font-size:11px;font-weight:600;padding:5px 10px;border-radius:10px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap">${depLabel}</button></div>

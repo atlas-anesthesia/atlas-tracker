@@ -606,7 +606,8 @@ async function confirmBooking() {
     const patientHtml     = buildPatientConfirmHTML(_entry.patientFirst || '', _selected);
     fireEmail(_entry.patientEmail, 'Pre-Op Call Confirmed — Atlas Anesthesia', patientHtml);
     fireEmail('jordan@atlasanesthesia.co', internalSubject, internalHtml);
-    fireEmail('admin@atlasanesthesia.co', internalSubject, internalHtml);
+    // admin@ (Josh) internal FYI removed at his request — this milestone now
+    // shows as a "📅 Call scheduled" pill on his Follow-up Tracker instead.
     // Also send the signed anesthesia consent to the assigned CRNA so
     // they have a record of consent + the patient's signature image on
     // file before the day of surgery. Falls back to admin@ if the entry
