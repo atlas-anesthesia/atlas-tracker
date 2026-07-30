@@ -1413,6 +1413,42 @@ function applyRoleRestrictions(role) {
   const crnaBypassCard = document.getElementById('po-crna-bypass-wrap');
   if(crnaBypassCard) crnaBypassCard.style.display = (!isAssistant && !isScheduler) ? '' : 'none';
 
+  // Attachments card on the Pre-Op form — surfaces Shannon's Tracker-side
+  // PDF (if any) and lets Josh/Dev/Jordan attach additional files (PDFs or
+  // photos/screenshots — images are auto-wrapped to PDF). Everyone sees it.
+  if(jordanNotesCard && !document.getElementById('po-attachments-wrap')) {
+    const attWrap = document.createElement('div');
+    attWrap.id = 'po-attachments-wrap';
+    attWrap.style.cssText = 'grid-column:1/-1;margin:0 0 14px 0;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px';
+    attWrap.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#475569">📎 Attachments</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">PDFs, screenshots or photos. Images are auto-converted to PDF on upload.</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <input type="file" id="po-att-input" accept="application/pdf,image/jpeg,image/png,image/heic,.pdf,.jpg,.jpeg,.png,.heic" multiple style="display:none">
+          <button type="button" onclick="document.getElementById('po-att-input').click()" style="background:#1d3557;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Add file</button>
+        </div>
+      </div>
+      <div id="po-att-shannon" style="font-size:12px;color:var(--text-muted);margin-top:6px"></div>
+      <div id="po-att-list" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
+      <div id="po-att-status" style="font-size:12px;color:#b91c1c;margin-top:6px;min-height:14px"></div>`;
+    jordanNotesCard.parentNode.insertBefore(attWrap, jordanNotesCard.nextSibling);
+    const fileInput = document.getElementById('po-att-input');
+    if(fileInput) fileInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      e.target.value = '';
+      for(const f of files) {
+        try { await window._addPreopAttachment(f); }
+        catch(err) {
+          const s = document.getElementById('po-att-status');
+          if(s) s.textContent = '✗ ' + (err.message || err);
+        }
+      }
+    });
+  }
+
   // Buttons on the Pre-Op tab + the header Surgery Mode toggle.
   // Jordan: no $500 deposit, no anesthesia record, no surgery mode.
   // Nicole: also no surgery mode (she never operates a case).
@@ -2995,7 +3031,7 @@ if(tab==='inventory') renderInventory();
 if(tab==='history') { loadSavedInvoices().then(() => renderHistory()); }
 if(tab==='reports') renderReports();
 if(tab==='preop-history') renderPreopHistory();
-if(tab==='preop') { setTimeout(wireEKGDetection, 300); }
+if(tab==='preop') { setTimeout(wireEKGDetection, 300); setTimeout(() => { if(typeof window._renderPreopAttachments === 'function') window._renderPreopAttachments(); }, 300); }
 if(tab==='invoice') { loadSavedInvoices(); setInvoiceProvider(); renderDraftInvoices(); setTimeout(populateCenterDropdowns,100); setTimeout(injectBillingToggle, 100); }
 if(tab==='cs-log') { renderCSLog(); renderTransferLog(); }
 if(tab==='analytics') {
@@ -4894,6 +4930,22 @@ csEntries = [];
 renderCSEntries();
 clearCase();
 try { logAudit('case-save', caseId, `total $${total.toFixed(2)}` + (_isTestCase ? ' [TEST]' : '')); } catch(e){}
+// Stamp po-finalizedAt on the matching pre-op record so Mid-Case can hide
+// it even before the cases-array refresh lands. Fire-and-forget — a failure
+// here doesn't block the save; Mid-Case's other filter (finalizedIds) picks
+// up the slack on the next render.
+try {
+  const preSnap = await getDoc(doc(db,'atlas','preop'));
+  const preRecords = preSnap.exists() ? (preSnap.data().records || []) : [];
+  const preIdx = preRecords.findIndex(r => r && r['po-caseId'] === caseId);
+  if(preIdx !== -1 && !preRecords[preIdx]['po-finalizedAt']) {
+    preRecords[preIdx]['po-finalizedAt'] = new Date().toISOString();
+    preRecords[preIdx].savedAt = new Date().toISOString();
+    await setDoc(doc(db,'atlas','preop'), { records: preRecords });
+    window._rawPreopRecords    = preRecords;
+    window._cachedPreopRecords = [...preRecords];
+  }
+} catch(preErr) { console.warn('Could not stamp po-finalizedAt:', preErr); }
 if(_isTestCase) {
   alert(`🧪 Test case saved — inventory NOT changed.\nTotal: $${total.toFixed(2)}\nThis case is excluded from stats.`);
 } else {
@@ -6375,6 +6427,166 @@ window._refreshCrnaBypassCard = function(record) {
   }
 };
 
+// ── Pre-Op form attachments ────────────────────────────────────────────────
+// Multiple files per Pre-Op record, stored at atlas/preop_pdfs.<recordId>.
+// Images (JPG/PNG/HEIC) are wrapped into a single-page PDF on upload so
+// downstream viewers stay uniform.
+const _POA_DOC_PREFIX = 'preop_pdfs.';
+const _POA_MAX_BYTES = 900000; // conservative single-doc cap
+
+function _poaDocPath(recId) { return _POA_DOC_PREFIX + recId; }
+
+async function _poaLoad(recId) {
+  if(!recId) return { files: [] };
+  try {
+    const snap = await getDoc(doc(db, 'atlas', _poaDocPath(recId)));
+    return snap.exists() ? (snap.data() || { files: [] }) : { files: [] };
+  } catch(e) { console.warn('poa load failed', e); return { files: [] }; }
+}
+async function _poaSave(recId, data) {
+  await setDoc(doc(db, 'atlas', _poaDocPath(recId)), data);
+}
+
+async function _poaFileToPdfDataUrl(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+  const isImage = file.type?.startsWith('image/') || /\.(jpe?g|png|heic)$/i.test(file.name);
+  if(!isImage) return { dataUrl, filename: file.name, contentType: file.type || 'application/pdf' };
+  if(!window.PDFLib) throw new Error('PDF library not loaded yet — please try again.');
+  const { PDFDocument } = window.PDFLib;
+  const comma = dataUrl.indexOf(',');
+  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const pdfDoc = await PDFDocument.create();
+  const isPng = /^data:image\/png/i.test(dataUrl) || (bytes[0]===0x89 && bytes[1]===0x50);
+  const img = isPng ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+  const margin = 24;
+  const page = pdfDoc.addPage([img.width + margin*2, img.height + margin*2]);
+  page.drawImage(img, { x: margin, y: margin, width: img.width, height: img.height });
+  const out = await pdfDoc.save();
+  let s = '';
+  const chunk = 0x8000;
+  for(let i = 0; i < out.length; i += chunk) s += String.fromCharCode.apply(null, out.subarray(i, i + chunk));
+  return {
+    dataUrl: 'data:application/pdf;base64,' + btoa(s),
+    filename: file.name.replace(/\.(jpe?g|png|heic)$/i, '') + '.pdf',
+    contentType: 'application/pdf'
+  };
+}
+
+window._addPreopAttachment = async function(file) {
+  const recId = window._editingPreopId || (window._editingPreopRecord && window._editingPreopRecord.id) || '';
+  if(!recId) { alert('Save the Pre-Op first, then attach files.'); return; }
+  const status = document.getElementById('po-att-status');
+  if(status) status.textContent = 'Uploading ' + file.name + '…';
+  const converted = await _poaFileToPdfDataUrl(file);
+  if(converted.dataUrl.length > _POA_MAX_BYTES) {
+    if(status) { status.textContent = '✗ ' + file.name + ' is too large (~' + Math.round(converted.dataUrl.length/1024) + ' KB). Trim it under 900 KB.'; status.style.color = '#b91c1c'; }
+    return;
+  }
+  const data = await _poaLoad(recId);
+  data.files = Array.isArray(data.files) ? data.files : [];
+  data.files.unshift({
+    id: uid(),
+    filename: converted.filename,
+    dataUrl: converted.dataUrl,
+    contentType: converted.contentType,
+    sizeBytes: converted.dataUrl.length,
+    uploadedAt: new Date().toISOString(),
+    uploadedBy: (currentUser?.email) || ''
+  });
+  await _poaSave(recId, data);
+  if(status) { status.textContent = '✓ Attached ' + converted.filename; status.style.color = '#166534'; setTimeout(() => { if(status) status.textContent = ''; }, 2500); }
+  await window._renderPreopAttachments();
+};
+
+window._deletePreopAttachment = async function(fileId) {
+  const recId = window._editingPreopId || (window._editingPreopRecord && window._editingPreopRecord.id) || '';
+  if(!recId) return;
+  if(!confirm('Remove this attachment?')) return;
+  const data = await _poaLoad(recId);
+  data.files = (data.files || []).filter(f => f.id !== fileId);
+  await _poaSave(recId, data);
+  await window._renderPreopAttachments();
+};
+
+window._viewPreopAttachment = function(dataUrl) {
+  if(!dataUrl) return;
+  const w = window.open('', '_blank');
+  if(!w) { alert('Popup blocked — allow popups to view attachments.'); return; }
+  w.document.write('<iframe src="' + dataUrl + '" style="width:100%;height:100vh;border:none"></iframe>');
+};
+
+window._renderPreopAttachments = async function() {
+  const list  = document.getElementById('po-att-list');
+  const shan  = document.getElementById('po-att-shannon');
+  if(!list) return;
+  const recId = window._editingPreopId || (window._editingPreopRecord && window._editingPreopRecord.id) || '';
+  const rec   = window._editingPreopRecord || null;
+  // Shannon's Tracker-side attachment: look up the linked preop_visits entry.
+  if(shan) {
+    const visitId = rec && rec['po-preopVisitId'];
+    const visit = visitId ? (window._preopVisitEntries || []).find(e => e.id === visitId) : null;
+    if(visit && visit.pdfFilename) {
+      shan.innerHTML = `<span style="color:#166534">📎 From Shannon:</span> <a href="javascript:void(0)" onclick="window._viewShannonAttachment('${visit.id}')" style="color:#1d4ed8;text-decoration:none">${(visit.pdfFilename || 'attachment.pdf').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c])}</a>`;
+    } else {
+      shan.textContent = '';
+    }
+  }
+  if(!recId) { list.innerHTML = '<div style="font-size:12px;color:var(--text-faint);font-style:italic">Save this Pre-Op to enable attachments.</div>'; return; }
+  const data = await _poaLoad(recId);
+  const files = data.files || [];
+  if(!files.length) { list.innerHTML = '<div style="font-size:12px;color:var(--text-faint);font-style:italic">No attachments yet.</div>'; return; }
+  const esc = s => String(s || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c]);
+  list.innerHTML = files.map(f => {
+    const when = f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString() : '';
+    const who  = f.uploadedBy ? f.uploadedBy.split('@')[0] : '';
+    const meta = [when, who].filter(Boolean).join(' · ');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:#fff;border:1px solid #e2e8f0;border-radius:6px">
+      <div style="min-width:0;flex:1">
+        <div style="font-size:13px;font-weight:600;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📎 ${esc(f.filename)}</div>
+        <div style="font-size:11px;color:var(--text-faint)">${esc(meta)}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button type="button" onclick="window._viewPreopAttachment(${JSON.stringify(f.dataUrl)})" style="background:transparent;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">View</button>
+        <button type="button" onclick="window._deletePreopAttachment('${f.id}')" style="background:transparent;color:#b91c1c;border:1px solid #fecaca;border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+};
+
+// Fetch Shannon's Tracker-side PDF (stored via _writePdfDoc in
+// scheduler-tracker.js) and open it in a new tab. Handles the chunked
+// format used for larger PDFs.
+window._viewShannonAttachment = async function(entryId) {
+  try {
+    const head = await getDoc(doc(db, 'atlas', 'preop_visit_pdfs.' + entryId));
+    if(!head.exists()) { alert('Attachment not found.'); return; }
+    const d = head.data();
+    let dataUrl = d.dataUrl || '';
+    const chunkCount = d.chunkCount || 1;
+    if(chunkCount > 1) {
+      const parts = [dataUrl];
+      for(let i = 1; i < chunkCount; i++) {
+        const c = await getDoc(doc(db, 'atlas', 'preop_visit_pdfs.' + entryId + '_c' + i));
+        if(c.exists()) parts.push(c.data().dataUrl || '');
+      }
+      dataUrl = parts.join('');
+    }
+    if(!dataUrl) { alert('Attachment is empty.'); return; }
+    window._viewPreopAttachment(dataUrl);
+  } catch(err) {
+    console.error('view Shannon attachment failed', err);
+    alert('Could not open: ' + (err.message || err));
+  }
+};
+
 // Print the Pre-Op record the user is currently on. Called by the "Print
 // Anesthesia Record" button so it no longer bounces to the Pre-Op History tab.
 // Uses whatever is currently in the form (including unsaved edits) merged over
@@ -6854,6 +7066,8 @@ const phiHiddenInModal = typeof window.isPHIHidden === 'function' && window.isPH
 window._editingPreopRecord = record; // stored so reveal can fill PHI fields later
 // Sync the CRNA "Bypass Jordan" card to whatever this record currently has.
 try { if(typeof window._refreshCrnaBypassCard === 'function') window._refreshCrnaBypassCard(record); } catch(_){}
+// Refresh the Pre-Op attachments panel so it reflects this record's files.
+try { if(typeof window._renderPreopAttachments === 'function') window._renderPreopAttachments(); } catch(_){}
 // Fill saved fields (skip PHI fields when hidden — they'll fill on reveal)
 Object.keys(record).forEach(fid => {
 if(phiHiddenInModal && typeof window.isPHIField === 'function' && window.isPHIField(fid)) return;
@@ -8917,12 +9131,38 @@ if(window._userRole !== 'assistant' && window._userRole !== 'scheduler') {
   preopRecords = preopRecords.filter(r => (r.worker || 'dev') === currentWorker);
   drafts = drafts.filter(d => (d.worker || 'dev') === currentWorker);
 }
+// Cancelled Tracker entries → collect their case IDs so we can also drop
+// their draft cases (otherwise they show as orphan "Finalize Case →" rows).
+const canceledEntryCaseIds = new Set(
+  (window._preopVisitEntries || [])
+    .filter(e => e && e.canceledAt && e.preopCaseId)
+    .map(e => e.preopCaseId)
+);
+drafts = drafts.filter(d => !canceledEntryCaseIds.has(d.caseId));
 // Match pre-ops to drafts by caseId
 const draftIds = new Set(drafts.map(d => d.caseId));
-// IDs of already-finalized cases — exclude these from Mid-Case entirely
+// IDs of already-finalized cases — exclude these from Mid-Case entirely.
+// Two ways a case can be "already finalized":
+//   1) It's in the cases array with draft:false
+//   2) The pre-op record itself has po-finalizedAt stamped by saveCase
+//      (belt-and-suspenders in case an older shard didn't load quickly)
 const finalizedIds = new Set(cases.filter(c => !c.draft).map(c => c.caseId).filter(Boolean));
-// Only show pre-ops that don't have a finalized case yet
-preopRecords = preopRecords.filter(r => !finalizedIds.has(r['po-caseId']));
+// Also exclude pre-ops whose linked Tracker entry has been canceled. Older
+// canceled entries (pre-July-2026) didn't delete the pre-op record, so the
+// pre-op was hanging around here with a "Finalize Case →" button — Josh
+// asked to make those stop showing.
+const canceledPreopIds = new Set(
+  (window._preopVisitEntries || [])
+    .filter(e => e && e.canceledAt)
+    .flatMap(e => [e.preopRecordId, e.preopCaseId].filter(Boolean))
+);
+preopRecords = preopRecords.filter(r => {
+  if(finalizedIds.has(r['po-caseId'])) return false;
+  if(r['po-finalizedAt']) return false;
+  if(canceledPreopIds.has(r.id) || canceledPreopIds.has(r['po-caseId'])) return false;
+  if(r['po-canceledAt']) return false;
+  return true;
+});
 // Past pre-ops that were never finalized stay visible in Mid-Case so the
 // CRNAs can catch up on their backlog. Case History is reserved for
 // actually-finalized cases.
