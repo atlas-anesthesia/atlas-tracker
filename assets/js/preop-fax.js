@@ -451,36 +451,17 @@ function buildModal() {
         </div>
       </div>
 
-      <!-- ─── Procedure Info ───────────────────────────────────────────── -->
-      <div style="padding:14px 24px;border-bottom:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);margin-bottom:8px">Procedure Information</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Scheduled Procedure</label>
-            <input type="text" id="pof-proc-type" oninput="window._pofPreview()" placeholder="e.g. Wisdom teeth extraction" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Surgeon / Dentist</label>
-            <input type="text" id="pof-surgeon" oninput="window._pofPreview()" placeholder="Dr. ___" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Procedure Location</label>
-            <input type="text" id="pof-proc-loc" oninput="window._pofPreview()" placeholder="e.g. Smith Family Dental, Green Bay" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:4px">Estimated Procedure Length</label>
-            <input type="text" id="pof-proc-length" oninput="window._pofPreview()" placeholder="e.g. 1 hour 30 min" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none">
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:18px;margin-top:10px;flex-wrap:wrap">
-          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-faint);width:130px">Anesthesia Type</span>
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
-            <input type="radio" name="pof-anesth-type" value="MAC" onchange="window._pofPreview()" style="margin:0"> MAC
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
-            <input type="radio" name="pof-anesth-type" value="General" onchange="window._pofPreview()" style="margin:0"> General
-          </label>
-        </div>
+      <!-- Procedure Info section removed at Josh's request (not used on the
+           records-request fax; adds clutter to the modal). Backing fields
+           are kept as hidden inputs so any code that still reads them
+           (readPreopForm / draft rehydration) doesn't crash. -->
+      <div style="display:none">
+        <input type="text" id="pof-proc-type">
+        <input type="text" id="pof-surgeon">
+        <input type="text" id="pof-proc-loc">
+        <input type="text" id="pof-proc-length">
+        <input type="radio" name="pof-anesth-type" value="MAC">
+        <input type="radio" name="pof-anesth-type" value="General">
       </div>
 
       <!-- ─── Medical Summary ──────────────────────────────────────────── -->
