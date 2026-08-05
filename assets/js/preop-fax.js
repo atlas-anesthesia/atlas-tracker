@@ -666,22 +666,6 @@ function buildPreviewHTML() {
       </div>
     </div>
 
-    ${sectionHdr('PROCEDURE INFORMATION')}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:8px 0 4px">
-      <div>
-        ${labelVal('PROCEDURE TYPE', procType)}
-        ${labelVal('LOCATION', procLoc)}
-      </div>
-      <div>
-        ${labelVal('SURGEON / DENTIST', surgeon)}
-        ${labelVal('EST. LENGTH', procLen)}
-      </div>
-    </div>
-    <div style="font-size:11px;margin:6px 0 12px"><strong style="font-size:9px;color:#555;text-transform:uppercase">Anesthesia Type:</strong>
-      <span style="margin-left:10px">${box(anesth==='MAC', 'MAC')}</span>
-      <span style="margin-left:14px">${box(anesth==='General', 'General')}</span>
-    </div>
-
     ${sectionHdr('MEDICAL SUMMARY')}
     <div style="margin:8px 0 4px">
       ${block('PMH', pmh)}
@@ -1048,10 +1032,24 @@ window._pofSend = async function() {
     if(sel) sel.focus();
     return;
   }
-  const fax = $('pof-fax')?.value.trim() || '';
+  const rawFax = $('pof-fax')?.value.trim() || '';
   const to  = $('pof-to')?.value.trim()  || '';
-  if(!fax) { alert('Please enter a Recipient Fax #.'); return; }
-  if(!fax.startsWith('+')) { alert('Fax number needs the country code, e.g. +19205551234'); return; }
+  if(!rawFax) { alert('Please enter a Recipient Fax #.'); return; }
+  // Normalize to E.164 the same way fax.js does — strip parens, dashes,
+  // spaces, and add +1 if the country code is missing. This way Oliver can
+  // paste things like "+1(833)485-5191" or "833-485-5191" and it still ends
+  // up as +18334855191 for FaxAge.
+  const digitsOnly = rawFax.replace(/[^0-9+]/g, '');
+  let fax;
+  if(digitsOnly.startsWith('+')) {
+    fax = '+' + digitsOnly.slice(1).replace(/[^0-9]/g, '');
+  } else {
+    const digits = digitsOnly.replace(/[^0-9]/g, '');
+    if(digits.length === 11 && digits.startsWith('1')) fax = '+' + digits;
+    else if(digits.length === 10) fax = '+1' + digits;
+    else fax = '';
+  }
+  if(!fax || fax.length < 12) { alert('That fax number doesn\'t look right. Try the format +19205551234 (or paste with dashes / parens — we\'ll clean them up).'); return; }
   if(!to)  { alert('Please enter the Recipient Name (or pick a preset).'); return; }
 
   const choice = (typeof window.readScheduleChoice === 'function') ? window.readScheduleChoice('pof') : { mode: 'now' };
