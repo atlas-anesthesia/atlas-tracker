@@ -737,6 +737,43 @@ window._pofPreview = refreshPreview;
 // Drafts live on the corresponding pre-op record as `_preopFaxDraft` so they
 // follow the case automatically — open the same record again, get your draft.
 
+// Render the currently-displayed fax preview into a PDF and return its
+// base64 body. Uses the exact same html2canvas + jsPDF pipeline the
+// insurance sheet uses so the fax lands as a pixel-perfect copy of what
+// the user sees on-screen — colors, layout, fonts, everything. If the
+// libraries aren't loaded (unlikely) we return null so the caller can
+// fall back to sending raw HTML.
+async function _pofBuildPDFBase64() {
+  if(typeof window.html2canvas !== 'function' || !window.jspdf?.jsPDF) return null;
+  const src = document.getElementById('pof-preview');
+  if(!src) return null;
+  // Snapshot at 2× so text edges stay crisp when FaxAge reduces to fax DPI.
+  // useCORS lets our inlined signature data URL make it through cleanly.
+  const canvas = await window.html2canvas(src, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const margin = 24;
+  const imgW = pageW - margin * 2;
+  const imgH = imgW * (canvas.height / canvas.width);
+  const imgData = canvas.toDataURL('image/jpeg', 0.95);
+  if(imgH <= pageH - margin * 2) {
+    pdf.addImage(imgData, 'JPEG', margin, margin, imgW, imgH);
+  } else {
+    // Split onto multiple pages if the preview taller than one Letter sheet.
+    let yOffset = 0;
+    while(yOffset < imgH) {
+      pdf.addImage(imgData, 'JPEG', margin, margin - yOffset, imgW, imgH);
+      yOffset += pageH - margin * 2;
+      if(yOffset < imgH) pdf.addPage();
+    }
+  }
+  const dataUri = pdf.output('datauristring');
+  const base64  = dataUri.split('base64,')[1] || '';
+  return base64;
+}
+
 function getCurrentCaseId() {
   // Source of truth is the selected pre-op record. Fall back to the live
   // pre-op form's case ID only when nothing is selected yet (rare; would
@@ -1072,10 +1109,20 @@ window._pofSend = async function() {
     const html = buildPreviewHTML();
     const w = workerFromForm();
     const r = readPreopForm();
+    // Also render the preview to a PDF so the fax matches on-screen
+    // pixel-for-pixel (FaxAge accepts PDF and faxes it verbatim, no HTML
+    // re-rendering). If the worker doesn't consume pdfBase64, no harm —
+    // it still has the html payload to fall back on.
+    let pdfBase64 = '';
+    try {
+      // Make sure the preview DOM is current before we snapshot it.
+      if(typeof refreshPreview === 'function') refreshPreview();
+      pdfBase64 = await _pofBuildPDFBase64() || '';
+    } catch(pdfErr) { console.warn('PDF render for fax failed — falling back to HTML:', pdfErr); }
     const result = (typeof window.sendOrScheduleFax === 'function')
-      ? await window.sendOrScheduleFax({ faxNumber: fax, caseId: to, worker: w, html, source: 'pre-op' }, choice)
+      ? await window.sendOrScheduleFax({ faxNumber: fax, caseId: to, worker: w, html, pdfBase64, source: 'pre-op' }, choice)
       : await (async () => {
-          const rsp = await fetch(FAX_WORKER_URL, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ to: fax, caseId: to, worker: w, html }) });
+          const rsp = await fetch(FAX_WORKER_URL, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ to: fax, caseId: to, worker: w, html, pdfBase64 }) });
           const d = await rsp.json();
           return { success: !!(rsp.ok && d.success), scheduled: false, sid: d.sid, error: d.error };
         })();
