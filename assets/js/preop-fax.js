@@ -39,6 +39,86 @@ let _modalBuilt = false;
 
 function $(id) { return document.getElementById(id); }
 
+// ── Signature inlining ─────────────────────────────────────────────────────
+// FaxAge (and most HTML→fax renderers) run in a sandbox that can't resolve
+// relative asset URLs, and won't honor mix-blend-mode / CSS filters. The old
+// approach relied on both, so recipients often saw an empty box where the
+// signature should be. Fix: load each signature PNG once, run it through a
+// canvas to knock out the white background (any near-white pixel → alpha 0)
+// and force the ink to solid black, then cache the resulting base64 data URL.
+// Downstream we embed that data URL directly in the fax HTML — no external
+// fetches, no CSS trickery required for it to render.
+const _SIGNATURE_URLS = {
+  josh: 'assets/signatures/josh.png',
+  dev:  'assets/signatures/dev.png'
+};
+const _sigCache   = {};
+const _sigLoading = {};
+function _ensureSignatureLoaded(worker) {
+  const key = worker === 'dev' ? 'dev' : 'josh';
+  if(_sigCache[key])   return Promise.resolve(_sigCache[key]);
+  if(_sigLoading[key]) return _sigLoading[key];
+  _sigLoading[key] = new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width  = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const px = ctx.getImageData(0, 0, c.width, c.height);
+        const d  = px.data;
+        for(let i = 0; i < d.length; i += 4) {
+          const r = d[i], g = d[i+1], b = d[i+2];
+          // Any near-white pixel becomes fully transparent. Otherwise we
+          // treat it as ink and darken toward pure black while preserving
+          // some anti-aliased edge alpha for readability.
+          const bright = (r + g + b) / 3;
+          if(bright > 220) {
+            d[i+3] = 0;
+          } else {
+            d[i]   = 0;
+            d[i+1] = 0;
+            d[i+2] = 0;
+            // Boost mid-tones so the fax renders bold, not gray.
+            d[i+3] = Math.min(255, 255 - Math.round(bright));
+          }
+        }
+        ctx.putImageData(px, 0, 0);
+        const url = c.toDataURL('image/png');
+        _sigCache[key] = url;
+        resolve(url);
+      } catch(e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error('Could not load signature: ' + _SIGNATURE_URLS[key]));
+    img.src = _SIGNATURE_URLS[key];
+  });
+  return _sigLoading[key];
+}
+
+// Warm the signature cache in the background so the first fax preview
+// already has the inlined data URLs to swap in. If the modal is already
+// on-screen when the load finishes, kick a preview refresh so the just-
+// -processed signature swaps into place immediately.
+try {
+  _ensureSignatureLoaded('josh').then(() => { if(typeof refreshPreview === 'function') refreshPreview(); }).catch(() => {});
+  _ensureSignatureLoaded('dev').then(() => { if(typeof refreshPreview === 'function') refreshPreview(); }).catch(() => {});
+} catch(_){}
+
+// Format the current moment as "Jul 30, 2026 at 10:23 AM CT" — used for the
+// transmission-timestamp header the recipient sees on the fax.
+function _fmtFaxTimestamp() {
+  try {
+    return new Date().toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+      timeZone: 'America/Chicago'
+    }).replace(',', ' ·') + ' CT';
+  } catch(e) { return new Date().toISOString(); }
+}
+
 // ── "SEND PRE-OP FAX" button state ────────────────────────────────────────
 // The hidden #po-bellin-fax-sent-flag input persists with the pre-op record
 // (saved via getPreopTextFields). When its value is 'true', the button shows
@@ -544,6 +624,7 @@ function buildPreviewHTML() {
       <div style="text-align:right">
         <div style="font-size:18px;font-weight:bold">FAX</div>
         <div style="font-size:10px;opacity:.85;margin-top:1px">PRE-OP EVALUATION REQUEST</div>
+        <div style="font-size:9px;opacity:.85;margin-top:3px">Transmitted: ${_fmtFaxTimestamp()}</div>
       </div>
     </div>
 
@@ -628,10 +709,13 @@ function buildPreviewHTML() {
     <div style="margin-top:14px;display:grid;grid-template-columns:1fr 200px;gap:18px;align-items:end">
       <div>
         <div style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase;margin-bottom:2px">Requested By</div>
-        <img src="assets/signatures/${w === 'josh' ? 'josh' : 'dev'}.png" style="height:78px;mix-blend-mode:multiply;filter:contrast(2.2) brightness(.55) saturate(0);display:block" alt="Signature" onerror="this.style.display='none'">
+        <img src="${_sigCache[w === 'josh' ? 'josh' : 'dev'] || _SIGNATURE_URLS[w === 'josh' ? 'josh' : 'dev']}" style="height:78px;display:block" alt="Signature" onerror="this.style.display='none'">
         <div style="border-top:1px solid #000;width:240px;font-size:10px;padding-top:2px;margin-top:2px">${providerName(w)} &middot; Atlas Anesthesia</div>
       </div>
-      <div style="text-align:right;font-size:10px;color:#555">DATE: <span style="border-bottom:1px solid #888;padding:0 6px">${fmtDate(today)}</span></div>
+      <div style="text-align:right;font-size:10px;color:#555">
+        <div>DATE: <span style="border-bottom:1px solid #888;padding:0 6px">${fmtDate(today)}</span></div>
+        <div style="margin-top:4px;font-size:9px;color:#666;font-style:italic">Sent: ${_fmtFaxTimestamp()}</div>
+      </div>
     </div>
 
     ${sectionHdr('PROVIDER CERTIFICATION')}
@@ -977,6 +1061,15 @@ window._pofSend = async function() {
   if(btn) { btn.textContent = choice.mode === 'later' ? 'Scheduling...' : 'Sending...'; btn.disabled = true; }
 
   try {
+    // Make sure BOTH signatures are baked into the data-URL cache before we
+    // build the HTML — otherwise the outgoing fax falls back to the relative
+    // asset URL and the FaxAge renderer can't fetch it.
+    try {
+      await Promise.all([
+        _ensureSignatureLoaded('josh').catch(() => {}),
+        _ensureSignatureLoaded('dev').catch(() => {})
+      ]);
+    } catch(_){}
     const html = buildPreviewHTML();
     const w = workerFromForm();
     const r = readPreopForm();

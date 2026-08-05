@@ -33,6 +33,61 @@ const PROVIDER_INFO = {
 };
 function providerInfo() { return PROVIDER_INFO[workerNow()] || PROVIDER_INFO.dev; }
 
+// ── Signature inlining (same treatment as preop-fax.js) ─────────────────────
+// FaxAge / SES render this HTML in a sandbox that can't fetch relative asset
+// URLs and doesn't honor mix-blend-mode + CSS filters. Pre-process the PNG
+// once via canvas (near-white → transparent, ink → solid black) and cache
+// the resulting base64 data URL so the receipt embeds the actual signature.
+const _sigCache = {};
+const _sigLoading = {};
+function _ensureSignatureLoaded(worker) {
+  const key = worker === 'dev' ? 'dev' : 'josh';
+  if(_sigCache[key])   return Promise.resolve(_sigCache[key]);
+  if(_sigLoading[key]) return _sigLoading[key];
+  _sigLoading[key] = new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const px = ctx.getImageData(0, 0, c.width, c.height);
+        const d = px.data;
+        for(let i = 0; i < d.length; i += 4) {
+          const bright = (d[i] + d[i+1] + d[i+2]) / 3;
+          if(bright > 220) { d[i+3] = 0; }
+          else { d[i] = 0; d[i+1] = 0; d[i+2] = 0; d[i+3] = Math.min(255, 255 - Math.round(bright)); }
+        }
+        ctx.putImageData(px, 0, 0);
+        _sigCache[key] = c.toDataURL('image/png');
+        resolve(_sigCache[key]);
+      } catch(e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error('sig load failed: ' + PROVIDER_INFO[key].sigPath));
+    img.src = PROVIDER_INFO[key].sigPath;
+  });
+  return _sigLoading[key];
+}
+try {
+  _ensureSignatureLoaded('josh').then(() => { if(typeof refreshPreview === 'function') refreshPreview(); }).catch(() => {});
+  _ensureSignatureLoaded('dev').then(() => { if(typeof refreshPreview === 'function') refreshPreview(); }).catch(() => {});
+} catch(_){}
+function _sigSrcFor(worker) {
+  const key = worker === 'dev' ? 'dev' : 'josh';
+  return _sigCache[key] || PROVIDER_INFO[key].sigPath;
+}
+function _fmtInsTimestamp() {
+  try {
+    return new Date().toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+      timeZone: 'America/Chicago'
+    }).replace(',', ' ·') + ' CT';
+  } catch(e) { return new Date().toISOString(); }
+}
+
 // Procedure codes from Josh's PDF form (Receipt/Insurance Claim Information)
 const JOSH_PROCEDURES = [
   { code: '',       label: 'Dental Restoration' },
@@ -557,10 +612,13 @@ function buildJoshReceiptHTML() {
     <div style="display:grid;grid-template-columns:1fr 200px;gap:18px;align-items:end;margin-top:18px">
       <div>
         <div style="font-size:9px;color:#555;font-weight:600;text-transform:uppercase;margin-bottom:2px">Signed</div>
-        <img src="${pInfo.sigPath}" style="height:78px;mix-blend-mode:multiply;filter:contrast(2.2) brightness(.55) saturate(0);display:block" alt="Signature" onerror="this.style.display='none'">
+        <img src="${_sigSrcFor(workerNow())}" style="height:78px;display:block" alt="Signature" onerror="this.style.display='none'">
         <div style="border-top:1px solid #000;width:240px;font-size:10px;padding-top:2px;margin-top:2px">${pInfo.name} · Atlas Anesthesia, LLC</div>
       </div>
-      <div style="text-align:right;font-size:10px;color:#555">DATE: <span style="border-bottom:1px solid #888;padding:0 6px">${fmtDate(today)}</span></div>
+      <div style="text-align:right;font-size:10px;color:#555">
+        <div>DATE: <span style="border-bottom:1px solid #888;padding:0 6px">${fmtDate(today)}</span></div>
+        <div style="margin-top:4px;font-size:9px;color:#666;font-style:italic">Sent: ${_fmtInsTimestamp()}</div>
+      </div>
     </div>
 
     <div style="margin-top:14px;background:#fdecec;border:1px solid #f5b5b5;border-radius:3px;padding:6px 10px;font-size:9px;color:#444;line-height:1.4">
@@ -636,6 +694,7 @@ window._insDownloadPDF = async function() {
   const origLabel = btn?.textContent;
   if(btn) { btn.textContent = 'Generating...'; btn.disabled = true; }
   try {
+    try { await _ensureSignatureLoaded(workerNow()); refreshPreview(); } catch(_){}
     const pdf = await _insBuildPDF();
     pdf.save(_insPDFFilename());
   } catch(e) {
@@ -712,6 +771,11 @@ window._insSend = async function() {
   if(btn) { btn.textContent = 'Sending...'; btn.disabled = true; }
 
   try {
+    // Bake the current worker's signature into the cache before we
+    // build the HTML so the recipient's copy has the inlined image.
+    // Then re-render the preview so the DOM snapshot picked up by
+    // _insBuildPDF() (via html2canvas) also has the processed image.
+    try { await _ensureSignatureLoaded(workerNow()); refreshPreview(); } catch(_){}
     const html = buildPreviewHTML();
     const w = workerNow();
     const caseId = _selectedPreop['po-caseId'] || '';
