@@ -67,27 +67,28 @@ function _ensureSignatureLoaded(worker) {
         c.width  = img.naturalWidth;
         c.height = img.naturalHeight;
         const ctx = c.getContext('2d');
+        // Fill white first so the output is opaque — fax gateways render any
+        // transparent pixels as BLACK (that's the "black background" Josh
+        // saw), so we produce a plain white-page-with-black-ink signature
+        // that matches the fax paper.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, c.width, c.height);
         ctx.drawImage(img, 0, 0);
         const px = ctx.getImageData(0, 0, c.width, c.height);
         const d  = px.data;
         for(let i = 0; i < d.length; i += 4) {
-          const r = d[i], g = d[i+1], b = d[i+2];
-          // Any near-white pixel becomes fully transparent. Otherwise we
-          // treat it as ink and darken toward pure black while preserving
-          // some anti-aliased edge alpha for readability.
-          const bright = (r + g + b) / 3;
-          if(bright > 220) {
-            d[i+3] = 0;
+          const bright = (d[i] + d[i+1] + d[i+2]) / 3;
+          if(bright > 200) {
+            // background / paper → solid white
+            d[i] = 255; d[i+1] = 255; d[i+2] = 255; d[i+3] = 255;
           } else {
-            d[i]   = 0;
-            d[i+1] = 0;
-            d[i+2] = 0;
-            // Boost mid-tones so the fax renders bold, not gray.
-            d[i+3] = Math.min(255, 255 - Math.round(bright));
+            // ink → solid black, opaque so it doesn't rely on alpha at all
+            d[i] = 0;   d[i+1] = 0;   d[i+2] = 0;   d[i+3] = 255;
           }
         }
         ctx.putImageData(px, 0, 0);
-        const url = c.toDataURL('image/png');
+        // Export as JPEG to guarantee no alpha channel makes it into the fax.
+        const url = c.toDataURL('image/jpeg', 0.92);
         _sigCache[key] = url;
         resolve(url);
       } catch(e) { reject(e); }

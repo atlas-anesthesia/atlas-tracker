@@ -52,16 +52,20 @@ function _ensureSignatureLoaded(worker) {
         const c = document.createElement('canvas');
         c.width = img.naturalWidth; c.height = img.naturalHeight;
         const ctx = c.getContext('2d');
+        // Fill white first so the output is opaque (transparent pixels
+        // render as black in FaxAge / SES — the "black background" issue).
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, c.width, c.height);
         ctx.drawImage(img, 0, 0);
         const px = ctx.getImageData(0, 0, c.width, c.height);
         const d = px.data;
         for(let i = 0; i < d.length; i += 4) {
           const bright = (d[i] + d[i+1] + d[i+2]) / 3;
-          if(bright > 220) { d[i+3] = 0; }
-          else { d[i] = 0; d[i+1] = 0; d[i+2] = 0; d[i+3] = Math.min(255, 255 - Math.round(bright)); }
+          if(bright > 200) { d[i] = 255; d[i+1] = 255; d[i+2] = 255; d[i+3] = 255; }
+          else            { d[i] = 0;   d[i+1] = 0;   d[i+2] = 0;   d[i+3] = 255; }
         }
         ctx.putImageData(px, 0, 0);
-        _sigCache[key] = c.toDataURL('image/png');
+        _sigCache[key] = c.toDataURL('image/jpeg', 0.92);
         resolve(_sigCache[key]);
       } catch(e) { reject(e); }
     };
