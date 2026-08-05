@@ -1108,27 +1108,73 @@ window.restoreInventoryFromFile = async function() {
   input.click();
 };
 
+// Full backup — everything lands in Firestore under atlas/full_backup_<date>_*
+// (one doc per collection) so it stays in the cloud instead of a JSON file
+// in the Downloads folder. Restore later by reading the same set of docs.
+//
+// One doc per collection because Firestore caps a single doc at ~1MB; the
+// preop / cases collections routinely exceed that when squished together.
 window.downloadFullBackup = async function() {
   const btn = document.getElementById('backup-download-btn');
   if(btn) { btn.textContent = '⏳...'; btn.disabled = true; }
   try {
     const COLS = ['inventory','cases','preop','payments','deposits','payouts',
-      'surgerycenters','cslog','cstransfers','saved_pdfs','personal_income_formula'];
-    const backup = { exportedAt: new Date().toISOString(), version: 'atlas-1.0', data: {} };
+      'surgerycenters','cslog','cstransfers','saved_pdfs','personal_income_formula',
+      'preop_visits','scheduling_inbox','bundles'];
+    const today = todayStr();
+    const savedAt = new Date().toISOString();
+    const successes = [], failures = [];
     for(const col of COLS) {
       try {
         const snap = await getDoc(doc(db, 'atlas', col));
-        if(snap.exists()) backup.data[col] = snap.data();
-      } catch(e) { console.warn('Skip:', col); }
+        if(!snap.exists()) continue;
+        // Wrap the source doc's payload with the backup metadata so a future
+        // restore knows exactly what to write back into atlas/<col>.
+        await setDoc(doc(db, 'atlas', 'full_backup_' + today + '_' + col), {
+          sourceCollection: col,
+          backedUpAt: savedAt,
+          data: snap.data()
+        });
+        successes.push(col);
+      } catch(e) { console.warn('Skip:', col, e.message); failures.push(col); }
     }
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = 'atlas-backup-' + todayStr() + '.json';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Small manifest doc so you can list the day's backups at a glance and
+    // so an eventual restore knows which collection docs to re-hydrate.
+    await setDoc(doc(db, 'atlas', 'full_backup_' + today), {
+      backedUpAt: savedAt,
+      collections: successes,
+      failures,
+      version: 'atlas-cloud-1.0'
+    });
+    try { logAudit && logAudit('full-backup-cloud', 'atlas/full_backup_' + today, successes.length + ' collections'); } catch(_){}
+    alert('✓ Backup saved to Firebase.\n\n' +
+      successes.length + ' collection' + (successes.length === 1 ? '' : 's') + ' → atlas/full_backup_' + today + '_*\n\n' +
+      (failures.length ? '⚠ Could not back up: ' + failures.join(', ') : 'Everything backed up.'));
   } catch(e) { alert('Backup failed: ' + e.message); }
   finally { if(btn) { btn.textContent = '⬇ Backup'; btn.disabled = false; } }
+};
+
+// List every cloud backup so you can spot what dates exist without opening
+// the Firebase console. Prints a table in the browser DevTools console.
+window.listCloudBackups = async function() {
+  try {
+    const snap = await getDocs(collection(db, 'atlas'));
+    const rows = [];
+    snap.forEach(d => {
+      const id = d.id;
+      if(!/^full_backup_\d{4}-\d{2}-\d{2}$/.test(id)) return;
+      const data = d.data() || {};
+      rows.push({
+        date: id.replace('full_backup_', ''),
+        collections: (data.collections || []).length,
+        backedUpAt: data.backedUpAt || '—'
+      });
+    });
+    rows.sort((a, b) => b.date.localeCompare(a.date));
+    console.log('%cCloud backups (newest first):', 'color:#1d3557;font-weight:600');
+    console.table(rows);
+    return rows;
+  } catch(e) { console.error('listCloudBackups failed:', e); return []; }
 };
 
 
