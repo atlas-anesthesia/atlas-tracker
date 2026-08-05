@@ -73,15 +73,27 @@ window.readScheduleChoice = function(prefix) {
 };
 
 // Send (or schedule) a fax — used by every modal's send handler.
-//   opts: { faxNumber, caseId, worker, html, source }
+//   opts: { faxNumber, caseId, worker, html, pdfBase64, source }
 //   choice: result of readScheduleChoice(prefix)
 // Returns { success, scheduled, sid, error }
+//
+// pdfBase64 is the pixel-perfect PDF snapshot of the modal's preview (added
+// for the pre-op fax so recipients see exactly what's on-screen). It MUST
+// be forwarded to the worker verbatim — dropping it here silently falls
+// the fax back to HTML rendering, which is what shipped the "looks nothing
+// like the preview" fax in the first place.
 window.sendOrScheduleFax = async function(opts, choice) {
   if(choice.mode === 'now') {
     const res = await fetch(WORKER_BASE + '/fax', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: opts.faxNumber, caseId: opts.caseId, worker: opts.worker, html: opts.html })
+      body: JSON.stringify({
+        to: opts.faxNumber,
+        caseId: opts.caseId,
+        worker: opts.worker,
+        html: opts.html,
+        pdfBase64: opts.pdfBase64 || ''
+      })
     });
     const data = await res.json().catch(() => ({}));
     return { success: !!(res.ok && data.success), scheduled: false, sid: data.sid, error: data.error };
@@ -95,6 +107,7 @@ window.sendOrScheduleFax = async function(opts, choice) {
       caseId: opts.caseId,
       worker: opts.worker,
       html: opts.html,
+      pdfBase64: opts.pdfBase64 || '',
       source: opts.source || ''
     })
   });
